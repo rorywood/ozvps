@@ -44,7 +44,7 @@ class VirtFusionClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}/api${endpoint}`;
+    const url = `${this.baseUrl}/api/v1${endpoint}`;
     
     const response = await fetch(url, {
       ...options,
