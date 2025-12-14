@@ -8,8 +8,8 @@ import {
   Cpu, 
   HardDrive, 
   Server as ServerIcon, 
-  Plus,
-  Loader2
+  Loader2,
+  ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,12 +36,6 @@ export default function Dashboard() {
             <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Dashboard</h1>
             <p className="text-muted-foreground">Overview of your infrastructure</p>
           </div>
-          <Link href="/provision">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(59,130,246,0.3)] border-0" data-testid="button-deploy-server">
-              <Plus className="h-4 w-4 mr-2" />
-              Deploy Server
-            </Button>
-          </Link>
         </div>
 
         {/* Stats Grid */}
@@ -114,14 +108,20 @@ export default function Dashboard() {
               <p className="text-muted-foreground">Loading servers...</p>
             </GlassCard>
           ) : error ? (
-            <GlassCard className="p-12 flex flex-col items-center justify-center">
-              <div className="h-16 w-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-                <ServerIcon className="h-8 w-8 text-red-400" />
+            <GlassCard className="p-12 flex flex-col items-center justify-center" data-testid="error-state">
+              <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+                <ServerIcon className="h-8 w-8 text-yellow-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Unable to Load Servers</h3>
-              <p className="text-muted-foreground text-center max-w-md">
-                Could not connect to VirtFusion. Please check your API configuration.
+              <h3 className="text-lg font-medium text-white mb-2">Connecting to VirtFusion</h3>
+              <p className="text-muted-foreground text-center max-w-md mb-6">
+                Unable to fetch servers. This panel connects to your VirtFusion instance to display your VPS servers.
               </p>
+              <Button variant="outline" className="border-white/10 hover:bg-white/5" asChild>
+                <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open VirtFusion Panel
+                </a>
+              </Button>
             </GlassCard>
           ) : servers.length === 0 ? (
             <GlassCard className="p-12 flex flex-col items-center justify-center" data-testid="empty-servers-state">
@@ -130,14 +130,14 @@ export default function Dashboard() {
               </div>
               <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
               <p className="text-muted-foreground text-center max-w-md mb-6">
-                You don't have any VPS servers configured in VirtFusion. Deploy your first server to get started.
+                You don't have any VPS servers. Order a server through WHMCS to get started.
               </p>
-              <Link href="/provision">
-                <Button className="bg-primary hover:bg-primary/90" data-testid="button-deploy-first-server">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Deploy Your First Server
-                </Button>
-              </Link>
+              <Button variant="outline" className="border-white/10 hover:bg-white/5" asChild>
+                <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open VirtFusion Panel
+                </a>
+              </Button>
             </GlassCard>
           ) : (
             <div className="grid grid-cols-1 gap-4">

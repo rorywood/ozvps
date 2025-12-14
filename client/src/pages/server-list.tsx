@@ -13,7 +13,8 @@ import {
   Search,
   Filter,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -96,13 +97,14 @@ export default function ServerList() {
             </div>
             <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
             <p className="text-muted-foreground text-center max-w-md mb-6">
-              You don't have any VPS servers configured in VirtFusion. Deploy your first server to get started.
+              You don't have any VPS servers yet. Order a server through your billing portal to get started.
             </p>
-            <Link href="/provision">
-              <Button className="bg-primary hover:bg-primary/90" data-testid="button-deploy-first-server">
-                Deploy Your First Server
-              </Button>
-            </Link>
+            <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-open-virtfusion" asChild>
+              <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open VirtFusion Panel
+              </a>
+            </Button>
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-4">

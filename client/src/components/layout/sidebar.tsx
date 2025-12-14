@@ -2,9 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
   Server, 
-  PlusCircle, 
   Network, 
-  CreditCard, 
   Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,9 +14,7 @@ export function Sidebar() {
   const navItems = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/servers", icon: Server, label: "Servers" },
-    { href: "/provision", icon: PlusCircle, label: "Deploy New" },
     { href: "/networking", icon: Network, label: "Networking" },
-    { href: "/billing", icon: CreditCard, label: "Billing" },
     { href: "/account", icon: Settings, label: "Settings" },
   ];
 
