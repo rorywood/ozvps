@@ -11,8 +11,6 @@ import Provision from "@/pages/provision";
 import Networking from "@/pages/networking";
 import Billing from "@/pages/billing";
 import Account from "@/pages/account";
-import generatedImage from '@assets/generated_images/dark_abstract_gradient_background_for_glassmorphism_ui.png';
-import { useEffect } from "react";
 
 function Router() {
   return (
@@ -31,11 +29,6 @@ function Router() {
 }
 
 function App() {
-  useEffect(() => {
-    // Set the background image CSS variable dynamically
-    document.body.style.setProperty('--bg-image', `url(${generatedImage})`);
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
