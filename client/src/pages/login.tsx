@@ -2,74 +2,110 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, User } from "lucide-react";
+import { Key, ExternalLink } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import logo from "@/assets/logo.png";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [apiToken, setApiToken] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    
+    if (!apiToken.trim()) {
+      setError("Please enter your API token");
+      return;
+    }
+
     setLoading(true);
-    // Simulate API delay
-    setTimeout(() => {
-      setLoading(false);
+    
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ apiToken: apiToken.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Invalid API token");
+        setLoading(false);
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["auth", "session"] });
       setLocation("/dashboard");
-    }, 1000);
+    } catch (err) {
+      setError("Failed to connect. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <GlassCard className="w-full max-w-md p-8 relative overflow-hidden">
-        {/* Decorative elements */}
         <div className="absolute -top-20 -right-20 w-40 h-40 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl" />
         
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-8">
-            <img src={logo} alt="CloudASN" className="h-16 w-auto mb-4" />
+            <img src={logo} alt="CloudASN" className="h-16 w-auto mb-4" data-testid="img-logo" />
             <h1 className="text-xl font-display font-bold text-white text-center">VPS Control Panel</h1>
-            <p className="text-muted-foreground text-center mt-2 text-sm">Enter your credentials to access your fleet</p>
+            <p className="text-muted-foreground text-center mt-2 text-sm">
+              Enter your VirtFusion API token to access your servers
+            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="apiToken">VirtFusion API Token</Label>
               <div className="relative">
-                <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Key className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  id="email" 
-                  placeholder="name@company.com" 
+                  id="apiToken" 
+                  type="password"
+                  placeholder="Enter your API token" 
                   className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
-                  defaultValue="demo@virtfusion.com"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  data-testid="input-api-token"
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Get your API token from the{" "}
+                <a 
+                  href="https://vps.cloudasn.com/account/api" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  VirtFusion Panel
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </p>
             </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <a href="#" className="text-xs text-primary hover:text-primary/80 transition-colors">Forgot password?</a>
+
+            {error && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-3" data-testid="text-error">
+                {error}
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="password" 
-                  type="password" 
-                  placeholder="••••••••" 
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
-                  defaultValue="password123"
-                />
-              </div>
-            </div>
+            )}
 
             <Button 
               type="submit" 
               className="w-full h-10 font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(59,130,246,0.3)] border-0"
               disabled={loading}
+              data-testid="button-login"
             >
               {loading ? "Authenticating..." : "Sign In"}
             </Button>

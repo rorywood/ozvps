@@ -3,13 +3,16 @@ import {
   LayoutDashboard, 
   Server, 
   Network, 
-  Settings
+  Settings,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
+import { useAuth } from "@/hooks/use-auth";
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { logout, isLoggingOut } = useAuth();
 
   const navItems = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -46,7 +49,16 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="p-4 border-t border-white/5">
+      <div className="p-4 border-t border-white/5 space-y-3">
+        <button
+          onClick={() => logout()}
+          disabled={isLoggingOut}
+          data-testid="button-logout"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-white hover:bg-white/5 transition-all duration-200"
+        >
+          <LogOut className="h-4 w-4" />
+          {isLoggingOut ? "Signing out..." : "Sign Out"}
+        </button>
         <div className="px-3 py-3 rounded-lg bg-white/5 border border-white/5">
           <p className="text-xs text-muted-foreground text-center">CloudASN VPS Panel</p>
           <p className="text-xs text-primary/70 text-center mt-1">Powered by VirtFusion</p>

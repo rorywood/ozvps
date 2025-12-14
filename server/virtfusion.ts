@@ -30,16 +30,19 @@ interface VirtFusionPackage {
   disk: number;
 }
 
-class VirtFusionClient {
+export class VirtFusionClient {
   private baseUrl: string;
   private apiToken: string;
 
-  constructor() {
+  constructor(apiToken: string) {
     this.baseUrl = process.env.VIRTFUSION_PANEL_URL || '';
-    this.apiToken = process.env.VIRTFUSION_API_TOKEN || '';
+    this.apiToken = apiToken;
 
-    if (!this.baseUrl || !this.apiToken) {
-      throw new Error('VIRTFUSION_PANEL_URL and VIRTFUSION_API_TOKEN must be set');
+    if (!this.baseUrl) {
+      throw new Error('VIRTFUSION_PANEL_URL must be set');
+    }
+    if (!this.apiToken) {
+      throw new Error('API token is required');
     }
   }
 
@@ -63,6 +66,15 @@ class VirtFusionClient {
     }
 
     return response.json();
+  }
+
+  async validateToken(): Promise<boolean> {
+    try {
+      await this.request<any>('/connect');
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async listServers() {
@@ -162,4 +174,6 @@ class VirtFusionClient {
   }
 }
 
-export const virtfusionClient = new VirtFusionClient();
+export function createVirtFusionClient(apiToken: string): VirtFusionClient {
+  return new VirtFusionClient(apiToken);
+}
