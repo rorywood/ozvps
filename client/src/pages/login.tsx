@@ -2,7 +2,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Key, ExternalLink } from "lucide-react";
+import { User, ExternalLink } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,14 +13,14 @@ export default function LoginPage() {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [apiToken, setApiToken] = useState("");
+  const [customerId, setCustomerId] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     
-    if (!apiToken.trim()) {
-      setError("Please enter your API token");
+    if (!customerId.trim()) {
+      setError("Please enter your Customer ID");
       return;
     }
 
@@ -32,13 +32,13 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ apiToken: apiToken.trim() }),
+        body: JSON.stringify({ extRelationId: customerId.trim() }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Invalid API token");
+        setError(data.error || "Login failed");
         setLoading(false);
         return;
       }
@@ -62,34 +62,34 @@ export default function LoginPage() {
             <img src={logo} alt="CloudASN" className="h-16 w-auto mb-4" data-testid="img-logo" />
             <h1 className="text-xl font-display font-bold text-white text-center">VPS Control Panel</h1>
             <p className="text-muted-foreground text-center mt-2 text-sm">
-              Enter your VirtFusion API token to access your servers
+              Enter your Customer ID to access your servers
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="apiToken">VirtFusion API Token</Label>
+              <Label htmlFor="customerId">Customer ID</Label>
               <div className="relative">
-                <Key className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  id="apiToken" 
-                  type="password"
-                  placeholder="Enter your API token" 
+                  id="customerId" 
+                  type="text"
+                  placeholder="Enter your Customer ID" 
                   className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
-                  value={apiToken}
-                  onChange={(e) => setApiToken(e.target.value)}
-                  data-testid="input-api-token"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  data-testid="input-customer-id"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Get your API token from the{" "}
+                Your Customer ID is provided in your welcome email or can be found in{" "}
                 <a 
-                  href="https://vps.cloudasn.com/account/api" 
+                  href="https://billing.cloudasn.com" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  VirtFusion Panel
+                  WHMCS
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </p>
@@ -107,7 +107,7 @@ export default function LoginPage() {
               disabled={loading}
               data-testid="button-login"
             >
-              {loading ? "Authenticating..." : "Sign In"}
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </div>

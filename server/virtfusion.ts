@@ -22,27 +22,27 @@ interface VirtFusionServer {
   };
 }
 
-interface VirtFusionPackage {
+interface VirtFusionUser {
   id: number;
   name: string;
-  cpu: number;
-  memory: number;
-  disk: number;
+  email: string;
+  extRelationId: string;
+  enabled: boolean;
 }
 
 export class VirtFusionClient {
   private baseUrl: string;
   private apiToken: string;
 
-  constructor(apiToken: string) {
+  constructor() {
     this.baseUrl = process.env.VIRTFUSION_PANEL_URL || '';
-    this.apiToken = apiToken;
+    this.apiToken = process.env.VIRTFUSION_API_TOKEN || '';
 
     if (!this.baseUrl) {
       throw new Error('VIRTFUSION_PANEL_URL must be set');
     }
     if (!this.apiToken) {
-      throw new Error('API token is required');
+      throw new Error('VIRTFUSION_API_TOKEN must be set');
     }
   }
 
@@ -68,13 +68,28 @@ export class VirtFusionClient {
     return response.json();
   }
 
-  async validateToken(): Promise<boolean> {
+  async validateConnection(): Promise<boolean> {
     try {
       await this.request<any>('/connect');
       return true;
     } catch (error) {
       return false;
     }
+  }
+
+  async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async listServersByUserId(userId: number) {
+    const data = await this.request<{ data: VirtFusionServer[] }>(`/servers/user/${userId}`);
+    return data.data.map(server => this.transformServer(server));
   }
 
   async listServers() {
@@ -88,7 +103,8 @@ export class VirtFusionClient {
   }
 
   async powerAction(serverId: string, action: 'start' | 'stop' | 'restart') {
-    await this.request(`/servers/${serverId}/power/${action}`, {
+    const endpoint = action === 'start' ? 'boot' : action === 'stop' ? 'shutdown' : 'restart';
+    await this.request(`/servers/${serverId}/power/${endpoint}`, {
       method: 'POST',
     });
     return { success: true };
@@ -96,7 +112,7 @@ export class VirtFusionClient {
 
   async getServerStats(serverId: string) {
     try {
-      const data = await this.request<{ data: any }>(`/servers/${serverId}/stats`);
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/traffic`);
       return data.data;
     } catch (error) {
       log(`Failed to fetch stats for server ${serverId}: ${error}`, 'virtfusion');
@@ -112,6 +128,7 @@ export class VirtFusionClient {
       name: server.name,
       uuid: server.uuid,
       status,
+      userId: server.userId,
       primaryIp: server.primaryIp || server.ipAddresses?.[0]?.address || 'N/A',
       location: {
         id: server.locationId?.toString() || 'unknown',
@@ -174,6 +191,4 @@ export class VirtFusionClient {
   }
 }
 
-export function createVirtFusionClient(apiToken: string): VirtFusionClient {
-  return new VirtFusionClient(apiToken);
-}
+export const virtfusionClient = new VirtFusionClient();

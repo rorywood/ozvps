@@ -1,21 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { createVirtFusionClient } from "./virtfusion";
+import { virtfusionClient } from "./virtfusion";
 import { log } from "./index";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.apiToken) {
+  if (!req.session.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
-}
-
-function getClient(req: Request) {
-  const token = req.session.apiToken;
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-  return createVirtFusionClient(token);
 }
 
 export async function registerRoutes(
@@ -25,31 +17,62 @@ export async function registerRoutes(
   
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { apiToken } = req.body;
+      const { extRelationId } = req.body;
       
-      if (!apiToken || typeof apiToken !== 'string') {
-        return res.status(400).json({ error: 'API token is required' });
+      if (!extRelationId || typeof extRelationId !== 'string') {
+        return res.status(400).json({ error: 'Customer ID is required' });
       }
 
-      const client = createVirtFusionClient(apiToken);
-      const isValid = await client.validateToken();
+      const user = await virtfusionClient.getUserByExtRelationId(extRelationId.trim());
       
-      if (!isValid) {
-        return res.status(401).json({ error: 'Invalid API token' });
+      if (!user) {
+        return res.status(401).json({ error: 'Customer not found. Please check your Customer ID.' });
       }
 
-      req.session.apiToken = apiToken;
-      log('User logged in with VirtFusion token', 'auth');
-      res.json({ success: true });
+      if (!user.enabled) {
+        return res.status(401).json({ error: 'Account is disabled. Please contact support.' });
+      }
+
+      req.session.regenerate((err) => {
+        if (err) {
+          log(`Session regeneration error: ${err.message}`, 'auth');
+          return res.status(500).json({ error: 'Login failed. Please try again.' });
+        }
+        
+        req.session.userId = user.id;
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+        req.session.extRelationId = extRelationId;
+        
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            log(`Session save error: ${saveErr.message}`, 'auth');
+            return res.status(500).json({ error: 'Login failed. Please try again.' });
+          }
+          
+          log(`User logged in: ${user.name} (${user.email})`, 'auth');
+          res.json({ 
+            success: true,
+            user: {
+              name: user.name,
+              email: user.email
+            }
+          });
+        });
+      });
     } catch (error: any) {
       log(`Login error: ${error.message}`, 'auth');
-      res.status(401).json({ error: 'Invalid API token' });
+      res.status(500).json({ error: 'Login failed. Please try again.' });
     }
   });
 
   app.get('/api/auth/session', (req, res) => {
     res.json({ 
-      authenticated: !!req.session.apiToken 
+      authenticated: !!req.session.userId,
+      user: req.session.userId ? {
+        name: req.session.userName,
+        email: req.session.userEmail
+      } : null
     });
   });
 
@@ -65,8 +88,8 @@ export async function registerRoutes(
 
   app.get('/api/servers', requireAuth, async (req, res) => {
     try {
-      const client = getClient(req);
-      const servers = await client.listServers();
+      const userId = req.session.userId!;
+      const servers = await virtfusionClient.listServersByUserId(userId);
       res.json(servers);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
@@ -76,8 +99,12 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id', requireAuth, async (req, res) => {
     try {
-      const client = getClient(req);
-      const server = await client.getServer(req.params.id);
+      const server = await virtfusionClient.getServer(req.params.id);
+      
+      if (server.userId !== req.session.userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
       res.json(server);
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
@@ -93,12 +120,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid action' });
       }
 
+      const server = await virtfusionClient.getServer(req.params.id);
+      if (server.userId !== req.session.userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const virtfusionAction = action === 'boot' ? 'start' : 
                               action === 'shutdown' ? 'stop' : 
                               'restart';
 
-      const client = getClient(req);
-      const result = await client.powerAction(req.params.id, virtfusionAction);
+      const result = await virtfusionClient.powerAction(req.params.id, virtfusionAction);
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
@@ -108,8 +139,12 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/metrics', requireAuth, async (req, res) => {
     try {
-      const client = getClient(req);
-      const metrics = await client.getServerStats(req.params.id);
+      const server = await virtfusionClient.getServer(req.params.id);
+      if (server.userId !== req.session.userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      const metrics = await virtfusionClient.getServerStats(req.params.id);
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
       log(`Error fetching metrics for server ${req.params.id}: ${error.message}`, 'api');
