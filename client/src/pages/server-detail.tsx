@@ -9,13 +9,20 @@ import {
   Cpu, 
   HardDrive, 
   Network, 
-  Clock,
   Settings,
-  Shield,
   Activity,
   HardDrive as StorageIcon,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Server as ServerIcon,
+  User,
+  Globe,
+  AlignLeft,
+  ChevronDown,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+  Home
 } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { api } from "@/lib/api";
@@ -24,6 +31,12 @@ import { cn } from "@/lib/utils";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Mock historical data for charts
 const generateHistoryData = (points: number, base: number, variance: number) => {
@@ -34,7 +47,6 @@ const generateHistoryData = (points: number, base: number, variance: number) => 
 };
 
 const cpuData = generateHistoryData(24, 45, 15);
-const ramData = generateHistoryData(24, 60, 5);
 const netData = generateHistoryData(24, 20, 10);
 
 export default function ServerDetail() {
@@ -95,257 +107,244 @@ export default function ServerDetail() {
 
   return (
     <AppShell>
-      <div className="space-y-8 pb-20">
+      <div className="space-y-6 pb-20">
         
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <Link href="/servers">
-              <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-white hover:bg-white/5">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-display font-bold text-white">{server.name}</h1>
-                <span className={cn(
-                  "text-xs font-bold px-2 py-0.5 rounded border uppercase tracking-wider",
-                  server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
-                  server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
-                  "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-                )}>
-                  {server.status}
-                </span>
+        {/* Header Section */}
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-white/5">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+               <Link href="/servers">
+                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-white hover:bg-white/5">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name}</h1>
+              <div className={cn(
+                "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
+                server.status === 'running' ? "bg-green-500 shadow-green-500/50" : 
+                server.status === 'stopped' ? "bg-red-500 shadow-red-500/50" :
+                "bg-yellow-500 shadow-yellow-500/50"
+              )} />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
+              <div className="flex items-center gap-2">
+                <div className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] font-mono text-white border border-white/10">IP</div>
+                <span className="text-white/80 font-mono">{server.primaryIp}</span>
               </div>
-              <p className="text-muted-foreground font-mono text-sm mt-1">{server.id} • {server.primaryIp} • {server.location.name}</p>
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5" />
+                <span className="text-white/80">{server.id}.cloudasn.net</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <AlignLeft className="h-3.5 w-3.5" />
+                <span className="text-white/80">Production Web Server</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <User className="h-3.5 w-3.5" />
+                <span className="text-white/80">Admin (Root)</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground gap-2">
-              <TerminalSquare className="h-4 w-4" />
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9">
+              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
               Console
             </Button>
-             <div className="w-px h-8 bg-white/10 mx-2 hidden lg:block" />
-            <div className="flex items-center bg-black/20 rounded-md border border-white/10 p-1">
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className="h-8 px-3 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm gap-2" 
-                title="Start"
-                disabled={server.status === 'running' || powerMutation.isPending}
-                onClick={() => handlePowerAction('boot')}
-              >
-                <Power className="h-4 w-4" />
-                <span className="sr-only lg:not-sr-only">Start</span>
-              </Button>
-              <div className="w-px h-4 bg-white/10 mx-1" />
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className="h-8 px-3 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm gap-2" 
-                title="Reboot"
-                disabled={server.status !== 'running' || powerMutation.isPending}
-                onClick={() => handlePowerAction('reboot')}
-              >
-                <RotateCw className="h-4 w-4" />
-                <span className="sr-only lg:not-sr-only">Reboot</span>
-              </Button>
-              <div className="w-px h-4 bg-white/10 mx-1" />
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className="h-8 px-3 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm gap-2" 
-                title="Stop"
-                disabled={server.status === 'stopped' || powerMutation.isPending}
-                onClick={() => handlePowerAction('shutdown')}
-              >
-                <Power className="h-4 w-4 rotate-180" />
-                <span className="sr-only lg:not-sr-only">Stop</span>
-              </Button>
-            </div>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0">
+                  <Power className="h-4 w-4 mr-2" />
+                  Power Options
+                  <ChevronDown className="h-3 w-3 ml-2 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">
+                 <DropdownMenuItem 
+                    className="focus:bg-white/10 cursor-pointer text-green-400 focus:text-green-400"
+                    disabled={server.status === 'running'}
+                    onClick={() => handlePowerAction('boot')}
+                  >
+                   <Power className="h-4 w-4 mr-2" /> Start Server
+                 </DropdownMenuItem>
+                 <DropdownMenuItem 
+                    className="focus:bg-white/10 cursor-pointer text-yellow-400 focus:text-yellow-400"
+                    disabled={server.status !== 'running'}
+                    onClick={() => handlePowerAction('reboot')}
+                  >
+                   <RotateCw className="h-4 w-4 mr-2" /> Reboot
+                 </DropdownMenuItem>
+                 <DropdownMenuItem 
+                    className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
+                    disabled={server.status === 'stopped'}
+                    onClick={() => handlePowerAction('shutdown')}
+                  >
+                   <Power className="h-4 w-4 mr-2 rotate-180" /> Shutdown
+                 </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-8">
-          <TabsList className="bg-white/5 border border-white/5 p-1 h-auto w-full md:w-auto flex flex-wrap justify-start">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6">Overview</TabsTrigger>
-            <TabsTrigger value="network" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6">Network</TabsTrigger>
-            <TabsTrigger value="storage" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6">Storage</TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6">Settings</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <GlassCard className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
-                  <Cpu className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">vCPU Usage</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.stats.cpu_usage}%</p>
-                </div>
-              </GlassCard>
-              <GlassCard className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
-                  <Activity className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">RAM Usage</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.stats.ram_usage}%</p>
-                </div>
-              </GlassCard>
-               <GlassCard className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
-                  <StorageIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Disk I/O</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.stats.disk_usage} MB/s</p>
-                </div>
-              </GlassCard>
-               <GlassCard className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
-                  <Network className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Network</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.stats.net_in} Mb/s</p>
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Main Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <GlassCard className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-blue-500" />
-                  CPU History (24h)
-                </h3>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={cpuData}>
-                      <defs>
-                        <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                      <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff' }}
-                        itemStyle={{ color: '#fff' }}
-                      />
-                      <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorCpu)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </GlassCard>
-
-              <GlassCard className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                  <Network className="h-5 w-5 text-green-500" />
-                  Network Throughput
-                </h3>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                     <AreaChart data={netData}>
-                      <defs>
-                        <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                      <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff' }}
-                        itemStyle={{ color: '#fff' }}
-                      />
-                      <Area type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorNet)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Info Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <GlassCard className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Hardware Information</h3>
-                <div className="space-y-3 text-sm">
-                   <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-muted-foreground">Plan</span>
-                    <span className="text-white font-medium">{server.plan.name}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-muted-foreground">Operating System</span>
-                    <span className="text-white font-medium">{server.image.name}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-muted-foreground">Virtualization</span>
-                    <span className="text-white font-medium">KVM / VirtFusion</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-muted-foreground">Boot Mode</span>
-                    <span className="text-white font-medium">UEFI</span>
-                  </div>
-                </div>
-              </GlassCard>
-
-              <GlassCard className="p-6">
-                 <h3 className="text-lg font-semibold text-white mb-4">Recent Events</h3>
-                 <div className="space-y-4">
-                   {[
-                     { event: "Daily Backup Created", time: "3 hours ago", type: "success" },
-                     { event: "Network Interface Up", time: "2 days ago", type: "info" },
-                     { event: "System Reboot (User Initiated)", time: "2 days ago", type: "warning" },
-                   ].map((log, i) => (
-                     <div key={i} className="flex items-start gap-3">
-                       <div className={cn(
-                         "mt-1 h-2 w-2 rounded-full",
-                         log.type === 'success' ? "bg-green-500" :
-                         log.type === 'warning' ? "bg-orange-500" : "bg-blue-500"
-                       )} />
-                       <div>
-                         <p className="text-sm font-medium text-white">{log.event}</p>
-                         <p className="text-xs text-muted-foreground">{log.time}</p>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-              </GlassCard>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="network">
-            <GlassCard className="p-6 text-center py-20">
-              <Network className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-white">Network Configuration</h3>
-              <p className="text-muted-foreground">Network interface management would go here.</p>
-            </GlassCard>
-          </TabsContent>
+        {/* Specs Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <Cpu className="h-5 w-5" />
+             </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore @ 3.5GHz</div>
+                <div className="text-xs text-muted-foreground">AMD EPYC 7003</div>
+             </div>
+          </GlassCard>
           
-          <TabsContent value="storage">
-            <GlassCard className="p-6 text-center py-20">
-              <HardDrive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-white">Storage Volumes</h3>
-              <p className="text-muted-foreground">Disk management and backups would go here.</p>
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <Activity className="h-5 w-5" />
+             </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.ram / 1024} GB RAM</div>
+                <div className="text-xs text-muted-foreground">DDR4 ECC Memory</div>
+             </div>
+          </GlassCard>
+
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <StorageIcon className="h-5 w-5" />
+             </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB Storage</div>
+                <div className="text-xs text-muted-foreground">NVMe SSD Array</div>
+             </div>
+          </GlassCard>
+
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <Network className="h-5 w-5" />
+             </div>
+             <div>
+                <div className="text-sm font-bold text-white">2.58 GB</div>
+                <div className="text-xs text-muted-foreground">Traffic today</div>
+             </div>
+          </GlassCard>
+        </div>
+
+        {/* Navigation Tabs */}
+        <Tabs defaultValue="statistics" className="space-y-6">
+          <div className="border-b border-white/10">
+            <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
+              {["Statistics", "IP Management", "Reinstallation", "Rescue", "Configuration", "Inventory", "Notes", "Activity Log"].map(tab => (
+                 <TabsTrigger 
+                    key={tab} 
+                    value={tab.toLowerCase().replace(' ', '-')}
+                    className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-white"
+                  >
+                    {tab}
+                 </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+
+          <TabsContent value="statistics" className="space-y-8 animate-in fade-in duration-300">
+            
+            {/* Chart Container */}
+            <GlassCard className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div className="flex items-center gap-2 bg-white/5 p-1 rounded-md">
+                   {["24 HOURS", "14 DAYS", "30 DAYS", "ALL"].map((range, i) => (
+                      <button 
+                        key={range} 
+                        className={cn(
+                          "px-3 py-1 rounded text-xs font-bold transition-colors",
+                          i === 0 ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-muted-foreground hover:text-white hover:bg-white/5"
+                        )}
+                      >
+                        {range}
+                      </button>
+                   ))}
+                </div>
+                
+                <h3 className="text-sm font-medium text-white uppercase tracking-wider text-center flex-1">
+                  Bandwidth Usage (Port 3)
+                </h3>
+
+                <div className="flex items-center gap-2">
+                   <div className="flex gap-1 text-muted-foreground">
+                      <ZoomIn className="h-4 w-4 cursor-pointer hover:text-white" />
+                      <ZoomOut className="h-4 w-4 cursor-pointer hover:text-white" />
+                      <Home className="h-4 w-4 cursor-pointer hover:text-white" />
+                      <Maximize2 className="h-4 w-4 cursor-pointer hover:text-white" />
+                   </div>
+                   <Button size="sm" variant="outline" className="h-7 text-xs border-white/10 ml-2">BREAKDOWN</Button>
+                </div>
+              </div>
+
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={netData}>
+                    <defs>
+                      <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                       <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIn)" name="Inbound" />
+                    <Area type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorOut)" name="Outbound" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="flex items-center justify-center gap-6 mt-4">
+                 <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-blue-500" />
+                    <span className="text-xs font-medium text-white">Inbound Traffic</span>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-green-500" />
+                    <span className="text-xs font-medium text-white">Outbound Traffic</span>
+                 </div>
+              </div>
             </GlassCard>
+
+            <div className="space-y-4">
+               <h3 className="text-lg font-bold text-white">IPMI Sensors</h3>
+               <GlassCard className="p-6 flex items-center justify-between">
+                  <div className="flex items-center gap-2 bg-white/5 p-1 rounded-md">
+                     <button className="px-3 py-1 rounded text-xs font-bold bg-white/10 text-white">24 HOURS</button>
+                     <button className="px-3 py-1 rounded text-xs font-bold text-muted-foreground hover:text-white">14 DAYS</button>
+                     <button className="px-3 py-1 rounded text-xs font-bold text-muted-foreground hover:text-white">30 DAYS</button>
+                     <button className="px-3 py-1 rounded text-xs font-bold text-blue-400 bg-blue-500/10">ALL</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Show Details</span>
+                    <div className="h-5 w-9 bg-white/10 rounded-full relative cursor-pointer">
+                      <div className="absolute left-1 top-1 h-3 w-3 bg-white/50 rounded-full" />
+                    </div>
+                  </div>
+               </GlassCard>
+            </div>
           </TabsContent>
 
-          <TabsContent value="settings">
-            <GlassCard className="p-6 text-center py-20">
-              <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-white">Server Settings</h3>
-              <p className="text-muted-foreground">Reinstallation, ISO mounting, and kernel settings.</p>
-            </GlassCard>
-          </TabsContent>
-
+          {["ip-management", "reinstallation", "rescue", "configuration", "inventory", "notes", "activity-log"].map(tab => (
+            <TabsContent key={tab} value={tab}>
+               <GlassCard className="p-12 text-center border-dashed border-white/10 bg-transparent">
+                  <p className="text-muted-foreground">This module is available in the full version.</p>
+               </GlassCard>
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
     </AppShell>
