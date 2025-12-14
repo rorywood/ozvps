@@ -29,7 +29,7 @@ export function Sidebar() {
         <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30 text-primary">
           <Box className="h-5 w-5" />
         </div>
-        <span className="font-display font-bold text-xl tracking-tight text-white">VirtFusion</span>
+        <span className="font-display font-bold text-xl tracking-tight text-white">CloudASN</span>
       </div>
 
       <div className="flex-1 px-3 py-4 space-y-1">

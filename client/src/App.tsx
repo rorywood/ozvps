@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import ServerList from "@/pages/server-list";
+import ServerDetail from "@/pages/server-detail";
 import Provision from "@/pages/provision";
 import Networking from "@/pages/networking";
 import Billing from "@/pages/billing";
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/servers" component={ServerList} />
+      <Route path="/server/:id" component={ServerDetail} />
       <Route path="/provision" component={Provision} />
       <Route path="/networking" component={Networking} />
       <Route path="/billing" component={Billing} />

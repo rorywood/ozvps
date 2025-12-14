@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
 
 export default function ServerList() {
   return (
@@ -49,8 +50,9 @@ export default function ServerList() {
 
         <div className="grid grid-cols-1 gap-4">
           {mockServers.map((server) => (
-            <GlassCard key={server.id} className="p-6 transition-all duration-300 hover:border-primary/30 group">
-              <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            <Link key={server.id} href={`/server/${server.id}`}>
+              <GlassCard className="p-6 transition-all duration-300 hover:border-primary/30 group cursor-pointer">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-6">
                 
                 {/* Status Icon & Basic Info */}
                 <div className="flex items-center gap-4 min-w-[250px]">
@@ -175,6 +177,7 @@ export default function ServerList() {
                 </div>
               )}
             </GlassCard>
+            </Link>
           ))}
         </div>
       </div>
