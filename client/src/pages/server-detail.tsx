@@ -13,13 +13,17 @@ import {
   Settings,
   Shield,
   Activity,
-  HardDrive as StorageIcon
+  HardDrive as StorageIcon,
+  Loader2,
+  AlertCircle
 } from "lucide-react";
 import { Link, useRoute } from "wouter";
-import { mockServers } from "@/lib/mock-data";
+import { api } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock historical data for charts
 const generateHistoryData = (points: number, base: number, variance: number) => {
@@ -36,7 +40,58 @@ const netData = generateHistoryData(24, 20, 10);
 export default function ServerDetail() {
   const [, params] = useRoute("/server/:id");
   const serverId = params?.id;
-  const server = mockServers.find(s => s.id === serverId) || mockServers[0];
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: server, isLoading, isError } = useQuery({
+    queryKey: ['server', serverId],
+    queryFn: () => api.getServer(serverId || ''),
+    enabled: !!serverId
+  });
+
+  const powerMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
+      api.powerAction(id, action),
+    onSuccess: (_, { action }) => {
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      toast({
+        title: "Action Initiated",
+        description: `Server ${action} command sent successfully.`,
+      });
+    }
+  });
+
+  const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown') => {
+    if (serverId) {
+      powerMutation.mutate({ id: serverId, action });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
+          <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+          <p>Loading server details...</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (isError || !server) {
+    return (
+      <AppShell>
+         <div className="flex flex-col items-center justify-center py-20 text-red-400 h-[50vh]">
+            <AlertCircle className="h-10 w-10 mb-4" />
+            <p>Server not found or access denied.</p>
+            <Link href="/servers">
+              <Button variant="outline" className="mt-4 border-white/10 text-white">Return to Fleet</Button>
+            </Link>
+          </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -62,7 +117,7 @@ export default function ServerDetail() {
                   {server.status}
                 </span>
               </div>
-              <p className="text-muted-foreground font-mono text-sm mt-1">{server.id} • {server.ip} • {server.location}</p>
+              <p className="text-muted-foreground font-mono text-sm mt-1">{server.id} • {server.primaryIp} • {server.location.name}</p>
             </div>
           </div>
 
@@ -73,17 +128,38 @@ export default function ServerDetail() {
             </Button>
              <div className="w-px h-8 bg-white/10 mx-2 hidden lg:block" />
             <div className="flex items-center bg-black/20 rounded-md border border-white/10 p-1">
-              <Button size="sm" variant="ghost" className="h-8 px-3 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm gap-2" title="Start">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-8 px-3 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm gap-2" 
+                title="Start"
+                disabled={server.status === 'running' || powerMutation.isPending}
+                onClick={() => handlePowerAction('boot')}
+              >
                 <Power className="h-4 w-4" />
                 <span className="sr-only lg:not-sr-only">Start</span>
               </Button>
               <div className="w-px h-4 bg-white/10 mx-1" />
-              <Button size="sm" variant="ghost" className="h-8 px-3 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm gap-2" title="Reboot">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-8 px-3 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm gap-2" 
+                title="Reboot"
+                disabled={server.status !== 'running' || powerMutation.isPending}
+                onClick={() => handlePowerAction('reboot')}
+              >
                 <RotateCw className="h-4 w-4" />
                 <span className="sr-only lg:not-sr-only">Reboot</span>
               </Button>
               <div className="w-px h-4 bg-white/10 mx-1" />
-              <Button size="sm" variant="ghost" className="h-8 px-3 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm gap-2" title="Stop">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-8 px-3 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm gap-2" 
+                title="Stop"
+                disabled={server.status === 'stopped' || powerMutation.isPending}
+                onClick={() => handlePowerAction('shutdown')}
+              >
                 <Power className="h-4 w-4 rotate-180" />
                 <span className="sr-only lg:not-sr-only">Stop</span>
               </Button>
@@ -108,7 +184,7 @@ export default function ServerDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">vCPU Usage</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.usage_cpu}%</p>
+                  <p className="text-xl font-bold text-white font-mono">{server.stats.cpu_usage}%</p>
                 </div>
               </GlassCard>
               <GlassCard className="p-4 flex items-center gap-4">
@@ -117,7 +193,7 @@ export default function ServerDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">RAM Usage</p>
-                  <p className="text-xl font-bold text-white font-mono">{server.usage_ram}%</p>
+                  <p className="text-xl font-bold text-white font-mono">{server.stats.ram_usage}%</p>
                 </div>
               </GlassCard>
                <GlassCard className="p-4 flex items-center gap-4">
@@ -126,7 +202,7 @@ export default function ServerDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Disk I/O</p>
-                  <p className="text-xl font-bold text-white font-mono">12 MB/s</p>
+                  <p className="text-xl font-bold text-white font-mono">{server.stats.disk_usage} MB/s</p>
                 </div>
               </GlassCard>
                <GlassCard className="p-4 flex items-center gap-4">
@@ -135,7 +211,7 @@ export default function ServerDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Network</p>
-                  <p className="text-xl font-bold text-white font-mono">240 Mb/s</p>
+                  <p className="text-xl font-bold text-white font-mono">{server.stats.net_in} Mb/s</p>
                 </div>
               </GlassCard>
             </div>
@@ -204,11 +280,11 @@ export default function ServerDetail() {
                 <div className="space-y-3 text-sm">
                    <div className="flex justify-between py-2 border-b border-white/5">
                     <span className="text-muted-foreground">Plan</span>
-                    <span className="text-white font-medium">{server.plan}</span>
+                    <span className="text-white font-medium">{server.plan.name}</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-white/5">
                     <span className="text-muted-foreground">Operating System</span>
-                    <span className="text-white font-medium">{server.image}</span>
+                    <span className="text-white font-medium">{server.image.name}</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-white/5">
                     <span className="text-muted-foreground">Virtualization</span>
