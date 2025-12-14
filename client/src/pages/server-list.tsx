@@ -89,6 +89,21 @@ export default function ServerList() {
             <AlertCircle className="h-10 w-10 mb-4" />
             <p>Failed to load servers. Please try again.</p>
           </div>
+        ) : servers?.length === 0 ? (
+          <GlassCard className="p-12 flex flex-col items-center justify-center" data-testid="empty-servers-state">
+            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+              <ServerIcon className="h-10 w-10 text-primary" />
+            </div>
+            <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
+            <p className="text-muted-foreground text-center max-w-md mb-6">
+              You don't have any VPS servers configured in VirtFusion. Deploy your first server to get started.
+            </p>
+            <Link href="/provision">
+              <Button className="bg-primary hover:bg-primary/90" data-testid="button-deploy-first-server">
+                Deploy Your First Server
+              </Button>
+            </Link>
+          </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {servers?.map((server) => (
