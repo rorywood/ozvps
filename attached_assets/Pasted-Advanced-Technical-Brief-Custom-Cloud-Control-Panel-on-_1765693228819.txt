@@ -1,0 +1,273 @@
+Advanced Technical Brief
+
+Custom Cloud Control Panel on top of VirtFusion API
+Target UX: CloudASN / TenantOS-style.
+Visual style: Modern, glassmorphism, dark-first, minimal, high-density, fast.
+
+1. System Architecture (Non-Negotiable)
+
+VirtFusion is the backend control plane and system of record.
+
+The custom panel is a pure API consumer.
+
+No VirtFusion UI components are reused.
+
+The VirtFusion web UI may remain enabled internally but is not exposed to customers.
+
+Architecture flow:
+
+User → Custom UI (Replit app)
+     → VirtFusion REST API
+     → VirtFusion backend (DB, hypervisors, orchestration)
+
+2. Authentication & Security Model
+
+Use VirtFusion API tokens (Bearer tokens).
+
+Two token classes:
+
+Admin tokens (infrastructure, users, pools).
+
+End-user tokens (self-service servers, usage, billing visibility).
+
+Tokens stored server-side only.
+
+RBAC enforced in the UI layer by endpoint allow-lists, not UI hiding.
+
+Token rotation and revocation supported.
+
+3. VirtFusion API Capabilities to be Used
+3.1 Users & Tenancy
+
+Create, update, delete users
+
+External relational IDs (map users to billing systems)
+
+Credit balance & usage (self-service)
+
+Tenant-scoped data isolation
+
+3.2 Server / VM Lifecycle
+
+List servers (tenant-filtered)
+
+Provision servers
+
+Power actions: start, stop, reboot, force stop
+
+Destroy servers
+
+Resize resources (where permitted)
+
+Retrieve console/VNC access data
+
+Status polling and state transitions
+
+3.3 Infrastructure (Admin Scope)
+
+Hypervisors list
+
+Hypervisor groups / pools
+
+Capacity metrics
+
+Host health and availability
+
+3.4 Networking
+
+IP address allocation
+
+IP block assignment
+
+VLANs (if enabled)
+
+Traffic limits and usage stats
+
+3.5 Usage & Billing Signals
+
+Traffic usage per server
+
+Credit consumption
+
+Resource allocation
+
+External billing system integration via relational IDs
+
+3.6 Events / Automation
+
+Polling or webhook-driven updates
+
+Build completion
+
+State change notifications
+
+Error/failure propagation to UI
+
+4. Required UI Modules (Pages)
+4.1 Authentication
+
+Login
+
+Session validation
+
+Token expiry handling
+
+Permission-aware routing
+
+4.2 Global Dashboard
+
+Total servers
+
+Active vs stopped
+
+Aggregate CPU / RAM / storage
+
+Traffic usage
+
+Credit balance
+
+Recent actions log
+
+4.3 Server Management
+
+Server list (table + card hybrid)
+
+Server detail view:
+
+Status
+
+Resources
+
+IPs
+
+Traffic
+
+Console access
+
+Action panel:
+
+Start / stop / reboot
+
+Resize (if allowed)
+
+Destroy (guard-railed)
+
+4.4 Provisioning Flow
+
+Plan selection
+
+Location / pool selection
+
+OS image
+
+Network options
+
+Review → deploy
+
+Live build progress
+
+4.5 Networking
+
+IP inventory
+
+Assignment state
+
+Traffic graphs
+
+Limits and overages
+
+4.6 Billing & Usage
+
+Credit balance
+
+Consumption history
+
+Traffic history
+
+Usage per server
+
+4.7 Account & Profile
+
+User details
+
+API tokens (if exposing self-service tokens)
+
+Security settings
+
+4.8 Admin-Only (Optional)
+
+User management
+
+Pool visibility
+
+Infrastructure status
+
+System-wide metrics
+
+5. UX / Design Constraints
+
+Glassmorphism (blur, translucency, depth)
+
+Dark mode default
+
+High contrast, no clutter
+
+No legacy UI patterns
+
+Fast transitions, zero animation fluff
+
+Desktop-first, responsive secondary
+
+Data-dense views preferred over “pretty”
+
+6. Frontend Technical Expectations
+
+Modern framework (React / Svelte / Next)
+
+Component-driven architecture
+
+Centralised API client
+
+Typed API responses
+
+Error-first handling (no silent failures)
+
+Optimistic UI where safe
+
+Polling + event refresh strategy
+
+7. Data Handling Rules
+
+Never trust UI state alone; always reconcile with API.
+
+All destructive actions require confirmation + permission check.
+
+Server states treated as asynchronous and eventual.
+
+UI must gracefully handle:
+
+Provisioning delays
+
+Failed builds
+
+Partial API outages
+
+8. Long-Term Design Intent
+
+UI must not assume VirtFusion permanence.
+
+Abstract API calls behind a service layer.
+
+Treat VirtFusion as a replaceable backend.
+
+Control panel is the product; infrastructure is implementation detail.
+
+9. Outcome Definition
+
+End users never see VirtFusion.
+
+Panel looks and behaves like a modern cloud provider (CloudASN / TenantOS tier).
+
+VirtFusion runs invisibly underneath as orchestration engine only.
+
+This is the brief to hand directly to Replit.
