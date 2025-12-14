@@ -2,9 +2,10 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Box, Lock, User } from "lucide-react";
+import { Lock, User } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
+import logo from "@/assets/logo.png";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -29,10 +30,8 @@ export default function LoginPage() {
         
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-8">
-            <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 text-primary mb-4 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-              <Box className="h-6 w-6" />
-            </div>
-            <h1 className="text-2xl font-display font-bold text-white text-center">CloudASN VPS Panel</h1>
+            <img src={logo} alt="CloudASN" className="h-16 w-auto mb-4" />
+            <h1 className="text-xl font-display font-bold text-white text-center">VPS Control Panel</h1>
             <p className="text-muted-foreground text-center mt-2 text-sm">Enter your credentials to access your fleet</p>
           </div>
 

@@ -6,10 +6,10 @@ import {
   Network, 
   CreditCard, 
   Settings, 
-  LogOut,
-  Box
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/logo.png";
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -25,11 +25,8 @@ export function Sidebar() {
 
   return (
     <div className="h-screen w-64 flex flex-col glass-panel border-r border-white/5 fixed left-0 top-0 z-50">
-      <div className="p-6 flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30 text-primary">
-          <Box className="h-5 w-5" />
-        </div>
-        <span className="font-display font-bold text-xl tracking-tight text-white">CloudASN</span>
+      <div className="p-6 flex items-center justify-center">
+        <img src={logo} alt="CloudASN" className="h-10 w-auto" />
       </div>
 
       <div className="flex-1 px-3 py-4 space-y-1">
