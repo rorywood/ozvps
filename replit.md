@@ -34,7 +34,8 @@ Preferred communication style: Simple, everyday language.
 ### Authentication Flow
 - VirtFusion API tokens (Bearer tokens) for backend communication
 - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
-- Frontend uses session-based mock authentication (demo mode)
+- No user authentication currently - direct access to panel
+- Authentication code exists but is disabled (can be re-enabled if needed)
 
 ### Project Structure
 ```
