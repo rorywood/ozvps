@@ -32,12 +32,18 @@ export default function ServerConsole() {
     if (consoleData?.twoStep && consoleData?.authUrl && consoleData?.vncUrl) {
       setStatus('authenticating');
       
-      const authWindow = window.open(consoleData.authUrl, '_blank', 'width=800,height=600');
+      // Use hidden iframe for authentication
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = consoleData.authUrl;
+      document.body.appendChild(iframe);
       
+      // Wait for auth to complete, then redirect to VNC
       setTimeout(() => {
         setStatus('opening');
+        document.body.removeChild(iframe);
         window.location.replace(consoleData.vncUrl);
-      }, 2000);
+      }, 1500);
     }
   }, [consoleData]);
 
