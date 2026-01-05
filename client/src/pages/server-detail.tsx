@@ -248,46 +248,10 @@ export default function ServerDetail() {
     }
   };
 
-  const handleOpenVnc = async () => {
-    if (!serverId || isEnablingVnc) return;
-    
-    setIsEnablingVnc(true);
-    try {
-      const result = await api.getConsoleUrl(serverId);
-      if (result?.url) {
-        setVncEnabled(true);
-        setVncTimeRemaining(3600);
-        
-        if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-        vncTimerRef.current = setInterval(() => {
-          setVncTimeRemaining(prev => {
-            if (prev <= 1) {
-              if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-              setVncEnabled(false);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        
-        window.open(result.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
-        
-        toast({
-          title: "Console Opened",
-          description: "VNC console opened in a new window.",
-        });
-      } else {
-        throw new Error('No console URL returned');
-      }
-    } catch (error) {
-      toast({
-        title: "Console Failed",
-        description: "Could not open console. Make sure the server is running.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsEnablingVnc(false);
-    }
+  const handleOpenVnc = () => {
+    if (!serverId) return;
+    // Navigate to the console page which embeds the VNC in an iframe (hides the URL)
+    setLocation(`/servers/${serverId}/console`);
   };
 
   const handleStartEditName = () => {
@@ -634,15 +598,11 @@ export default function ServerDetail() {
                     : "bg-white/5 hover:bg-white/10 text-white border-white/10"
                 )}
                 onClick={handleOpenVnc}
-                disabled={isEnablingVnc || !!powerActionPending || server.status !== 'running' || isSuspended}
+                disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
                 data-testid="button-console"
               >
-                {isEnablingVnc ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                )}
-                {isEnablingVnc ? 'Enabling...' : 'Console'}
+                <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+                Console
               </Button>
             )}
             
