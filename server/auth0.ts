@@ -118,20 +118,18 @@ class Auth0Client {
 
   async createUser(email: string, password: string, name?: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
     try {
-      const managementToken = await this.getManagementToken();
-
-      const response = await fetch(`${this.baseUrl}/api/v2/users`, {
+      // Use the dbconnections/signup endpoint which doesn't require Management API access
+      const response = await fetch(`${this.baseUrl}/dbconnections/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${managementToken}`,
         },
         body: JSON.stringify({
+          client_id: AUTH0_CLIENT_ID,
           email,
           password,
-          name: name || email.split('@')[0],
           connection: 'Username-Password-Authentication',
-          email_verified: false,
+          name: name || email.split('@')[0],
         }),
       });
 
@@ -139,13 +137,13 @@ class Auth0Client {
         const error = await response.json() as any;
         log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
         
-        if (error.statusCode === 409 || error.message?.includes('already exists')) {
+        if (error.code === 'invalid_signup' || error.description?.includes('already exists')) {
           return { success: false, error: 'An account with this email already exists' };
         }
-        if (error.message?.includes('PasswordStrengthError')) {
+        if (error.code === 'password_strength_error' || error.name === 'PasswordStrengthError') {
           return { success: false, error: 'Password is too weak. Please use a stronger password.' };
         }
-        return { success: false, error: error.message || 'Failed to create account' };
+        return { success: false, error: error.description || error.message || 'Failed to create account' };
       }
 
       const userData = await response.json() as any;
@@ -153,10 +151,10 @@ class Auth0Client {
       return {
         success: true,
         user: {
-          user_id: userData.user_id,
+          user_id: userData._id || `auth0|${userData._id}`,
           email: userData.email,
-          name: userData.name,
-          email_verified: userData.email_verified,
+          name: name || email.split('@')[0],
+          email_verified: false,
         },
       };
     } catch (error: any) {
