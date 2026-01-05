@@ -85,15 +85,13 @@ class Auth0Client {
         const error = await response.json() as Auth0Error;
         log(`Auth0 login failed for ${email}: ${error.error_description}`, 'auth0');
         
+        // Check if user is blocked FIRST (before other error checks)
+        if (error.error_description?.toLowerCase().includes('block')) {
+          return { success: false, error: 'Your account has been banned by Support. Please contact us at support@ozvps.com.au for further info.' };
+        }
+        
         if (error.error === 'invalid_grant') {
           return { success: false, error: 'Invalid email or password' };
-        }
-        // Check if user is blocked
-        if (error.error === 'unauthorized' && error.error_description?.toLowerCase().includes('block')) {
-          return { success: false, error: 'Your account has been banned by Support. Please contact us at support@ozvps.com.au for further info.', blocked: true };
-        }
-        if (error.error_description?.toLowerCase().includes('block')) {
-          return { success: false, error: 'Your account has been banned by Support. Please contact us at support@ozvps.com.au for further info.', blocked: true };
         }
         return { success: false, error: error.error_description || 'Authentication failed' };
       }
