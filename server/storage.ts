@@ -11,6 +11,7 @@ export interface IStorage {
   updateUserVirtFusionData(userId: number, data: { virtFusionUserId: number; extRelationId: string; name?: string }): Promise<void>;
   updateUser(userId: number, data: { name?: string }): Promise<void>;
   updateUserPassword(userId: number, newPassword: string): Promise<void>;
+  updateUserStatus(userId: number, status: 'active' | 'disabled'): Promise<void>;
   verifyPassword(user: User, password: string): Promise<boolean>;
   
   createSession(data: {
@@ -64,6 +65,10 @@ export class DatabaseStorage implements IStorage {
   async updateUserPassword(userId: number, newPassword: string): Promise<void> {
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+  }
+
+  async updateUserStatus(userId: number, status: 'active' | 'disabled'): Promise<void> {
+    await db.update(users).set({ status }).where(eq(users.id, userId));
   }
 
   async verifyPassword(user: User, password: string): Promise<boolean> {

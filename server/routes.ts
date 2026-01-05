@@ -45,6 +45,13 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
+    const user = await storage.getUserById(session.userId);
+    if (!user || user.status === 'disabled') {
+      await storage.deleteSession(sessionId);
+      res.clearCookie(SESSION_COOKIE);
+      return res.status(401).json({ error: 'Account disabled. Please contact support.' });
+    }
+
     req.userSession = {
       id: session.id,
       userId: session.userId,
@@ -150,12 +157,24 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
+      if (user.status === 'disabled') {
+        return res.status(401).json({ error: 'Account disabled. Please contact support.' });
+      }
+
       const validPassword = await storage.verifyPassword(user, password);
       if (!validPassword) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
-      if (!user.virtFusionUserId) {
+      if (user.virtFusionUserId) {
+        const virtFusionUser = await virtfusionClient.getUserById(user.virtFusionUserId);
+        if (!virtFusionUser) {
+          await storage.updateUserStatus(user.id, 'disabled');
+          await storage.deleteUserSessions(user.id);
+          log(`User ${user.id} disabled - VirtFusion user ${user.virtFusionUserId} no longer exists`, 'api');
+          return res.status(401).json({ error: 'Account disabled. Please contact support.' });
+        }
+      } else {
         const virtFusionUser = await virtfusionClient.findUserByEmail(email);
         if (virtFusionUser) {
           await storage.updateUserVirtFusionData(user.id, {

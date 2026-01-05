@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   name: text("name"),
   virtFusionUserId: integer("virtfusion_user_id"),
   extRelationId: text("ext_relation_id"),
+  status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
