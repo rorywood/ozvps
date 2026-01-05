@@ -78,15 +78,32 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
-  // Send text to clipboard/paste
-  const sendClipboardText = () => {
+  // Convert character to X11 keysym (handles case sensitivity)
+  const charToKeysym = (char: string): number => {
+    const code = char.charCodeAt(0);
+    // For basic ASCII printable characters (32-126), keysym equals Unicode
+    if (code >= 32 && code <= 126) {
+      return code;
+    }
+    // Special keys
+    if (char === '\n' || char === '\r') return 0xFF0D; // Return/Enter
+    if (char === '\t') return 0xFF09; // Tab
+    if (char === '\b') return 0xFF08; // Backspace
+    // Default: use Unicode code point
+    return code;
+  };
+
+  // Send text to clipboard/paste (case-sensitive)
+  const sendClipboardText = async () => {
     const rfb = vncRef.current?.rfb;
     if (rfb && clipboardText) {
-      // Type each character
+      // Type each character with small delay for reliability
       for (const char of clipboardText) {
-        const code = char.charCodeAt(0);
-        rfb.sendKey(code, char, true);
-        rfb.sendKey(code, char, false);
+        const keysym = charToKeysym(char);
+        rfb.sendKey(keysym, null, true);  // key down
+        rfb.sendKey(keysym, null, false); // key up
+        // Small delay between characters for reliability
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
     }
   };
@@ -211,14 +228,14 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
         </div>
       </div>
       
-      {/* Toggle Sidebar Button */}
+      {/* Toggle Sidebar Button - Always visible with clear styling */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-[#0a0a0a] border border-white/10 border-l-0 rounded-r-md p-1.5 text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+        className="absolute top-1/2 -translate-y-1/2 z-20 bg-blue-600 hover:bg-blue-500 border-2 border-blue-400 rounded-r-lg p-2 text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
         style={{ left: sidebarOpen ? '256px' : '0' }}
         data-testid="button-toggle-sidebar"
       >
-        {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {sidebarOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
       </button>
 
       {/* Main VNC Area */}
@@ -304,7 +321,12 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             url={wsUrl}
             scaleViewport
             background="#000000"
-            style={{ width: '100%', height: '100%', minHeight: '400px' }}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              minHeight: '400px',
+              cursor: 'crosshair'
+            }}
             ref={vncRef}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
