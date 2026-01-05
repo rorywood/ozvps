@@ -209,15 +209,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
-      if (user.virtFusionUserId) {
-        const virtFusionUser = await virtfusionClient.getUserById(user.virtFusionUserId);
-        if (!virtFusionUser) {
-          await storage.updateUserStatus(user.id, 'disabled');
-          await storage.deleteUserSessions(user.id);
-          log(`User ${user.id} disabled - VirtFusion user ${user.virtFusionUserId} no longer exists`, 'api');
-          return res.status(401).json({ error: 'Account disabled. Please contact support.' });
-        }
-      } else {
+      if (!user.virtFusionUserId) {
         const virtFusionUser = await virtfusionClient.findUserByEmail(email);
         if (virtFusionUser) {
           await storage.updateUserVirtFusionData(user.id, {
