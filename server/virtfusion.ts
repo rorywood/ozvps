@@ -133,12 +133,14 @@ export class VirtFusionClient {
   }
 
   async listServersByUserId(userId: number) {
-    const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}`);
+    // Fetch with remoteState=true to get live power status from hypervisor
+    const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}?remoteState=true`);
     return response.data.map(server => this.transformServer(server));
   }
 
   async listServers() {
-    const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers');
+    // Fetch with remoteState=true to get live power status from hypervisor
+    const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers?remoteState=true');
     return response.data.map(server => this.transformServer(server));
   }
 
