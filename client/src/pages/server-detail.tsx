@@ -14,7 +14,6 @@ import {
   HardDrive as StorageIcon,
   Loader2,
   AlertCircle,
-  Globe,
   AlignLeft,
   ChevronDown,
   Copy,
@@ -33,6 +32,7 @@ import {
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -542,7 +542,7 @@ export default function ServerDetail() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <Globe className="h-3.5 w-3.5" />
+                <img src={flagAU} alt="Australia" className="h-3.5 w-5 object-cover rounded-sm" />
                 <span className="text-white/80">{server.location.name}</span>
               </div>
               <div className="flex items-center gap-2">
