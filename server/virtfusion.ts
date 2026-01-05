@@ -589,10 +589,13 @@ export class VirtFusionClient {
   async generateServerLoginTokens(serverId: string, extRelationId: string) {
     try {
       // Use the VirtFusion API to generate authentication tokens for a specific server
-      // POST /users/{extRelationId}/serverAuthenticationTokens/{serverId}
-      const data = await this.request<{ data: any }>(`/users/${extRelationId}/serverAuthenticationTokens/${serverId}`, {
+      // POST /servers/{serverId}/serverAuthenticationTokens with extRelationId in body
+      log(`Generating server token: serverId=${serverId}, extRelationId=${extRelationId}`, 'virtfusion');
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/serverAuthenticationTokens`, {
         method: 'POST',
+        body: JSON.stringify({ extRelationId }),
       });
+      log(`Token generated successfully: ${JSON.stringify(data.data)}`, 'virtfusion');
       return data.data;
     } catch (error) {
       log(`Failed to generate login tokens for server ${serverId}: ${error}`, 'virtfusion');
