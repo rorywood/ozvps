@@ -17,5 +17,13 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const serverNameSchema = z.object({
+  name: z.string()
+    .min(2, 'Server name must be at least 2 characters')
+    .max(48, 'Server name must be 48 characters or less')
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/, 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods'),
+});
+
 export type Session = typeof sessions.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ServerNameInput = z.infer<typeof serverNameSchema>;

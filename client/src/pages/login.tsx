@@ -41,20 +41,20 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <GlassCard className="w-full max-w-md p-8 relative overflow-hidden">
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-primary/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl" />
+      <GlassCard className="w-full max-w-lg p-10 relative overflow-hidden">
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl" />
         
         <div className="relative z-10">
-          <div className="flex flex-col items-center mb-8">
-            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-4" data-testid="img-logo" />
-            <h1 className="text-xl font-display font-bold text-white text-center">VPS Control Panel</h1>
-            <p className="text-muted-foreground text-center mt-2 text-sm">
-              Sign in with your VirtFusion account
+          <div className="flex flex-col items-center mb-10">
+            <img src={logo} alt="OzVPS" className="h-20 w-auto mb-6" data-testid="img-logo" />
+            <h1 className="text-2xl font-display font-bold text-white text-center">Welcome Back</h1>
+            <p className="text-muted-foreground text-center mt-3 text-base">
+              Sign in to manage your servers
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -98,7 +98,7 @@ export default function LoginPage() {
 
             <Button 
               type="submit" 
-              className="w-full h-10 font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(59,130,246,0.3)] border-0"
+              className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(59,130,246,0.3)] border-0"
               disabled={loginMutation.isPending}
               data-testid="button-login"
             >
@@ -113,8 +113,8 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            Use the same credentials as your VirtFusion control panel
+          <p className="text-center text-sm text-muted-foreground mt-8">
+            Need help? Contact support at support@ozvps.com
           </p>
         </div>
       </GlassCard>

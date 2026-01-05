@@ -2,8 +2,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
-import { loginSchema } from "@shared/schema";
+import { loginSchema, serverNameSchema } from "@shared/schema";
 import { log } from "./index";
+import { validateServerName } from "./content-filter";
 
 declare global {
   namespace Express {
@@ -234,6 +235,27 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch traffic data' });
+    }
+  });
+
+  app.put('/api/servers/:id/name', authMiddleware, async (req, res) => {
+    try {
+      const parsed = serverNameSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid server name' });
+      }
+
+      const { name } = parsed.data;
+      const profanityCheck = validateServerName(name);
+      if (!profanityCheck.valid) {
+        return res.status(400).json({ error: profanityCheck.error });
+      }
+
+      await virtfusionClient.updateServerName(req.params.id, name.trim());
+      res.json({ success: true, name: name.trim() });
+    } catch (error: any) {
+      log(`Error updating server name for ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update server name' });
     }
   });
 

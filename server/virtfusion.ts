@@ -572,6 +572,19 @@ export class VirtFusionClient {
     }
   }
 
+  async updateServerName(serverId: string, name: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name }),
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to update server name for ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
   private transformServer(server: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } }) {
     // Check remoteState first for live power status from hypervisor
     const remoteState = (server as any).remoteState;

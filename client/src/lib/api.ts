@@ -144,6 +144,19 @@ class ApiClient {
     return response.json();
   }
 
+  async updateServerName(id: string, name: string): Promise<{ success: boolean; name: string }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update server name');
+    }
+    return response.json();
+  }
+
   async getBuildStatus(id: string): Promise<{
     state: string;
     phase: 'queued' | 'building' | 'complete' | 'error';
