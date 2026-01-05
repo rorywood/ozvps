@@ -274,6 +274,46 @@ class Auth0Client {
     const user = await this.getUserById(auth0UserId);
     return user?.app_metadata?.virtfusion_user_id || null;
   }
+
+  async changePassword(auth0UserId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            password: newPassword,
+            connection: 'Username-Password-Authentication',
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Failed to change Auth0 password: ${response.status} ${JSON.stringify(error)}`, 'auth0');
+        
+        if (error.message?.includes('PasswordStrengthError') || error.code === 'password_strength_error') {
+          return { success: false, error: 'Password is too weak. Please use a stronger password with at least 8 characters, including uppercase, lowercase, numbers, and special characters.' };
+        }
+        if (error.message?.includes('PasswordHistoryError')) {
+          return { success: false, error: 'Cannot reuse a recent password. Please choose a different password.' };
+        }
+        return { success: false, error: error.message || 'Failed to change password' };
+      }
+
+      log(`Password changed successfully for user ${auth0UserId}`, 'auth0');
+      return { success: true };
+    } catch (error: any) {
+      log(`Auth0 password change error: ${error.message}`, 'auth0');
+      return { success: false, error: 'Password change service unavailable' };
+    }
+  }
 }
 
 export const auth0Client = new Auth0Client();

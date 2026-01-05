@@ -13,6 +13,7 @@ declare global {
       userSession?: {
         id: string;
         userId: number;
+        auth0UserId: string | null;
         virtFusionUserId: number | null;
         extRelationId: string | null;
         email: string;
@@ -49,6 +50,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     req.userSession = {
       id: session.id,
       userId: session.userId || 0,
+      auth0UserId: session.auth0UserId || null,
       virtFusionUserId: session.virtFusionUserId,
       extRelationId: session.extRelationId,
       email: session.email,
@@ -577,9 +579,33 @@ export async function registerRoutes(
   });
 
   app.post('/api/user/password', authMiddleware, async (req, res) => {
-    // Password changes are now managed through Auth0
-    // This endpoint is disabled for security reasons
-    res.status(400).json({ error: 'Password changes are not supported. Please contact support.' });
+    try {
+      const session = req.userSession!;
+      const { newPassword } = req.body;
+      
+      if (!newPassword) {
+        return res.status(400).json({ error: 'New password is required' });
+      }
+      
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'Unable to change password. Please contact support.' });
+      }
+      
+      const result = await auth0Client.changePassword(session.auth0UserId, newPassword);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Failed to change password' });
+      }
+      
+      res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error: any) {
+      log(`Error changing password: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to change password' });
+    }
   });
 
   return httpServer;
