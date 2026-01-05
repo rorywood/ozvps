@@ -10,7 +10,8 @@ export async function registerRoutes(
 
   app.get('/api/servers', async (req, res) => {
     try {
-      const servers = await virtfusionClient.listServers();
+      // Show servers for user ID 2 (testing user)
+      const servers = await virtfusionClient.listServersByUserId(2);
       res.json(servers);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
