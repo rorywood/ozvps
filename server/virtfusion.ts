@@ -35,7 +35,8 @@ export class VirtFusionClient {
   private apiToken: string;
 
   constructor() {
-    this.baseUrl = process.env.VIRTFUSION_PANEL_URL || '';
+    // Remove trailing slash from base URL if present
+    this.baseUrl = (process.env.VIRTFUSION_PANEL_URL || '').replace(/\/+$/, '');
     this.apiToken = process.env.VIRTFUSION_API_TOKEN || '';
 
     if (!this.baseUrl) {
@@ -48,24 +49,30 @@ export class VirtFusionClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/api/v1${endpoint}`;
+    log(`Making request to: ${url}`, 'virtfusion');
     
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.apiToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...options.headers,
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      log(`VirtFusion API error: ${response.status} ${errorText}`, 'virtfusion');
-      throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        log(`VirtFusion API error: ${response.status} ${errorText}`, 'virtfusion');
+        throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error: any) {
+      log(`VirtFusion fetch error: ${error.message} - URL: ${url}`, 'virtfusion');
+      throw error;
     }
-
-    return response.json();
   }
 
   async validateConnection(): Promise<boolean> {
@@ -83,6 +90,19 @@ export class VirtFusionClient {
       return data.data;
     } catch (error) {
       log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async getUserByEmail(email: string): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser[] }>(`/users?email=${encodeURIComponent(email)}`);
+      if (data.data && data.data.length > 0) {
+        return data.data[0];
+      }
+      return null;
+    } catch (error) {
+      log(`Failed to fetch user by email ${email}: ${error}`, 'virtfusion');
       return null;
     }
   }

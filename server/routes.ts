@@ -10,8 +10,18 @@ export async function registerRoutes(
 
   app.get('/api/servers', async (req, res) => {
     try {
-      const servers = await virtfusionClient.listServers();
-      res.json(servers);
+      // Get servers for specific user
+      const userEmail = 'rorywood10@gmail.com';
+      const user = await virtfusionClient.getUserByEmail(userEmail);
+      
+      if (user) {
+        const servers = await virtfusionClient.listServersByUserId(user.id);
+        res.json(servers);
+      } else {
+        // Fallback to all servers if user not found
+        const servers = await virtfusionClient.listServers();
+        res.json(servers);
+      }
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch servers' });
