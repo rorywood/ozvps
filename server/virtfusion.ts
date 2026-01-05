@@ -602,13 +602,18 @@ export class VirtFusionClient {
     return enrichedServers;
   }
 
-  async generateServerLoginTokens(serverId: string, extRelationId: string) {
+  async generateServerLoginTokens(serverId: string, extRelationId: string, redirectTo?: string) {
     try {
       // Use the VirtFusion API to generate authentication tokens for a specific server
       // POST /users/{extRelationId}/serverAuthenticationTokens/{serverId}
-      log(`Generating server token: serverId=${serverId}, extRelationId=${extRelationId}`, 'virtfusion');
+      log(`Generating server token: serverId=${serverId}, extRelationId=${extRelationId}, redirectTo=${redirectTo}`, 'virtfusion');
+      const body: any = {};
+      if (redirectTo) {
+        body.redirect_to = redirectTo;
+      }
       const data = await this.request<{ data: any }>(`/users/${extRelationId}/serverAuthenticationTokens/${serverId}`, {
         method: 'POST',
+        body: JSON.stringify(body),
       });
       log(`Token generated successfully: ${JSON.stringify(data.data)}`, 'virtfusion');
       return data.data;
