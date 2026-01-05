@@ -80,6 +80,26 @@ async function verifyServerOwnership(serverId: string, userVirtFusionId: number 
   }
 }
 
+async function getServerWithOwnershipCheck(serverId: string, userVirtFusionId: number | null): Promise<{ server: any | null; error?: string; status?: number }> {
+  if (!userVirtFusionId) {
+    return { server: null, error: 'Access denied', status: 403 };
+  }
+  
+  try {
+    const server = await virtfusionClient.getServer(serverId);
+    if (!server) {
+      return { server: null, error: 'Server not found', status: 404 };
+    }
+    if (server.userId !== userVirtFusionId) {
+      return { server: null, error: 'Access denied', status: 403 };
+    }
+    return { server };
+  } catch (error) {
+    log(`Server check failed for ${serverId}: ${error}`, 'api');
+    return { server: null, error: 'Failed to verify server access', status: 500 };
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -292,9 +312,13 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/power', authMiddleware, async (req, res) => {
     try {
-      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Power actions are disabled.' });
       }
 
       const { action } = req.body;
@@ -348,9 +372,13 @@ export async function registerRoutes(
 
   app.put('/api/servers/:id/name', authMiddleware, async (req, res) => {
     try {
-      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Modifications are disabled.' });
       }
 
       const parsed = serverNameSchema.safeParse(req.body);
@@ -387,9 +415,13 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/vnc/enable', authMiddleware, async (req, res) => {
     try {
-      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
       }
 
       const vnc = await virtfusionClient.enableVnc(req.params.id);
@@ -402,9 +434,13 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/vnc/disable', authMiddleware, async (req, res) => {
     try {
-      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
       }
 
       const vnc = await virtfusionClient.disableVnc(req.params.id);
@@ -437,9 +473,13 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
     try {
-      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Reinstall is disabled.' });
       }
 
       const { osId, hostname } = req.body;
@@ -471,13 +511,13 @@ export async function registerRoutes(
       const serverId = req.params.id;
       
       // Get server to verify ownership and get UUID
-      const server = await virtfusionClient.getServer(serverId);
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(404).json({ error: 'Server not found' });
+        return res.status(status || 403).json({ error: error || 'Access denied' });
       }
-      
-      if (server.userId !== req.userSession!.virtFusionUserId) {
-        return res.status(403).json({ error: 'Access denied' });
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Console access is disabled.' });
       }
 
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
