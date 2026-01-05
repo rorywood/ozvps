@@ -143,6 +143,21 @@ class ApiClient {
     if (!response.ok) throw new Error('Failed to reinstall server');
     return response.json();
   }
+
+  async getBuildStatus(id: string): Promise<{
+    state: string;
+    phase: 'queued' | 'building' | 'complete' | 'error';
+    buildFailed: boolean;
+    suspended: boolean;
+    commissionStatus: number;
+    isComplete: boolean;
+    isError: boolean;
+    isBuilding: boolean;
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/build-status`);
+    if (!response.ok) throw new Error('Failed to fetch build status');
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

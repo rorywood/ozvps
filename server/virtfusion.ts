@@ -257,6 +257,46 @@ export class VirtFusionClient {
     }
   }
 
+  async getServerBuildStatus(serverId: string) {
+    try {
+      const response = await this.request<{ data: any }>(`/servers/${serverId}`);
+      const server = response.data;
+      
+      // Extract the raw build state information
+      const state = server.state || '';
+      const buildFailed = server.buildFailed === true;
+      const suspended = server.suspended === true;
+      const commissionStatus = server.commissionStatus;
+      
+      // Determine the build phase based on VirtFusion state
+      let phase: 'queued' | 'building' | 'complete' | 'error' = 'complete';
+      
+      if (buildFailed) {
+        phase = 'error';
+      } else if (state === 'queued' || state === 'pending') {
+        phase = 'queued';
+      } else if (state === 'provisioning' || state === 'building' || state === 'installing') {
+        phase = 'building';
+      } else if (state === 'complete' || state === 'running') {
+        phase = 'complete';
+      }
+      
+      return {
+        state,
+        phase,
+        buildFailed,
+        suspended,
+        commissionStatus,
+        isComplete: phase === 'complete' && !buildFailed,
+        isError: buildFailed,
+        isBuilding: phase === 'queued' || phase === 'building',
+      };
+    } catch (error) {
+      log(`Failed to fetch build status for server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
   async getVncDetails(serverId: string) {
     try {
       const data = await this.request<{ data: any }>(`/servers/${serverId}/vnc`);

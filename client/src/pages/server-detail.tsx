@@ -130,15 +130,24 @@ export default function ServerDetail() {
       // Cleanup any existing polls
       cleanupReinstallPolling();
       
-      // Poll server state to track rebuild progress
+      // Poll build status to track rebuild progress (uses buildFailed flag for reliable error detection)
       reinstallPollRef.current = setInterval(async () => {
         try {
-          const serverData = await api.getServer(serverId || '');
-          const state = serverData?.status;
+          const buildStatus = await api.getBuildStatus(serverId || '');
           
-          if (state === 'provisioning' || state === 'building') {
-            setReinstallStatus('Installing operating system...');
-          } else if (state === 'running') {
+          if (buildStatus.isError) {
+            // Only trigger error if buildFailed is explicitly true
+            cleanupReinstallPolling();
+            setReinstallInProgress(false);
+            setReinstallStatus('');
+            toast({
+              title: "Reinstallation Failed",
+              description: "Server reinstallation encountered an error.",
+              variant: "destructive",
+            });
+          } else if (buildStatus.isBuilding) {
+            setReinstallStatus(buildStatus.phase === 'queued' ? 'Queued for installation...' : 'Installing operating system...');
+          } else if (buildStatus.isComplete) {
             cleanupReinstallPolling();
             setReinstallInProgress(false);
             setReinstallStatus('');
@@ -147,15 +156,6 @@ export default function ServerDetail() {
             toast({
               title: "Reinstallation Complete",
               description: "Your server has been successfully reinstalled.",
-            });
-          } else if (state === 'error') {
-            cleanupReinstallPolling();
-            setReinstallInProgress(false);
-            setReinstallStatus('');
-            toast({
-              title: "Reinstallation Failed",
-              description: "Server reinstallation encountered an error.",
-              variant: "destructive",
             });
           }
         } catch (e) {

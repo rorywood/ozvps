@@ -148,5 +148,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/servers/:id/build-status', async (req, res) => {
+    try {
+      const status = await virtfusionClient.getServerBuildStatus(req.params.id);
+      res.json(status);
+    } catch (error: any) {
+      log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch build status' });
+    }
+  });
+
   return httpServer;
 }
