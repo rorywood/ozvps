@@ -184,9 +184,12 @@ export default function ServerDetail() {
           description: "Console will automatically disable after 60 minutes.",
         });
         
-        // Open VNC console in VirtFusion panel
-        const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
-        window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+        // Open VNC console in VirtFusion panel using server UUID
+        const serverUuid = server?.uuid;
+        if (serverUuid) {
+          const panelUrl = `https://panel.ozvps.com.au/server/${serverUuid}/vnc`;
+          window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+        }
       }
     } catch (error) {
       toast({
@@ -249,9 +252,9 @@ export default function ServerDetail() {
     });
   };
 
-  // Get bandwidth allowance from traffic data
-  const bandwidthAllowance = trafficData?.available?.total || 0; // GB per month
-  const currentMonth = trafficData?.available?.current?.month || 1;
+  // Get bandwidth allowance from server plan specs (traffic limit in GB)
+  const bandwidthAllowance = server?.plan?.specs?.traffic || 0;
+  const currentMonth = new Date().getMonth() + 1;
 
   // Parse OS templates - the API returns grouped templates with version and variant info
   const osOptions: Array<{ id: string; name: string; version: string; variant: string; group: string }> = [];

@@ -384,18 +384,24 @@ export class VirtFusionClient {
     // Get primary IP from network interfaces
     const primaryIp = server.network?.interfaces?.[0]?.ipv4?.[0]?.address || 'N/A';
     
-    // Get resources
+    // Get resources from settings.resources (actual allocation) or fallback to resources
+    const settingsResources = (server as any).settings?.resources || {};
     const resources = server.resources || {};
-    const vcpu = resources.cpuCores || 1;
-    const ram = resources.memory || 1024;
-    const disk = resources.storage || 20;
+    const vcpu = settingsResources.cpuCores || resources.cpuCores || 1;
+    const ram = settingsResources.memory || resources.memory || 1024;
+    const disk = settingsResources.storage || resources.storage || 20;
+    const trafficLimit = settingsResources.traffic || resources.traffic || 0;
     
     // Get location from server_info
     const locationName = server.server_info?.name || 'Unknown';
     
-    // Get OS info
-    const osName = server.os?.name || server.os?.dist || 'Linux';
-    const osDistro = server.os?.dist || 'linux';
+    // Get OS info - prefer template name from settings, then qemuAgent os.name
+    const settingsOs = (server as any).os || {};
+    const qemuAgentOs = (server as any).qemuAgent?.os || {};
+    const osTemplateName = settingsOs.templateName || '';
+    const osFullName = qemuAgentOs.name || '';
+    const osName = osTemplateName || osFullName || server.os?.name || server.os?.dist || 'Linux';
+    const osDistro = qemuAgentOs.dist || server.os?.dist || 'linux';
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();
@@ -420,6 +426,7 @@ export class VirtFusionClient {
           vcpu,
           ram,
           disk,
+          traffic: trafficLimit,
         },
       },
       image: {
