@@ -451,25 +451,21 @@ export async function registerRoutes(
     try {
       const serverId = req.params.id;
       
-      const isOwner = await verifyServerOwnership(serverId, req.userSession!.virtFusionUserId);
-      if (!isOwner) {
+      // Get server to verify ownership and get UUID
+      const server = await virtfusionClient.getServer(serverId);
+      if (!server) {
+        return res.status(404).json({ error: 'Server not found' });
+      }
+      
+      if (server.userId !== req.userSession!.virtFusionUserId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      // Enable VNC to get the WSS token
-      const vncResult = await virtfusionClient.enableVnc(serverId);
-      
-      if (vncResult?.vnc?.wss?.url) {
-        // Use the WSS URL with token for authenticated VNC access
-        const consoleUrl = `${panelUrl}${vncResult.vnc.wss.url}`;
-        return res.json({ url: consoleUrl, vnc: vncResult.vnc });
-      }
-      
-      // Fallback to panel console page if no WSS token
-      const consoleUrl = `${panelUrl}/server/${serverId}/console`;
-      res.json({ url: consoleUrl, vnc: vncResult?.vnc || null });
+      // Use the standard VirtFusion console URL format with server UUID
+      const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
+      res.json({ url: consoleUrl });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
