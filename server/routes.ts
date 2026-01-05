@@ -543,8 +543,35 @@ export async function registerRoutes(
         try {
           // Fetch server with owner data to get the actual extRelationId
           const ownerData = await virtfusionClient.getServerOwner(serverId);
-          if (ownerData?.extRelationId) {
-            const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), ownerData.extRelationId);
+          let extRelationId = ownerData?.extRelationId;
+          
+          // If no extRelationId, generate one and update the user
+          if (!extRelationId && ownerData?.id) {
+            log(`Owner ${ownerData.id} has no extRelationId, generating one...`, 'api');
+            // Generate numeric extRelationId from email
+            const email = ownerData.email || session.email || '';
+            let hash = 0;
+            for (let i = 0; i < email.length; i++) {
+              const char = email.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash;
+            }
+            const positiveHash = Math.abs(hash);
+            const timestamp = Date.now() % 1000000000;
+            extRelationId = `${positiveHash}${timestamp}`;
+            
+            // Update the VirtFusion user with the new extRelationId
+            const updated = await virtfusionClient.updateUserById(ownerData.id, { extRelationId });
+            if (updated) {
+              log(`Successfully set extRelationId ${extRelationId} for user ${ownerData.id}`, 'api');
+            } else {
+              log(`Failed to set extRelationId for user ${ownerData.id}`, 'api');
+              extRelationId = null;
+            }
+          }
+          
+          if (extRelationId) {
+            const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), extRelationId);
             if (tokenData?.token) {
               // Use token-based URL for seamless authentication
               const consoleUrl = `${panelUrl}/auth/token/${tokenData.token}?redirect=/server/${server.uuid}/vnc`;
@@ -552,7 +579,7 @@ export async function registerRoutes(
               return res.json({ url: consoleUrl });
             }
           } else {
-            log(`Server ${serverId} owner has no extRelationId set`, 'api');
+            log(`Server ${serverId} owner has no extRelationId and could not set one`, 'api');
           }
         } catch (tokenError: any) {
           log(`Token auth failed: ${tokenError.message}`, 'api');

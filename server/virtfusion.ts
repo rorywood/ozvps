@@ -246,6 +246,21 @@ export class VirtFusionClient {
     }
   }
 
+  async updateUserById(userId: number, updates: { extRelationId?: string; name?: string; email?: string }): Promise<VirtFusionUser | null> {
+    try {
+      log(`Updating VirtFusion user ${userId} with: ${JSON.stringify(updates)}`, 'virtfusion');
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}/byId`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      log(`Successfully updated user ${userId}`, 'virtfusion');
+      return data.data;
+    } catch (error) {
+      log(`Failed to update user by ID ${userId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
   async updateUser(extRelationId: string, updates: VirtFusionUserUpdateRequest): Promise<VirtFusionUser | null> {
     try {
       const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`, {
@@ -589,11 +604,10 @@ export class VirtFusionClient {
   async generateServerLoginTokens(serverId: string, extRelationId: string) {
     try {
       // Use the VirtFusion API to generate authentication tokens for a specific server
-      // POST /servers/{serverId}/serverAuthenticationTokens with extRelationId in body
+      // POST /users/{extRelationId}/serverAuthenticationTokens/{serverId}
       log(`Generating server token: serverId=${serverId}, extRelationId=${extRelationId}`, 'virtfusion');
-      const data = await this.request<{ data: any }>(`/servers/${serverId}/serverAuthenticationTokens`, {
+      const data = await this.request<{ data: any }>(`/users/${extRelationId}/serverAuthenticationTokens/${serverId}`, {
         method: 'POST',
-        body: JSON.stringify({ extRelationId }),
       });
       log(`Token generated successfully: ${JSON.stringify(data.data)}`, 'virtfusion');
       return data.data;
