@@ -1,25 +1,65 @@
 import { log } from "./index";
 
-interface VirtFusionServer {
+// VirtFusion API response structure - based on actual API response
+interface VirtFusionServerResponse {
   id: number;
   name: string;
   uuid: string;
-  status: string;
-  primaryIp: string;
-  hostname: string;
-  packageId: number;
-  packageName: string;
-  userId: number;
-  locationId: number;
-  locationName: string;
-  ipAddresses: any[];
-  stats?: {
-    cpu: number;
-    memory: number;
-    disk: number;
-    network_in: number;
-    network_out: number;
+  ownerId: number;
+  hostname?: string;
+  state?: string;
+  suspended?: boolean;
+  buildFailed?: boolean;
+  protected?: boolean;
+  
+  // Power/status fields - try various possible names
+  power_status?: string;
+  powerState?: string;
+  power?: string;
+  
+  // OS info
+  os?: {
+    dist?: string;
+    name?: string;
+    kernel?: string;
+    img?: string;
   };
+  
+  // Server location info
+  server_info?: {
+    show?: boolean;
+    name?: string;
+    icon?: string;
+    label?: string;
+  };
+  
+  // Resources
+  resources?: {
+    memory?: number;
+    storage?: number;
+    traffic?: number;
+    cpuCores?: number;
+    cpu_model?: string;
+  };
+  
+  // Network
+  network?: {
+    interfaces?: Array<{
+      name?: string;
+      mac?: string;
+      ipv4?: Array<{
+        address?: string;
+        gateway?: string;
+        netmask?: string;
+      }>;
+      ipv6?: Array<{
+        address?: string;
+      }>;
+    }>;
+  };
+  
+  created_at?: string;
+  createdAt?: string;
 }
 
 interface VirtFusionUser {
@@ -35,7 +75,6 @@ export class VirtFusionClient {
   private apiToken: string;
 
   constructor() {
-    // Remove trailing slash from base URL if present
     this.baseUrl = (process.env.VIRTFUSION_PANEL_URL || '').replace(/\/+$/, '');
     this.apiToken = process.env.VIRTFUSION_API_TOKEN || '';
 
@@ -49,7 +88,6 @@ export class VirtFusionClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/api/v1${endpoint}`;
-    log(`Making request to: ${url}`, 'virtfusion');
     
     try {
       const response = await fetch(url, {
@@ -68,7 +106,7 @@ export class VirtFusionClient {
         throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
       }
 
-      return response.json();
+      return await response.json();
     } catch (error: any) {
       log(`VirtFusion fetch error: ${error.message} - URL: ${url}`, 'virtfusion');
       throw error;
@@ -94,35 +132,19 @@ export class VirtFusionClient {
     }
   }
 
-  async getUserByEmail(email: string): Promise<VirtFusionUser | null> {
-    try {
-      const data = await this.request<{ data: VirtFusionUser[] }>('/users/search', {
-        method: 'POST',
-        body: JSON.stringify({ email })
-      });
-      if (data.data && data.data.length > 0) {
-        return data.data[0];
-      }
-      return null;
-    } catch (error) {
-      log(`Failed to fetch user by email ${email}: ${error}`, 'virtfusion');
-      return null;
-    }
-  }
-
   async listServersByUserId(userId: number) {
-    const data = await this.request<{ data: VirtFusionServer[] }>(`/servers/user/${userId}`);
-    return data.data.map(server => this.transformServer(server));
+    const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}`);
+    return response.data.map(server => this.transformServer(server));
   }
 
   async listServers() {
-    const data = await this.request<{ data: VirtFusionServer[] }>('/servers');
-    return data.data.map(server => this.transformServer(server));
+    const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers');
+    return response.data.map(server => this.transformServer(server));
   }
 
   async getServer(serverId: string) {
-    const data = await this.request<{ data: VirtFusionServer }>(`/servers/${serverId}`);
-    return this.transformServer(data.data);
+    const response = await this.request<{ data: VirtFusionServerResponse }>(`/servers/${serverId}`);
+    return this.transformServer(response.data);
   }
 
   async powerAction(serverId: string, action: 'start' | 'stop' | 'restart') {
@@ -143,75 +165,119 @@ export class VirtFusionClient {
     }
   }
 
-  private transformServer(server: VirtFusionServer) {
-    const status = this.mapStatus(server.status);
+  private transformServer(server: VirtFusionServerResponse) {
+    // Determine status from server state - "complete" means built and running
+    const stateValue = server.power_status || server.powerState || server.power || server.state || '';
+    const status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+    
+    // Get primary IP from network interfaces
+    const primaryIp = server.network?.interfaces?.[0]?.ipv4?.[0]?.address || 'N/A';
+    
+    // Get resources
+    const resources = server.resources || {};
+    const vcpu = resources.cpuCores || 1;
+    const ram = resources.memory || 1024;
+    const disk = resources.storage || 20;
+    
+    // Get location from server_info
+    const locationName = server.server_info?.name || 'Unknown';
+    
+    // Get OS info
+    const osName = server.os?.name || server.os?.dist || 'Linux';
+    const osDistro = server.os?.dist || 'linux';
+    
+    // Get created date
+    const createdAt = server.created_at || server.createdAt || new Date().toISOString();
     
     return {
       id: server.id.toString(),
-      name: server.name,
-      uuid: server.uuid,
+      name: server.name || `Server ${server.id}`,
+      uuid: server.uuid || '',
       status,
-      userId: server.userId,
-      primaryIp: server.primaryIp || server.ipAddresses?.[0]?.address || 'N/A',
+      userId: server.ownerId,
+      primaryIp,
+      hostname: server.hostname || '',
       location: {
-        id: server.locationId?.toString() || 'unknown',
-        name: server.locationName || 'Unknown',
-        flag: '🌐',
+        id: server.id.toString(),
+        name: locationName,
+        flag: '🇦🇺',
       },
       plan: {
-        id: server.packageId?.toString() || 'unknown',
-        name: server.packageName || 'Unknown Package',
+        id: server.id.toString(),
+        name: `${vcpu} vCPU / ${ram >= 1024 ? (ram / 1024).toFixed(0) + ' GB' : ram + ' MB'} RAM / ${disk} GB`,
         specs: {
-          vcpu: this.extractCpu(server),
-          ram: this.extractRam(server),
-          disk: this.extractDisk(server),
+          vcpu,
+          ram,
+          disk,
         },
       },
       image: {
-        id: 'os-1',
-        name: this.extractOsName(server),
-        distro: 'linux' as const,
+        id: server.id.toString(),
+        name: osName,
+        distro: osDistro as 'linux' | 'windows',
       },
       stats: {
-        cpu_usage: server.stats?.cpu || Math.floor(Math.random() * 60),
-        ram_usage: server.stats?.memory || Math.floor(Math.random() * 70),
-        disk_usage: server.stats?.disk || Math.floor(Math.random() * 50),
-        net_in: server.stats?.network_in || Math.floor(Math.random() * 100),
-        net_out: server.stats?.network_out || Math.floor(Math.random() * 100),
+        cpu_usage: 0,
+        ram_usage: 0,
+        disk_usage: 0,
+        net_in: 0,
+        net_out: 0,
       },
-      created_at: new Date().toISOString(),
+      created_at: createdAt,
     };
   }
 
-  private mapStatus(status: string | undefined): 'running' | 'stopped' | 'provisioning' | 'error' {
+  private mapStatus(status: string | undefined, suspended?: boolean, buildFailed?: boolean): 'running' | 'stopped' | 'provisioning' | 'error' {
+    // Check for suspended or failed builds first
+    if (suspended) return 'stopped';
+    if (buildFailed) return 'error';
+    
     if (!status) return 'stopped';
     const statusLower = status.toLowerCase();
-    if (statusLower.includes('running') || statusLower.includes('active') || statusLower === 'online') {
+    
+    // Running states
+    if (statusLower === 'running' || 
+        statusLower === 'online' || 
+        statusLower === 'active' ||
+        statusLower === 'started' ||
+        statusLower === 'on' ||
+        statusLower === 'powered on') {
       return 'running';
     }
-    if (statusLower.includes('stopped') || statusLower.includes('offline') || statusLower === 'stopped') {
+    
+    // Stopped states
+    if (statusLower === 'stopped' || 
+        statusLower === 'offline' || 
+        statusLower === 'off' ||
+        statusLower === 'shutdown' ||
+        statusLower === 'powered off') {
       return 'stopped';
     }
-    if (statusLower.includes('provision') || statusLower.includes('building')) {
+    
+    // Complete state (server is built/ready - need separate power check)
+    if (statusLower === 'complete') {
+      // When state is "complete", the server is built but we need power state
+      // Since we can't determine power here, return running as default for built servers
+      return 'running';
+    }
+    
+    // Provisioning states
+    if (statusLower.includes('provision') || 
+        statusLower.includes('building') ||
+        statusLower.includes('creating') ||
+        statusLower.includes('pending') ||
+        statusLower.includes('queued')) {
       return 'provisioning';
     }
-    return 'stopped';
-  }
-
-  private extractCpu(server: any): number {
-    return 4;
-  }
-
-  private extractRam(server: any): number {
-    return 4096;
-  }
-
-  private extractDisk(server: any): number {
-    return 80;
-  }
-
-  private extractOsName(server: any): string {
-    return 'Ubuntu 22.04 LTS';
+    
+    // Error states
+    if (statusLower.includes('error') || 
+        statusLower.includes('failed')) {
+      return 'error';
+    }
+    
+    // Default to running for built servers
+    return 'running';
   }
 }
 
