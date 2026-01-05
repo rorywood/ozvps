@@ -656,7 +656,7 @@ export class VirtFusionClient {
 
   async updateServerName(serverId: string, name: string) {
     try {
-      const data = await this.request<{ data: any }>(`/servers/${serverId}`, {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/modify/name`, {
         method: 'PUT',
         body: JSON.stringify({ name }),
       });

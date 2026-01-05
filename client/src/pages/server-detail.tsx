@@ -247,9 +247,46 @@ export default function ServerDetail() {
     }
   };
 
-  const handleOpenVnc = () => {
-    if (!serverId) return;
-    setLocation(`/servers/${serverId}/console`);
+  const handleOpenVnc = async () => {
+    if (!serverId || isEnablingVnc) return;
+    
+    setIsEnablingVnc(true);
+    try {
+      const result = await api.getConsoleUrl(serverId);
+      if (result?.url) {
+        setVncEnabled(true);
+        setVncTimeRemaining(3600);
+        
+        if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+        vncTimerRef.current = setInterval(() => {
+          setVncTimeRemaining(prev => {
+            if (prev <= 1) {
+              if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+              setVncEnabled(false);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        window.open(result.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+        
+        toast({
+          title: "Console Opened",
+          description: "VNC console opened in a new window.",
+        });
+      } else {
+        throw new Error('No console URL returned');
+      }
+    } catch (error) {
+      toast({
+        title: "Console Failed",
+        description: "Could not open console. Make sure the server is running.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnablingVnc(false);
+    }
   };
 
   const handleStartEditName = () => {
