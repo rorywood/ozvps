@@ -250,8 +250,8 @@ export default function ServerDetail() {
 
   const handleOpenVnc = () => {
     if (!serverId) return;
-    // Navigate to the console page which embeds the VNC in an iframe (hides the URL)
-    setLocation(`/servers/${serverId}/console`);
+    // Open console page in a popup window - it will fetch and redirect to VNC
+    window.open(`/servers/${serverId}/console`, '_blank', 'width=1024,height=768,menubar=no,toolbar=no,location=no');
   };
 
   const handleStartEditName = () => {
