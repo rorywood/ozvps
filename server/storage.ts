@@ -1,10 +1,16 @@
-import { type Session, type User, sessions, users } from "@shared/schema";
+import { type Session, type User, type UserMapping, sessions, users, userMappings } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
+  // User mapping (Auth0 -> VirtFusion)
+  createUserMapping(data: { auth0UserId: string; email: string; name?: string; virtFusionUserId: number }): Promise<UserMapping>;
+  getUserMappingByAuth0Id(auth0UserId: string): Promise<UserMapping | undefined>;
+  getUserMappingByEmail(email: string): Promise<UserMapping | undefined>;
+  
+  // Legacy user methods (no longer used with Auth0)
   createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
@@ -30,6 +36,28 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // User mapping methods
+  async createUserMapping(data: { auth0UserId: string; email: string; name?: string; virtFusionUserId: number }): Promise<UserMapping> {
+    const [mapping] = await db.insert(userMappings).values({
+      auth0UserId: data.auth0UserId,
+      email: data.email.toLowerCase(),
+      name: data.name,
+      virtFusionUserId: data.virtFusionUserId,
+    }).returning();
+    return mapping;
+  }
+
+  async getUserMappingByAuth0Id(auth0UserId: string): Promise<UserMapping | undefined> {
+    const [mapping] = await db.select().from(userMappings).where(eq(userMappings.auth0UserId, auth0UserId));
+    return mapping;
+  }
+
+  async getUserMappingByEmail(email: string): Promise<UserMapping | undefined> {
+    const [mapping] = await db.select().from(userMappings).where(eq(userMappings.email, email.toLowerCase()));
+    return mapping;
+  }
+
+  // Legacy user methods
   async createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User> {
     const passwordHash = await bcrypt.hash(data.password, 12);
     const [user] = await db.insert(users).values({

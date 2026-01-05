@@ -184,14 +184,13 @@ export class VirtFusionClient {
         body: JSON.stringify({
           email: normalizedEmail,
           name,
-          extRelationId: normalizedEmail, // Use email as extRelationId for lookup
           sendMail: false,
         }),
       });
-      log(`Created VirtFusion user: ${email} with ID ${data.data.id} and extRelationId ${normalizedEmail}`, 'virtfusion');
+      log(`Created VirtFusion user: ${email} with ID ${data.data.id}`, 'virtfusion');
       return data.data;
     } catch (error: any) {
-      // If user already exists (409), try to extract user data from response or lookup
+      // If user already exists (409), try to extract user data from response
       if (error.status === 409 || error.message?.includes('409')) {
         log(`User ${email} already exists in VirtFusion`, 'virtfusion');
         
@@ -201,13 +200,7 @@ export class VirtFusionClient {
           return error.data.data as VirtFusionUser;
         }
         
-        // Try to find by extRelationId = email
-        const user = await this.findUserByEmail(email);
-        if (user) {
-          return user;
-        }
-        
-        log(`Could not find existing user ${email}`, 'virtfusion');
+        log(`User ${email} exists but cannot retrieve their data - please link manually`, 'virtfusion');
         return null;
       }
       log(`Failed to create VirtFusion user ${email}: ${error}`, 'virtfusion');

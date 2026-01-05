@@ -1,6 +1,17 @@
 import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
+// Maps Auth0 users to VirtFusion users
+export const userMappings = pgTable("user_mappings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name"),
+  virtFusionUserId: integer("virtfusion_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Legacy users table (no longer used with Auth0)
 export const users = pgTable("users", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   email: text("email").notNull().unique(),
@@ -43,6 +54,7 @@ export const serverNameSchema = z.object({
 });
 
 export type User = typeof users.$inferSelect;
+export type UserMapping = typeof userMappings.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
