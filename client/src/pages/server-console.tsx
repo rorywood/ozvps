@@ -1,18 +1,15 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Monitor, CheckCircle } from "lucide-react";
+import { Loader2, Monitor } from "lucide-react";
 import { Link } from "wouter";
 
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
   const serverId = params?.id;
-  const [authStatus, setAuthStatus] = useState<'loading' | 'authenticating' | 'redirecting' | 'error'>('loading');
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const hasStartedAuth = useRef(false);
 
   const { data: consoleData, isLoading, error, refetch } = useQuery({
     queryKey: ['console-url', serverId],
@@ -28,41 +25,10 @@ export default function ServerConsole() {
   useEffect(() => {
     if (consoleData?.url) {
       window.location.replace(consoleData.url);
-      return;
     }
+  }, [consoleData?.url]);
 
-    if (consoleData?.twoStep && consoleData?.authUrl && consoleData?.vncUrl && !hasStartedAuth.current) {
-      hasStartedAuth.current = true;
-      setAuthStatus('authenticating');
-      
-      const iframe = iframeRef.current;
-      const vncUrl = consoleData.vncUrl;
-      if (iframe && vncUrl) {
-        iframe.src = consoleData.authUrl;
-        
-        const handleLoad = () => {
-          setAuthStatus('redirecting');
-          setTimeout(() => {
-            window.location.replace(vncUrl);
-          }, 500);
-        };
-        
-        iframe.addEventListener('load', handleLoad);
-        
-        const timeout = setTimeout(() => {
-          setAuthStatus('redirecting');
-          window.location.replace(vncUrl);
-        }, 3000);
-        
-        return () => {
-          iframe.removeEventListener('load', handleLoad);
-          clearTimeout(timeout);
-        };
-      }
-    }
-  }, [consoleData]);
-
-  if (isLoading || authStatus === 'loading') {
+  if (isLoading || consoleData?.url) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <GlassCard className="p-12 flex flex-col items-center">
@@ -74,41 +40,7 @@ export default function ServerConsole() {
     );
   }
 
-  if (authStatus === 'authenticating') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <GlassCard className="p-12 flex flex-col items-center">
-          <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-          <p className="text-white font-medium mb-1">Authenticating...</p>
-          <p className="text-muted-foreground text-sm">Setting up secure session</p>
-        </GlassCard>
-        <iframe 
-          ref={iframeRef}
-          style={{ display: 'none' }}
-          title="auth-frame"
-        />
-      </div>
-    );
-  }
-
-  if (authStatus === 'redirecting' || consoleData?.url || consoleData?.twoStep) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <GlassCard className="p-12 flex flex-col items-center">
-          <CheckCircle className="h-8 w-8 text-green-400 mb-4" />
-          <p className="text-white font-medium mb-1">Opening VNC Console</p>
-          <p className="text-muted-foreground text-sm">Redirecting to console...</p>
-        </GlassCard>
-        <iframe 
-          ref={iframeRef}
-          style={{ display: 'none' }}
-          title="auth-frame"
-        />
-      </div>
-    );
-  }
-
-  if (error || (!consoleData?.url && !consoleData?.twoStep)) {
+  if (error || !consoleData?.url) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <GlassCard className="p-12 flex flex-col items-center max-w-md">
