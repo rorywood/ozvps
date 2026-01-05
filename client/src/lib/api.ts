@@ -158,6 +158,14 @@ class ApiClient {
     if (!response.ok) throw new Error('Failed to fetch build status');
     return response.json();
   }
+
+  async getConsoleUrl(id: string): Promise<{ url: string }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/console-url`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to generate console URL');
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

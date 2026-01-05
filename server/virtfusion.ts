@@ -391,6 +391,42 @@ export class VirtFusionClient {
     }
   }
 
+  async listServersWithStats(userId: number) {
+    // First get the basic list of servers
+    const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}`);
+    const basicServers = response.data;
+    
+    // Then fetch each server individually with remoteState=true to get live stats
+    // This is necessary because the bulk endpoint doesn't include remoteState data
+    const enrichedServers = await Promise.all(
+      basicServers.map(async (server) => {
+        try {
+          const detailedResponse = await this.request<{ data: VirtFusionServerResponse & { remoteState?: any } }>(`/servers/${server.id}?remoteState=true`);
+          return this.transformServer(detailedResponse.data);
+        } catch (error) {
+          // If individual fetch fails, use basic data
+          return this.transformServer(server);
+        }
+      })
+    );
+    
+    return enrichedServers;
+  }
+
+  async generateServerLoginTokens(serverId: string, extRelationId: string) {
+    try {
+      // Use the VirtFusion API to generate authentication tokens for a specific server
+      // POST /users/{extRelationId}/serverAuthenticationTokens/{serverId}
+      const data = await this.request<{ data: any }>(`/users/${extRelationId}/serverAuthenticationTokens/${serverId}`, {
+        method: 'POST',
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to generate login tokens for server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
   async getOsTemplates(serverId: string) {
     try {
       // Get server specs to match against packages

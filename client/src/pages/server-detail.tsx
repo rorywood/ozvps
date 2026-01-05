@@ -246,7 +246,7 @@ export default function ServerDetail() {
     setIsEnablingVnc(true);
     
     try {
-      // Enable VNC
+      // Enable VNC first
       const result = await api.enableVnc(serverId);
       
       if (result.vnc?.enabled) {
@@ -289,17 +289,25 @@ export default function ServerDetail() {
           description: "Console will automatically disable after 60 minutes.",
         });
         
-        // Open VNC console using the WebSocket URL from VirtFusion
-        if (result.vnc?.wss?.url) {
-          // Use the noVNC HTML5 client with the provided WebSocket URL
-          // VirtFusion provides a signed URL that includes authentication
-          window.open(result.vnc.wss.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
-        } else {
-          toast({
-            title: "Console Not Available",
-            description: "VNC console URL not available. Please try again.",
-            variant: "destructive",
-          });
+        // Get authenticated console URL using login tokens
+        try {
+          const consoleData = await api.getConsoleUrl(serverId);
+          if (consoleData.url) {
+            window.open(consoleData.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+          } else {
+            throw new Error('No console URL returned');
+          }
+        } catch (consoleError) {
+          // Fallback: try the direct WebSocket URL
+          if (result.vnc?.wss?.url) {
+            window.open(result.vnc.wss.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+          } else {
+            toast({
+              title: "Console Not Available",
+              description: "VNC console URL not available. Please try again.",
+              variant: "destructive",
+            });
+          }
         }
       }
     } catch (error) {

@@ -225,38 +225,6 @@ export default function ServerList() {
 
                 </div>
                 
-                {/* Resource Bars */}
-                {server.status === 'running' && (
-                  <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/5 pt-4">
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">CPU</span>
-                        <span className="text-white font-mono">{server.stats.cpu_usage}%</span>
-                      </div>
-                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary transition-all duration-500" style={{ width: `${server.stats.cpu_usage}%` }} />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">RAM</span>
-                        <span className="text-white font-mono">{server.stats.ram_usage}%</span>
-                      </div>
-                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${server.stats.ram_usage}%` }} />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Disk</span>
-                        <span className="text-white font-mono">{server.stats.disk_usage}%</span>
-                      </div>
-                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${server.stats.disk_usage}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
               </GlassCard>
               </Link>
             ))}

@@ -11,7 +11,8 @@ export async function registerRoutes(
   app.get('/api/servers', async (req, res) => {
     try {
       // Show servers for user ID 2 (testing user)
-      const servers = await virtfusionClient.listServersByUserId(2);
+      // Use listServersWithStats to fetch individual servers with remoteState for live stats
+      const servers = await virtfusionClient.listServersWithStats(2);
       res.json(servers);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
@@ -157,6 +158,40 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch build status' });
+    }
+  });
+
+  app.post('/api/servers/:id/console-url', async (req, res) => {
+    try {
+      // For now, use a hardcoded extRelationId for testing user (user ID 2)
+      // In production, this would come from the authenticated user's session
+      // TODO: Replace with actual authenticated user's extRelationId when auth is implemented
+      const testExtRelationId = '2'; // Testing user's external relation ID
+      
+      // Generate login tokens for this server
+      const tokens = await virtfusionClient.generateServerLoginTokens(req.params.id, testExtRelationId);
+      
+      // The token response should contain a URL or token to access the console
+      // VirtFusion typically returns { token, url } or similar
+      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+      
+      // Construct console URL with authentication token
+      // VirtFusion uses /sso endpoint with token parameter
+      let consoleUrl = '';
+      if (tokens.token) {
+        consoleUrl = `${panelUrl}/sso?token=${tokens.token}&redirect=/server/${req.params.id}/console`;
+      } else if (tokens.url) {
+        consoleUrl = tokens.url;
+      } else {
+        // Fallback: return the panel URL with server ID
+        consoleUrl = `${panelUrl}/server/${req.params.id}/console`;
+      }
+      
+      // Only return the URL - never expose tokens to the client
+      res.json({ url: consoleUrl });
+    } catch (error: any) {
+      log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to generate console URL' });
     }
   });
 
