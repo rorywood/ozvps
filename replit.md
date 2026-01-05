@@ -51,6 +51,7 @@ Preferred communication style: Simple, everyday language.
   - **IMPORTANT**: VirtFusion's `redirect_to` parameter does NOT work - must use hidden iframe approach
   - **IMPORTANT**: Build auth URL using raw tokens (tokens['1'] and tokens['2']), NOT endpoint_complete (has HTML-encoded &amp;)
   - extRelationId must be NUMERIC (1 to 18446744073709551615), not email string
+  - **Security**: 15-minute auto-timeout disables VNC session; manual disable button available; auth tokens expire in 60 seconds
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 
