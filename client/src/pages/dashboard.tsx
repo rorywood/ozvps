@@ -92,7 +92,7 @@ export default function Dashboard() {
             <div className="relative z-10">
               <div className="text-2xl font-bold text-green-400 font-display" data-testid="text-status">Ready</div>
               <div className="text-xs text-muted-foreground mt-1">
-                VirtFusion Connected
+                All Systems Online
               </div>
             </div>
           </GlassCard>
@@ -112,16 +112,10 @@ export default function Dashboard() {
               <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
                 <ServerIcon className="h-8 w-8 text-yellow-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Connecting to VirtFusion</h3>
+              <h3 className="text-lg font-medium text-white mb-2">Connection Issue</h3>
               <p className="text-muted-foreground text-center max-w-md mb-6">
-                Unable to fetch servers. This panel connects to your VirtFusion instance to display your VPS servers.
+                Unable to fetch servers. Please try again or contact support if the issue persists.
               </p>
-              <Button variant="outline" className="border-white/10 hover:bg-white/5" asChild>
-                <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Open VirtFusion Panel
-                </a>
-              </Button>
             </GlassCard>
           ) : servers.length === 0 ? (
             <GlassCard className="p-12 flex flex-col items-center justify-center" data-testid="empty-servers-state">
@@ -130,12 +124,12 @@ export default function Dashboard() {
               </div>
               <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
               <p className="text-muted-foreground text-center max-w-md mb-6">
-                You don't have any VPS servers. Order a server through WHMCS to get started.
+                You don't have any VPS servers. Order a server through your billing portal to get started.
               </p>
               <Button variant="outline" className="border-white/10 hover:bg-white/5" asChild>
-                <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+                <a href="https://ozvps.com.au" target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Open VirtFusion Panel
+                  Order a Server
                 </a>
               </Button>
             </GlassCard>

@@ -49,7 +49,6 @@ export function Sidebar() {
       <div className="p-4 border-t border-white/5">
         <div className="px-3 py-3 rounded-lg bg-white/5 border border-white/5">
           <p className="text-xs text-muted-foreground text-center">OzVPS Panel</p>
-          <p className="text-xs text-primary/70 text-center mt-1">Powered by VirtFusion</p>
         </div>
       </div>
     </div>

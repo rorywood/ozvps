@@ -23,12 +23,12 @@ export default function Account() {
           </div>
           <h3 className="text-xl font-display font-medium text-white mb-2">Account Settings</h3>
           <p className="text-muted-foreground text-center max-w-md mb-6">
-            Manage your profile, security settings, and API access through your VirtFusion account.
+            Manage your profile, security settings, and preferences through your OzVPS account.
           </p>
-          <Button className="bg-primary hover:bg-primary/90" data-testid="button-virtfusion-account" asChild>
-            <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+          <Button className="bg-primary hover:bg-primary/90" data-testid="button-ozvps-account" asChild>
+            <a href="https://ozvps.com.au" target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4 mr-2" />
-              Open VirtFusion Panel
+              Go to OzVPS
             </a>
           </Button>
         </GlassCard>
@@ -45,7 +45,7 @@ export default function Account() {
               </div>
             </div>
             <p className="text-muted-foreground text-sm">
-              Update your name, email, and contact information in VirtFusion.
+              Update your name, email, and contact information.
             </p>
           </GlassCard>
 

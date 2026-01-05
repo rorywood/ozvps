@@ -99,10 +99,10 @@ export default function ServerList() {
             <p className="text-muted-foreground text-center max-w-md mb-6">
               You don't have any VPS servers yet. Order a server through your billing portal to get started.
             </p>
-            <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-open-virtfusion" asChild>
-              <a href="https://vps.cloudasn.com" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-order-server" asChild>
+              <a href="https://ozvps.com.au" target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4 mr-2" />
-                Open VirtFusion Panel
+                Order a Server
               </a>
             </Button>
           </GlassCard>
