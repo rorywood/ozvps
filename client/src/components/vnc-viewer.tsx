@@ -78,33 +78,53 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
-  // Convert character to X11 keysym (handles case sensitivity)
-  const charToKeysym = (char: string): number => {
+  // Characters that require Shift key to be pressed
+  const SHIFT_CHARS = '~!@#$%^&*()_+{}|:"<>?ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const SHIFT_KEYSYM = 0xFFE1; // XK_Shift_L
+
+  // Map character to its base keysym (the key without shift)
+  const getKeysymForChar = (char: string): number => {
     const code = char.charCodeAt(0);
-    // For basic ASCII printable characters (32-126), keysym equals Unicode
-    if (code >= 32 && code <= 126) {
-      return code;
-    }
+    
     // Special keys
     if (char === '\n' || char === '\r') return 0xFF0D; // Return/Enter
     if (char === '\t') return 0xFF09; // Tab
     if (char === '\b') return 0xFF08; // Backspace
-    // Default: use Unicode code point
+    if (char === ' ') return 0x0020; // Space
+    
+    // For printable ASCII, keysym equals the character code
+    if (code >= 32 && code <= 126) {
+      return code;
+    }
+    
     return code;
   };
 
-  // Send text to clipboard/paste (case-sensitive)
+  // Send text to clipboard/paste with proper case sensitivity
   const sendClipboardText = async () => {
     const rfb = vncRef.current?.rfb;
-    if (rfb && clipboardText) {
-      // Type each character with small delay for reliability
-      for (const char of clipboardText) {
-        const keysym = charToKeysym(char);
-        rfb.sendKey(keysym, null, true);  // key down
-        rfb.sendKey(keysym, null, false); // key up
-        // Small delay between characters for reliability
-        await new Promise(resolve => setTimeout(resolve, 10));
+    if (!rfb || !clipboardText) return;
+
+    for (const char of clipboardText) {
+      const needsShift = SHIFT_CHARS.includes(char);
+      const keysym = getKeysymForChar(char);
+      
+      // Press Shift if needed for uppercase/symbols
+      if (needsShift) {
+        rfb.sendKey(SHIFT_KEYSYM, 'ShiftLeft', true);
       }
+      
+      // Send the actual key
+      rfb.sendKey(keysym, null, true);
+      rfb.sendKey(keysym, null, false);
+      
+      // Release Shift if we pressed it
+      if (needsShift) {
+        rfb.sendKey(SHIFT_KEYSYM, 'ShiftLeft', false);
+      }
+      
+      // Small delay between characters for reliability
+      await new Promise(resolve => setTimeout(resolve, 15));
     }
   };
 
@@ -324,15 +344,15 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             style={{ 
               width: '100%', 
               height: '100%', 
-              minHeight: '400px',
-              cursor: 'crosshair'
+              minHeight: '400px'
             }}
             ref={vncRef}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
             onSecurityFailure={handleSecurityFailure}
             rfbOptions={{
-              credentials: { password }
+              credentials: { password },
+              showDotCursor: true
             }}
             data-testid="vnc-container"
           />
