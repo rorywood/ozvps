@@ -265,14 +265,13 @@ export default function ServerDetail() {
         // Open a single popup to auth URL first (this sets VirtFusion session cookie)
         const popup = window.open(consoleData.authUrl, 'vnc_console', 'width=1024,height=768,menubar=no,toolbar=no,location=no');
         
-        // After auth completes, navigate the SAME popup to VNC URL
-        // The cookies are preserved in the same popup context
-        // 500ms is enough for the token auth to process
+        // VirtFusion needs ~1 second to process auth token and set cookie
+        // Then we redirect the same popup to VNC (cookies preserved in same context)
         setTimeout(() => {
           if (popup && !popup.closed) {
             popup.location.href = consoleData.vncUrl;
           }
-        }, 500);
+        }, 1000);
       } else if (consoleData.url) {
         // Direct URL - just open it
         window.open(consoleData.url, 'vnc_console', 'width=1024,height=768,menubar=no,toolbar=no,location=no');
