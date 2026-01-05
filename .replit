@@ -41,3 +41,9 @@ waitForPort = 5000
 
 [agent]
 mockupState = "FULLSTACK"
+
+[userenv]
+
+[userenv.shared]
+AUTH0_DOMAIN = "dev-xmuayk0mzf2vteec.us.auth0.com"
+AUTH0_CLIENT_ID = "6O27go985xNb45YQmSjAIbCEBJSVwPzm"
