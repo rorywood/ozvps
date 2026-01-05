@@ -538,7 +538,17 @@ export async function registerRoutes(
 
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      // Try to get extRelationId from server owner data and generate auth token
+      // Step 1: Enable VNC on the server first
+      try {
+        log(`Enabling VNC for server ${serverId}...`, 'api');
+        await virtfusionClient.enableVnc(serverId);
+        log(`VNC enabled successfully for server ${serverId}`, 'api');
+      } catch (vncError: any) {
+        log(`Failed to enable VNC for server ${serverId}: ${vncError.message}`, 'api');
+        // Continue anyway - VNC might already be enabled
+      }
+      
+      // Step 2: Try to get extRelationId from server owner data and generate auth token
       if (server.id) {
         try {
           // Fetch server with owner data to get the actual extRelationId
