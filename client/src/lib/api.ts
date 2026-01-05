@@ -235,6 +235,19 @@ class ApiClient {
     return response.json();
   }
 
+  async register(email: string, password: string, name?: string): Promise<{ user: { id: number; email: string; name: string } }> {
+    const response = await fetch(`${this.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Registration failed');
+    }
+    return response.json();
+  }
+
   async logout(): Promise<void> {
     await fetch(`${this.baseUrl}/auth/logout`, { method: 'POST' });
   }

@@ -1,29 +1,70 @@
-import { type Session, sessions } from "@shared/schema";
+import { type Session, type User, sessions, users } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import bcrypt from "bcrypt";
 
 export interface IStorage {
+  createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  updateUserVirtFusionData(userId: number, data: { virtFusionUserId: number; extRelationId: string; name?: string }): Promise<void>;
+  verifyPassword(user: User, password: string): Promise<boolean>;
+  
   createSession(data: {
-    virtFusionUserId: number;
-    extRelationId: string;
+    userId: number;
+    virtFusionUserId?: number;
+    extRelationId?: string;
     email: string;
     name?: string;
-    virtFusionToken: string;
     expiresAt: Date;
   }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
-  deleteUserSessions(virtFusionUserId: number): Promise<void>;
+  deleteUserSessions(userId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
+  async createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User> {
+    const passwordHash = await bcrypt.hash(data.password, 12);
+    const [user] = await db.insert(users).values({
+      email: data.email.toLowerCase(),
+      passwordHash,
+      name: data.name,
+      virtFusionUserId: data.virtFusionUserId,
+      extRelationId: data.extRelationId,
+    }).returning();
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+    return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async updateUserVirtFusionData(userId: number, data: { virtFusionUserId: number; extRelationId: string; name?: string }): Promise<void> {
+    await db.update(users).set({
+      virtFusionUserId: data.virtFusionUserId,
+      extRelationId: data.extRelationId,
+      name: data.name || undefined,
+    }).where(eq(users.id, userId));
+  }
+
+  async verifyPassword(user: User, password: string): Promise<boolean> {
+    return bcrypt.compare(password, user.passwordHash);
+  }
+
   async createSession(data: {
-    virtFusionUserId: number;
-    extRelationId: string;
+    userId: number;
+    virtFusionUserId?: number;
+    extRelationId?: string;
     email: string;
     name?: string;
-    virtFusionToken: string;
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
@@ -43,8 +84,8 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sessions).where(eq(sessions.id, id));
   }
 
-  async deleteUserSessions(virtFusionUserId: number): Promise<void> {
-    await db.delete(sessions).where(eq(sessions.virtFusionUserId, virtFusionUserId));
+  async deleteUserSessions(userId: number): Promise<void> {
+    await db.delete(sessions).where(eq(sessions.userId, userId));
   }
 }
 

@@ -142,6 +142,45 @@ export class VirtFusionClient {
     }
   }
 
+  async findUserByEmail(email: string): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser[] }>(`/users?email=${encodeURIComponent(email)}`);
+      if (data.data && data.data.length > 0) {
+        return data.data[0];
+      }
+      return null;
+    } catch (error) {
+      log(`Failed to find user by email ${email}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async createUser(email: string, name: string): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser }>('/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          name,
+          sendMail: false,
+        }),
+      });
+      log(`Created VirtFusion user: ${email} with ID ${data.data.id}`, 'virtfusion');
+      return data.data;
+    } catch (error) {
+      log(`Failed to create VirtFusion user ${email}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async findOrCreateUser(email: string, name: string): Promise<VirtFusionUser | null> {
+    let user = await this.findUserByEmail(email);
+    if (!user) {
+      user = await this.createUser(email, name);
+    }
+    return user;
+  }
+
   async getUserById(userId: number): Promise<VirtFusionUser | null> {
     try {
       const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}`);

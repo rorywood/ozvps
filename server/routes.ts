@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
-import { loginSchema, serverNameSchema } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 
@@ -11,11 +11,11 @@ declare global {
     interface Request {
       userSession?: {
         id: string;
-        virtFusionUserId: number;
-        extRelationId: string;
+        userId: number;
+        virtFusionUserId: number | null;
+        extRelationId: string | null;
         email: string;
         name?: string;
-        virtFusionToken: string;
       };
     }
   }
@@ -47,11 +47,11 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
     req.userSession = {
       id: session.id,
+      userId: session.userId,
       virtFusionUserId: session.virtFusionUserId,
       extRelationId: session.extRelationId,
       email: session.email,
       name: session.name || undefined,
-      virtFusionToken: session.virtFusionToken,
     };
 
     next();
@@ -67,6 +67,63 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   // Auth endpoints (public)
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const parsed = registerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid registration data' });
+      }
+
+      const { email, password, name } = parsed.data;
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: 'An account with this email already exists' });
+      }
+
+      const virtFusionUser = await virtfusionClient.findOrCreateUser(email, name || email.split('@')[0]);
+      if (!virtFusionUser) {
+        return res.status(500).json({ error: 'Failed to create account. Please try again or contact support.' });
+      }
+
+      const user = await storage.createUser({
+        email,
+        password,
+        name: name || virtFusionUser.name,
+        virtFusionUserId: virtFusionUser.id,
+        extRelationId: virtFusionUser.extRelationId,
+      });
+
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      const session = await storage.createSession({
+        userId: user.id,
+        virtFusionUserId: virtFusionUser.id,
+        extRelationId: virtFusionUser.extRelationId,
+        email: user.email,
+        name: user.name || undefined,
+        expiresAt,
+      });
+
+      res.cookie(SESSION_COOKIE, session.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        expires: expiresAt,
+      });
+
+      res.status(201).json({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+      });
+    } catch (error: any) {
+      log(`Registration error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Registration failed' });
+    }
+  });
+
   app.post('/api/auth/login', async (req, res) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
@@ -76,23 +133,38 @@ export async function registerRoutes(
 
       const { email, password } = parsed.data;
 
-      const authResult = await virtfusionClient.authenticateUser(email, password);
-      
-      if (!authResult) {
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
-      // Invalidate any existing sessions for this user (enforce single session)
-      await storage.deleteUserSessions(authResult.user.id);
+      const validPassword = await storage.verifyPassword(user, password);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      if (!user.virtFusionUserId) {
+        const virtFusionUser = await virtfusionClient.findUserByEmail(email);
+        if (virtFusionUser) {
+          await storage.updateUserVirtFusionData(user.id, {
+            virtFusionUserId: virtFusionUser.id,
+            extRelationId: virtFusionUser.extRelationId,
+            name: user.name || virtFusionUser.name,
+          });
+          user.virtFusionUserId = virtFusionUser.id;
+          user.extRelationId = virtFusionUser.extRelationId;
+        }
+      }
+
+      await storage.deleteUserSessions(user.id);
 
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-      
       const session = await storage.createSession({
-        virtFusionUserId: authResult.user.id,
-        extRelationId: authResult.user.extRelationId,
-        email: authResult.user.email,
-        name: authResult.user.name,
-        virtFusionToken: authResult.token,
+        userId: user.id,
+        virtFusionUserId: user.virtFusionUserId || undefined,
+        extRelationId: user.extRelationId || undefined,
+        email: user.email,
+        name: user.name || undefined,
         expiresAt,
       });
 
@@ -105,9 +177,9 @@ export async function registerRoutes(
 
       res.json({
         user: {
-          id: authResult.user.id,
-          email: authResult.user.email,
-          name: authResult.user.name,
+          id: user.id,
+          email: user.email,
+          name: user.name,
         },
       });
     } catch (error: any) {
@@ -121,11 +193,7 @@ export async function registerRoutes(
     
     if (sessionId) {
       try {
-        const session = await storage.getSession(sessionId);
-        if (session) {
-          await virtfusionClient.logoutUser(session.virtFusionToken);
-          await storage.deleteSession(sessionId);
-        }
+        await storage.deleteSession(sessionId);
       } catch (error) {
         log(`Logout error: ${error}`, 'api');
       }
@@ -153,9 +221,10 @@ export async function registerRoutes(
 
       res.json({
         user: {
-          id: session.virtFusionUserId,
+          id: session.userId,
           email: session.email,
           name: session.name,
+          virtFusionUserId: session.virtFusionUserId,
           extRelationId: session.extRelationId,
         },
       });
