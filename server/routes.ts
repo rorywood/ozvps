@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
+import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
@@ -45,16 +46,9 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    const user = await storage.getUserById(session.userId);
-    if (!user || user.status === 'disabled') {
-      await storage.deleteSession(sessionId);
-      res.clearCookie(SESSION_COOKIE);
-      return res.status(401).json({ error: 'Account disabled. Please contact support.' });
-    }
-
     req.userSession = {
       id: session.id,
-      userId: session.userId,
+      userId: session.userId || 0,
       virtFusionUserId: session.virtFusionUserId,
       extRelationId: session.extRelationId,
       email: session.email,
@@ -138,31 +132,27 @@ export async function registerRoutes(
 
       const { email, password, name } = parsed.data;
 
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ error: 'An account with this email already exists' });
+      // Create user in Auth0
+      const auth0Result = await auth0Client.createUser(email, password, name);
+      if (!auth0Result.success || !auth0Result.user) {
+        return res.status(400).json({ error: auth0Result.error || 'Failed to create account' });
       }
 
+      // Find or create VirtFusion user
       const virtFusionUser = await virtfusionClient.findOrCreateUser(email, name || email.split('@')[0]);
       if (!virtFusionUser) {
         return res.status(500).json({ error: 'Failed to create account. Please try again or contact support.' });
       }
 
-      const user = await storage.createUser({
-        email,
-        password,
-        name: name || virtFusionUser.name,
-        virtFusionUserId: virtFusionUser.id,
-        extRelationId: virtFusionUser.extRelationId,
-      });
-
+      // Create local session (we still need sessions for the app)
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
-        userId: user.id,
+        visitorId: 0,
         virtFusionUserId: virtFusionUser.id,
         extRelationId: virtFusionUser.extRelationId,
-        email: user.email,
-        name: user.name || undefined,
+        email: email,
+        name: name || virtFusionUser.name,
+        auth0UserId: auth0Result.user.user_id,
         expiresAt,
       });
 
@@ -175,9 +165,9 @@ export async function registerRoutes(
 
       res.status(201).json({
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
+          id: auth0Result.user.user_id,
+          email: email,
+          name: name || virtFusionUser.name,
         },
       });
     } catch (error: any) {
@@ -195,42 +185,31 @@ export async function registerRoutes(
 
       const { email, password } = parsed.data;
 
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid email or password' });
+      // Authenticate with Auth0
+      const auth0Result = await auth0Client.authenticateUser(email, password);
+      if (!auth0Result.success || !auth0Result.user) {
+        return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
 
-      if (user.status === 'disabled') {
-        return res.status(401).json({ error: 'Account disabled. Please contact support.' });
+      // Find or link VirtFusion user
+      let virtFusionUser = await virtfusionClient.findUserByEmail(email);
+      if (!virtFusionUser) {
+        // Create VirtFusion user if doesn't exist
+        virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
       }
 
-      const validPassword = await storage.verifyPassword(user, password);
-      if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
+      // Delete any existing sessions for this Auth0 user
+      await storage.deleteSessionsByAuth0UserId(auth0Result.user.user_id);
 
-      if (!user.virtFusionUserId) {
-        const virtFusionUser = await virtfusionClient.findUserByEmail(email);
-        if (virtFusionUser) {
-          await storage.updateUserVirtFusionData(user.id, {
-            virtFusionUserId: virtFusionUser.id,
-            extRelationId: virtFusionUser.extRelationId,
-            name: user.name || virtFusionUser.name,
-          });
-          user.virtFusionUserId = virtFusionUser.id;
-          user.extRelationId = virtFusionUser.extRelationId;
-        }
-      }
-
-      await storage.deleteUserSessions(user.id);
-
+      // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
-        userId: user.id,
-        virtFusionUserId: user.virtFusionUserId || undefined,
-        extRelationId: user.extRelationId || undefined,
-        email: user.email,
-        name: user.name || undefined,
+        visitorId: 0,
+        virtFusionUserId: virtFusionUser?.id,
+        extRelationId: virtFusionUser?.extRelationId,
+        email: email,
+        name: auth0Result.user.name,
+        auth0UserId: auth0Result.user.user_id,
         expiresAt,
       });
 
@@ -243,9 +222,9 @@ export async function registerRoutes(
 
       res.json({
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
+          id: auth0Result.user.user_id,
+          email: email,
+          name: auth0Result.user.name,
         },
       });
     } catch (error: any) {
@@ -548,17 +527,14 @@ export async function registerRoutes(
 
   app.get('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      const localUser = await storage.getUserById(req.userSession!.userId);
-      if (!localUser) {
-        return res.status(404).json({ error: 'User not found' });
-      }
+      const session = req.userSession!;
       
       res.json({
-        id: localUser.id,
-        email: localUser.email,
-        name: localUser.name,
-        virtFusionUserId: localUser.virtFusionUserId,
-        createdAt: localUser.createdAt,
+        id: session.userId || session.id,
+        email: session.email,
+        name: session.name,
+        virtFusionUserId: session.virtFusionUserId,
+        createdAt: new Date().toISOString(),
       });
     } catch (error: any) {
       log(`Error fetching user profile: ${error.message}`, 'api');
@@ -568,26 +544,16 @@ export async function registerRoutes(
 
   app.put('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      const { name } = req.body;
+      const session = req.userSession!;
       
-      // Update local user profile
-      const localUser = await storage.getUserById(req.userSession!.userId);
-      if (!localUser) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      // Update name in local database if provided
-      if (name && name !== localUser.name) {
-        await storage.updateUser(localUser.id, { name });
-      }
-      
-      const updatedUser = await storage.getUserById(req.userSession!.userId);
+      // Profile updates are managed through Auth0
+      // For now, just return the current session data
       res.json({
-        id: updatedUser!.id,
-        email: updatedUser!.email,
-        name: updatedUser!.name,
-        virtFusionUserId: updatedUser!.virtFusionUserId,
-        createdAt: updatedUser!.createdAt,
+        id: session.userId || session.id,
+        email: session.email,
+        name: session.name,
+        virtFusionUserId: session.virtFusionUserId,
+        createdAt: new Date().toISOString(),
       });
     } catch (error: any) {
       log(`Error updating user profile: ${error.message}`, 'api');
@@ -596,34 +562,9 @@ export async function registerRoutes(
   });
 
   app.post('/api/user/password', authMiddleware, async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      
-      if (!newPassword || newPassword.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-      
-      // Update password in local database
-      const localUser = await storage.getUserById(req.userSession!.userId);
-      if (!localUser) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      // Verify current password if provided
-      if (currentPassword) {
-        const bcrypt = await import('bcrypt');
-        const validPassword = await bcrypt.compare(currentPassword, localUser.passwordHash);
-        if (!validPassword) {
-          return res.status(401).json({ error: 'Current password is incorrect' });
-        }
-      }
-      
-      await storage.updateUserPassword(localUser.id, newPassword);
-      res.json({ success: true, message: 'Password updated successfully' });
-    } catch (error: any) {
-      log(`Error changing password: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to change password' });
-    }
+    // Password changes are now managed through Auth0
+    // This endpoint is disabled for security reasons
+    res.status(400).json({ error: 'Password changes are not supported. Please contact support.' });
   });
 
   return httpServer;

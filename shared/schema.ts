@@ -14,7 +14,8 @@ export const users = pgTable("users", {
 
 export const sessions = pgTable("sessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id"),
+  auth0UserId: text("auth0_user_id"),
   virtFusionUserId: integer("virtfusion_user_id"),
   extRelationId: text("ext_relation_id"),
   email: text("email").notNull(),

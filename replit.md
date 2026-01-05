@@ -32,10 +32,18 @@ Preferred communication style: Simple, everyday language.
 - **Current Storage**: In-memory storage (MemStorage) for user sessions, designed for future database migration
 
 ### Authentication Flow
-- VirtFusion API tokens (Bearer tokens) for backend communication
-- Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
-- No user authentication currently - direct access to panel
-- Authentication code exists but is disabled (can be re-enabled if needed)
+- **User Authentication**: Auth0 (Resource Owner Password Grant)
+  - Users authenticate via Auth0 API using the existing login/register UI
+  - Auth0 manages user credentials securely
+  - Environment variables: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`
+- **VirtFusion Integration**: Users are automatically linked to VirtFusion accounts by email
+  - On login/register, the system finds or creates a VirtFusion user with the same email
+  - VirtFusion user ID is stored in session for server access control
+- **Session Management**: Cookie-based sessions stored in PostgreSQL
+  - Sessions contain Auth0 user ID, VirtFusion user ID, email, and name
+  - 7-day session expiry with httpOnly secure cookies
+- **VirtFusion API**: Bearer token authentication for backend communication
+  - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 
 ### Project Structure
 ```

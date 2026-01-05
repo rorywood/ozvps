@@ -15,7 +15,8 @@ export interface IStorage {
   verifyPassword(user: User, password: string): Promise<boolean>;
   
   createSession(data: {
-    userId: number;
+    visitorId?: number;
+    auth0UserId?: string;
     virtFusionUserId?: number;
     extRelationId?: string;
     email: string;
@@ -25,6 +26,7 @@ export interface IStorage {
   getSession(id: string): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
   deleteUserSessions(userId: number): Promise<void>;
+  deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -76,7 +78,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSession(data: {
-    userId: number;
+    visitorId?: number;
+    auth0UserId?: string;
     virtFusionUserId?: number;
     extRelationId?: string;
     email: string;
@@ -86,7 +89,13 @@ export class DatabaseStorage implements IStorage {
     const id = randomBytes(32).toString("hex");
     const [session] = await db.insert(sessions).values({
       id,
-      ...data,
+      userId: data.visitorId,
+      auth0UserId: data.auth0UserId,
+      virtFusionUserId: data.virtFusionUserId,
+      extRelationId: data.extRelationId,
+      email: data.email,
+      name: data.name,
+      expiresAt: data.expiresAt,
     }).returning();
     return session;
   }
@@ -102,6 +111,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUserSessions(userId: number): Promise<void> {
     await db.delete(sessions).where(eq(sessions.userId, userId));
+  }
+
+  async deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void> {
+    await db.delete(sessions).where(eq(sessions.auth0UserId, auth0UserId));
   }
 }
 

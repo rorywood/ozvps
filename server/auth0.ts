@@ -1,0 +1,203 @@
+import { log } from "./index";
+
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
+const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID;
+const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET;
+
+interface Auth0TokenResponse {
+  access_token: string;
+  id_token?: string;
+  token_type: string;
+  expires_in: number;
+}
+
+interface Auth0User {
+  user_id: string;
+  email: string;
+  name?: string;
+  email_verified?: boolean;
+}
+
+interface Auth0Error {
+  error: string;
+  error_description: string;
+}
+
+class Auth0Client {
+  private baseUrl: string;
+  private managementToken: string | null = null;
+  private managementTokenExpiry: number = 0;
+
+  constructor() {
+    if (!AUTH0_DOMAIN) {
+      throw new Error('AUTH0_DOMAIN is not configured');
+    }
+    this.baseUrl = `https://${AUTH0_DOMAIN}`;
+  }
+
+  private async getManagementToken(): Promise<string> {
+    if (this.managementToken && Date.now() < this.managementTokenExpiry) {
+      return this.managementToken;
+    }
+
+    const response = await fetch(`${this.baseUrl}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credentials',
+        client_id: AUTH0_CLIENT_ID,
+        client_secret: AUTH0_CLIENT_SECRET,
+        audience: `${this.baseUrl}/api/v2/`,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json() as Auth0Error;
+      log(`Failed to get Auth0 management token: ${error.error_description}`, 'auth0');
+      throw new Error('Failed to get management token');
+    }
+
+    const data = await response.json() as Auth0TokenResponse;
+    this.managementToken = data.access_token;
+    this.managementTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+    return this.managementToken;
+  }
+
+  async authenticateUser(email: string, password: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'password',
+          username: email,
+          password: password,
+          client_id: AUTH0_CLIENT_ID,
+          client_secret: AUTH0_CLIENT_SECRET,
+          scope: 'openid profile email',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json() as Auth0Error;
+        log(`Auth0 login failed for ${email}: ${error.error_description}`, 'auth0');
+        
+        if (error.error === 'invalid_grant') {
+          return { success: false, error: 'Invalid email or password' };
+        }
+        return { success: false, error: error.error_description || 'Authentication failed' };
+      }
+
+      const tokenData = await response.json() as Auth0TokenResponse;
+      
+      const userInfoResponse = await fetch(`${this.baseUrl}/userinfo`, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+
+      if (!userInfoResponse.ok) {
+        log(`Failed to get user info from Auth0`, 'auth0');
+        return { success: false, error: 'Failed to get user information' };
+      }
+
+      const userInfo = await userInfoResponse.json() as any;
+      
+      return {
+        success: true,
+        user: {
+          user_id: userInfo.sub,
+          email: userInfo.email,
+          name: userInfo.name || userInfo.nickname,
+          email_verified: userInfo.email_verified,
+        },
+      };
+    } catch (error: any) {
+      log(`Auth0 authentication error: ${error.message}`, 'auth0');
+      return { success: false, error: 'Authentication service unavailable' };
+    }
+  }
+
+  async createUser(email: string, password: string, name?: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(`${this.baseUrl}/api/v2/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${managementToken}`,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          name: name || email.split('@')[0],
+          connection: 'Username-Password-Authentication',
+          email_verified: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
+        
+        if (error.statusCode === 409 || error.message?.includes('already exists')) {
+          return { success: false, error: 'An account with this email already exists' };
+        }
+        if (error.message?.includes('PasswordStrengthError')) {
+          return { success: false, error: 'Password is too weak. Please use a stronger password.' };
+        }
+        return { success: false, error: error.message || 'Failed to create account' };
+      }
+
+      const userData = await response.json() as any;
+      
+      return {
+        success: true,
+        user: {
+          user_id: userData.user_id,
+          email: userData.email,
+          name: userData.name,
+          email_verified: userData.email_verified,
+        },
+      };
+    } catch (error: any) {
+      log(`Auth0 user creation error: ${error.message}`, 'auth0');
+      return { success: false, error: 'Account creation service unavailable' };
+    }
+  }
+
+  async getUserByEmail(email: string): Promise<Auth0User | null> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users-by-email?email=${encodeURIComponent(email)}`,
+        {
+          headers: { Authorization: `Bearer ${managementToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to get Auth0 user by email: ${response.status}`, 'auth0');
+        return null;
+      }
+
+      const users = await response.json() as any[];
+      if (users.length === 0) {
+        return null;
+      }
+
+      const user = users[0];
+      return {
+        user_id: user.user_id,
+        email: user.email,
+        name: user.name,
+        email_verified: user.email_verified,
+      };
+    } catch (error: any) {
+      log(`Auth0 get user error: ${error.message}`, 'auth0');
+      return null;
+    }
+  }
+}
+
+export const auth0Client = new Auth0Client();
