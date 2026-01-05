@@ -475,13 +475,12 @@ export default function ServerDetail() {
         
         {/* Suspension Banner */}
         {isSuspended && (
-          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
-            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
+            <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
             <div>
-              <h3 className="font-semibold text-red-300">Server Suspended</h3>
-              <p className="text-sm text-red-300/80">
-                This server has been suspended. All management functions are disabled. 
-                Please contact support or check your billing status.
+              <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
+              <p className="text-sm text-yellow-300/80">
+                Please contact support for assistance.
               </p>
             </div>
           </div>
@@ -1119,7 +1118,7 @@ export default function ServerDetail() {
                     Reinstall Server
                   </Button>
                   {isSuspended && (
-                    <p className="text-sm text-red-400/80 mt-2">
+                    <p className="text-sm text-yellow-400/80 mt-2">
                       Reinstall is disabled while the server is suspended.
                     </p>
                   )}

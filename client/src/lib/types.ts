@@ -3,6 +3,7 @@ export interface Server {
   name: string;
   uuid: string;
   status: 'running' | 'stopped' | 'provisioning' | 'error';
+  suspended: boolean;
   primaryIp: string;
   location: {
     id: string;
