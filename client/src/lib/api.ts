@@ -210,15 +210,17 @@ class ApiClient {
 
   // User Profile endpoints
   async getUserProfile(): Promise<{
-    id: number;
+    id: number | string;
     name: string;
     email: string;
     extRelationId?: string;
-    enabled: boolean;
+    virtFusionUserId?: number | null;
+    enabled?: boolean;
     timezone?: string;
     twoFactorAuth?: boolean;
     created?: string;
     updated?: string;
+    createdAt?: string;
   }> {
     const response = await fetch(`${this.baseUrl}/user/profile`);
     if (!response.ok) throw new Error('Failed to fetch user profile');

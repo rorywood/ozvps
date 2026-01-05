@@ -3,14 +3,24 @@ import {
   LayoutDashboard, 
   Server, 
   Settings,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState } from "react";
 
-export function Sidebar() {
+const navItems = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/servers", icon: Server, label: "Servers" },
+  { href: "/account", icon: Settings, label: "Settings" },
+];
+
+function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -22,14 +32,8 @@ export function Sidebar() {
     },
   });
 
-  const navItems = [
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/servers", icon: Server, label: "Servers" },
-    { href: "/account", icon: Settings, label: "Settings" },
-  ];
-
   return (
-    <div className="h-screen w-64 flex flex-col glass-panel border-r border-white/5 fixed left-0 top-0 z-50">
+    <>
       <div className="p-6 flex items-center justify-center">
         <img src={logo} alt="OzVPS" className="h-16 w-auto" data-testid="img-logo" />
       </div>
@@ -40,6 +44,7 @@ export function Sidebar() {
           return (
             <Link key={item.href} href={item.href}>
               <div
+                onClick={onNavClick}
                 data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
@@ -70,6 +75,51 @@ export function Sidebar() {
           <p className="text-xs text-muted-foreground text-center">OzVPS Panel</p>
         </div>
       </div>
+    </>
+  );
+}
+
+export function DesktopSidebar() {
+  return (
+    <div className="hidden lg:flex h-screen w-64 flex-col glass-panel border-r border-white/5 fixed left-0 top-0 z-50">
+      <SidebarContent />
     </div>
+  );
+}
+
+export function MobileHeader() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
+      <div className="flex items-center justify-between p-4">
+        <img src={logo} alt="OzVPS" className="h-10 w-auto" data-testid="img-logo-mobile" />
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <button
+              className="p-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              data-testid="button-mobile-menu"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-64 p-0 glass-panel border-r border-white/5">
+            <div className="h-full flex flex-col">
+              <SidebarContent onNavClick={() => setOpen(false)} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <>
+      <DesktopSidebar />
+      <MobileHeader />
+    </>
   );
 }

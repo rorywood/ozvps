@@ -66,6 +66,17 @@ shared/           # Shared code between client/server
 - **Component Composition**: GlassCard wrapper component for consistent glassmorphism styling
 - **Type Safety**: Shared types between frontend and backend via `@shared/*` path alias
 
+### Responsive Design
+- **Mobile Navigation**: Hamburger menu with Sheet drawer (slide-out) for mobile devices
+- **Breakpoints**: Using Tailwind CSS responsive utilities (`sm:`, `md:`, `lg:`)
+  - Mobile: < 640px (default styles)
+  - Small: 640px+ (`sm:`)
+  - Medium: 768px+ (`md:`)
+  - Large: 1024px+ (`lg:`) - desktop sidebar visible
+- **Touch Targets**: Minimum 40px (h-10) on mobile, reduced to 36px (h-9) on larger screens
+- **Layout**: Single-column on mobile, multi-column grids on tablet/desktop
+- **AppShell**: Responsive padding with `lg:pl-64` for sidebar and `pt-16 lg:pt-0` for mobile header
+
 ## External Dependencies
 
 ### VirtFusion API Integration

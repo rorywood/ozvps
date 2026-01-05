@@ -44,15 +44,17 @@ export interface User {
 }
 
 export interface UserProfile {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   extRelationId?: string;
-  enabled: boolean;
+  virtFusionUserId?: number | null;
+  enabled?: boolean;
   timezone?: string;
   twoFactorAuth?: boolean;
   created?: string;
   updated?: string;
+  createdAt?: string;
 }
 
 export interface Invoice {

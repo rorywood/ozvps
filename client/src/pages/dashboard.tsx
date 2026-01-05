@@ -168,29 +168,29 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-8">
-                      <div className="hidden md:block">
-                        <div className="text-xs text-muted-foreground mb-1">CPU Usage</div>
-                        <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-4 sm:gap-8 flex-wrap sm:flex-nowrap">
+                      <div className="hidden sm:block">
+                        <div className="text-xs text-muted-foreground mb-1">CPU</div>
+                        <div className="w-16 sm:w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
                           <div className="h-full bg-primary rounded-full" style={{ width: `${server.stats?.cpu_usage || 0}%` }} />
                         </div>
                       </div>
                       
-                      <div className="hidden md:block">
-                        <div className="text-xs text-muted-foreground mb-1">RAM Usage</div>
-                        <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="hidden sm:block">
+                        <div className="text-xs text-muted-foreground mb-1">RAM</div>
+                        <div className="w-16 sm:w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
                           <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${server.stats?.ram_usage || 0}%` }} />
                         </div>
                       </div>
 
-                      <div className="hidden lg:block">
-                        <div className="text-xs text-muted-foreground mb-1">Disk Usage</div>
-                        <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="hidden md:block">
+                        <div className="text-xs text-muted-foreground mb-1">Disk</div>
+                        <div className="w-16 sm:w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
                           <div className="h-full bg-green-500 rounded-full" style={{ width: `${server.stats?.disk_usage || 0}%` }} />
                         </div>
                       </div>
 
-                      <div className="text-right min-w-[100px]">
+                      <div className="text-right ml-auto">
                         <div className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border",
                           server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :

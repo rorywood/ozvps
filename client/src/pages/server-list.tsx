@@ -148,7 +148,7 @@ export default function ServerList() {
                   </div>
 
                   {/* Specs Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 flex-1 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-2 flex-1 text-sm">
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Location</div>
                       <div className="text-white font-medium flex items-center gap-2">
@@ -171,7 +171,7 @@ export default function ServerList() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
+                  <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5 flex-wrap">
                     {server.suspended && (
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-500/10 border border-yellow-500/20">
                         <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
@@ -181,45 +181,48 @@ export default function ServerList() {
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground"
+                      className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground hidden sm:flex"
                       disabled={server.suspended}
                     >
-                      <TerminalSquare className="h-4 w-4 mr-2" />
-                      Console
+                      <TerminalSquare className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Console</span>
                     </Button>
                     
                     <div className="flex items-center bg-black/20 rounded-md border border-white/10 p-1">
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        className="h-7 w-7 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm" 
+                        className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Start"}
                         disabled={server.status === 'running' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'boot')}
+                        aria-label="Start server"
                       >
-                        <Power className="h-4 w-4" />
+                        <Power className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
-                      <div className="w-px h-4 bg-white/10 mx-1" />
+                      <div className="w-px h-5 bg-white/10 mx-0.5" />
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        className="h-7 w-7 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm" 
+                        className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Reboot"}
                         disabled={server.status !== 'running' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'reboot')}
+                        aria-label="Reboot server"
                       >
-                        <RotateCw className="h-4 w-4" />
+                        <RotateCw className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
-                      <div className="w-px h-4 bg-white/10 mx-1" />
+                      <div className="w-px h-5 bg-white/10 mx-0.5" />
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm" 
+                        className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Stop"}
                         disabled={server.status === 'stopped' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'shutdown')}
+                        aria-label="Stop server"
                       >
-                        <Power className="h-4 w-4 rotate-180" />
+                        <Power className="h-5 w-5 sm:h-4 sm:w-4 rotate-180" />
                       </Button>
                     </div>
 
