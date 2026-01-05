@@ -495,12 +495,30 @@ export class VirtFusionClient {
   }
 
   private mapStatus(status: string | undefined, suspended?: boolean, buildFailed?: boolean): 'running' | 'stopped' | 'provisioning' | 'error' {
-    // Check for suspended or failed builds first
+    // Check for suspended first
     if (suspended) return 'stopped';
-    if (buildFailed) return 'error';
     
     if (!status) return 'stopped';
     const statusLower = status.toLowerCase();
+    
+    // Check if server is in a transitional/building state
+    // VirtFusion temporarily sets buildFailed=true during rebuilds, so we check state first
+    const isTransitionalState = 
+      statusLower.includes('provision') || 
+      statusLower.includes('building') ||
+      statusLower.includes('creating') ||
+      statusLower.includes('pending') ||
+      statusLower.includes('queued') ||
+      statusLower === 'installing';
+    
+    // If in transitional state, return provisioning regardless of buildFailed
+    if (isTransitionalState) {
+      return 'provisioning';
+    }
+    
+    // Only check buildFailed for non-transitional states
+    // This prevents false errors during rebuilds
+    if (buildFailed) return 'error';
     
     // Running states
     if (statusLower === 'running' || 
@@ -526,15 +544,6 @@ export class VirtFusionClient {
       // When state is "complete", the server is built but we need power state
       // Since we can't determine power here, return running as default for built servers
       return 'running';
-    }
-    
-    // Provisioning states
-    if (statusLower.includes('provision') || 
-        statusLower.includes('building') ||
-        statusLower.includes('creating') ||
-        statusLower.includes('pending') ||
-        statusLower.includes('queued')) {
-      return 'provisioning';
     }
     
     // Error states
