@@ -248,10 +248,47 @@ export default function ServerDetail() {
     }
   };
 
+  const VNC_SESSION_TIMEOUT = 15 * 60; // 15 minutes timeout
+  
   const handleOpenVnc = () => {
     if (!serverId) return;
+    
+    // Clear any existing timers
+    if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+    if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
+    
     // Open console page in a popup window - it will fetch and redirect to VNC
     window.open(`/servers/${serverId}/console`, '_blank', 'width=1024,height=768,menubar=no,toolbar=no,location=no');
+    
+    // Start VNC session timer
+    setVncEnabled(true);
+    setVncTimeRemaining(VNC_SESSION_TIMEOUT);
+    
+    // Countdown timer
+    vncTimerRef.current = setInterval(() => {
+      setVncTimeRemaining(prev => {
+        if (prev <= 1) {
+          if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    // Auto-disable VNC after timeout
+    vncDisableTimerRef.current = setTimeout(async () => {
+      try {
+        await api.disableVnc(serverId);
+        setVncEnabled(false);
+        setVncTimeRemaining(0);
+        toast({
+          title: "VNC Session Expired",
+          description: "Console session has been automatically disabled for security. Click Console to reconnect.",
+        });
+      } catch (error) {
+        console.error('Failed to auto-disable VNC:', error);
+      }
+    }, VNC_SESSION_TIMEOUT * 1000);
   };
 
   const handleStartEditName = () => {
