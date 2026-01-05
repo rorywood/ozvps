@@ -117,6 +117,7 @@ export default function ServerList() {
                   <div className="flex items-center gap-4 min-w-[250px]">
                     <div className={cn(
                       "h-12 w-12 rounded-xl flex items-center justify-center border shadow-[0_0_15px_-3px_rgba(0,0,0,0.5)]",
+                      server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 shadow-yellow-500/20" :
                       server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-green-500/20" : 
                       server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/20" :
                       "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 animate-pulse"
@@ -127,7 +128,7 @@ export default function ServerList() {
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
                         {server.suspended ? (
-                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400">
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
                             SUSPENDED
                           </span>
                         ) : (
@@ -167,6 +168,12 @@ export default function ServerList() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
+                    {server.suspended && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                        <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                        <span className="text-sm font-medium text-yellow-400">Suspended</span>
+                      </div>
+                    )}
                     <Button 
                       size="sm" 
                       variant="outline" 
