@@ -243,8 +243,20 @@ export default function ServerDetail() {
 
   const handleOpenVnc = () => {
     if (!serverId) return;
-    // Navigate to the embedded VNC console page
-    setLocation(`/servers/${serverId}/console`);
+    // Open console in a popout window
+    const width = 1024;
+    const height = 768;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    const popup = window.open(
+      `/servers/${serverId}/console?popout=true`,
+      'vnc_console',
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,resizable=yes`
+    );
+    // Fallback to in-tab navigation if popup was blocked
+    if (!popup || popup.closed) {
+      setLocation(`/servers/${serverId}/console`);
+    }
   };
 
   const handleStartEditName = () => {

@@ -1,4 +1,5 @@
-import { useRoute, useLocation } from "wouter";
+import { useEffect } from "react";
+import { useRoute, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { VncViewer } from "@/components/vnc-viewer";
@@ -10,7 +11,11 @@ import { Link } from "wouter";
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const serverId = params?.id;
+  
+  // Check if this is a popout window
+  const isPopout = searchString.includes('popout=true');
 
   const { data: consoleData, isLoading, error, refetch } = useQuery({
     queryKey: ['console-url', serverId],
@@ -23,8 +28,30 @@ export default function ServerConsole() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // Set window title for popout
+  useEffect(() => {
+    if (isPopout) {
+      document.title = `Console - Server ${serverId}`;
+    }
+  }, [isPopout, serverId]);
+
+  // Cleanup VNC on window close for popout
+  useEffect(() => {
+    if (isPopout && serverId) {
+      const handleBeforeUnload = () => {
+        api.disableVnc(serverId).catch(() => {});
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+  }, [isPopout, serverId]);
+
   const handleClose = () => {
-    setLocation(`/servers/${serverId}`);
+    if (isPopout) {
+      window.close();
+    } else {
+      setLocation(`/servers/${serverId}`);
+    }
   };
 
   const handleDisconnect = async () => {
@@ -34,6 +61,10 @@ export default function ServerConsole() {
       } catch (e) {
         console.error('Failed to disable VNC:', e);
       }
+    }
+    // Auto-close popout on disconnect
+    if (isPopout) {
+      window.close();
     }
   };
 
@@ -62,11 +93,17 @@ export default function ServerConsole() {
             <Button variant="outline" onClick={() => refetch()} className="border-white/10 hover:bg-white/5 text-white" data-testid="button-retry">
               Try Again
             </Button>
-            <Link href={`/servers/${serverId}`}>
-              <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white" data-testid="button-back-to-server">
-                Back to Server
+            {isPopout ? (
+              <Button variant="outline" onClick={() => window.close()} className="border-white/10 hover:bg-white/5 text-white" data-testid="button-close-window">
+                Close Window
               </Button>
-            </Link>
+            ) : (
+              <Link href={`/servers/${serverId}`}>
+                <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white" data-testid="button-back-to-server">
+                  Back to Server
+                </Button>
+              </Link>
+            )}
           </div>
         </GlassCard>
       </div>
@@ -94,12 +131,18 @@ export default function ServerConsole() {
         <p className="text-muted-foreground text-center mb-4">
           Unable to initialize VNC console. The server may be powered off or VNC may not be supported.
         </p>
-        <Link href={`/servers/${serverId}`}>
-          <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white" data-testid="button-back-to-server">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Server
+        {isPopout ? (
+          <Button variant="outline" onClick={() => window.close()} className="border-white/10 hover:bg-white/5 text-white" data-testid="button-close-window">
+            Close Window
           </Button>
-        </Link>
+        ) : (
+          <Link href={`/servers/${serverId}`}>
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white" data-testid="button-back-to-server">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Server
+            </Button>
+          </Link>
+        )}
       </GlassCard>
     </div>
   );
