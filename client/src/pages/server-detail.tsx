@@ -17,10 +17,6 @@ import {
   Globe,
   AlignLeft,
   ChevronDown,
-  Maximize2,
-  ZoomIn,
-  ZoomOut,
-  Home,
   Copy,
   ExternalLink,
   RefreshCw,
@@ -31,7 +27,6 @@ import { Link, useRoute } from "wouter";
 import { api } from "@/lib/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -57,7 +52,7 @@ import {
 } from "@/components/ui/select";
 
 export default function ServerDetail() {
-  const [, params] = useRoute("/server/:id");
+  const [, params] = useRoute("/servers/:id");
   const serverId = params?.id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -254,21 +249,12 @@ export default function ServerDetail() {
     });
   };
 
-  // Format traffic data for chart
-  const chartData = trafficData && Array.isArray(trafficData) && trafficData.length > 0
-    ? trafficData.slice(-24).map((item: any, index: number) => ({
-        time: `${index}:00`,
-        inbound: item.in || item.inbound || item.rx || 0,
-        outbound: item.out || item.outbound || item.tx || 0,
-      }))
-    : Array.from({ length: 24 }, (_, i) => ({
-        time: `${i}:00`,
-        inbound: 0,
-        outbound: 0,
-      }));
+  // Get bandwidth allowance from traffic data
+  const bandwidthAllowance = trafficData?.available?.total || 0; // GB per month
+  const currentMonth = trafficData?.available?.current?.month || 1;
 
-  // Parse OS templates
-  const osOptions: Array<{ id: string; name: string; group: string }> = [];
+  // Parse OS templates - the API returns grouped templates with version and variant info
+  const osOptions: Array<{ id: string; name: string; version: string; variant: string; group: string }> = [];
   if (osTemplates) {
     if (Array.isArray(osTemplates)) {
       osTemplates.forEach((group: any) => {
@@ -277,6 +263,8 @@ export default function ServerDetail() {
             osOptions.push({
               id: template.id?.toString() || '',
               name: template.name || 'Unknown OS',
+              version: template.version || '',
+              variant: template.variant || '',
               group: group.name || 'Other'
             });
           });
@@ -284,6 +272,8 @@ export default function ServerDetail() {
           osOptions.push({
             id: group.id?.toString() || '',
             name: group.name || 'Unknown OS',
+            version: group.version || '',
+            variant: group.variant || '',
             group: 'Other'
           });
         }
@@ -503,126 +493,120 @@ export default function ServerDetail() {
             </TabsList>
           </div>
 
-          <TabsContent value="statistics" className="space-y-8 animate-in fade-in duration-300">
+          <TabsContent value="statistics" className="space-y-6 animate-in fade-in duration-300">
             
-            {/* Live Stats - Memory & CPU */}
+            {/* Live Stats - CPU, Memory, Disk */}
             {server.status === 'running' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Memory Card */}
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium text-muted-foreground">Memory</h3>
-                    <span className="text-2xl font-bold text-white" data-testid="text-memory-percent">
-                      {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-2 mb-3">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${liveStats?.ram_usage || 0}%` }}
-                      data-testid="progress-memory"
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span data-testid="text-memory-used">
-                      {liveStats?.memory_used_mb ? `${liveStats.memory_used_mb.toFixed(2)} MB of ${liveStats.memory_total_mb?.toFixed(2)} MB Used` : '— MB Used'}
-                    </span>
-                    <span data-testid="text-memory-free">
-                      {liveStats?.memory_free_mb ? `${liveStats.memory_free_mb.toFixed(2)} MB Free` : '— MB Free'}
-                    </span>
-                  </div>
-                </GlassCard>
-
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* CPU Card */}
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium text-muted-foreground">CPU</h3>
-                    <span className="text-2xl font-bold text-white" data-testid="text-cpu-percent">
+                <GlassCard className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
+                    <span className="text-lg font-bold text-white" data-testid="text-cpu-percent">
                       {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
                     </span>
                   </div>
-                  <div className="w-full bg-white/10 rounded-full h-2 mb-3">
+                  <div className="w-full bg-white/10 rounded-full h-1.5">
                     <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
                       style={{ width: `${liveStats?.cpu_usage || 0}%` }}
                       data-testid="progress-cpu"
                     />
                   </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Intel Xeon Family</span>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                     <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
+                  </div>
+                </GlassCard>
+
+                {/* Memory Card */}
+                <GlassCard className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
+                    <span className="text-lg font-bold text-white" data-testid="text-memory-percent">
+                      {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-1.5">
+                    <div 
+                      className="bg-green-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${liveStats?.ram_usage || 0}%` }}
+                      data-testid="progress-memory"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                    <span data-testid="text-memory-used">
+                      {liveStats?.memory_used_mb ? `${liveStats.memory_used_mb} MB / ${liveStats.memory_total_mb} MB` : '—'}
+                    </span>
+                  </div>
+                </GlassCard>
+
+                {/* Disk Card */}
+                <GlassCard className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
+                    <span className="text-lg font-bold text-white" data-testid="text-disk-percent">
+                      {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-1.5">
+                    <div 
+                      className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${liveStats?.disk_usage || 0}%` }}
+                      data-testid="progress-disk"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                    <span data-testid="text-disk-used">
+                      {liveStats?.disk_used_gb ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` : '—'}
+                    </span>
                   </div>
                 </GlassCard>
               </div>
             )}
 
-            {/* Chart Container */}
+            {/* Bandwidth Allowance Card */}
             <GlassCard className="p-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                <div className="flex items-center gap-2 bg-white/5 p-1 rounded-md">
-                   {["24 HOURS", "14 DAYS", "30 DAYS", "ALL"].map((range, i) => (
-                      <button 
-                        key={range} 
-                        className={cn(
-                          "px-3 py-1 rounded text-xs font-bold transition-colors",
-                          i === 0 ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-muted-foreground hover:text-white hover:bg-white/5"
-                        )}
-                        data-testid={`button-range-${range.toLowerCase().replace(' ', '-')}`}
-                      >
-                        {range}
-                      </button>
-                   ))}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-white uppercase tracking-wider">
+                  Monthly Bandwidth Allowance
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  Month {currentMonth}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                      <Network className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-white" data-testid="text-bandwidth-allowance">
+                        {bandwidthAllowance > 0 ? `${bandwidthAllowance} GB` : 'Unlimited'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Monthly Allowance</div>
+                    </div>
+                  </div>
                 </div>
                 
-                <h3 className="text-sm font-medium text-white uppercase tracking-wider text-center flex-1">
-                  Bandwidth Usage
-                </h3>
-
-                <div className="flex items-center gap-2">
-                   <div className="flex gap-1 text-muted-foreground">
-                      <ZoomIn className="h-4 w-4 cursor-pointer hover:text-white" />
-                      <ZoomOut className="h-4 w-4 cursor-pointer hover:text-white" />
-                      <Home className="h-4 w-4 cursor-pointer hover:text-white" />
-                      <Maximize2 className="h-4 w-4 cursor-pointer hover:text-white" />
-                   </div>
+                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                      <Activity className="h-5 w-5 text-green-400" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-white" data-testid="text-bandwidth-remaining">
+                        {bandwidthAllowance > 0 ? `${bandwidthAllowance} GB` : 'Unlimited'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Remaining This Month</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="h-[350px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                       <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="time" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                      itemStyle={{ color: '#fff' }}
-                    />
-                    <Area type="monotone" dataKey="inbound" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIn)" name="Inbound" />
-                    <Area type="monotone" dataKey="outbound" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorOut)" name="Outbound" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="flex items-center justify-center gap-6 mt-4">
-                 <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-blue-500" />
-                    <span className="text-xs font-medium text-white">Inbound Traffic</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-green-500" />
-                    <span className="text-xs font-medium text-white">Outbound Traffic</span>
-                 </div>
+              <div className="mt-4 text-xs text-muted-foreground text-center">
+                Traffic resets at the start of each billing month. Bandwidth is pooled across all assigned traffic blocks.
               </div>
             </GlassCard>
           </TabsContent>

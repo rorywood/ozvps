@@ -18,7 +18,7 @@ function Router() {
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/servers" component={ServerList} />
-      <Route path="/server/:id" component={ServerDetail} />
+      <Route path="/servers/:id" component={ServerDetail} />
       <Route path="/networking" component={Networking} />
       <Route path="/account" component={Account} />
       <Route component={NotFound} />

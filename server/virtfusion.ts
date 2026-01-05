@@ -202,13 +202,27 @@ export class VirtFusionClient {
         cpuUsage = parseFloat(cpu.percent) || 0;
       }
       
-      // Get disk usage if available
+      // Get disk usage from remoteState.disk object
+      // The disk data looks like: {"vda":{"capacity":"16106127360","physical":"12897910784",...}}
       let diskUsage = 0;
-      const disk = remoteState.disk || remoteState.storage || {};
-      if (disk.usage !== undefined) {
-        diskUsage = parseFloat(disk.usage) || 0;
-      } else if (disk.percent !== undefined) {
-        diskUsage = parseFloat(disk.percent) || 0;
+      let diskUsedBytes = 0;
+      let diskTotalBytes = 0;
+      const disk = remoteState.disk || {};
+      
+      // Disk is an object with disk names as keys (e.g., "vda", "sda")
+      const diskKeys = Object.keys(disk);
+      for (const key of diskKeys) {
+        const diskData = disk[key];
+        if (diskData && diskData.capacity && diskData.physical) {
+          const capacity = parseInt(diskData.capacity) || 0;
+          const physical = parseInt(diskData.physical) || 0;
+          diskTotalBytes += capacity;
+          diskUsedBytes += physical;
+        }
+      }
+      
+      if (diskTotalBytes > 0) {
+        diskUsage = (diskUsedBytes / diskTotalBytes) * 100;
       }
       
       // Memory details for display
@@ -223,6 +237,8 @@ export class VirtFusionClient {
         memory_total_mb: memTotalMB,
         memory_used_mb: memUsedMB,
         memory_free_mb: memFreeMB,
+        disk_used_gb: Math.round(diskUsedBytes / (1024 * 1024 * 1024) * 100) / 100,
+        disk_total_gb: Math.round(diskTotalBytes / (1024 * 1024 * 1024) * 100) / 100,
         running: remoteState.running || remoteState.state === 'running',
       };
     } catch (error) {
@@ -279,7 +295,38 @@ export class VirtFusionClient {
 
   async getOsTemplates(serverId: string) {
     try {
-      const data = await this.request<{ data: any }>(`/servers/${serverId}/media/osGroups`);
+      // Get server specs to match against packages
+      const serverResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
+      const serverResources = serverResponse.data?.settings?.resources || {};
+      const serverMemory = serverResources.memory || 0;
+      const serverStorage = serverResources.storage || 0;
+      const serverCores = serverResources.cpuCores || 0;
+      
+      // Get all packages and find matching one
+      const packagesResponse = await this.request<{ data: any[] }>('/packages');
+      const packages = packagesResponse.data || [];
+      
+      // Find matching package by comparing specs
+      let matchingPackage = packages.find(pkg => 
+        pkg.memory === serverMemory && 
+        pkg.primaryStorage === serverStorage && 
+        pkg.cpuCores === serverCores
+      );
+      
+      // If no exact match, find closest match
+      if (!matchingPackage && packages.length > 0) {
+        matchingPackage = packages.find(pkg => 
+          pkg.memory === serverMemory && pkg.cpuCores === serverCores
+        ) || packages[0];
+      }
+      
+      if (!matchingPackage) {
+        log(`No matching package found for server ${serverId}`, 'virtfusion');
+        return null;
+      }
+      
+      // Use the correct endpoint for getting OS templates available for a package
+      const data = await this.request<{ data: any }>(`/media/templates/fromServerPackageSpec/${matchingPackage.id}`);
       return data.data;
     } catch (error) {
       log(`Failed to fetch OS templates for server ${serverId}: ${error}`, 'virtfusion');

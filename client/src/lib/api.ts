@@ -64,6 +64,8 @@ class ApiClient {
     memory_total_mb?: number,
     memory_used_mb?: number,
     memory_free_mb?: number,
+    disk_used_gb?: number,
+    disk_total_gb?: number,
     running?: boolean 
   }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/stats`);
@@ -114,18 +116,9 @@ class ApiClient {
     if (!response.ok) throw new Error('Failed to disable VNC');
   }
 
-  async getTrafficHistory(id: string): Promise<any[]> {
+  async getTrafficHistory(id: string): Promise<any> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/traffic`);
     if (!response.ok) throw new Error('Failed to fetch traffic data');
-    return response.json();
-  }
-
-  async getVncDetails(id: string): Promise<VncDetails | null> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc`);
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error('Failed to fetch VNC details');
-    }
     return response.json();
   }
 
