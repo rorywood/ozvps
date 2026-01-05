@@ -41,16 +41,61 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   
   // Force the canvas cursor to be visible by directly mutating the style
   const forceCursorVisible = () => {
-    setTimeout(() => {
-      const vncContainer = document.querySelector('[data-testid="vnc-container"]');
-      if (vncContainer) {
-        const canvases = vncContainer.querySelectorAll('canvas');
-        canvases.forEach(canvas => {
+    const vncContainer = document.querySelector('[data-testid="vnc-container"]');
+    if (vncContainer) {
+      const canvases = vncContainer.querySelectorAll('canvas');
+      canvases.forEach(canvas => {
+        if (canvas.style.cursor === 'none' || !canvas.style.cursor) {
           canvas.style.setProperty('cursor', 'crosshair', 'important');
-        });
-      }
-    }, 100);
+        }
+      });
+    }
   };
+  
+  // Use MutationObserver to catch when noVNC resets cursor to none
+  useEffect(() => {
+    const vncContainer = document.querySelector('[data-testid="vnc-container"]');
+    if (!vncContainer) return;
+    
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const target = mutation.target as HTMLElement;
+          if (target.tagName === 'CANVAS' && target.style.cursor === 'none') {
+            target.style.setProperty('cursor', 'crosshair', 'important');
+          }
+        }
+      });
+    });
+    
+    // Observe all canvases for style changes
+    const canvases = vncContainer.querySelectorAll('canvas');
+    canvases.forEach(canvas => {
+      observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
+      // Initial force
+      (canvas as HTMLElement).style.setProperty('cursor', 'crosshair', 'important');
+    });
+    
+    // Also observe container for new canvases
+    const containerObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeName === 'CANVAS') {
+            const canvas = node as HTMLCanvasElement;
+            canvas.style.setProperty('cursor', 'crosshair', 'important');
+            observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
+          }
+        });
+      });
+    });
+    
+    containerObserver.observe(vncContainer, { childList: true, subtree: true });
+    
+    return () => {
+      observer.disconnect();
+      containerObserver.disconnect();
+    };
+  }, [key, status]);
 
   const handleDisconnect = () => {
     setStatus('disconnected');
@@ -379,7 +424,8 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             onSecurityFailure={handleSecurityFailure}
             rfbOptions={{
               credentials: { password },
-              showDotCursor: true
+              showDotCursor: true,
+              localCursor: true
             }}
             data-testid="vnc-container"
           />
