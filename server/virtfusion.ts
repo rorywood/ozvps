@@ -775,6 +775,7 @@ export class VirtFusionClient {
       name: server.name || `Server ${server.id}`,
       uuid: server.uuid || '',
       status,
+      suspended: server.suspended === true,
       userId: server.ownerId,
       primaryIp,
       hostname: server.hostname || '',
