@@ -113,6 +113,20 @@ export class VirtFusionClient {
       if (!response.ok) {
         const errorText = await response.text();
         log(`VirtFusion API error: ${response.status} ${errorText}`, 'virtfusion');
+        
+        // Try to parse error response for conflict (409) which may contain user data
+        if (response.status === 409) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            throw Object.assign(new Error(`VirtFusion API error: 409 Conflict`), { 
+              status: 409, 
+              data: errorJson 
+            });
+          } catch (parseError) {
+            throw new Error(`VirtFusion API error: 409 Conflict`);
+          }
+        }
+        
         throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
       }
 
@@ -144,31 +158,15 @@ export class VirtFusionClient {
 
   async findUserByEmail(email: string): Promise<VirtFusionUser | null> {
     try {
-      // VirtFusion doesn't have a direct email lookup, so we paginate through users
+      // VirtFusion doesn't have a direct email lookup API
+      // We use the email as extRelationId for users created by our panel
       const normalizedEmail = email.toLowerCase().trim();
-      let page = 1;
-      const maxPages = 50; // Safety limit
       
-      while (page <= maxPages) {
-        const data = await this.request<{ 
-          data: VirtFusionUser[]; 
-          last_page: number;
-          current_page: number;
-        }>(`/users?page=${page}&results=100`);
-        
-        if (data.data && data.data.length > 0) {
-          const user = data.data.find(u => u.email?.toLowerCase() === normalizedEmail);
-          if (user) {
-            log(`Found VirtFusion user by email: ${email} (ID: ${user.id})`, 'virtfusion');
-            return user;
-          }
-        }
-        
-        // Check if we've reached the last page
-        if (page >= data.last_page || !data.data || data.data.length === 0) {
-          break;
-        }
-        page++;
+      // Try to find by extRelationId = email (for users we created)
+      const user = await this.getUserByExtRelationId(normalizedEmail);
+      if (user) {
+        log(`Found VirtFusion user by email extRelationId: ${email} (ID: ${user.id})`, 'virtfusion');
+        return user;
       }
       
       return null;
@@ -180,21 +178,37 @@ export class VirtFusionClient {
 
   async createUser(email: string, name: string): Promise<VirtFusionUser | null> {
     try {
+      const normalizedEmail = email.toLowerCase().trim();
       const data = await this.request<{ data: VirtFusionUser }>('/users', {
         method: 'POST',
         body: JSON.stringify({
-          email,
+          email: normalizedEmail,
           name,
+          extRelationId: normalizedEmail, // Use email as extRelationId for lookup
           sendMail: false,
         }),
       });
-      log(`Created VirtFusion user: ${email} with ID ${data.data.id}`, 'virtfusion');
+      log(`Created VirtFusion user: ${email} with ID ${data.data.id} and extRelationId ${normalizedEmail}`, 'virtfusion');
       return data.data;
     } catch (error: any) {
-      // If user already exists (409), try to find them
-      if (error.message?.includes('409')) {
-        log(`User ${email} already exists in VirtFusion, attempting lookup...`, 'virtfusion');
-        return await this.findUserByEmail(email);
+      // If user already exists (409), try to extract user data from response or lookup
+      if (error.status === 409 || error.message?.includes('409')) {
+        log(`User ${email} already exists in VirtFusion`, 'virtfusion');
+        
+        // Check if 409 response contains user data
+        if (error.data?.data) {
+          log(`Found user data in 409 response for ${email}`, 'virtfusion');
+          return error.data.data as VirtFusionUser;
+        }
+        
+        // Try to find by extRelationId = email
+        const user = await this.findUserByEmail(email);
+        if (user) {
+          return user;
+        }
+        
+        log(`Could not find existing user ${email} - they may have been created with a different extRelationId (e.g., from WHMCS)`, 'virtfusion');
+        return null;
       }
       log(`Failed to create VirtFusion user ${email}: ${error}`, 'virtfusion');
       return null;
