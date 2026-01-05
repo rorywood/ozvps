@@ -1,13 +1,23 @@
 import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
+export const users = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name"),
+  virtFusionUserId: integer("virtfusion_user_id"),
+  extRelationId: text("ext_relation_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const sessions = pgTable("sessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  virtFusionUserId: integer("virtfusion_user_id").notNull(),
-  extRelationId: text("ext_relation_id").notNull(),
+  userId: integer("user_id").notNull(),
+  virtFusionUserId: integer("virtfusion_user_id"),
+  extRelationId: text("ext_relation_id"),
   email: text("email").notNull(),
   name: text("name"),
-  virtFusionToken: text("virtfusion_token").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -17,6 +27,12 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().min(1, 'Name is required').optional(),
+});
+
 export const serverNameSchema = z.object({
   name: z.string()
     .min(2, 'Server name must be at least 2 characters')
@@ -24,6 +40,8 @@ export const serverNameSchema = z.object({
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/, 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods'),
 });
 
+export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
 export type ServerNameInput = z.infer<typeof serverNameSchema>;
