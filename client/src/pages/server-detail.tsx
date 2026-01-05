@@ -86,12 +86,6 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
 
-  const { data: liveStats } = useQuery({
-    queryKey: ['live-stats', serverId],
-    queryFn: () => api.getLiveStats(serverId || ''),
-    enabled: !!serverId,
-    refetchInterval: 10000, // Refresh every 10 seconds
-  });
 
   const powerMutation = useMutation({
     mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
@@ -314,87 +308,33 @@ export default function ServerDetail() {
 
         {/* Specs Bar */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
-             <div className="flex items-center gap-4 mb-3">
-               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                  <Cpu className="h-5 w-5" />
-               </div>
-               <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore</div>
-                  <div className="text-xs text-muted-foreground">CPU Cores</div>
-               </div>
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <Cpu className="h-5 w-5" />
              </div>
-             <div className="space-y-1.5">
-               <div className="flex justify-between text-xs">
-                 <span className="text-muted-foreground">CPU Usage</span>
-                 <span className="text-white font-medium">{liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0}%</span>
-               </div>
-               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                 <div 
-                   className={cn(
-                     "h-full rounded-full transition-all duration-500",
-                     (liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0) > 80 ? "bg-red-500" : 
-                     (liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-blue-500"
-                   )}
-                   style={{ width: `${liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0}%` }}
-                 />
-               </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore</div>
+                <div className="text-xs text-muted-foreground">CPU Allocated</div>
              </div>
           </GlassCard>
           
-          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
-             <div className="flex items-center gap-4 mb-3">
-               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                  <Activity className="h-5 w-5" />
-               </div>
-               <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'} RAM</div>
-                  <div className="text-xs text-muted-foreground">Memory</div>
-               </div>
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <Activity className="h-5 w-5" />
              </div>
-             <div className="space-y-1.5">
-               <div className="flex justify-between text-xs">
-                 <span className="text-muted-foreground">RAM Usage</span>
-                 <span className="text-white font-medium">{liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0}%</span>
-               </div>
-               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                 <div 
-                   className={cn(
-                     "h-full rounded-full transition-all duration-500",
-                     (liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0) > 80 ? "bg-red-500" : 
-                     (liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-green-500"
-                   )}
-                   style={{ width: `${liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0}%` }}
-                 />
-               </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
+                <div className="text-xs text-muted-foreground">RAM Allocated</div>
              </div>
           </GlassCard>
 
-          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
-             <div className="flex items-center gap-4 mb-3">
-               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                  <StorageIcon className="h-5 w-5" />
-               </div>
-               <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB Storage</div>
-                  <div className="text-xs text-muted-foreground">NVMe SSD</div>
-               </div>
+          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
+             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                <StorageIcon className="h-5 w-5" />
              </div>
-             <div className="space-y-1.5">
-               <div className="flex justify-between text-xs">
-                 <span className="text-muted-foreground">Disk Usage</span>
-                 <span className="text-white font-medium">{liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0}%</span>
-               </div>
-               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                 <div 
-                   className={cn(
-                     "h-full rounded-full transition-all duration-500",
-                     (liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0) > 80 ? "bg-red-500" : 
-                     (liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-purple-500"
-                   )}
-                   style={{ width: `${liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0}%` }}
-                 />
-               </div>
+             <div>
+                <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB</div>
+                <div className="text-xs text-muted-foreground">Storage Allocated</div>
              </div>
           </GlassCard>
 
