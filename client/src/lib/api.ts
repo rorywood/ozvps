@@ -194,6 +194,9 @@ class ApiClient {
 
   async getConsoleUrl(id: string): Promise<{ 
     url?: string;
+    authUrl?: string;
+    vncUrl?: string;
+    twoStep?: boolean;
     embedded?: boolean;
     vnc?: { 
       wsUrl?: string;
