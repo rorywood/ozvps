@@ -19,7 +19,6 @@ import {
   Copy,
   ExternalLink,
   RefreshCw,
-  Timer,
   X,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -62,15 +61,9 @@ export default function ServerDetail() {
   const [reinstallInProgress, setReinstallInProgress] = useState(false);
   const [reinstallStatus, setReinstallStatus] = useState<string>('');
   const [selectedOs, setSelectedOs] = useState<string>("");
-  const [vncEnabled, setVncEnabled] = useState(false);
-  const [vncTimeRemaining, setVncTimeRemaining] = useState<number>(0);
-  const [isEnablingVnc, setIsEnablingVnc] = useState(false);
-  const [isDisablingVnc, setIsDisablingVnc] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isRenamingServer, setIsRenamingServer] = useState(false);
-  const vncTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const vncDisableTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reinstallPollRef = useRef<NodeJS.Timeout | null>(null);
   const reinstallTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -290,45 +283,6 @@ export default function ServerDetail() {
     }
   };
 
-  const handleDisableVnc = async () => {
-    if (!serverId || isDisablingVnc) return;
-    
-    setIsDisablingVnc(true);
-    try {
-      await api.disableVnc(serverId);
-      setVncEnabled(false);
-      setVncTimeRemaining(0);
-      if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-      if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
-      toast({
-        title: "VNC Console Disabling",
-        description: "Console session is being terminated. Close the VNC window - it will stop working shortly.",
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to Disable Console",
-        description: "Could not disable VNC console.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDisablingVnc(false);
-    }
-  };
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-      if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
-    };
-  }, []);
-
-  // Format time remaining
-  const formatTimeRemaining = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const handleReinstall = () => {
     if (!serverId || !selectedOs) return;
@@ -553,58 +507,21 @@ export default function ServerDetail() {
           </div>
 
           <div className="flex items-center gap-3">
-            {vncEnabled ? (
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="secondary" 
-                  className={cn(
-                    "shadow-none font-medium h-9",
-                    (powerActionPending || server.status !== 'running' || isSuspended)
-                      ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
-                      : "bg-green-600/20 hover:bg-green-600/30 text-green-400 border-green-500/30"
-                  )}
-                  onClick={handleOpenVnc}
-                  disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
-                  data-testid="button-console"
-                >
-                  <TerminalSquare className="h-4 w-4 mr-2" />
-                  Console
-                  {!powerActionPending && server.status === 'running' && !isSuspended && (
-                    <>
-                      <Timer className="h-3 w-3 ml-2" />
-                      <span className="ml-1 text-xs font-mono">{formatTimeRemaining(vncTimeRemaining)}</span>
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-red-400 hover:bg-red-600/20 hover:text-red-300"
-                  onClick={handleDisableVnc}
-                  disabled={isDisablingVnc || !!powerActionPending || server.status !== 'running' || isSuspended}
-                  data-testid="button-disable-vnc"
-                  title="Disable VNC Console"
-                >
-                  {isDisablingVnc ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                </Button>
-              </div>
-            ) : (
-              <Button 
-                variant="secondary" 
-                className={cn(
-                  "shadow-none font-medium h-9",
-                  (powerActionPending || server.status !== 'running' || isSuspended)
-                    ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
-                    : "bg-white/5 hover:bg-white/10 text-white border-white/10"
-                )}
-                onClick={handleOpenVnc}
-                disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
-                data-testid="button-console"
-              >
-                <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                Console
-              </Button>
-            )}
+            <Button 
+              variant="secondary" 
+              className={cn(
+                "shadow-none font-medium h-9",
+                (powerActionPending || server.status !== 'running' || isSuspended)
+                  ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
+                  : "bg-white/5 hover:bg-white/10 text-white border-white/10"
+              )}
+              onClick={handleOpenVnc}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
+              data-testid="button-console"
+            >
+              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+              Console
+            </Button>
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
