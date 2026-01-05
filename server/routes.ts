@@ -200,16 +200,26 @@ export async function registerRoutes(
 
       // Check for existing VirtFusion user ID in Auth0 metadata
       let virtFusionUserId = await auth0Client.getVirtFusionUserId(auth0Result.user.user_id);
-      // Use lowercase email as extRelationId (this is how VirtFusion users are created)
-      const extRelationId = email.toLowerCase().trim();
+      let extRelationId: string | undefined;
       
       if (virtFusionUserId) {
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
+        // Fetch the actual extRelationId from VirtFusion (may differ from email for legacy users)
+        const vfUser = await virtfusionClient.getUserById(virtFusionUserId);
+        if (vfUser) {
+          extRelationId = vfUser.extRelationId;
+          log(`Fetched extRelationId from VirtFusion: ${extRelationId}`, 'auth');
+        } else {
+          // Fallback to email if user lookup fails
+          extRelationId = email.toLowerCase().trim();
+          log(`VirtFusion user lookup failed, using email as extRelationId: ${extRelationId}`, 'auth');
+        }
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
         if (virtFusionUser) {
           virtFusionUserId = virtFusionUser.id;
+          extRelationId = virtFusionUser.extRelationId;
           
           // Store in Auth0 metadata for future logins
           await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, virtFusionUser.id);
