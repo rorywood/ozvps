@@ -21,7 +21,12 @@ import {
   ExternalLink,
   RefreshCw,
   Timer,
-  X
+  X,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Gauge,
+  Calendar,
+  TrendingUp
 } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { api } from "@/lib/api";
@@ -666,50 +671,146 @@ export default function ServerDetail() {
               </div>
             )}
 
-            {/* Bandwidth Allowance Card */}
+            {/* Bandwidth Stats Card - Redesigned */}
             <GlassCard className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-white uppercase tracking-wider">
-                  Monthly Bandwidth Allowance
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  Month {currentMonth}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <Network className="h-5 w-5 text-blue-400" />
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-white" data-testid="text-bandwidth-allowance">
-                        {bandwidthAllowance > 0 ? `${bandwidthAllowance} GB` : 'Unlimited'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Monthly Allowance</div>
-                    </div>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Bandwidth Usage</h3>
+                    <p className="text-xs text-muted-foreground">Monthly data transfer statistics</p>
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/10"
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['traffic', serverId] })}
+                  data-testid="button-refresh-bandwidth"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Main Usage Display */}
+              {(() => {
+                const current = trafficData?.current;
+                const network = trafficData?.network;
                 
-                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                      <Activity className="h-5 w-5 text-green-400" />
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-white" data-testid="text-bandwidth-remaining">
-                        {bandwidthAllowance > 0 ? `${bandwidthAllowance} GB` : 'Unlimited'}
+                // Convert bytes to GB
+                const usedGB = current?.total ? (current.total / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
+                const rxGB = current?.rx ? (current.rx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
+                const txGB = current?.tx ? (current.tx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
+                const limitGB = current?.limit || bandwidthAllowance || 0;
+                const remainingGB = limitGB > 0 ? Math.max(0, limitGB - parseFloat(usedGB)).toFixed(2) : null;
+                const usagePercent = limitGB > 0 ? Math.min(100, (parseFloat(usedGB) / limitGB) * 100) : 0;
+                
+                // Format period dates
+                const periodStart = current?.periodStart ? new Date(current.periodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+                const periodEnd = current?.periodEnd ? new Date(current.periodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+                
+                return (
+                  <div className="space-y-6">
+                    {/* Progress Bar Section */}
+                    <div className="p-5 bg-gradient-to-r from-white/5 to-white/[0.02] rounded-xl border border-white/10">
+                      <div className="flex items-end justify-between mb-3">
+                        <div>
+                          <span className="text-3xl font-bold text-white" data-testid="text-bandwidth-used">{usedGB}</span>
+                          <span className="text-lg text-muted-foreground ml-1">GB</span>
+                          {limitGB > 0 && (
+                            <span className="text-muted-foreground text-sm ml-2">/ {limitGB} GB</span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-2xl font-bold text-white" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</span>
+                          <span className="text-xs text-muted-foreground block">used</span>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Remaining This Month</div>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-white/10 rounded-full h-3 mb-3 overflow-hidden">
+                        <div 
+                          className={cn(
+                            "h-3 rounded-full transition-all duration-700 ease-out",
+                            usagePercent > 90 ? "bg-gradient-to-r from-red-500 to-red-400" :
+                            usagePercent > 70 ? "bg-gradient-to-r from-yellow-500 to-orange-400" :
+                            "bg-gradient-to-r from-blue-500 to-cyan-400"
+                          )}
+                          style={{ width: `${Math.max(usagePercent, 1)}%` }}
+                          data-testid="progress-bandwidth"
+                        />
+                      </div>
+                      
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>
+                          {remainingGB !== null ? (
+                            <><span className="text-green-400 font-medium">{remainingGB} GB</span> remaining</>
+                          ) : (
+                            <span className="text-blue-400">Unlimited</span>
+                          )}
+                        </span>
+                        {periodStart && periodEnd && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {periodStart} - {periodEnd}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {/* Download */}
+                      <div className="p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/[0.07] transition-colors">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ArrowDownToLine className="h-4 w-4 text-green-400" />
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Download</span>
+                        </div>
+                        <div className="text-xl font-bold text-white" data-testid="text-bandwidth-rx">{rxGB} GB</div>
+                      </div>
+                      
+                      {/* Upload */}
+                      <div className="p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/[0.07] transition-colors">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ArrowUpFromLine className="h-4 w-4 text-blue-400" />
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Upload</span>
+                        </div>
+                        <div className="text-xl font-bold text-white" data-testid="text-bandwidth-tx">{txGB} GB</div>
+                      </div>
+                      
+                      {/* Port Speed */}
+                      <div className="p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/[0.07] transition-colors">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Gauge className="h-4 w-4 text-purple-400" />
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Port Speed</span>
+                        </div>
+                        <div className="text-xl font-bold text-white" data-testid="text-port-speed">
+                          {network?.portSpeed || 500} Mbps
+                        </div>
+                      </div>
+                      
+                      {/* Monthly Allowance */}
+                      <div className="p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/[0.07] transition-colors">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Network className="h-4 w-4 text-cyan-400" />
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">Allowance</span>
+                        </div>
+                        <div className="text-xl font-bold text-white" data-testid="text-bandwidth-allowance">
+                          {limitGB > 0 ? `${limitGB} GB` : 'Unlimited'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Info Footer */}
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+                      <Activity className="h-3 w-3" />
+                      <span>Traffic resets at the start of each billing month. Inbound traffic is counted.</span>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="mt-4 text-xs text-muted-foreground text-center">
-                Traffic resets at the start of each billing month. Bandwidth is pooled across all assigned traffic blocks.
-              </div>
+                );
+              })()}
             </GlassCard>
           </TabsContent>
 

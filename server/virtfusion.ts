@@ -249,8 +249,49 @@ export class VirtFusionClient {
 
   async getServerTrafficHistory(serverId: string) {
     try {
-      const data = await this.request<{ data: any }>(`/servers/${serverId}/traffic/blocks`);
-      return data.data;
+      // Get actual traffic usage stats from VirtFusion
+      const trafficResponse = await this.request<{ data: any }>(`/servers/${serverId}/traffic`);
+      const trafficData = trafficResponse.data;
+      
+      // Also get server details for network speed info
+      const serverResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
+      const server = serverResponse.data;
+      
+      // Get network interface speed limits (in bytes/sec, convert to Mbps)
+      const networkInterface = server.network?.interfaces?.[0];
+      const inSpeedKbps = networkInterface?.inAverage || 0;
+      const outSpeedKbps = networkInterface?.outAverage || 0;
+      // VirtFusion uses KB/s, convert to Mbps: KB/s * 8 / 1000 = Mbps
+      const inSpeedMbps = Math.round((inSpeedKbps * 8) / 1000);
+      const outSpeedMbps = Math.round((outSpeedKbps * 8) / 1000);
+      
+      // Get traffic limit from server resources
+      const trafficLimit = server.settings?.resources?.traffic || server.traffic?.public?.currentPeriod?.limit || 0;
+      
+      // Get current billing period info
+      const billingPeriod = server.traffic?.public?.currentPeriod || null;
+      
+      // Parse monthly data
+      const monthlyData = trafficData?.monthly || [];
+      const currentMonthData = monthlyData[0] || null;
+      
+      return {
+        current: {
+          rx: currentMonthData?.rx || 0,        // bytes received
+          tx: currentMonthData?.tx || 0,        // bytes transmitted  
+          total: currentMonthData?.total || 0,  // total bytes
+          limit: trafficLimit,                   // GB limit
+          month: currentMonthData?.month || new Date().getMonth() + 1,
+          periodStart: currentMonthData?.start || billingPeriod?.start || null,
+          periodEnd: currentMonthData?.end || billingPeriod?.end || null,
+        },
+        network: {
+          inSpeedMbps,
+          outSpeedMbps,
+          portSpeed: Math.max(inSpeedMbps, outSpeedMbps),
+        },
+        history: monthlyData,
+      };
     } catch (error) {
       log(`Failed to fetch traffic history for server ${serverId}: ${error}`, 'virtfusion');
       return null;

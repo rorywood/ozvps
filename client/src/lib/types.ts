@@ -16,6 +16,7 @@ export interface Server {
       vcpu: number;
       ram: number; // in MB
       disk: number; // in GB
+      traffic?: number; // in GB, monthly allowance
     };
   };
   image: {
