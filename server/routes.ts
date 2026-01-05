@@ -144,18 +144,10 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'Failed to create account. Please try again or contact support.' });
       }
 
-      // Save the Auth0 -> VirtFusion user mapping
-      try {
-        await storage.createUserMapping({
-          auth0UserId: auth0Result.user.user_id,
-          email: email,
-          name: name || virtFusionUser.name,
-          virtFusionUserId: virtFusionUser.id,
-        });
-        log(`Created user mapping: Auth0 ${auth0Result.user.user_id} -> VirtFusion ${virtFusionUser.id}`, 'auth');
-      } catch (mappingError: any) {
-        log(`Failed to create user mapping (may already exist): ${mappingError.message}`, 'auth');
-      }
+      // Store VirtFusion user ID in Auth0 metadata (no local database needed)
+      const auth0UserId = `auth0|${auth0Result.user.user_id}`;
+      await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
+      log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
 
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
@@ -204,32 +196,20 @@ export async function registerRoutes(
         return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
 
-      // Check for existing user mapping
-      let userMapping = await storage.getUserMappingByAuth0Id(auth0Result.user.user_id);
-      let virtFusionUserId: number | undefined;
+      // Check for existing VirtFusion user ID in Auth0 metadata
+      let virtFusionUserId = await auth0Client.getVirtFusionUserId(auth0Result.user.user_id);
       
-      if (userMapping) {
-        // Use existing mapping
-        virtFusionUserId = userMapping.virtFusionUserId;
-        log(`Found user mapping: Auth0 ${auth0Result.user.user_id} -> VirtFusion ${virtFusionUserId}`, 'auth');
+      if (virtFusionUserId) {
+        log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
       } else {
-        // Create VirtFusion user and mapping
+        // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
         if (virtFusionUser) {
           virtFusionUserId = virtFusionUser.id;
           
-          // Save mapping for future logins
-          try {
-            await storage.createUserMapping({
-              auth0UserId: auth0Result.user.user_id,
-              email: email,
-              name: auth0Result.user.name,
-              virtFusionUserId: virtFusionUser.id,
-            });
-            log(`Created user mapping: Auth0 ${auth0Result.user.user_id} -> VirtFusion ${virtFusionUser.id}`, 'auth');
-          } catch (mappingError: any) {
-            log(`Failed to create user mapping: ${mappingError.message}`, 'auth');
-          }
+          // Store in Auth0 metadata for future logins
+          await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, virtFusionUser.id);
+          log(`Created VirtFusion user and stored in Auth0: ${virtFusionUser.id}`, 'auth');
         }
       }
 

@@ -16,6 +16,9 @@ interface Auth0User {
   email: string;
   name?: string;
   email_verified?: boolean;
+  app_metadata?: {
+    virtfusion_user_id?: number;
+  };
 }
 
 interface Auth0Error {
@@ -197,11 +200,81 @@ class Auth0Client {
         email: user.email,
         name: user.name,
         email_verified: user.email_verified,
+        app_metadata: user.app_metadata,
       };
     } catch (error: any) {
       log(`Auth0 get user error: ${error.message}`, 'auth0');
       return null;
     }
+  }
+
+  async getUserById(userId: string): Promise<Auth0User | null> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(userId)}`,
+        {
+          headers: { Authorization: `Bearer ${managementToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to get Auth0 user by ID: ${response.status}`, 'auth0');
+        return null;
+      }
+
+      const user = await response.json() as any;
+      return {
+        user_id: user.user_id,
+        email: user.email,
+        name: user.name,
+        email_verified: user.email_verified,
+        app_metadata: user.app_metadata,
+      };
+    } catch (error: any) {
+      log(`Auth0 get user by ID error: ${error.message}`, 'auth0');
+      return null;
+    }
+  }
+
+  async setVirtFusionUserId(auth0UserId: string, virtFusionUserId: number): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            app_metadata: {
+              virtfusion_user_id: virtFusionUserId,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        log(`Failed to update Auth0 user metadata: ${response.status} ${error}`, 'auth0');
+        return false;
+      }
+
+      log(`Stored VirtFusion user ID ${virtFusionUserId} in Auth0 metadata for user ${auth0UserId}`, 'auth0');
+      return true;
+    } catch (error: any) {
+      log(`Auth0 metadata update error: ${error.message}`, 'auth0');
+      return false;
+    }
+  }
+
+  async getVirtFusionUserId(auth0UserId: string): Promise<number | null> {
+    const user = await this.getUserById(auth0UserId);
+    return user?.app_metadata?.virtfusion_user_id || null;
   }
 }
 
