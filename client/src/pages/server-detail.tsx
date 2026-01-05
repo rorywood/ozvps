@@ -190,33 +190,87 @@ export default function ServerDetail() {
 
         {/* Specs Bar */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                <Cpu className="h-5 w-5" />
+          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
+             <div className="flex items-center gap-4 mb-3">
+               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                  <Cpu className="h-5 w-5" />
+               </div>
+               <div className="flex-1">
+                  <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore @ 3.5GHz</div>
+                  <div className="text-xs text-muted-foreground">AMD EPYC 7003</div>
+               </div>
              </div>
-             <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore @ 3.5GHz</div>
-                <div className="text-xs text-muted-foreground">AMD EPYC 7003</div>
+             <div className="space-y-1.5">
+               <div className="flex justify-between text-xs">
+                 <span className="text-muted-foreground">CPU Usage</span>
+                 <span className="text-white font-medium">{server.stats?.cpu_usage || 0}%</span>
+               </div>
+               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                 <div 
+                   className={cn(
+                     "h-full rounded-full transition-all duration-500",
+                     (server.stats?.cpu_usage || 0) > 80 ? "bg-red-500" : 
+                     (server.stats?.cpu_usage || 0) > 60 ? "bg-yellow-500" : "bg-blue-500"
+                   )}
+                   style={{ width: `${server.stats?.cpu_usage || 0}%` }}
+                 />
+               </div>
              </div>
           </GlassCard>
           
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                <Activity className="h-5 w-5" />
+          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
+             <div className="flex items-center gap-4 mb-3">
+               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                  <Activity className="h-5 w-5" />
+               </div>
+               <div className="flex-1">
+                  <div className="text-sm font-bold text-white">{server.plan.specs.ram / 1024} GB RAM</div>
+                  <div className="text-xs text-muted-foreground">DDR4 ECC Memory</div>
+               </div>
              </div>
-             <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.ram / 1024} GB RAM</div>
-                <div className="text-xs text-muted-foreground">DDR4 ECC Memory</div>
+             <div className="space-y-1.5">
+               <div className="flex justify-between text-xs">
+                 <span className="text-muted-foreground">RAM Usage</span>
+                 <span className="text-white font-medium">{server.stats?.ram_usage || 0}%</span>
+               </div>
+               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                 <div 
+                   className={cn(
+                     "h-full rounded-full transition-all duration-500",
+                     (server.stats?.ram_usage || 0) > 80 ? "bg-red-500" : 
+                     (server.stats?.ram_usage || 0) > 60 ? "bg-yellow-500" : "bg-green-500"
+                   )}
+                   style={{ width: `${server.stats?.ram_usage || 0}%` }}
+                 />
+               </div>
              </div>
           </GlassCard>
 
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
-                <StorageIcon className="h-5 w-5" />
+          <GlassCard className="p-4 bg-white/[0.02] border-white/5">
+             <div className="flex items-center gap-4 mb-3">
+               <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                  <StorageIcon className="h-5 w-5" />
+               </div>
+               <div className="flex-1">
+                  <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB Storage</div>
+                  <div className="text-xs text-muted-foreground">NVMe SSD Array</div>
+               </div>
              </div>
-             <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB Storage</div>
-                <div className="text-xs text-muted-foreground">NVMe SSD Array</div>
+             <div className="space-y-1.5">
+               <div className="flex justify-between text-xs">
+                 <span className="text-muted-foreground">Disk Usage</span>
+                 <span className="text-white font-medium">{server.stats?.disk_usage || 0}%</span>
+               </div>
+               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                 <div 
+                   className={cn(
+                     "h-full rounded-full transition-all duration-500",
+                     (server.stats?.disk_usage || 0) > 80 ? "bg-red-500" : 
+                     (server.stats?.disk_usage || 0) > 60 ? "bg-yellow-500" : "bg-purple-500"
+                   )}
+                   style={{ width: `${server.stats?.disk_usage || 0}%` }}
+                 />
+               </div>
              </div>
           </GlassCard>
 
