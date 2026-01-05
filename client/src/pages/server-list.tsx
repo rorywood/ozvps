@@ -109,7 +109,7 @@ export default function ServerList() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {servers?.map((server) => (
-              <Link key={server.id} href={`/server/${server.id}`}>
+              <Link key={server.id} href={`/servers/${server.id}`}>
                 <GlassCard className="p-6 transition-all duration-300 hover:border-primary/30 group cursor-pointer">
                   <div className="flex flex-col lg:flex-row lg:items-center gap-6">
                   
