@@ -331,6 +331,7 @@ export class VirtFusionClient {
   async getServerOwner(serverId: string): Promise<{ id: number; extRelationId: string | null; name: string; email: string } | null> {
     try {
       const response = await this.request<{ data: { owner: { id: number; extRelationId: string | null; name: string; email: string } } }>(`/servers/${serverId}?with=owner`);
+      log(`Server ${serverId} owner data: ${JSON.stringify(response.data.owner)}`, 'virtfusion');
       return response.data.owner || null;
     } catch (error) {
       log(`Failed to fetch server owner for ${serverId}: ${error}`, 'virtfusion');
