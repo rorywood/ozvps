@@ -92,6 +92,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/servers/:id/vnc/enable', async (req, res) => {
+    try {
+      const vnc = await virtfusionClient.enableVnc(req.params.id);
+      res.json(vnc);
+    } catch (error: any) {
+      log(`Error enabling VNC for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to enable VNC' });
+    }
+  });
+
+  app.post('/api/servers/:id/vnc/disable', async (req, res) => {
+    try {
+      const vnc = await virtfusionClient.disableVnc(req.params.id);
+      res.json(vnc);
+    } catch (error: any) {
+      log(`Error disabling VNC for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to disable VNC' });
+    }
+  });
+
   app.get('/api/servers/:id/network', async (req, res) => {
     try {
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);

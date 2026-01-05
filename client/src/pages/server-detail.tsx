@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,9 @@ import {
   Home,
   Copy,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Timer,
+  X
 } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { api } from "@/lib/api";
@@ -61,6 +63,11 @@ export default function ServerDetail() {
   const queryClient = useQueryClient();
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
   const [selectedOs, setSelectedOs] = useState<string>("");
+  const [vncEnabled, setVncEnabled] = useState(false);
+  const [vncTimeRemaining, setVncTimeRemaining] = useState<number>(0);
+  const [isEnablingVnc, setIsEnablingVnc] = useState(false);
+  const vncTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const vncDisableTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
@@ -133,15 +140,105 @@ export default function ServerDetail() {
     }
   };
 
-  const handleOpenVnc = () => {
+  const handleOpenVnc = async () => {
     if (!serverId) return;
     
-    toast({
-      title: "Opening Console",
-      description: "VNC console opening in VirtFusion panel...",
-    });
-    const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
-    window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+    setIsEnablingVnc(true);
+    
+    try {
+      // Enable VNC
+      const result = await api.enableVnc(serverId);
+      
+      if (result.vnc?.enabled) {
+        setVncEnabled(true);
+        
+        // Set 60 minute timer
+        const VNC_DURATION = 60 * 60; // 60 minutes in seconds
+        setVncTimeRemaining(VNC_DURATION);
+        
+        // Countdown timer for display
+        if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+        vncTimerRef.current = setInterval(() => {
+          setVncTimeRemaining(prev => {
+            if (prev <= 1) {
+              if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        // Auto-disable after 60 minutes
+        if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
+        vncDisableTimerRef.current = setTimeout(async () => {
+          try {
+            await api.disableVnc(serverId);
+            setVncEnabled(false);
+            setVncTimeRemaining(0);
+            toast({
+              title: "VNC Console Disabled",
+              description: "Console access has been automatically disabled after 60 minutes.",
+            });
+          } catch (e) {
+            console.error('Failed to auto-disable VNC:', e);
+          }
+        }, VNC_DURATION * 1000);
+        
+        toast({
+          title: "VNC Console Enabled",
+          description: "Console will automatically disable after 60 minutes.",
+        });
+        
+        // Open VNC console in VirtFusion panel
+        const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
+        window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to Enable Console",
+        description: "Could not enable VNC console. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnablingVnc(false);
+    }
+  };
+
+  const handleDisableVnc = async () => {
+    if (!serverId) return;
+    
+    try {
+      await api.disableVnc(serverId);
+      setVncEnabled(false);
+      setVncTimeRemaining(0);
+      if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+      if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
+      toast({
+        title: "VNC Console Disabled",
+        description: "Console access has been disabled.",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to Disable Console",
+        description: "Could not disable VNC console.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (vncTimerRef.current) clearInterval(vncTimerRef.current);
+      if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
+    };
+  }, []);
+
+  // Format time remaining
+  const formatTimeRemaining = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleReinstall = () => {
@@ -265,15 +362,46 @@ export default function ServerDetail() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button 
-              variant="secondary" 
-              className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9"
-              onClick={handleOpenVnc}
-              data-testid="button-console"
-            >
-              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-              Console
-            </Button>
+            {vncEnabled ? (
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="secondary" 
+                  className="bg-green-600/20 hover:bg-green-600/30 text-green-400 border-green-500/30 shadow-none font-medium h-9"
+                  onClick={handleOpenVnc}
+                  data-testid="button-console"
+                >
+                  <TerminalSquare className="h-4 w-4 mr-2" />
+                  Console
+                  <Timer className="h-3 w-3 ml-2" />
+                  <span className="ml-1 text-xs font-mono">{formatTimeRemaining(vncTimeRemaining)}</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-red-400 hover:bg-red-600/20 hover:text-red-300"
+                  onClick={handleDisableVnc}
+                  data-testid="button-disable-vnc"
+                  title="Disable VNC Console"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="secondary" 
+                className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9"
+                onClick={handleOpenVnc}
+                disabled={isEnablingVnc}
+                data-testid="button-console"
+              >
+                {isEnablingVnc ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+                )}
+                {isEnablingVnc ? 'Enabling...' : 'Console'}
+              </Button>
+            )}
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

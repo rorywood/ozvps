@@ -71,6 +71,49 @@ class ApiClient {
     return response.json();
   }
 
+  async getVncDetails(id: string): Promise<{
+    vnc: {
+      ip: string;
+      port: number;
+      password: string;
+      enabled: boolean;
+      wss: {
+        token: string;
+        url: string;
+      };
+    };
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc`);
+    if (!response.ok) throw new Error('Failed to fetch VNC details');
+    return response.json();
+  }
+
+  async enableVnc(id: string): Promise<{
+    vnc: {
+      ip: string;
+      port: number;
+      password: string;
+      enabled: boolean;
+      wss: {
+        token: string;
+        url: string;
+      };
+    };
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc/enable`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to enable VNC');
+    return response.json();
+  }
+
+  async disableVnc(id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc/disable`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to disable VNC');
+  }
+
   async getTrafficHistory(id: string): Promise<any[]> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/traffic`);
     if (!response.ok) throw new Error('Failed to fetch traffic data');

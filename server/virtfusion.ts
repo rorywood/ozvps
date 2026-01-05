@@ -251,6 +251,32 @@ export class VirtFusionClient {
     }
   }
 
+  async enableVnc(serverId: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/vnc`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'enable' }),
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to enable VNC for server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
+  async disableVnc(serverId: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/vnc`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'disable' }),
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to disable VNC for server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
   async getOsTemplates(serverId: string) {
     try {
       const data = await this.request<{ data: any }>(`/servers/${serverId}/media/osGroups`);
