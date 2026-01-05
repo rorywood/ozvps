@@ -267,11 +267,12 @@ export default function ServerDetail() {
         
         // After auth completes, navigate the SAME popup to VNC URL
         // The cookies are preserved in the same popup context
+        // 500ms is enough for the token auth to process
         setTimeout(() => {
           if (popup && !popup.closed) {
             popup.location.href = consoleData.vncUrl;
           }
-        }, 1500);
+        }, 500);
       } else if (consoleData.url) {
         // Direct URL - just open it
         window.open(consoleData.url, 'vnc_console', 'width=1024,height=768,menubar=no,toolbar=no,location=no');
