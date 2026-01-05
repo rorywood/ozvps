@@ -574,9 +574,11 @@ export async function registerRoutes(
             const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), extRelationId.toString());
             // VirtFusion returns tokens in authentication.endpoint_complete format
             if (tokenData?.authentication?.endpoint_complete) {
-              // Use token-based URL for seamless authentication with redirect to VNC
-              const consoleUrl = `${panelUrl}${tokenData.authentication.endpoint_complete}&redirect=/server/${server.uuid}/vnc`;
-              log(`Generated console token URL for server ${serverId}`, 'api');
+              // Decode HTML entities (VirtFusion returns &amp; instead of &)
+              const endpoint = tokenData.authentication.endpoint_complete.replace(/&amp;/g, '&');
+              // Use token-based URL for seamless authentication with redirect to VNC console
+              const consoleUrl = `${panelUrl}${endpoint}&redirect=${encodeURIComponent(`/server/${server.uuid}/vnc`)}`;
+              log(`Generated console token URL for server ${serverId}: ${consoleUrl}`, 'api');
               return res.json({ url: consoleUrl });
             }
           } else {
