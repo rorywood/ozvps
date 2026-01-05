@@ -143,7 +143,8 @@ export class VirtFusionClient {
   }
 
   async getServer(serverId: string) {
-    const response = await this.request<{ data: VirtFusionServerResponse }>(`/servers/${serverId}`);
+    // Fetch with remoteState=true to get live power status from hypervisor
+    const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
     return this.transformServer(response.data);
   }
 
@@ -487,10 +488,24 @@ export class VirtFusionClient {
     }
   }
 
-  private transformServer(server: VirtFusionServerResponse) {
-    // Determine status from server state - "complete" means built and running
-    const stateValue = server.power_status || server.powerState || server.power || server.state || '';
-    const status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+  private transformServer(server: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } }) {
+    // Check remoteState first for live power status from hypervisor
+    const remoteState = (server as any).remoteState;
+    let status: 'running' | 'stopped' | 'provisioning' | 'error';
+    
+    if (remoteState && typeof remoteState.running === 'boolean') {
+      // Use live power status from hypervisor
+      status = remoteState.running ? 'running' : 'stopped';
+      
+      // Still check for suspended state
+      if (server.suspended) {
+        status = 'stopped';
+      }
+    } else {
+      // Fallback to state-based detection
+      const stateValue = server.power_status || server.powerState || server.power || server.state || '';
+      status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+    }
     
     // Get primary IP from network interfaces
     const primaryIp = server.network?.interfaces?.[0]?.ipv4?.[0]?.address || 'N/A';
