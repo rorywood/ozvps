@@ -96,7 +96,10 @@ export class VirtFusionClient {
 
   async getUserByEmail(email: string): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser[] }>(`/users?email=${encodeURIComponent(email)}`);
+      const data = await this.request<{ data: VirtFusionUser[] }>('/users/search', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
       if (data.data && data.data.length > 0) {
         return data.data[0];
       }
@@ -180,7 +183,8 @@ export class VirtFusionClient {
     };
   }
 
-  private mapStatus(status: string): 'running' | 'stopped' | 'provisioning' | 'error' {
+  private mapStatus(status: string | undefined): 'running' | 'stopped' | 'provisioning' | 'error' {
+    if (!status) return 'stopped';
     const statusLower = status.toLowerCase();
     if (statusLower.includes('running') || statusLower.includes('active') || statusLower === 'online') {
       return 'running';
