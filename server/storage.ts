@@ -1,44 +1,35 @@
-import { type PanelUser, type InsertPanelUser, type Session, panelUsers, sessions } from "@shared/schema";
+import { type Session, sessions } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {
-  getUserById(id: number): Promise<PanelUser | undefined>;
-  getUserByEmail(email: string): Promise<PanelUser | undefined>;
-  createUser(user: InsertPanelUser): Promise<PanelUser>;
-  
-  createSession(userId: number, expiresAt: Date): Promise<Session>;
+  createSession(data: {
+    virtFusionUserId: number;
+    extRelationId: string;
+    email: string;
+    name?: string;
+    virtFusionToken: string;
+    expiresAt: Date;
+  }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
-  deleteUserSessions(userId: number): Promise<void>;
+  deleteUserSessions(virtFusionUserId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUserById(id: number): Promise<PanelUser | undefined> {
-    const [user] = await db.select().from(panelUsers).where(eq(panelUsers.id, id));
-    return user;
-  }
-
-  async getUserByEmail(email: string): Promise<PanelUser | undefined> {
-    const [user] = await db.select().from(panelUsers).where(eq(panelUsers.email, email.toLowerCase()));
-    return user;
-  }
-
-  async createUser(insertUser: InsertPanelUser): Promise<PanelUser> {
-    const [user] = await db.insert(panelUsers).values({
-      ...insertUser,
-      email: insertUser.email.toLowerCase(),
-    }).returning();
-    return user;
-  }
-
-  async createSession(userId: number, expiresAt: Date): Promise<Session> {
+  async createSession(data: {
+    virtFusionUserId: number;
+    extRelationId: string;
+    email: string;
+    name?: string;
+    virtFusionToken: string;
+    expiresAt: Date;
+  }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
     const [session] = await db.insert(sessions).values({
       id,
-      userId,
-      expiresAt,
+      ...data,
     }).returning();
     return session;
   }
@@ -52,8 +43,8 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sessions).where(eq(sessions.id, id));
   }
 
-  async deleteUserSessions(userId: number): Promise<void> {
-    await db.delete(sessions).where(eq(sessions.userId, userId));
+  async deleteUserSessions(virtFusionUserId: number): Promise<void> {
+    await db.delete(sessions).where(eq(sessions.virtFusionUserId, virtFusionUserId));
   }
 }
 

@@ -1,26 +1,15 @@
 import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import MemoryStore from "memorystore";
 
 const app = express();
 const httpServer = createServer(app);
-const MemoryStoreSession = MemoryStore(session);
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
-  }
-}
-
-declare module "express-session" {
-  interface SessionData {
-    userId?: number;
-    userName?: string;
-    userEmail?: string;
-    extRelationId?: string;
   }
 }
 
@@ -33,28 +22,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-
-const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret) {
-  throw new Error("SESSION_SECRET environment variable must be set");
-}
-
-app.use(
-  session({
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000,
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
-    },
-  })
-);
+app.use(cookieParser());
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

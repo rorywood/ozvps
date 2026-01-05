@@ -1,18 +1,171 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
+import { storage } from "./storage";
+import { loginSchema } from "@shared/schema";
 import { log } from "./index";
+
+declare global {
+  namespace Express {
+    interface Request {
+      userSession?: {
+        id: string;
+        virtFusionUserId: number;
+        extRelationId: string;
+        email: string;
+        name?: string;
+        virtFusionToken: string;
+      };
+    }
+  }
+}
+
+const SESSION_COOKIE = 'ozvps_session';
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+async function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const sessionId = req.cookies?.[SESSION_COOKIE];
+  
+  if (!sessionId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const session = await storage.getSession(sessionId);
+    
+    if (!session) {
+      res.clearCookie(SESSION_COOKIE);
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    if (new Date(session.expiresAt) < new Date()) {
+      await storage.deleteSession(sessionId);
+      res.clearCookie(SESSION_COOKIE);
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    req.userSession = {
+      id: session.id,
+      virtFusionUserId: session.virtFusionUserId,
+      extRelationId: session.extRelationId,
+      email: session.email,
+      name: session.name || undefined,
+      virtFusionToken: session.virtFusionToken,
+    };
+
+    next();
+  } catch (error) {
+    log(`Auth middleware error: ${error}`, 'api');
+    return res.status(500).json({ error: 'Authentication error' });
+  }
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.get('/api/servers', async (req, res) => {
+  // Auth endpoints (public)
+  app.post('/api/auth/login', async (req, res) => {
     try {
-      // Show servers for user ID 2 (testing user)
-      // Use listServersWithStats to fetch individual servers with remoteState for live stats
-      const servers = await virtfusionClient.listServersWithStats(2);
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid email or password format' });
+      }
+
+      const { email, password } = parsed.data;
+
+      const authResult = await virtfusionClient.authenticateUser(email, password);
+      
+      if (!authResult) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      
+      const session = await storage.createSession({
+        virtFusionUserId: authResult.user.id,
+        extRelationId: authResult.user.extRelationId,
+        email: authResult.user.email,
+        name: authResult.user.name,
+        virtFusionToken: authResult.token,
+        expiresAt,
+      });
+
+      res.cookie(SESSION_COOKIE, session.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        expires: expiresAt,
+      });
+
+      res.json({
+        user: {
+          id: authResult.user.id,
+          email: authResult.user.email,
+          name: authResult.user.name,
+        },
+      });
+    } catch (error: any) {
+      log(`Login error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  app.post('/api/auth/logout', async (req, res) => {
+    const sessionId = req.cookies?.[SESSION_COOKIE];
+    
+    if (sessionId) {
+      try {
+        const session = await storage.getSession(sessionId);
+        if (session) {
+          await virtfusionClient.logoutUser(session.virtFusionToken);
+          await storage.deleteSession(sessionId);
+        }
+      } catch (error) {
+        log(`Logout error: ${error}`, 'api');
+      }
+    }
+    
+    res.clearCookie(SESSION_COOKIE);
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/me', async (req, res) => {
+    const sessionId = req.cookies?.[SESSION_COOKIE];
+    
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+      const session = await storage.getSession(sessionId);
+      
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        if (session) await storage.deleteSession(sessionId);
+        res.clearCookie(SESSION_COOKIE);
+        return res.status(401).json({ error: 'Session expired' });
+      }
+
+      res.json({
+        user: {
+          id: session.virtFusionUserId,
+          email: session.email,
+          name: session.name,
+          extRelationId: session.extRelationId,
+        },
+      });
+    } catch (error: any) {
+      log(`Auth check error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Authentication check failed' });
+    }
+  });
+
+  // Protected routes - require authentication
+  app.get('/api/servers', authMiddleware, async (req, res) => {
+    try {
+      const userId = req.userSession!.virtFusionUserId;
+      const servers = await virtfusionClient.listServersWithStats(userId);
       res.json(servers);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
@@ -20,7 +173,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id', async (req, res) => {
+  app.get('/api/servers/:id', authMiddleware, async (req, res) => {
     try {
       const server = await virtfusionClient.getServer(req.params.id);
       res.json(server);
@@ -30,7 +183,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/power', async (req, res) => {
+  app.post('/api/servers/:id/power', authMiddleware, async (req, res) => {
     try {
       const { action } = req.body;
       
@@ -38,7 +191,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid action' });
       }
 
-      // Map frontend actions to VirtFusion actions
       const virtfusionAction = action === 'boot' ? 'start' : 
                               action === 'shutdown' ? 'stop' : 
                               action === 'poweroff' ? 'poweroff' :
@@ -52,7 +204,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/metrics', async (req, res) => {
+  app.get('/api/servers/:id/metrics', authMiddleware, async (req, res) => {
     try {
       const metrics = await virtfusionClient.getServerStats(req.params.id);
       res.json(metrics || { cpu: [], ram: [], net: [] });
@@ -62,7 +214,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/stats', async (req, res) => {
+  app.get('/api/servers/:id/stats', authMiddleware, async (req, res) => {
     try {
       const stats = await virtfusionClient.getServerLiveStats(req.params.id);
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
@@ -72,7 +224,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/traffic', async (req, res) => {
+  app.get('/api/servers/:id/traffic', authMiddleware, async (req, res) => {
     try {
       const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);
       res.json(traffic || []);
@@ -82,7 +234,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/vnc', async (req, res) => {
+  app.get('/api/servers/:id/vnc', authMiddleware, async (req, res) => {
     try {
       const vnc = await virtfusionClient.getVncDetails(req.params.id);
       if (!vnc) {
@@ -95,7 +247,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/vnc/enable', async (req, res) => {
+  app.post('/api/servers/:id/vnc/enable', authMiddleware, async (req, res) => {
     try {
       const vnc = await virtfusionClient.enableVnc(req.params.id);
       res.json(vnc);
@@ -105,7 +257,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/vnc/disable', async (req, res) => {
+  app.post('/api/servers/:id/vnc/disable', authMiddleware, async (req, res) => {
     try {
       const vnc = await virtfusionClient.disableVnc(req.params.id);
       res.json(vnc);
@@ -115,7 +267,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/network', async (req, res) => {
+  app.get('/api/servers/:id/network', authMiddleware, async (req, res) => {
     try {
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
       res.json(network || { interfaces: [] });
@@ -125,7 +277,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/os-templates', async (req, res) => {
+  app.get('/api/servers/:id/os-templates', authMiddleware, async (req, res) => {
     try {
       const templates = await virtfusionClient.getOsTemplates(req.params.id);
       res.json(templates || []);
@@ -135,7 +287,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/reinstall', async (req, res) => {
+  app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
     try {
       const { osId, hostname } = req.body;
       
@@ -151,7 +303,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/servers/:id/build-status', async (req, res) => {
+  app.get('/api/servers/:id/build-status', authMiddleware, async (req, res) => {
     try {
       const status = await virtfusionClient.getServerBuildStatus(req.params.id);
       res.json(status);
@@ -161,33 +313,22 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/console-url', async (req, res) => {
+  app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
-      // For now, use a hardcoded extRelationId for testing user (user ID 2)
-      // In production, this would come from the authenticated user's session
-      // TODO: Replace with actual authenticated user's extRelationId when auth is implemented
-      const testExtRelationId = '2'; // Testing user's external relation ID
+      const extRelationId = req.userSession!.extRelationId;
       
-      // Generate login tokens for this server
-      const tokens = await virtfusionClient.generateServerLoginTokens(req.params.id, testExtRelationId);
-      
-      // The token response should contain a URL or token to access the console
-      // VirtFusion typically returns { token, url } or similar
+      const tokens = await virtfusionClient.generateServerLoginTokens(req.params.id, extRelationId);
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      // Construct console URL with authentication token
-      // VirtFusion uses /sso endpoint with token parameter
       let consoleUrl = '';
       if (tokens.token) {
         consoleUrl = `${panelUrl}/sso?token=${tokens.token}&redirect=/server/${req.params.id}/console`;
       } else if (tokens.url) {
         consoleUrl = tokens.url;
       } else {
-        // Fallback: return the panel URL with server ID
         consoleUrl = `${panelUrl}/server/${req.params.id}/console`;
       }
       
-      // Only return the URL - never expose tokens to the client
       res.json({ url: consoleUrl });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
@@ -195,12 +336,9 @@ export async function registerRoutes(
     }
   });
 
-  // User Profile endpoints
-  app.get('/api/user/profile', async (req, res) => {
+  app.get('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      // For testing, use hardcoded user ID 2
-      // TODO: Replace with authenticated user ID when auth is implemented
-      const user = await virtfusionClient.getUserById(2);
+      const user = await virtfusionClient.getUserById(req.userSession!.virtFusionUserId);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -211,12 +349,9 @@ export async function registerRoutes(
     }
   });
 
-  app.put('/api/user/profile', async (req, res) => {
+  app.put('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      // For testing, use hardcoded extRelationId for user 2
-      // TODO: Replace with authenticated user's extRelationId when auth is implemented
-      const testExtRelationId = '2';
-      
+      const extRelationId = req.userSession!.extRelationId;
       const { name, email, timezone } = req.body;
       
       const updates: { name?: string; email?: string; timezone?: string } = {};
@@ -224,7 +359,7 @@ export async function registerRoutes(
       if (email) updates.email = email;
       if (timezone) updates.timezone = timezone;
       
-      const user = await virtfusionClient.updateUser(testExtRelationId, updates);
+      const user = await virtfusionClient.updateUser(extRelationId, updates);
       res.json(user);
     } catch (error: any) {
       log(`Error updating user profile: ${error.message}`, 'api');
@@ -232,19 +367,16 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/user/password', async (req, res) => {
+  app.post('/api/user/password', authMiddleware, async (req, res) => {
     try {
-      // For testing, use hardcoded extRelationId for user 2
-      // TODO: Replace with authenticated user's extRelationId when auth is implemented
-      const testExtRelationId = '2';
-      
+      const extRelationId = req.userSession!.extRelationId;
       const { newPassword } = req.body;
       
       if (!newPassword || newPassword.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
       
-      await virtfusionClient.resetUserPassword(testExtRelationId, newPassword);
+      await virtfusionClient.resetUserPassword(extRelationId, newPassword);
       res.json({ success: true, message: 'Password updated successfully' });
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');

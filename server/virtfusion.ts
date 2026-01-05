@@ -775,6 +775,103 @@ export class VirtFusionClient {
     // Default to running for built servers
     return 'running';
   }
+
+  async authenticateUser(email: string, password: string): Promise<{
+    token: string;
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      extRelationId: string;
+    };
+  } | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        log(`VirtFusion auth failed: ${response.status} - ${JSON.stringify(errorData)}`, 'virtfusion');
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (!data.token && !data.data?.token) {
+        log('VirtFusion auth response missing token', 'virtfusion');
+        return null;
+      }
+
+      const token = data.token || data.data?.token;
+      const userData = data.user || data.data?.user || data.data;
+
+      return {
+        token,
+        user: {
+          id: userData.id,
+          name: userData.name || userData.email,
+          email: userData.email,
+          extRelationId: userData.extRelationId || String(userData.id),
+        },
+      };
+    } catch (error) {
+      log(`VirtFusion auth error: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async getUserWithToken(token: string): Promise<{
+    id: number;
+    name: string;
+    email: string;
+    extRelationId: string;
+  } | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      const user = data.data || data;
+
+      return {
+        id: user.id,
+        name: user.name || user.email,
+        email: user.email,
+        extRelationId: user.extRelationId || String(user.id),
+      };
+    } catch (error) {
+      log(`Failed to fetch user with token: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async logoutUser(token: string): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+    } catch (error) {
+      log(`Failed to logout from VirtFusion: ${error}`, 'virtfusion');
+    }
+  }
 }
 
 export const virtfusionClient = new VirtFusionClient();
