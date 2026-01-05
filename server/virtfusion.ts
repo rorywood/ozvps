@@ -144,12 +144,17 @@ export class VirtFusionClient {
 
   async findUserByEmail(email: string): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser[] }>(`/users?email=${encodeURIComponent(email)}`);
-      if (data.data && data.data.length > 0) {
-        return data.data[0];
+      // Try the selfService endpoint to find user by email
+      const data = await this.request<{ data: VirtFusionUser }>(`/selfService/byUserEmail/${encodeURIComponent(email)}`);
+      if (data.data) {
+        return data.data;
       }
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      // 404 means user doesn't exist - that's fine
+      if (error.message?.includes('404')) {
+        return null;
+      }
       log(`Failed to find user by email ${email}: ${error}`, 'virtfusion');
       return null;
     }
@@ -167,16 +172,23 @@ export class VirtFusionClient {
       });
       log(`Created VirtFusion user: ${email} with ID ${data.data.id}`, 'virtfusion');
       return data.data;
-    } catch (error) {
+    } catch (error: any) {
+      // If user already exists (409), try to find them
+      if (error.message?.includes('409')) {
+        log(`User ${email} already exists in VirtFusion, attempting lookup...`, 'virtfusion');
+        return await this.findUserByEmail(email);
+      }
       log(`Failed to create VirtFusion user ${email}: ${error}`, 'virtfusion');
       return null;
     }
   }
 
   async findOrCreateUser(email: string, name: string): Promise<VirtFusionUser | null> {
-    let user = await this.findUserByEmail(email);
+    // First try to create - this handles both new users and existing users (via 409)
+    let user = await this.createUser(email, name);
     if (!user) {
-      user = await this.createUser(email, name);
+      // If creation failed for other reason, try direct lookup
+      user = await this.findUserByEmail(email);
     }
     return user;
   }
