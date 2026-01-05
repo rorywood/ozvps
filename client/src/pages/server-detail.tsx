@@ -61,6 +61,7 @@ export default function ServerDetail() {
   const [vncEnabled, setVncEnabled] = useState(false);
   const [vncTimeRemaining, setVncTimeRemaining] = useState<number>(0);
   const [isEnablingVnc, setIsEnablingVnc] = useState(false);
+  const [isDisablingVnc, setIsDisablingVnc] = useState(false);
   const vncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const vncDisableTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -203,8 +204,9 @@ export default function ServerDetail() {
   };
 
   const handleDisableVnc = async () => {
-    if (!serverId) return;
+    if (!serverId || isDisablingVnc) return;
     
+    setIsDisablingVnc(true);
     try {
       await api.disableVnc(serverId);
       setVncEnabled(false);
@@ -212,8 +214,8 @@ export default function ServerDetail() {
       if (vncTimerRef.current) clearInterval(vncTimerRef.current);
       if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
       toast({
-        title: "VNC Console Disabled",
-        description: "Console access has been disabled.",
+        title: "VNC Console Disabling",
+        description: "Console session is being terminated. Close the VNC window - it will stop working shortly.",
       });
     } catch (error) {
       toast({
@@ -221,6 +223,8 @@ export default function ServerDetail() {
         description: "Could not disable VNC console.",
         variant: "destructive",
       });
+    } finally {
+      setIsDisablingVnc(false);
     }
   };
 
@@ -373,10 +377,11 @@ export default function ServerDetail() {
                   size="icon"
                   className="h-9 w-9 text-red-400 hover:bg-red-600/20 hover:text-red-300"
                   onClick={handleDisableVnc}
+                  disabled={isDisablingVnc}
                   data-testid="button-disable-vnc"
                   title="Disable VNC Console"
                 >
-                  <X className="h-4 w-4" />
+                  {isDisablingVnc ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                 </Button>
               </div>
             ) : (
