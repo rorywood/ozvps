@@ -244,20 +244,6 @@ export default function Account() {
                 )}
               </div>
 
-              <div className="mt-6 pt-6 border-t border-white/10">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Account ID</span>
-                    <p className="text-white font-mono" data-testid="text-user-id">{profile?.id}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Two-Factor Auth</span>
-                    <p className={profile?.twoFactorAuth ? "text-green-400" : "text-yellow-400"} data-testid="text-2fa-status">
-                      {profile?.twoFactorAuth ? "Enabled" : "Disabled"}
-                    </p>
-                  </div>
-                </div>
-              </div>
             </GlassCard>
 
             <GlassCard className="p-6" data-testid="security-section">
@@ -326,6 +312,13 @@ export default function Account() {
                 </p>
               </div>
             </GlassCard>
+          </div>
+        )}
+
+        {profile && (
+          <div className="text-center text-xs text-muted-foreground mt-8">
+            <span>Account ID: </span>
+            <span className="font-mono" data-testid="text-user-id">{profile?.virtFusionUserId || 'Not linked'}</span>
           </div>
         )}
       </div>
