@@ -57,6 +57,12 @@ class ApiClient {
     return response.json();
   }
 
+  async getLiveStats(id: string): Promise<{ cpu_usage: number, ram_usage: number, disk_usage: number, net_in: number, net_out: number }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/stats`);
+    if (!response.ok) throw new Error('Failed to fetch live stats');
+    return response.json();
+  }
+
   async getTrafficHistory(id: string): Promise<any[]> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/traffic`);
     if (!response.ok) throw new Error('Failed to fetch traffic data');

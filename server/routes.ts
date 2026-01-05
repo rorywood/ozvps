@@ -59,6 +59,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/servers/:id/stats', async (req, res) => {
+    try {
+      const stats = await virtfusionClient.getServerLiveStats(req.params.id);
+      res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
+    } catch (error: any) {
+      log(`Error fetching live stats for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch live stats' });
+    }
+  });
+
   app.get('/api/servers/:id/traffic', async (req, res) => {
     try {
       const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);

@@ -86,6 +86,13 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
 
+  const { data: liveStats } = useQuery({
+    queryKey: ['live-stats', serverId],
+    queryFn: () => api.getLiveStats(serverId || ''),
+    enabled: !!serverId,
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
+
   const powerMutation = useMutation({
     mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
       api.powerAction(id, action),
@@ -320,16 +327,16 @@ export default function ServerDetail() {
              <div className="space-y-1.5">
                <div className="flex justify-between text-xs">
                  <span className="text-muted-foreground">CPU Usage</span>
-                 <span className="text-white font-medium">{server.stats?.cpu_usage || 0}%</span>
+                 <span className="text-white font-medium">{liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0}%</span>
                </div>
                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                  <div 
                    className={cn(
                      "h-full rounded-full transition-all duration-500",
-                     (server.stats?.cpu_usage || 0) > 80 ? "bg-red-500" : 
-                     (server.stats?.cpu_usage || 0) > 60 ? "bg-yellow-500" : "bg-blue-500"
+                     (liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0) > 80 ? "bg-red-500" : 
+                     (liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-blue-500"
                    )}
-                   style={{ width: `${server.stats?.cpu_usage || 0}%` }}
+                   style={{ width: `${liveStats?.cpu_usage ?? server.stats?.cpu_usage ?? 0}%` }}
                  />
                </div>
              </div>
@@ -348,16 +355,16 @@ export default function ServerDetail() {
              <div className="space-y-1.5">
                <div className="flex justify-between text-xs">
                  <span className="text-muted-foreground">RAM Usage</span>
-                 <span className="text-white font-medium">{server.stats?.ram_usage || 0}%</span>
+                 <span className="text-white font-medium">{liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0}%</span>
                </div>
                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                  <div 
                    className={cn(
                      "h-full rounded-full transition-all duration-500",
-                     (server.stats?.ram_usage || 0) > 80 ? "bg-red-500" : 
-                     (server.stats?.ram_usage || 0) > 60 ? "bg-yellow-500" : "bg-green-500"
+                     (liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0) > 80 ? "bg-red-500" : 
+                     (liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-green-500"
                    )}
-                   style={{ width: `${server.stats?.ram_usage || 0}%` }}
+                   style={{ width: `${liveStats?.ram_usage ?? server.stats?.ram_usage ?? 0}%` }}
                  />
                </div>
              </div>
@@ -376,16 +383,16 @@ export default function ServerDetail() {
              <div className="space-y-1.5">
                <div className="flex justify-between text-xs">
                  <span className="text-muted-foreground">Disk Usage</span>
-                 <span className="text-white font-medium">{server.stats?.disk_usage || 0}%</span>
+                 <span className="text-white font-medium">{liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0}%</span>
                </div>
                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                  <div 
                    className={cn(
                      "h-full rounded-full transition-all duration-500",
-                     (server.stats?.disk_usage || 0) > 80 ? "bg-red-500" : 
-                     (server.stats?.disk_usage || 0) > 60 ? "bg-yellow-500" : "bg-purple-500"
+                     (liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0) > 80 ? "bg-red-500" : 
+                     (liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0) > 60 ? "bg-yellow-500" : "bg-purple-500"
                    )}
-                   style={{ width: `${server.stats?.disk_usage || 0}%` }}
+                   style={{ width: `${liveStats?.disk_usage ?? server.stats?.disk_usage ?? 0}%` }}
                  />
                </div>
              </div>

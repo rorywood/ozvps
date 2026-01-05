@@ -165,6 +165,42 @@ export class VirtFusionClient {
     }
   }
 
+  async getServerLiveStats(serverId: string) {
+    try {
+      // VirtFusion provides server stats in the main server response
+      // Try to get the server data with remote state info
+      const response = await this.request<{ data: any }>(`/servers/${serverId}`);
+      const server = response.data;
+      
+      // Check various possible locations for stats data
+      const stats = server.remoteState || server.remote_state || server.stats || server.statistics || {};
+      const resources = server.resources || {};
+      
+      // Try to extract CPU/RAM/disk usage from available data
+      // VirtFusion may provide these in different formats
+      let cpuUsage = stats.cpu?.usage || stats.cpuUsage || stats.cpu_usage || stats.cpu || 0;
+      let ramUsage = stats.memory?.usage || stats.memoryUsage || stats.ram_usage || stats.memory?.percent || stats.mem || 0;
+      let diskUsage = stats.disk?.usage || stats.diskUsage || stats.disk_usage || stats.storage?.percent || 0;
+      
+      // If values are in raw bytes, calculate percentage based on allocated resources
+      if (typeof cpuUsage === 'object') cpuUsage = cpuUsage.percent || cpuUsage.usage || 0;
+      if (typeof ramUsage === 'object') ramUsage = ramUsage.percent || ramUsage.usage || 0;
+      if (typeof diskUsage === 'object') diskUsage = diskUsage.percent || diskUsage.usage || 0;
+      
+      return {
+        cpu_usage: Math.min(100, Math.max(0, Number(cpuUsage) || 0)),
+        ram_usage: Math.min(100, Math.max(0, Number(ramUsage) || 0)),
+        disk_usage: Math.min(100, Math.max(0, Number(diskUsage) || 0)),
+        net_in: stats.network?.in || stats.networkIn || stats.net_in || 0,
+        net_out: stats.network?.out || stats.networkOut || stats.net_out || 0,
+      };
+    } catch (error) {
+      log(`Failed to fetch live stats for server ${serverId}: ${error}`, 'virtfusion');
+      // Return null to indicate stats aren't available
+      return null;
+    }
+  }
+
   async getServerTrafficHistory(serverId: string) {
     try {
       const data = await this.request<{ data: any }>(`/servers/${serverId}/traffic/blocks`);
