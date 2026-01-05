@@ -268,18 +268,27 @@ export class VirtFusionClient {
       const suspended = server.suspended === true;
       const commissionStatus = server.commissionStatus;
       
+      // Check if server is in a transitional/building state
+      const isTransitionalState = ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
+      
       // Determine the build phase based on VirtFusion state
+      // Important: VirtFusion temporarily sets buildFailed=true during rebuilds
+      // Only consider it a real error if buildFailed is true AND state is NOT transitional
       let phase: 'queued' | 'building' | 'complete' | 'error' = 'complete';
       
-      if (buildFailed) {
-        phase = 'error';
-      } else if (state === 'queued' || state === 'pending') {
+      if (state === 'queued' || state === 'pending') {
         phase = 'queued';
       } else if (state === 'provisioning' || state === 'building' || state === 'installing') {
         phase = 'building';
       } else if (state === 'complete' || state === 'running') {
         phase = 'complete';
+      } else if (buildFailed && !isTransitionalState) {
+        // Only mark as error if buildFailed is true AND we're not in a building state
+        phase = 'error';
       }
+      
+      // isError should only be true if we have a confirmed error (not during transition)
+      const isRealError = buildFailed && !isTransitionalState && state !== 'complete' && state !== 'running';
       
       return {
         state,
@@ -287,9 +296,9 @@ export class VirtFusionClient {
         buildFailed,
         suspended,
         commissionStatus,
-        isComplete: phase === 'complete' && !buildFailed,
-        isError: buildFailed,
-        isBuilding: phase === 'queued' || phase === 'building',
+        isComplete: (state === 'complete' || state === 'running') && !isRealError,
+        isError: isRealError,
+        isBuilding: isTransitionalState,
       };
     } catch (error) {
       log(`Failed to fetch build status for server ${serverId}: ${error}`, 'virtfusion');
