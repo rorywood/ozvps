@@ -126,14 +126,20 @@ export default function ServerList() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
-                        <span className={cn(
-                          "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border",
-                          server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
-                          server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
-                          "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-                        )}>
-                          {server.status}
-                        </span>
+                        {server.suspended ? (
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400">
+                            SUSPENDED
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border",
+                            server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
+                            server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                            "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                          )}>
+                            {server.status}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground font-mono mt-0.5">{server.primaryIp}</p>
                     </div>
@@ -161,7 +167,12 @@ export default function ServerList() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
-                    <Button size="sm" variant="outline" className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground"
+                      disabled={server.suspended}
+                    >
                       <TerminalSquare className="h-4 w-4 mr-2" />
                       Console
                     </Button>
@@ -171,8 +182,8 @@ export default function ServerList() {
                         size="icon" 
                         variant="ghost" 
                         className="h-7 w-7 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm" 
-                        title="Start"
-                        disabled={server.status === 'running' || powerMutation.isPending}
+                        title={server.suspended ? "Suspended" : "Start"}
+                        disabled={server.status === 'running' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'boot')}
                       >
                         <Power className="h-4 w-4" />
@@ -182,8 +193,8 @@ export default function ServerList() {
                         size="icon" 
                         variant="ghost" 
                         className="h-7 w-7 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm" 
-                        title="Reboot"
-                        disabled={server.status !== 'running' || powerMutation.isPending}
+                        title={server.suspended ? "Suspended" : "Reboot"}
+                        disabled={server.status !== 'running' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'reboot')}
                       >
                         <RotateCw className="h-4 w-4" />
@@ -193,8 +204,8 @@ export default function ServerList() {
                         size="icon" 
                         variant="ghost" 
                         className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm" 
-                        title="Stop"
-                        disabled={server.status === 'stopped' || powerMutation.isPending}
+                        title={server.suspended ? "Suspended" : "Stop"}
+                        disabled={server.status === 'stopped' || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'shutdown')}
                       >
                         <Power className="h-4 w-4 rotate-180" />

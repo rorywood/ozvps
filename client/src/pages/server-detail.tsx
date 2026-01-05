@@ -467,9 +467,25 @@ export default function ServerDetail() {
     );
   }
 
+  const isSuspended = server?.suspended === true;
+
   return (
     <AppShell>
       <div className="space-y-6 pb-20">
+        
+        {/* Suspension Banner */}
+        {isSuspended && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
+            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-red-300">Server Suspended</h3>
+              <p className="text-sm text-red-300/80">
+                This server has been suspended. All management functions are disabled. 
+                Please contact support or check your billing status.
+              </p>
+            </div>
+          </div>
+        )}
         
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-white/5">
@@ -518,13 +534,15 @@ export default function ServerDetail() {
               ) : (
                 <div className="flex items-center gap-2 group">
                   <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
-                  <button
-                    onClick={handleStartEditName}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white p-1"
-                    data-testid="button-edit-name"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
+                  {!isSuspended && (
+                    <button
+                      onClick={handleStartEditName}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white p-1"
+                      data-testid="button-edit-name"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               )}
               {powerActionPending ? (
@@ -577,17 +595,17 @@ export default function ServerDetail() {
                   variant="secondary" 
                   className={cn(
                     "shadow-none font-medium h-9",
-                    (powerActionPending || server.status !== 'running')
+                    (powerActionPending || server.status !== 'running' || isSuspended)
                       ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
                       : "bg-green-600/20 hover:bg-green-600/30 text-green-400 border-green-500/30"
                   )}
                   onClick={handleOpenVnc}
-                  disabled={!!powerActionPending || server.status !== 'running'}
+                  disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
                   data-testid="button-console"
                 >
                   <TerminalSquare className="h-4 w-4 mr-2" />
                   Console
-                  {!powerActionPending && server.status === 'running' && (
+                  {!powerActionPending && server.status === 'running' && !isSuspended && (
                     <>
                       <Timer className="h-3 w-3 ml-2" />
                       <span className="ml-1 text-xs font-mono">{formatTimeRemaining(vncTimeRemaining)}</span>
@@ -599,7 +617,7 @@ export default function ServerDetail() {
                   size="icon"
                   className="h-9 w-9 text-red-400 hover:bg-red-600/20 hover:text-red-300"
                   onClick={handleDisableVnc}
-                  disabled={isDisablingVnc || !!powerActionPending || server.status !== 'running'}
+                  disabled={isDisablingVnc || !!powerActionPending || server.status !== 'running' || isSuspended}
                   data-testid="button-disable-vnc"
                   title="Disable VNC Console"
                 >
@@ -611,12 +629,12 @@ export default function ServerDetail() {
                 variant="secondary" 
                 className={cn(
                   "shadow-none font-medium h-9",
-                  (powerActionPending || server.status !== 'running')
+                  (powerActionPending || server.status !== 'running' || isSuspended)
                     ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
                     : "bg-white/5 hover:bg-white/10 text-white border-white/10"
                 )}
                 onClick={handleOpenVnc}
-                disabled={isEnablingVnc || !!powerActionPending || server.status !== 'running'}
+                disabled={isEnablingVnc || !!powerActionPending || server.status !== 'running' || isSuspended}
                 data-testid="button-console"
               >
                 {isEnablingVnc ? (
@@ -631,9 +649,14 @@ export default function ServerDetail() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0" 
+                  className={cn(
+                    "font-medium h-9 border-0",
+                    isSuspended 
+                      ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
+                  )}
                   data-testid="button-power-options"
-                  disabled={!!powerActionPending}
+                  disabled={!!powerActionPending || isSuspended}
                 >
                   {powerActionPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -647,7 +670,7 @@ export default function ServerDetail() {
               <DropdownMenuContent align="end" className="w-48 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={server.status === 'running' || !!powerActionPending}
+                    disabled={server.status === 'running' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
                   >
@@ -655,7 +678,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={server.status !== 'running' || !!powerActionPending}
+                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
                   >
@@ -663,7 +686,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
                   >
@@ -671,7 +694,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('poweroff')}
                     data-testid="menu-item-poweroff"
                   >
@@ -1082,13 +1105,24 @@ export default function ServerDetail() {
                   </div>
 
                   <Button 
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className={cn(
+                      "text-white",
+                      isSuspended 
+                        ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                        : "bg-red-600 hover:bg-red-700"
+                    )}
                     onClick={() => setReinstallDialogOpen(true)}
+                    disabled={isSuspended}
                     data-testid="button-reinstall"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Reinstall Server
                   </Button>
+                  {isSuspended && (
+                    <p className="text-sm text-red-400/80 mt-2">
+                      Reinstall is disabled while the server is suspended.
+                    </p>
+                  )}
                 </div>
               </div>
             </GlassCard>
