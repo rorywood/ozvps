@@ -548,17 +548,23 @@ export async function registerRoutes(
         // Continue anyway - VNC might already be enabled
       }
       
-      // Step 2: Try to get extRelationId from server owner data and generate auth token
+      // Step 2: Get VNC details after enabling
+      let vncDetails = null;
+      try {
+        vncDetails = await virtfusionClient.getVncDetails(serverId);
+        log(`VNC details for server ${serverId}: ${JSON.stringify(vncDetails)}`, 'api');
+      } catch (vncErr: any) {
+        log(`Failed to get VNC details: ${vncErr.message}`, 'api');
+      }
+      
+      // Step 3: Try to get extRelationId and generate auth token
       if (server.id) {
         try {
-          // Fetch server with owner data to get the actual extRelationId
           const ownerData = await virtfusionClient.getServerOwner(serverId);
           let extRelationId = ownerData?.extRelationId;
           
-          // If no extRelationId, generate one and update the user
           if (!extRelationId && ownerData?.id) {
             log(`Owner ${ownerData.id} has no extRelationId, generating one...`, 'api');
-            // Generate numeric extRelationId from email
             const email = ownerData.email || session.email || '';
             let hash = 0;
             for (let i = 0; i < email.length; i++) {
@@ -570,7 +576,6 @@ export async function registerRoutes(
             const timestamp = Date.now() % 1000000000;
             extRelationId = `${positiveHash}${timestamp}`;
             
-            // Update the VirtFusion user with the new extRelationId
             const updated = await virtfusionClient.updateUserById(ownerData.id, { extRelationId });
             if (updated) {
               log(`Successfully set extRelationId ${extRelationId} for user ${ownerData.id}`, 'api');
@@ -585,19 +590,17 @@ export async function registerRoutes(
               server.id.toString(), 
               extRelationId.toString()
             );
-            // VirtFusion returns tokens in authentication.endpoint_complete format
             if (tokenData?.authentication?.endpoint_complete) {
-              // Decode HTML entities (VirtFusion returns &amp; instead of &)
-              let endpoint = tokenData.authentication.endpoint_complete;
-              // Replace all &amp; with & (VirtFusion HTML-encodes the ampersand)
-              while (endpoint.includes('&amp;')) {
-                endpoint = endpoint.replace('&amp;', '&');
+              // Build tokens directly to avoid HTML entity issues
+              const tokens = tokenData.authentication.tokens;
+              if (tokens && tokens['1'] && tokens['2']) {
+                // Construct the URL manually using the raw tokens
+                const token1 = tokens['1'];
+                const token2 = tokens['2'];
+                const authUrl = `${panelUrl}/token_authenticate/?1=${token1}&2=${token2}&redirect_to=${encodeURIComponent('/server/' + server.uuid + '/vnc')}`;
+                log(`Generated console URL for server ${serverId}: ${authUrl}`, 'api');
+                return res.json({ url: authUrl });
               }
-              // Build the auth URL with redirect_to parameter pointing to VNC
-              const vncPath = `/server/${server.uuid}/vnc`;
-              const authUrl = `${panelUrl}${endpoint}&redirect_to=${encodeURIComponent(vncPath)}`;
-              log(`Generated console URL for server ${serverId}: ${authUrl}`, 'api');
-              return res.json({ url: authUrl });
             }
           } else {
             log(`Server ${serverId} owner has no extRelationId and could not set one`, 'api');
@@ -607,7 +610,7 @@ export async function registerRoutes(
         }
       }
       
-      // Fallback to direct panel URL (user may need to login if extRelationId not set)
+      // Fallback to direct panel URL
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {
