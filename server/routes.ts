@@ -61,6 +61,18 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function verifyServerOwnership(serverId: string, userVirtFusionId: number | null): Promise<boolean> {
+  if (!userVirtFusionId) return false;
+  
+  try {
+    const server = await virtfusionClient.getServer(serverId);
+    return server && server.userId === userVirtFusionId;
+  } catch (error) {
+    log(`Ownership check failed for server ${serverId}: ${error}`, 'api');
+    return false;
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -261,6 +273,11 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/power', authMiddleware, async (req, res) => {
     try {
+      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const { action } = req.body;
       
       if (!['boot', 'reboot', 'shutdown', 'poweroff'].includes(action)) {
@@ -312,6 +329,11 @@ export async function registerRoutes(
 
   app.put('/api/servers/:id/name', authMiddleware, async (req, res) => {
     try {
+      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const parsed = serverNameSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid server name' });
@@ -346,6 +368,11 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/vnc/enable', authMiddleware, async (req, res) => {
     try {
+      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const vnc = await virtfusionClient.enableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
@@ -356,6 +383,11 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/vnc/disable', authMiddleware, async (req, res) => {
     try {
+      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const vnc = await virtfusionClient.disableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
@@ -386,6 +418,11 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
     try {
+      const isOwner = await verifyServerOwnership(req.params.id, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const { osId, hostname } = req.body;
       
       if (!osId) {
@@ -413,6 +450,12 @@ export async function registerRoutes(
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;
+      
+      const isOwner = await verifyServerOwnership(serverId, req.userSession!.virtFusionUserId);
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
       // Enable VNC to get the WSS token

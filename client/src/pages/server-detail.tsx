@@ -26,9 +26,12 @@ import {
   ArrowUpFromLine,
   Gauge,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  Pencil,
+  Check
 } from "lucide-react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
+import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -51,6 +54,7 @@ import {
 
 export default function ServerDetail() {
   const [, params] = useRoute("/servers/:id");
+  const [, setLocation] = useLocation();
   const serverId = params?.id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -62,6 +66,9 @@ export default function ServerDetail() {
   const [vncTimeRemaining, setVncTimeRemaining] = useState<number>(0);
   const [isEnablingVnc, setIsEnablingVnc] = useState(false);
   const [isDisablingVnc, setIsDisablingVnc] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [isRenamingServer, setIsRenamingServer] = useState(false);
   const vncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const vncDisableTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reinstallPollRef = useRef<NodeJS.Timeout | null>(null);
@@ -240,84 +247,44 @@ export default function ServerDetail() {
     }
   };
 
-  const handleOpenVnc = async () => {
+  const handleOpenVnc = () => {
     if (!serverId) return;
+    setLocation(`/servers/${serverId}/console`);
+  };
+
+  const handleStartEditName = () => {
+    if (server) {
+      setEditedName(server.name);
+      setIsEditingName(true);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditedName("");
+  };
+
+  const handleSaveName = async () => {
+    if (!serverId || !editedName.trim()) return;
     
-    setIsEnablingVnc(true);
-    
+    setIsRenamingServer(true);
     try {
-      // Enable VNC first
-      const result = await api.enableVnc(serverId);
-      
-      if (result.vnc?.enabled) {
-        setVncEnabled(true);
-        
-        // Set 60 minute timer
-        const VNC_DURATION = 60 * 60; // 60 minutes in seconds
-        setVncTimeRemaining(VNC_DURATION);
-        
-        // Countdown timer for display
-        if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-        vncTimerRef.current = setInterval(() => {
-          setVncTimeRemaining(prev => {
-            if (prev <= 1) {
-              if (vncTimerRef.current) clearInterval(vncTimerRef.current);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        
-        // Auto-disable after 60 minutes
-        if (vncDisableTimerRef.current) clearTimeout(vncDisableTimerRef.current);
-        vncDisableTimerRef.current = setTimeout(async () => {
-          try {
-            await api.disableVnc(serverId);
-            setVncEnabled(false);
-            setVncTimeRemaining(0);
-            toast({
-              title: "VNC Console Disabled",
-              description: "Console access has been automatically disabled after 60 minutes.",
-            });
-          } catch (e) {
-            console.error('Failed to auto-disable VNC:', e);
-          }
-        }, VNC_DURATION * 1000);
-        
-        toast({
-          title: "VNC Console Enabled",
-          description: "Console will automatically disable after 60 minutes.",
-        });
-        
-        // Get authenticated console URL using login tokens
-        try {
-          const consoleData = await api.getConsoleUrl(serverId);
-          if (consoleData.url) {
-            window.open(consoleData.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
-          } else {
-            throw new Error('No console URL returned');
-          }
-        } catch (consoleError) {
-          // Fallback: try the direct WebSocket URL
-          if (result.vnc?.wss?.url) {
-            window.open(result.vnc.wss.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
-          } else {
-            toast({
-              title: "Console Not Available",
-              description: "VNC console URL not available. Please try again.",
-              variant: "destructive",
-            });
-          }
-        }
-      }
+      await api.renameServer(serverId, editedName.trim());
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      toast({
+        title: "Server Renamed",
+        description: "Server name has been updated successfully.",
+      });
+      setIsEditingName(false);
     } catch (error) {
       toast({
-        title: "Failed to Enable Console",
-        description: "Could not enable VNC console. Please try again.",
+        title: "Rename Failed",
+        description: "Could not rename server. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setIsEnablingVnc(false);
+      setIsRenamingServer(false);
     }
   };
 
@@ -476,7 +443,53 @@ export default function ServerDetail() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
-              <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="h-8 w-48 bg-black/30 border-white/20 text-white font-display font-bold text-lg"
+                    maxLength={50}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName();
+                      if (e.key === 'Escape') handleCancelEditName();
+                    }}
+                    data-testid="input-server-name"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    onClick={handleSaveName}
+                    disabled={isRenamingServer || !editedName.trim()}
+                    data-testid="button-save-name"
+                  >
+                    {isRenamingServer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:bg-white/10"
+                    onClick={handleCancelEditName}
+                    disabled={isRenamingServer}
+                    data-testid="button-cancel-name"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group">
+                  <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
+                  <button
+                    onClick={handleStartEditName}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white p-1"
+                    data-testid="button-edit-name"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               {powerActionPending ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />

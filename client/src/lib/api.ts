@@ -134,6 +134,16 @@ class ApiClient {
     return response.json();
   }
 
+  async renameServer(id: string, name: string): Promise<{ success: boolean; name: string }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!response.ok) throw new Error('Failed to rename server');
+    return response.json();
+  }
+
   async reinstallServer(id: string, osId: number, hostname?: string): Promise<{ success: boolean }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall`, {
       method: 'POST',
@@ -172,7 +182,15 @@ class ApiClient {
     return response.json();
   }
 
-  async getConsoleUrl(id: string): Promise<{ url: string }> {
+  async getConsoleUrl(id: string): Promise<{ 
+    url: string; 
+    vnc?: { 
+      ip: string; 
+      port: number; 
+      password: string; 
+      enabled: boolean;
+    }; 
+  }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/console-url`, {
       method: 'POST',
     });

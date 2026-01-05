@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ServerList from "@/pages/server-list";
 import ServerDetail from "@/pages/server-detail";
+import ServerConsole from "@/pages/server-console";
 import Account from "@/pages/account";
 import Login from "@/pages/login";
 import { api } from "@/lib/api";
@@ -80,6 +81,13 @@ function Router() {
         {(params) => (
           <AuthGuard>
             <ServerDetail />
+          </AuthGuard>
+        )}
+      </Route>
+      <Route path="/servers/:id/console">
+        {(params) => (
+          <AuthGuard>
+            <ServerConsole />
           </AuthGuard>
         )}
       </Route>
