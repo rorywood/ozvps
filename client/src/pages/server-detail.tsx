@@ -683,73 +683,117 @@ export default function ServerDetail() {
           <TabsContent value="statistics" className="space-y-6 animate-in fade-in duration-300">
             
             {/* Live Stats - CPU, Memory, Disk */}
-            {server.status === 'running' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* CPU Card */}
-                <GlassCard className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* CPU Card */}
+              <GlassCard className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
+                  {server.status === 'running' && !powerActionPending ? (
                     <span className="text-lg font-bold text-white" data-testid="text-cpu-percent">
                       {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
                     </span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-1.5">
-                    <div 
-                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${liveStats?.cpu_usage || 0}%` }}
-                      data-testid="progress-cpu"
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
-                    <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
-                  </div>
-                </GlassCard>
+                  ) : (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
+                    </span>
+                  )}
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending ? "bg-blue-500" : "bg-white/20"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.cpu_usage || 0}%` : '0%' }}
+                    data-testid="progress-cpu"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
+                </div>
+              </GlassCard>
 
-                {/* Memory Card */}
-                <GlassCard className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
+              {/* Memory Card */}
+              <GlassCard className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
+                  {server.status === 'running' && !powerActionPending ? (
                     <span className="text-lg font-bold text-white" data-testid="text-memory-percent">
                       {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
                     </span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-1.5">
-                    <div 
-                      className="bg-green-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${liveStats?.ram_usage || 0}%` }}
-                      data-testid="progress-memory"
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
-                    <span data-testid="text-memory-used">
-                      {liveStats?.memory_used_mb ? `${liveStats.memory_used_mb} MB / ${liveStats.memory_total_mb} MB` : '—'}
+                  ) : (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
-                  </div>
-                </GlassCard>
+                  )}
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending ? "bg-green-500" : "bg-white/20"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.ram_usage || 0}%` : '0%' }}
+                    data-testid="progress-memory"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span data-testid="text-memory-used">
+                    {server.status === 'running' && !powerActionPending && liveStats?.memory_used_mb 
+                      ? `${liveStats.memory_used_mb} MB / ${liveStats.memory_total_mb} MB` 
+                      : '—'}
+                  </span>
+                </div>
+              </GlassCard>
 
-                {/* Disk Card */}
-                <GlassCard className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
+              {/* Disk Card */}
+              <GlassCard className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
+                  {server.status === 'running' && !powerActionPending ? (
                     <span className="text-lg font-bold text-white" data-testid="text-disk-percent">
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-1.5">
-                    <div 
-                      className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${liveStats?.disk_usage || 0}%` }}
-                      data-testid="progress-disk"
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
-                    <span data-testid="text-disk-used">
-                      {liveStats?.disk_used_gb ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` : '—'}
+                  ) : (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
-                  </div>
-                </GlassCard>
-              </div>
-            )}
+                  )}
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending ? "bg-purple-500" : "bg-white/20"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.disk_usage || 0}%` : '0%' }}
+                    data-testid="progress-disk"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span data-testid="text-disk-used">
+                    {server.status === 'running' && !powerActionPending && liveStats?.disk_used_gb 
+                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` 
+                      : '—'}
+                  </span>
+                </div>
+              </GlassCard>
+            </div>
 
             {/* Bandwidth Stats Card - Compact */}
             <GlassCard className="p-4">
