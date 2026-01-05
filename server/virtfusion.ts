@@ -799,7 +799,10 @@ export class VirtFusionClient {
     };
   } | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+      const loginUrl = `${this.baseUrl}/api/v1/login`;
+      log(`Attempting login to: ${loginUrl} for email: ${email}`, 'virtfusion');
+      
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -808,6 +811,8 @@ export class VirtFusionClient {
         body: JSON.stringify({ email, password }),
       });
 
+      log(`Login response status: ${response.status}`, 'virtfusion');
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         log(`VirtFusion auth failed: ${response.status} - ${JSON.stringify(errorData)}`, 'virtfusion');
@@ -815,6 +820,7 @@ export class VirtFusionClient {
       }
 
       const data = await response.json();
+      log(`Login response data keys: ${Object.keys(data).join(', ')}`, 'virtfusion');
       
       if (!data.token && !data.data?.token) {
         log('VirtFusion auth response missing token', 'virtfusion');
