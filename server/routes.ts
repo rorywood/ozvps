@@ -413,27 +413,20 @@ export async function registerRoutes(
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;
-      
-      // Get server VNC info directly
-      const serverData = await virtfusionClient.getServerWithVnc(serverId);
-      
-      if (!serverData || !serverData.vnc) {
-        return res.status(404).json({ error: 'VNC information not available' });
-      }
-      
-      const vnc = serverData.vnc;
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      // If VNC has a WSS token, use it directly
-      if (vnc.wss?.url) {
-        // Construct the full noVNC URL with the WSS path
-        const consoleUrl = `${panelUrl}${vnc.wss.url}`;
-        return res.json({ url: consoleUrl, vnc });
+      // Enable VNC to get the WSS token
+      const vncResult = await virtfusionClient.enableVnc(serverId);
+      
+      if (vncResult?.vnc?.wss?.url) {
+        // Use the WSS URL with token for authenticated VNC access
+        const consoleUrl = `${panelUrl}${vncResult.vnc.wss.url}`;
+        return res.json({ url: consoleUrl, vnc: vncResult.vnc });
       }
       
-      // Fallback to panel console page
+      // Fallback to panel console page if no WSS token
       const consoleUrl = `${panelUrl}/server/${serverId}/console`;
-      res.json({ url: consoleUrl, vnc });
+      res.json({ url: consoleUrl, vnc: vncResult?.vnc || null });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });

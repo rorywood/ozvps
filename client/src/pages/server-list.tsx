@@ -7,7 +7,6 @@ import {
   Server as ServerIcon, 
   Power, 
   RotateCw, 
-  Trash2, 
   TerminalSquare,
   MoreVertical,
   Search,
@@ -212,13 +211,6 @@ export default function ServerList() {
                         <DropdownMenuLabel>Server Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator className="bg-white/10" />
                         <DropdownMenuItem className="focus:bg-white/10 cursor-pointer">View Details</DropdownMenuItem>
-                        <DropdownMenuItem className="focus:bg-white/10 cursor-pointer">Resize Server</DropdownMenuItem>
-                        <DropdownMenuItem className="focus:bg-white/10 cursor-pointer">Manage Network</DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-white/10" />
-                        <DropdownMenuItem className="text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Destroy Server
-                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
