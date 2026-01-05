@@ -165,6 +165,78 @@ export class VirtFusionClient {
     }
   }
 
+  async getServerTrafficHistory(serverId: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/traffic/blocks`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch traffic history for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async getVncDetails(serverId: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/vnc`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch VNC details for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async getOsTemplates(serverId: string) {
+    try {
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/media/osGroups`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch OS templates for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async reinstallServer(serverId: string, osId: number, hostname?: string) {
+    try {
+      const body: any = { osid: osId };
+      if (hostname) body.hostname = hostname;
+      
+      const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to reinstall server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
+  async getServerNetworkInfo(serverId: string) {
+    try {
+      const response = await this.request<{ data: VirtFusionServerResponse }>(`/servers/${serverId}`);
+      const server = response.data;
+      
+      const interfaces = server.network?.interfaces || [];
+      return {
+        interfaces: interfaces.map((iface, index) => ({
+          name: iface.name || `eth${index}`,
+          mac: iface.mac || 'N/A',
+          ipv4: iface.ipv4?.map(ip => ({
+            address: ip.address || 'N/A',
+            gateway: ip.gateway || 'N/A',
+            netmask: ip.netmask || 'N/A',
+          })) || [],
+          ipv6: iface.ipv6?.map(ip => ({
+            address: ip.address || 'N/A',
+          })) || [],
+        })),
+      };
+    } catch (error) {
+      log(`Failed to fetch network info for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
   private transformServer(server: VirtFusionServerResponse) {
     // Determine status from server state - "complete" means built and running
     const stateValue = server.power_status || server.powerState || server.power || server.state || '';

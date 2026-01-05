@@ -59,5 +59,64 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/servers/:id/traffic', async (req, res) => {
+    try {
+      const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);
+      res.json(traffic || []);
+    } catch (error: any) {
+      log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch traffic data' });
+    }
+  });
+
+  app.get('/api/servers/:id/vnc', async (req, res) => {
+    try {
+      const vnc = await virtfusionClient.getVncDetails(req.params.id);
+      if (!vnc) {
+        return res.status(404).json({ error: 'VNC not available for this server' });
+      }
+      res.json(vnc);
+    } catch (error: any) {
+      log(`Error fetching VNC details for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch VNC details' });
+    }
+  });
+
+  app.get('/api/servers/:id/network', async (req, res) => {
+    try {
+      const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
+      res.json(network || { interfaces: [] });
+    } catch (error: any) {
+      log(`Error fetching network info for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch network info' });
+    }
+  });
+
+  app.get('/api/servers/:id/os-templates', async (req, res) => {
+    try {
+      const templates = await virtfusionClient.getOsTemplates(req.params.id);
+      res.json(templates || []);
+    } catch (error: any) {
+      log(`Error fetching OS templates for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch OS templates' });
+    }
+  });
+
+  app.post('/api/servers/:id/reinstall', async (req, res) => {
+    try {
+      const { osId, hostname } = req.body;
+      
+      if (!osId) {
+        return res.status(400).json({ error: 'OS ID is required' });
+      }
+
+      const result = await virtfusionClient.reinstallServer(req.params.id, osId, hostname);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reinstall server' });
+    }
+  });
+
   return httpServer;
 }

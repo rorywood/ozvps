@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -9,20 +10,20 @@ import {
   Cpu, 
   HardDrive, 
   Network, 
-  Settings,
   Activity,
   HardDrive as StorageIcon,
   Loader2,
   AlertCircle,
-  Server as ServerIcon,
-  User,
   Globe,
   AlignLeft,
   ChevronDown,
   Maximize2,
   ZoomIn,
   ZoomOut,
-  Home
+  Home,
+  Copy,
+  ExternalLink,
+  RefreshCw
 } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { api } from "@/lib/api";
@@ -37,27 +38,52 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-// Mock historical data for charts
-const generateHistoryData = (points: number, base: number, variance: number) => {
-  return Array.from({ length: points }, (_, i) => ({
-    time: `${i}:00`,
-    value: Math.max(0, Math.min(100, base + (Math.random() * variance * 2 - variance)))
-  }));
-};
-
-const cpuData = generateHistoryData(24, 45, 15);
-const netData = generateHistoryData(24, 20, 10);
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function ServerDetail() {
   const [, params] = useRoute("/server/:id");
   const serverId = params?.id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
+  const [selectedOs, setSelectedOs] = useState<string>("");
+  const [vncLoading, setVncLoading] = useState(false);
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
+    enabled: !!serverId
+  });
+
+  const { data: networkInfo } = useQuery({
+    queryKey: ['network', serverId],
+    queryFn: () => api.getNetworkInfo(serverId || ''),
+    enabled: !!serverId
+  });
+
+  const { data: osTemplates } = useQuery({
+    queryKey: ['os-templates', serverId],
+    queryFn: () => api.getOsTemplates(serverId || ''),
+    enabled: !!serverId
+  });
+
+  const { data: trafficData } = useQuery({
+    queryKey: ['traffic', serverId],
+    queryFn: () => api.getTrafficHistory(serverId || ''),
     enabled: !!serverId
   });
 
@@ -74,11 +100,109 @@ export default function ServerDetail() {
     }
   });
 
+  const reinstallMutation = useMutation({
+    mutationFn: ({ id, osId }: { id: string, osId: number }) => 
+      api.reinstallServer(id, osId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      setReinstallDialogOpen(false);
+      toast({
+        title: "Reinstallation Started",
+        description: "Server is being reinstalled. This may take a few minutes.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Reinstallation Failed",
+        description: "Failed to start reinstallation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown') => {
     if (serverId) {
       powerMutation.mutate({ id: serverId, action });
     }
   };
+
+  const handleOpenVnc = async () => {
+    if (!serverId) return;
+    
+    setVncLoading(true);
+    try {
+      const vnc = await api.getVncDetails(serverId);
+      if (vnc?.url) {
+        window.open(vnc.url, '_blank', 'width=1024,height=768');
+      } else {
+        toast({
+          title: "Console",
+          description: "Opening VNC console in VirtFusion panel...",
+        });
+        const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
+        window.open(panelUrl, '_blank', 'width=1024,height=768');
+      }
+    } catch (error) {
+      toast({
+        title: "Console",
+        description: "Opening VNC console in VirtFusion panel...",
+      });
+      const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
+      window.open(panelUrl, '_blank', 'width=1024,height=768');
+    } finally {
+      setVncLoading(false);
+    }
+  };
+
+  const handleReinstall = () => {
+    if (!serverId || !selectedOs) return;
+    reinstallMutation.mutate({ id: serverId, osId: parseInt(selectedOs) });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copied",
+      description: "Copied to clipboard",
+    });
+  };
+
+  // Format traffic data for chart
+  const chartData = trafficData && Array.isArray(trafficData) && trafficData.length > 0
+    ? trafficData.slice(-24).map((item: any, index: number) => ({
+        time: `${index}:00`,
+        inbound: item.in || item.inbound || item.rx || 0,
+        outbound: item.out || item.outbound || item.tx || 0,
+      }))
+    : Array.from({ length: 24 }, (_, i) => ({
+        time: `${i}:00`,
+        inbound: 0,
+        outbound: 0,
+      }));
+
+  // Parse OS templates
+  const osOptions: Array<{ id: string; name: string; group: string }> = [];
+  if (osTemplates) {
+    if (Array.isArray(osTemplates)) {
+      osTemplates.forEach((group: any) => {
+        if (group.templates && Array.isArray(group.templates)) {
+          group.templates.forEach((template: any) => {
+            osOptions.push({
+              id: template.id?.toString() || '',
+              name: template.name || 'Unknown OS',
+              group: group.name || 'Other'
+            });
+          });
+        } else if (group.id) {
+          osOptions.push({
+            id: group.id?.toString() || '',
+            name: group.name || 'Unknown OS',
+            group: 'Other'
+          });
+        }
+      });
+    }
+  }
 
   if (isLoading) {
     return (
@@ -114,48 +238,61 @@ export default function ServerDetail() {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
                <Link href="/servers">
-                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-white hover:bg-white/5">
+                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-white hover:bg-white/5" data-testid="button-back">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
-              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name}</h1>
+              <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
               <div className={cn(
                 "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
                 server.status === 'running' ? "bg-green-500 shadow-green-500/50" : 
                 server.status === 'stopped' ? "bg-red-500 shadow-red-500/50" :
                 "bg-yellow-500 shadow-yellow-500/50"
-              )} />
+              )} data-testid="status-indicator" />
             </div>
             
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
               <div className="flex items-center gap-2">
                 <div className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] font-mono text-white border border-white/10">IP</div>
-                <span className="text-white/80 font-mono">{server.primaryIp}</span>
+                <span className="text-white/80 font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
+                <button 
+                  onClick={() => copyToClipboard(server.primaryIp)} 
+                  className="text-muted-foreground hover:text-white"
+                  data-testid="button-copy-ip"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5" />
-                <span className="text-white/80">{server.id}.ozvps.com.au</span>
+                <span className="text-white/80">{server.location.name}</span>
               </div>
               <div className="flex items-center gap-2">
                 <AlignLeft className="h-3.5 w-3.5" />
-                <span className="text-white/80">Production Web Server</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <User className="h-3.5 w-3.5" />
-                <span className="text-white/80">Admin (Root)</span>
+                <span className="text-white/80">{server.image.name}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="secondary" className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9">
-              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+            <Button 
+              variant="secondary" 
+              className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9"
+              onClick={handleOpenVnc}
+              disabled={vncLoading}
+              data-testid="button-console"
+            >
+              {vncLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+              )}
               Console
             </Button>
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0">
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0" data-testid="button-power-options">
                   <Power className="h-4 w-4 mr-2" />
                   Power Options
                   <ChevronDown className="h-3 w-3 ml-2 opacity-70" />
@@ -166,6 +303,7 @@ export default function ServerDetail() {
                     className="focus:bg-white/10 cursor-pointer text-green-400 focus:text-green-400"
                     disabled={server.status === 'running'}
                     onClick={() => handlePowerAction('boot')}
+                    data-testid="menu-item-start"
                   >
                    <Power className="h-4 w-4 mr-2" /> Start Server
                  </DropdownMenuItem>
@@ -173,6 +311,7 @@ export default function ServerDetail() {
                     className="focus:bg-white/10 cursor-pointer text-yellow-400 focus:text-yellow-400"
                     disabled={server.status !== 'running'}
                     onClick={() => handlePowerAction('reboot')}
+                    data-testid="menu-item-reboot"
                   >
                    <RotateCw className="h-4 w-4 mr-2" /> Reboot
                  </DropdownMenuItem>
@@ -180,6 +319,7 @@ export default function ServerDetail() {
                     className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
                     disabled={server.status === 'stopped'}
                     onClick={() => handlePowerAction('shutdown')}
+                    data-testid="menu-item-shutdown"
                   >
                    <Power className="h-4 w-4 mr-2 rotate-180" /> Shutdown
                  </DropdownMenuItem>
@@ -196,8 +336,8 @@ export default function ServerDetail() {
                   <Cpu className="h-5 w-5" />
                </div>
                <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore @ 3.5GHz</div>
-                  <div className="text-xs text-muted-foreground">AMD EPYC 7003</div>
+                  <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore</div>
+                  <div className="text-xs text-muted-foreground">CPU Cores</div>
                </div>
              </div>
              <div className="space-y-1.5">
@@ -224,8 +364,8 @@ export default function ServerDetail() {
                   <Activity className="h-5 w-5" />
                </div>
                <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{server.plan.specs.ram / 1024} GB RAM</div>
-                  <div className="text-xs text-muted-foreground">DDR4 ECC Memory</div>
+                  <div className="text-sm font-bold text-white">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'} RAM</div>
+                  <div className="text-xs text-muted-foreground">Memory</div>
                </div>
              </div>
              <div className="space-y-1.5">
@@ -253,7 +393,7 @@ export default function ServerDetail() {
                </div>
                <div className="flex-1">
                   <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB Storage</div>
-                  <div className="text-xs text-muted-foreground">NVMe SSD Array</div>
+                  <div className="text-xs text-muted-foreground">NVMe SSD</div>
                </div>
              </div>
              <div className="space-y-1.5">
@@ -279,8 +419,10 @@ export default function ServerDetail() {
                 <Network className="h-5 w-5" />
              </div>
              <div>
-                <div className="text-sm font-bold text-white">2.58 GB</div>
-                <div className="text-xs text-muted-foreground">Traffic today</div>
+                <div className="text-sm font-bold text-white" data-testid="text-traffic">
+                  {server.primaryIp !== 'N/A' ? server.primaryIp : 'No IP'}
+                </div>
+                <div className="text-xs text-muted-foreground">Primary IP</div>
              </div>
           </GlassCard>
         </div>
@@ -289,11 +431,12 @@ export default function ServerDetail() {
         <Tabs defaultValue="statistics" className="space-y-6">
           <div className="border-b border-white/10">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
-              {["Statistics", "IP Management", "Reinstallation", "Rescue", "Configuration", "Inventory", "Notes", "Activity Log"].map(tab => (
+              {["Statistics", "IP Management", "Reinstallation", "Rescue", "Configuration"].map(tab => (
                  <TabsTrigger 
                     key={tab} 
                     value={tab.toLowerCase().replace(' ', '-')}
                     className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-white"
+                    data-testid={`tab-${tab.toLowerCase().replace(' ', '-')}`}
                   >
                     {tab}
                  </TabsTrigger>
@@ -314,6 +457,7 @@ export default function ServerDetail() {
                           "px-3 py-1 rounded text-xs font-bold transition-colors",
                           i === 0 ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-muted-foreground hover:text-white hover:bg-white/5"
                         )}
+                        data-testid={`button-range-${range.toLowerCase().replace(' ', '-')}`}
                       >
                         {range}
                       </button>
@@ -321,7 +465,7 @@ export default function ServerDetail() {
                 </div>
                 
                 <h3 className="text-sm font-medium text-white uppercase tracking-wider text-center flex-1">
-                  Bandwidth Usage (Port 3)
+                  Bandwidth Usage
                 </h3>
 
                 <div className="flex items-center gap-2">
@@ -331,13 +475,12 @@ export default function ServerDetail() {
                       <Home className="h-4 w-4 cursor-pointer hover:text-white" />
                       <Maximize2 className="h-4 w-4 cursor-pointer hover:text-white" />
                    </div>
-                   <Button size="sm" variant="outline" className="h-7 text-xs border-white/10 ml-2">BREAKDOWN</Button>
                 </div>
               </div>
 
               <div className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={netData}>
+                  <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -355,8 +498,8 @@ export default function ServerDetail() {
                       contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
                       itemStyle={{ color: '#fff' }}
                     />
-                    <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIn)" name="Inbound" />
-                    <Area type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorOut)" name="Outbound" />
+                    <Area type="monotone" dataKey="inbound" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorIn)" name="Inbound" />
+                    <Area type="monotone" dataKey="outbound" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorOut)" name="Outbound" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -374,15 +517,205 @@ export default function ServerDetail() {
             </GlassCard>
           </TabsContent>
 
-          {["ip-management", "reinstallation", "rescue", "configuration", "inventory", "notes", "activity-log"].map(tab => (
+          {/* IP Management Tab */}
+          <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
+            <GlassCard className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-white">Network Interfaces</h3>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-white/10"
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['network', serverId] })}
+                  data-testid="button-refresh-network"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              
+              {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
+                <div className="space-y-4">
+                  {networkInfo.interfaces.map((iface, index) => (
+                    <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Network className="h-5 w-5 text-blue-400" />
+                        <span className="font-mono font-bold text-white">{iface.name}</span>
+                        <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
+                      </div>
+                      
+                      {iface.ipv4.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
+                          {iface.ipv4.map((ip, ipIndex) => (
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-md">
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono text-white" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
+                                <span className="text-xs text-muted-foreground">/ {ip.netmask}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
+                                <button 
+                                  onClick={() => copyToClipboard(ip.address)}
+                                  className="text-muted-foreground hover:text-white p-1"
+                                  data-testid={`button-copy-ip-${index}-${ipIndex}`}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {iface.ipv6.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv6 Addresses</div>
+                          {iface.ipv6.map((ip, ipIndex) => (
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-md">
+                              <span className="font-mono text-white text-sm">{ip.address}</span>
+                              <button 
+                                onClick={() => copyToClipboard(ip.address)}
+                                className="text-muted-foreground hover:text-white p-1"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Network className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No network interfaces found</p>
+                </div>
+              )}
+            </GlassCard>
+          </TabsContent>
+
+          {/* Reinstallation Tab */}
+          <TabsContent value="reinstallation" className="space-y-4 animate-in fade-in duration-300">
+            <GlassCard className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">Reinstall Operating System</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This will completely erase all data on your server and install a fresh operating system.
+                    Make sure to backup any important data before proceeding.
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-red-400">Warning: Data Loss</div>
+                      <div className="text-sm text-red-400/80">
+                        All existing data on the server will be permanently deleted. This action cannot be undone.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-white mb-2 block">Current Operating System</label>
+                    <div className="p-3 bg-white/5 rounded-md border border-white/10">
+                      <span className="text-white">{server.image.name}</span>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => setReinstallDialogOpen(true)}
+                    data-testid="button-reinstall"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reinstall Server
+                  </Button>
+                </div>
+              </div>
+            </GlassCard>
+          </TabsContent>
+
+          {/* Other Tabs Placeholder */}
+          {["rescue", "configuration"].map(tab => (
             <TabsContent key={tab} value={tab}>
                <GlassCard className="p-12 text-center border-dashed border-white/10 bg-transparent">
-                  <p className="text-muted-foreground">This module is available in the full version.</p>
+                  <p className="text-muted-foreground">This feature is coming soon.</p>
                </GlassCard>
             </TabsContent>
           ))}
         </Tabs>
       </div>
+
+      {/* Reinstall Dialog */}
+      <Dialog open={reinstallDialogOpen} onOpenChange={setReinstallDialogOpen}>
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Reinstall Server</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Select an operating system to install on your server. This will erase all existing data.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white">Operating System</label>
+              <Select value={selectedOs} onValueChange={setSelectedOs}>
+                <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-os">
+                  <SelectValue placeholder="Select an operating system" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a0a] border-white/10">
+                  {osOptions.length > 0 ? (
+                    osOptions.map((os) => (
+                      <SelectItem 
+                        key={os.id} 
+                        value={os.id}
+                        className="text-white focus:bg-white/10"
+                      >
+                        {os.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="unavailable" disabled className="text-muted-foreground">
+                      No templates available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setReinstallDialogOpen(false)}
+              className="border-white/10"
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleReinstall}
+              disabled={!selectedOs || reinstallMutation.isPending}
+              data-testid="button-confirm-reinstall"
+            >
+              {reinstallMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reinstalling...
+                </>
+              ) : (
+                'Confirm Reinstall'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
