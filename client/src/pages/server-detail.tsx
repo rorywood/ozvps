@@ -542,7 +542,7 @@ export default function ServerDetail() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <img src={flagAU} alt="Australia" className="h-3.5 w-5 object-cover rounded-sm" />
+                <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
                 <span className="text-white/80">{server.location.name}</span>
               </div>
               <div className="flex items-center gap-2">
