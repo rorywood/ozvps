@@ -33,15 +33,17 @@ export async function registerRoutes(
     try {
       const { action } = req.body;
       
-      if (!['boot', 'reboot', 'shutdown'].includes(action)) {
+      if (!['boot', 'reboot', 'shutdown', 'poweroff'].includes(action)) {
         return res.status(400).json({ error: 'Invalid action' });
       }
 
+      // Map frontend actions to VirtFusion actions
       const virtfusionAction = action === 'boot' ? 'start' : 
                               action === 'shutdown' ? 'stop' : 
+                              action === 'poweroff' ? 'poweroff' :
                               'restart';
 
-      const result = await virtfusionClient.powerAction(req.params.id, virtfusionAction);
+      const result = await virtfusionClient.powerAction(req.params.id, virtfusionAction as any);
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');

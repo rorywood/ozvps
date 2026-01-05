@@ -99,15 +99,52 @@ export default function ServerDetail() {
     refetchInterval: 5000, // Poll every 5 seconds
   });
 
+  const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
+
   const powerMutation = useMutation({
-    mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
+    mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' | 'poweroff' }) => 
       api.powerAction(id, action),
+    onMutate: ({ action }) => {
+      setPowerActionPending(action);
+    },
     onSuccess: (_, { action }) => {
-      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-      queryClient.invalidateQueries({ queryKey: ['servers'] });
       toast({
         title: "Action Initiated",
-        description: `Server ${action} command sent successfully.`,
+        description: action === 'boot' ? "Starting server..." : 
+                     action === 'reboot' ? "Rebooting server..." :
+                     action === 'poweroff' ? "Force stopping server..." :
+                     "Shutting down server...",
+      });
+      // Poll for status updates
+      const pollInterval = setInterval(async () => {
+        await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        const updatedServer = queryClient.getQueryData(['server', serverId]) as any;
+        if (updatedServer) {
+          const isComplete = 
+            (action === 'boot' && updatedServer.status === 'running') ||
+            ((action === 'shutdown' || action === 'poweroff') && updatedServer.status === 'stopped') ||
+            (action === 'reboot' && updatedServer.status === 'running');
+          if (isComplete) {
+            clearInterval(pollInterval);
+            setPowerActionPending(null);
+            queryClient.invalidateQueries({ queryKey: ['servers'] });
+          }
+        }
+      }, 2000);
+      // Clear after 30 seconds regardless
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setPowerActionPending(null);
+        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        queryClient.invalidateQueries({ queryKey: ['servers'] });
+      }, 30000);
+    },
+    onError: () => {
+      setPowerActionPending(null);
+      toast({
+        title: "Action Failed",
+        description: "Failed to perform power action. Please try again.",
+        variant: "destructive",
       });
     }
   });
@@ -197,7 +234,7 @@ export default function ServerDetail() {
     }
   });
 
-  const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown') => {
+  const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown' | 'poweroff') => {
     if (serverId) {
       powerMutation.mutate({ id: serverId, action });
     }
@@ -426,12 +463,24 @@ export default function ServerDetail() {
                 </Button>
               </Link>
               <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
-              <div className={cn(
-                "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
-                server.status === 'running' ? "bg-green-500 shadow-green-500/50" : 
-                server.status === 'stopped' ? "bg-red-500 shadow-red-500/50" :
-                "bg-yellow-500 shadow-yellow-500/50"
-              )} data-testid="status-indicator" />
+              {powerActionPending ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
+                  <span className="text-xs text-yellow-400 font-medium">
+                    {powerActionPending === 'boot' ? 'Starting...' :
+                     powerActionPending === 'reboot' ? 'Rebooting...' :
+                     powerActionPending === 'poweroff' ? 'Stopping...' :
+                     'Shutting down...'}
+                  </span>
+                </div>
+              ) : (
+                <div className={cn(
+                  "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
+                  server.status === 'running' ? "bg-green-500 shadow-green-500/50" : 
+                  server.status === 'stopped' ? "bg-red-500 shadow-red-500/50" :
+                  "bg-yellow-500 shadow-yellow-500/50"
+                )} data-testid="status-indicator" />
+              )}
             </div>
             
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
@@ -502,8 +551,16 @@ export default function ServerDetail() {
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0" data-testid="button-power-options">
-                  <Power className="h-4 w-4 mr-2" />
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-9 shadow-[0_0_15px_rgba(37,99,235,0.3)] border-0" 
+                  data-testid="button-power-options"
+                  disabled={!!powerActionPending}
+                >
+                  {powerActionPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Power className="h-4 w-4 mr-2" />
+                  )}
                   Power Options
                   <ChevronDown className="h-3 w-3 ml-2 opacity-70" />
                 </Button>
@@ -511,7 +568,7 @@ export default function ServerDetail() {
               <DropdownMenuContent align="end" className="w-48 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={server.status === 'running'}
+                    disabled={server.status === 'running' || !!powerActionPending}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
                   >
@@ -519,19 +576,27 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-white/10 cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={server.status !== 'running'}
+                    disabled={server.status !== 'running' || !!powerActionPending}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
                   >
                    <RotateCw className="h-4 w-4 mr-2" /> Reboot
                  </DropdownMenuItem>
                  <DropdownMenuItem 
-                    className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={server.status === 'stopped'}
+                    className="focus:bg-white/10 cursor-pointer text-orange-400 focus:text-orange-400"
+                    disabled={server.status === 'stopped' || !!powerActionPending}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
                   >
-                   <Power className="h-4 w-4 mr-2 rotate-180" /> Shutdown
+                   <Power className="h-4 w-4 mr-2" /> Shutdown
+                 </DropdownMenuItem>
+                 <DropdownMenuItem 
+                    className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
+                    disabled={server.status === 'stopped' || !!powerActionPending}
+                    onClick={() => handlePowerAction('poweroff')}
+                    data-testid="menu-item-poweroff"
+                  >
+                   <Power className="h-4 w-4 mr-2 rotate-180" /> Force Stop
                  </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

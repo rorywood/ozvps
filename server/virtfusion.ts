@@ -147,8 +147,13 @@ export class VirtFusionClient {
     return this.transformServer(response.data);
   }
 
-  async powerAction(serverId: string, action: 'start' | 'stop' | 'restart') {
-    const endpoint = action === 'start' ? 'boot' : action === 'stop' ? 'shutdown' : 'restart';
+  async powerAction(serverId: string, action: 'start' | 'stop' | 'restart' | 'poweroff') {
+    // Map action to VirtFusion endpoint
+    // VirtFusion has: boot, shutdown (graceful), restart, poweroff (hard)
+    const endpoint = action === 'start' ? 'boot' : 
+                     action === 'stop' ? 'shutdown' : 
+                     action === 'poweroff' ? 'poweroff' :
+                     'restart';
     await this.request(`/servers/${serverId}/power/${endpoint}`, {
       method: 'POST',
     });

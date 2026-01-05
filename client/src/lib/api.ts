@@ -41,7 +41,7 @@ class ApiClient {
     return response.json();
   }
 
-  async powerAction(id: string, action: 'boot' | 'reboot' | 'shutdown'): Promise<{ success: boolean }> {
+  async powerAction(id: string, action: 'boot' | 'reboot' | 'shutdown' | 'poweroff'): Promise<{ success: boolean }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/power`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
