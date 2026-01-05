@@ -46,10 +46,12 @@ Preferred communication style: Simple, everyday language.
   - **Step 1**: Backend enables VNC via POST `/servers/{id}/vnc` with `{ action: 'enable' }`
   - **Step 2**: Backend generates auth tokens via POST `/users/{extRelationId}/serverAuthenticationTokens/{serverId}`
   - **Step 3**: Backend returns two URLs: `authUrl` (token auth) and `vncUrl` (VNC console)
-  - **Step 4**: Frontend loads `authUrl` in a HIDDEN IFRAME to authenticate user with VirtFusion
-  - **Step 5**: After 1.5 seconds, frontend redirects to `vncUrl` which opens the VNC console
-  - **IMPORTANT**: VirtFusion's `redirect_to` parameter does NOT work - must use hidden iframe approach
+  - **Step 4**: Frontend opens `authUrl` in a POPUP WINDOW (this sets VirtFusion session cookie in that popup's context)
+  - **Step 5**: After 1.5 seconds, frontend navigates the SAME POPUP to `vncUrl` (cookies are preserved)
+  - **IMPORTANT**: VirtFusion's `redirect_to` parameter does NOT work
+  - **IMPORTANT**: Hidden iframes DO NOT WORK - cross-origin cookies don't transfer to main window (fails in incognito/fresh sessions)
   - **IMPORTANT**: Build auth URL using raw tokens (tokens['1'] and tokens['2']), NOT endpoint_complete (has HTML-encoded &amp;)
+  - **IMPORTANT**: Must use SINGLE POPUP for both auth and VNC - same browser context preserves cookies
   - extRelationId must be NUMERIC (1 to 18446744073709551615), not email string
   - **Security**: 15-minute auto-timeout disables VNC session; manual disable button available; auth tokens expire in 60 seconds
 - **VirtFusion API**: Bearer token authentication for backend communication
