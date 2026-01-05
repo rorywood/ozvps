@@ -68,6 +68,16 @@ interface VirtFusionUser {
   email: string;
   extRelationId: string;
   enabled: boolean;
+  timezone?: string;
+  twoFactorAuth?: boolean;
+  created?: string;
+  updated?: string;
+}
+
+interface VirtFusionUserUpdateRequest {
+  name?: string;
+  email?: string;
+  timezone?: string;
 }
 
 export class VirtFusionClient {
@@ -129,6 +139,42 @@ export class VirtFusionClient {
     } catch (error) {
       log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
       return null;
+    }
+  }
+
+  async getUserById(userId: number): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch user by ID ${userId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async updateUser(extRelationId: string, updates: VirtFusionUserUpdateRequest): Promise<VirtFusionUser | null> {
+    try {
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      return data.data;
+    } catch (error) {
+      log(`Failed to update user ${extRelationId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
+  async resetUserPassword(extRelationId: string, newPassword: string): Promise<boolean> {
+    try {
+      await this.request(`/users/${extRelationId}/byExtRelation/resetPassword`, {
+        method: 'POST',
+        body: JSON.stringify({ password: newPassword }),
+      });
+      return true;
+    } catch (error) {
+      log(`Failed to reset password for user ${extRelationId}: ${error}`, 'virtfusion');
+      throw error;
     }
   }
 
@@ -531,17 +577,35 @@ export class VirtFusionClient {
     const remoteState = (server as any).remoteState;
     let status: 'running' | 'stopped' | 'provisioning' | 'error';
     
-    if (remoteState && typeof remoteState.running === 'boolean') {
-      // Use live power status from hypervisor
-      status = remoteState.running ? 'running' : 'stopped';
-      
-      // Still check for suspended state
-      if (server.suspended) {
+    // server.state is the COMMISSION state (queued, building, complete, etc.)
+    // remoteState.state is the POWER state from hypervisor (running, stopped, etc.)
+    // remoteState.running is a boolean for power state
+    const commissionState = server.state?.toLowerCase() || '';
+    const powerState = remoteState?.state?.toLowerCase() || '';
+    
+    // Priority: suspended > buildFailed > commission state (if building) > power state
+    if (server.suspended) {
+      status = 'stopped';
+    } else if (server.buildFailed) {
+      status = 'error';
+    } else if (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying') {
+      status = 'provisioning';
+    } else if (powerState) {
+      // Use remoteState.state for power status - most reliable
+      if (powerState === 'running' || powerState === 'on' || powerState === 'online') {
+        status = 'running';
+      } else if (powerState === 'stopped' || powerState === 'shutdown' || powerState === 'shutoff' || powerState === 'poweroff' || powerState === 'off' || powerState === 'paused') {
         status = 'stopped';
+      } else {
+        // Unknown power state, fall back to running boolean
+        status = remoteState?.running ? 'running' : 'stopped';
       }
+    } else if (remoteState && typeof remoteState.running === 'boolean') {
+      // Use live power status from hypervisor boolean
+      status = remoteState.running ? 'running' : 'stopped';
     } else {
-      // Fallback to state-based detection
-      const stateValue = server.power_status || server.powerState || server.power || server.state || '';
+      // Final fallback to state-based detection using other fields
+      const stateValue = server.power_status || server.powerState || server.power || '';
       status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
     }
     

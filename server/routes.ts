@@ -195,5 +195,62 @@ export async function registerRoutes(
     }
   });
 
+  // User Profile endpoints
+  app.get('/api/user/profile', async (req, res) => {
+    try {
+      // For testing, use hardcoded user ID 2
+      // TODO: Replace with authenticated user ID when auth is implemented
+      const user = await virtfusionClient.getUserById(2);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json(user);
+    } catch (error: any) {
+      log(`Error fetching user profile: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch user profile' });
+    }
+  });
+
+  app.put('/api/user/profile', async (req, res) => {
+    try {
+      // For testing, use hardcoded extRelationId for user 2
+      // TODO: Replace with authenticated user's extRelationId when auth is implemented
+      const testExtRelationId = '2';
+      
+      const { name, email, timezone } = req.body;
+      
+      const updates: { name?: string; email?: string; timezone?: string } = {};
+      if (name) updates.name = name;
+      if (email) updates.email = email;
+      if (timezone) updates.timezone = timezone;
+      
+      const user = await virtfusionClient.updateUser(testExtRelationId, updates);
+      res.json(user);
+    } catch (error: any) {
+      log(`Error updating user profile: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update user profile' });
+    }
+  });
+
+  app.post('/api/user/password', async (req, res) => {
+    try {
+      // For testing, use hardcoded extRelationId for user 2
+      // TODO: Replace with authenticated user's extRelationId when auth is implemented
+      const testExtRelationId = '2';
+      
+      const { newPassword } = req.body;
+      
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      
+      await virtfusionClient.resetUserPassword(testExtRelationId, newPassword);
+      res.json({ success: true, message: 'Password updated successfully' });
+    } catch (error: any) {
+      log(`Error changing password: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
   return httpServer;
 }

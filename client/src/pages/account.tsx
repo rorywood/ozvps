@@ -1,84 +1,333 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { 
   User, 
   Shield, 
   Key, 
-  ExternalLink
+  Loader2,
+  Save,
+  Eye,
+  EyeOff,
+  Mail,
+  Clock
 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export default function Account() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [timezone, setTimezone] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const { data: profile, isLoading, error } = useQuery({
+    queryKey: ['userProfile'],
+    queryFn: () => api.getUserProfile(),
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name || "");
+      setEmail(profile.email || "");
+      setTimezone(profile.timezone || "");
+    }
+  }, [profile]);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: (updates: { name?: string; email?: string; timezone?: string }) => 
+      api.updateUserProfile(updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
+      });
+      setIsEditing(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update profile.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (password: string) => api.changePassword(password),
+    onSuccess: () => {
+      toast({
+        title: "Password Changed",
+        description: "Your password has been updated successfully.",
+      });
+      setNewPassword("");
+      setConfirmPassword("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Password Change Failed",
+        description: error.message || "Failed to change password.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleSaveProfile = () => {
+    updateProfileMutation.mutate({ name, email, timezone });
+  };
+
+  const handleChangePassword = () => {
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "Passwords do not match.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    changePasswordMutation.mutate(newPassword);
+  };
+
   return (
     <AppShell>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Settings</h1>
-          <p className="text-muted-foreground">Manage your account and preferences</p>
+          <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Account Settings</h1>
+          <p className="text-muted-foreground">Manage your profile and security settings</p>
         </div>
 
-        <GlassCard className="p-12 flex flex-col items-center justify-center" data-testid="account-settings">
-          <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-            <User className="h-10 w-10 text-primary" />
+        {isLoading ? (
+          <GlassCard className="p-12 flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
+            <p className="text-muted-foreground">Loading profile...</p>
+          </GlassCard>
+        ) : error ? (
+          <GlassCard className="p-12 flex flex-col items-center justify-center">
+            <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+              <User className="h-8 w-8 text-yellow-400" />
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">Unable to Load Profile</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              There was an issue loading your profile. Please try again later.
+            </p>
+          </GlassCard>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <GlassCard className="p-6" data-testid="profile-section">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Profile Information</h3>
+                    <p className="text-sm text-muted-foreground">Your personal details</p>
+                  </div>
+                </div>
+                {!isEditing && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="border-white/10 hover:bg-white/5"
+                    onClick={() => setIsEditing(true)}
+                    data-testid="button-edit-profile"
+                  >
+                    Edit
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-muted-foreground">Name</Label>
+                  {isEditing ? (
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="bg-black/20 border-white/10 text-white"
+                      data-testid="input-name"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-white" data-testid="text-name">{profile?.name || 'Not set'}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-muted-foreground">Email</Label>
+                  {isEditing ? (
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="bg-black/20 border-white/10 text-white"
+                      data-testid="input-email"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-white" data-testid="text-email">{profile?.email || 'Not set'}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="timezone" className="text-muted-foreground">Timezone</Label>
+                  {isEditing ? (
+                    <Input
+                      id="timezone"
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      placeholder="e.g., Australia/Sydney"
+                      className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50"
+                      data-testid="input-timezone"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-white" data-testid="text-timezone">{profile?.timezone || 'Not set'}</span>
+                    </div>
+                  )}
+                </div>
+
+                {isEditing && (
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={updateProfileMutation.isPending}
+                      className="bg-primary hover:bg-primary/90"
+                      data-testid="button-save-profile"
+                    >
+                      {updateProfileMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Changes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setName(profile?.name || "");
+                        setEmail(profile?.email || "");
+                        setTimezone(profile?.timezone || "");
+                      }}
+                      className="border-white/10 hover:bg-white/5"
+                      data-testid="button-cancel-edit"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Account ID</span>
+                    <p className="text-white font-mono" data-testid="text-user-id">{profile?.id}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Two-Factor Auth</span>
+                    <p className={profile?.twoFactorAuth ? "text-green-400" : "text-yellow-400"} data-testid="text-2fa-status">
+                      {profile?.twoFactorAuth ? "Enabled" : "Disabled"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-6" data-testid="security-section">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Security</h3>
+                  <p className="text-sm text-muted-foreground">Change your password</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword" className="text-muted-foreground">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      className="bg-black/20 border-white/10 text-white pr-10 placeholder:text-muted-foreground/50"
+                      data-testid="input-new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-muted-foreground">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50"
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleChangePassword}
+                  disabled={changePasswordMutation.isPending || !newPassword || !confirmPassword}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  data-testid="button-change-password"
+                >
+                  {changePasswordMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Key className="h-4 w-4 mr-2" />
+                  )}
+                  Change Password
+                </Button>
+
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Password must be at least 8 characters long
+                </p>
+              </div>
+            </GlassCard>
           </div>
-          <h3 className="text-xl font-display font-medium text-white mb-2">Account Settings</h3>
-          <p className="text-muted-foreground text-center max-w-md mb-6">
-            Manage your profile, security settings, and preferences through your OzVPS account.
-          </p>
-          <Button className="bg-primary hover:bg-primary/90" data-testid="button-ozvps-account" asChild>
-            <a href="https://ozvps.com.au" target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Go to OzVPS
-            </a>
-          </Button>
-        </GlassCard>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <GlassCard className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
-                <User className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">Profile</h3>
-                <p className="text-sm text-muted-foreground">Personal information</p>
-              </div>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Update your name, email, and contact information.
-            </p>
-          </GlassCard>
-
-          <GlassCard className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">Security</h3>
-                <p className="text-sm text-muted-foreground">Password & 2FA</p>
-              </div>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Manage password, two-factor authentication, and session settings.
-            </p>
-          </GlassCard>
-
-          <GlassCard className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
-                <Key className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">API Access</h3>
-                <p className="text-sm text-muted-foreground">Tokens & keys</p>
-              </div>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Generate and manage API tokens for programmatic access.
-            </p>
-          </GlassCard>
-        </div>
+        )}
       </div>
     </AppShell>
   );

@@ -42,6 +42,18 @@ export interface User {
   currency: string;
 }
 
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  extRelationId?: string;
+  enabled: boolean;
+  timezone?: string;
+  twoFactorAuth?: boolean;
+  created?: string;
+  updated?: string;
+}
+
 export interface Invoice {
   id: string;
   amount: number;

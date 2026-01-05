@@ -166,6 +166,48 @@ class ApiClient {
     if (!response.ok) throw new Error('Failed to generate console URL');
     return response.json();
   }
+
+  // User Profile endpoints
+  async getUserProfile(): Promise<{
+    id: number;
+    name: string;
+    email: string;
+    extRelationId?: string;
+    enabled: boolean;
+    timezone?: string;
+    twoFactorAuth?: boolean;
+    created?: string;
+    updated?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/profile`);
+    if (!response.ok) throw new Error('Failed to fetch user profile');
+    return response.json();
+  }
+
+  async updateUserProfile(updates: { name?: string; email?: string; timezone?: string }): Promise<{
+    id: number;
+    name: string;
+    email: string;
+    timezone?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    if (!response.ok) throw new Error('Failed to update user profile');
+    return response.json();
+  }
+
+  async changePassword(newPassword: string): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${this.baseUrl}/user/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    });
+    if (!response.ok) throw new Error('Failed to change password');
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();
