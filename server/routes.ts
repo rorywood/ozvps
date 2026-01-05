@@ -544,24 +544,25 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Server is suspended. Console access is disabled.' });
       }
 
-      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+      // Get VNC WebSocket data directly from VirtFusion API
+      const vncData = await virtfusionClient.getServerVncAccess(serverId);
       
-      // Try to generate a server authentication token for seamless login
-      if (session.extRelationId && server.id) {
-        try {
-          // Use numeric server ID from VirtFusion server object, not the string serverId from URL
-          const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), session.extRelationId);
-          if (tokenData?.token) {
-            // Use token-based URL for seamless authentication
-            const consoleUrl = `${panelUrl}/auth/token/${tokenData.token}?redirect=/server/${server.uuid}/vnc`;
-            return res.json({ url: consoleUrl });
+      if (vncData?.wss?.url) {
+        const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+        // Return the VNC WebSocket URL with token - this provides direct console access
+        const consoleUrl = `${panelUrl}${vncData.wss.url}`;
+        return res.json({ 
+          url: consoleUrl,
+          vnc: {
+            password: vncData.password,
+            ip: vncData.ip,
+            port: vncData.port,
           }
-        } catch (tokenError: any) {
-          log(`Failed to generate auth token, falling back to direct URL: ${tokenError.message}`, 'api');
-        }
+        });
       }
       
-      // Fallback to direct URL (user may need to login on the panel)
+      // Fallback to direct panel URL (user may need to login)
+      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {

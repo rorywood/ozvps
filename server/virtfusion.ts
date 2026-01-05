@@ -286,6 +286,16 @@ export class VirtFusionClient {
     }
   }
 
+  async getServerVncAccess(serverId: string): Promise<{ ip: string; port: number; password: string; wss: { token: string; url: string } } | null> {
+    try {
+      const response = await this.request<{ data: { vnc: { ip: string; port: number; password: string; wss: { token: string; url: string } } } }>(`/servers/${serverId}/vnc`);
+      return response.data.vnc || null;
+    } catch (error) {
+      log(`Failed to fetch VNC access for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
   async powerAction(serverId: string, action: 'start' | 'stop' | 'restart' | 'poweroff') {
     // Map action to VirtFusion endpoint
     // VirtFusion has: boot, shutdown (graceful), restart, poweroff (hard)
