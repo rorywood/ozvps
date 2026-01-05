@@ -26,10 +26,9 @@ Preferred communication style: Simple, everyday language.
 - **Development**: tsx for hot reloading, Vite middleware for frontend
 
 ### Data Layer
-- **ORM**: Drizzle ORM with PostgreSQL dialect
-- **Schema Location**: `shared/schema.ts`
-- **Migrations**: `migrations/` directory via drizzle-kit
-- **Current Storage**: In-memory storage (MemStorage) for user sessions, designed for future database migration
+- **Storage**: In-memory only (no database required)
+- **Session Storage**: MemoryStorage class using JavaScript Map
+- **Data Sources**: All user data stored in Auth0 (credentials) and VirtFusion (servers, settings)
 
 ### Authentication Flow
 - **User Authentication**: Auth0 (Resource Owner Password Grant)
@@ -38,10 +37,14 @@ Preferred communication style: Simple, everyday language.
   - Environment variables: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`
 - **VirtFusion Integration**: Users are automatically linked to VirtFusion accounts by email
   - On login/register, the system finds or creates a VirtFusion user with the same email
-  - VirtFusion user ID is stored in session for server access control
-- **Session Management**: Cookie-based sessions stored in PostgreSQL
-  - Sessions contain Auth0 user ID, VirtFusion user ID, email, and name
+  - VirtFusion user ID stored in Auth0 app_metadata for persistence
+- **Session Management**: Cookie-based sessions stored in-memory
+  - Sessions contain Auth0 user ID, VirtFusion user ID, extRelationId, email, and name
   - 7-day session expiry with httpOnly secure cookies
+  - Sessions cleared on server restart (users re-login via Auth0)
+- **VNC Console Access**: Token-based seamless authentication
+  - Uses VirtFusion serverAuthenticationTokens API with extRelationId
+  - Generates one-time token URLs for VNC console access without re-authentication
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 
@@ -84,10 +87,10 @@ shared/           # Shared code between client/server
 - API token configured via `VIRTFUSION_API_TOKEN` environment variable
 - Endpoints consumed: servers, power actions, metrics, packages, locations
 
-### Database
-- PostgreSQL via `DATABASE_URL` environment variable
-- Drizzle ORM for schema management and queries
-- Session storage via connect-pg-simple (configured but optional)
+### Storage
+- No database required - all data stored externally in Auth0 and VirtFusion
+- Sessions stored in-memory (cleared on server restart, users re-login via Auth0)
+- PostgreSQL available but not used
 
 ### Third-Party Services
 - **Fonts**: Google Fonts (Inter, Outfit, JetBrains Mono)
