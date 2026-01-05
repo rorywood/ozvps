@@ -207,7 +207,7 @@ export class VirtFusionClient {
           return user;
         }
         
-        log(`Could not find existing user ${email} - they may have been created with a different extRelationId (e.g., from WHMCS)`, 'virtfusion');
+        log(`Could not find existing user ${email}`, 'virtfusion');
         return null;
       }
       log(`Failed to create VirtFusion user ${email}: ${error}`, 'virtfusion');
