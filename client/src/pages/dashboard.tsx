@@ -149,6 +149,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4">
                       <div className={cn(
                         "h-10 w-10 rounded-lg flex items-center justify-center border",
+                        server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500" :
                         server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500" : 
                         server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500" :
                         "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 animate-pulse"
@@ -190,16 +191,18 @@ export default function Dashboard() {
                       <div className="text-right min-w-[100px]">
                         <div className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border",
+                          server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :
                           server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
                           server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
                           "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
                         )}>
                           <div className={cn("w-1.5 h-1.5 rounded-full", 
+                            server.suspended ? "bg-yellow-400" :
                             server.status === 'running' ? "bg-green-400" : 
                             server.status === 'stopped' ? "bg-red-400" : 
                             "bg-yellow-400"
                           )} />
-                          {server.status.toUpperCase()}
+                          {server.suspended ? 'SUSPENDED' : server.status.toUpperCase()}
                         </div>
                       </div>
                     </div>
