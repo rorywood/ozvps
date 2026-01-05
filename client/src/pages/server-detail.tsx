@@ -61,7 +61,6 @@ export default function ServerDetail() {
   const queryClient = useQueryClient();
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
   const [selectedOs, setSelectedOs] = useState<string>("");
-  const [vncLoading, setVncLoading] = useState(false);
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
@@ -126,32 +125,15 @@ export default function ServerDetail() {
     }
   };
 
-  const handleOpenVnc = async () => {
+  const handleOpenVnc = () => {
     if (!serverId) return;
     
-    setVncLoading(true);
-    try {
-      const vnc = await api.getVncDetails(serverId);
-      if (vnc?.url) {
-        window.open(vnc.url, '_blank', 'width=1024,height=768');
-      } else {
-        toast({
-          title: "Console",
-          description: "Opening VNC console in VirtFusion panel...",
-        });
-        const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
-        window.open(panelUrl, '_blank', 'width=1024,height=768');
-      }
-    } catch (error) {
-      toast({
-        title: "Console",
-        description: "Opening VNC console in VirtFusion panel...",
-      });
-      const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
-      window.open(panelUrl, '_blank', 'width=1024,height=768');
-    } finally {
-      setVncLoading(false);
-    }
+    toast({
+      title: "Opening Console",
+      description: "VNC console opening in VirtFusion panel...",
+    });
+    const panelUrl = `https://panel.ozvps.com.au/server/${serverId}/console`;
+    window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
   };
 
   const handleReinstall = () => {
@@ -279,14 +261,9 @@ export default function ServerDetail() {
               variant="secondary" 
               className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9"
               onClick={handleOpenVnc}
-              disabled={vncLoading}
               data-testid="button-console"
             >
-              {vncLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-              )}
+              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
               Console
             </Button>
             
