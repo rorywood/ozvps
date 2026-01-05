@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import flagAU from "@/assets/flag-au.png";
 
 export default function Dashboard() {
   const { data: servers = [], isLoading, error } = useQuery<Server[]>({
@@ -161,6 +162,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{server.primaryIp}</span>
                           <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                          <img src={flagAU} alt="AU" className="h-3 w-4 object-cover rounded-sm" />
                           <span>{server.location?.name || 'Unknown'}</span>
                         </div>
                       </div>

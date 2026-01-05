@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import flagAU from "@/assets/flag-au.png";
 
 export default function ServerList() {
   const { toast } = useToast();
@@ -150,7 +151,10 @@ export default function ServerList() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 flex-1 text-sm">
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Location</div>
-                      <div className="text-white font-medium">{server.location.name}</div>
+                      <div className="text-white font-medium flex items-center gap-2">
+                        <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
+                        {server.location.name}
+                      </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Specs</div>
