@@ -511,21 +511,31 @@ export default function ServerDetail() {
               <div className="flex items-center gap-2">
                 <Button 
                   variant="secondary" 
-                  className="bg-green-600/20 hover:bg-green-600/30 text-green-400 border-green-500/30 shadow-none font-medium h-9"
+                  className={cn(
+                    "shadow-none font-medium h-9",
+                    powerActionPending 
+                      ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
+                      : "bg-green-600/20 hover:bg-green-600/30 text-green-400 border-green-500/30"
+                  )}
                   onClick={handleOpenVnc}
+                  disabled={!!powerActionPending}
                   data-testid="button-console"
                 >
                   <TerminalSquare className="h-4 w-4 mr-2" />
                   Console
-                  <Timer className="h-3 w-3 ml-2" />
-                  <span className="ml-1 text-xs font-mono">{formatTimeRemaining(vncTimeRemaining)}</span>
+                  {!powerActionPending && (
+                    <>
+                      <Timer className="h-3 w-3 ml-2" />
+                      <span className="ml-1 text-xs font-mono">{formatTimeRemaining(vncTimeRemaining)}</span>
+                    </>
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 text-red-400 hover:bg-red-600/20 hover:text-red-300"
                   onClick={handleDisableVnc}
-                  disabled={isDisablingVnc}
+                  disabled={isDisablingVnc || !!powerActionPending}
                   data-testid="button-disable-vnc"
                   title="Disable VNC Console"
                 >
@@ -535,9 +545,14 @@ export default function ServerDetail() {
             ) : (
               <Button 
                 variant="secondary" 
-                className="bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-none font-medium h-9"
+                className={cn(
+                  "shadow-none font-medium h-9",
+                  powerActionPending 
+                    ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
+                    : "bg-white/5 hover:bg-white/10 text-white border-white/10"
+                )}
                 onClick={handleOpenVnc}
-                disabled={isEnablingVnc}
+                disabled={isEnablingVnc || !!powerActionPending}
                 data-testid="button-console"
               >
                 {isEnablingVnc ? (
