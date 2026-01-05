@@ -81,6 +81,9 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
+      // Invalidate any existing sessions for this user (enforce single session)
+      await storage.deleteUserSessions(authResult.user.id);
+
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       
       const session = await storage.createSession({

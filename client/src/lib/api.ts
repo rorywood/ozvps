@@ -208,6 +208,29 @@ class ApiClient {
     if (!response.ok) throw new Error('Failed to change password');
     return response.json();
   }
+
+  async login(email: string, password: string): Promise<{ user: { id: number; email: string; name: string } }> {
+    const response = await fetch(`${this.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Invalid email or password');
+    }
+    return response.json();
+  }
+
+  async logout(): Promise<void> {
+    await fetch(`${this.baseUrl}/auth/logout`, { method: 'POST' });
+  }
+
+  async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string } } | null> {
+    const response = await fetch(`${this.baseUrl}/auth/me`);
+    if (!response.ok) return null;
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();
