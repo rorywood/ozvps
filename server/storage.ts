@@ -1,25 +1,17 @@
-import { type Session, type User, type UserMapping, sessions, users, userMappings } from "@shared/schema";
-import { db } from "./db";
-import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
-import bcrypt from "bcrypt";
+
+export interface Session {
+  id: string;
+  userId?: number | null;
+  auth0UserId?: string | null;
+  virtFusionUserId?: number | null;
+  extRelationId?: string | null;
+  email: string;
+  name?: string | null;
+  expiresAt: Date;
+}
 
 export interface IStorage {
-  // User mapping (Auth0 -> VirtFusion)
-  createUserMapping(data: { auth0UserId: string; email: string; name?: string; virtFusionUserId: number }): Promise<UserMapping>;
-  getUserMappingByAuth0Id(auth0UserId: string): Promise<UserMapping | undefined>;
-  getUserMappingByEmail(email: string): Promise<UserMapping | undefined>;
-  
-  // Legacy user methods (no longer used with Auth0)
-  createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  getUserById(id: number): Promise<User | undefined>;
-  updateUserVirtFusionData(userId: number, data: { virtFusionUserId: number; extRelationId: string; name?: string }): Promise<void>;
-  updateUser(userId: number, data: { name?: string }): Promise<void>;
-  updateUserPassword(userId: number, newPassword: string): Promise<void>;
-  updateUserStatus(userId: number, status: 'active' | 'disabled'): Promise<void>;
-  verifyPassword(user: User, password: string): Promise<boolean>;
-  
   createSession(data: {
     visitorId?: number;
     auth0UserId?: string;
@@ -35,75 +27,8 @@ export interface IStorage {
   deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void>;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User mapping methods
-  async createUserMapping(data: { auth0UserId: string; email: string; name?: string; virtFusionUserId: number }): Promise<UserMapping> {
-    const [mapping] = await db.insert(userMappings).values({
-      auth0UserId: data.auth0UserId,
-      email: data.email.toLowerCase(),
-      name: data.name,
-      virtFusionUserId: data.virtFusionUserId,
-    }).returning();
-    return mapping;
-  }
-
-  async getUserMappingByAuth0Id(auth0UserId: string): Promise<UserMapping | undefined> {
-    const [mapping] = await db.select().from(userMappings).where(eq(userMappings.auth0UserId, auth0UserId));
-    return mapping;
-  }
-
-  async getUserMappingByEmail(email: string): Promise<UserMapping | undefined> {
-    const [mapping] = await db.select().from(userMappings).where(eq(userMappings.email, email.toLowerCase()));
-    return mapping;
-  }
-
-  // Legacy user methods
-  async createUser(data: { email: string; password: string; name?: string; virtFusionUserId?: number; extRelationId?: string }): Promise<User> {
-    const passwordHash = await bcrypt.hash(data.password, 12);
-    const [user] = await db.insert(users).values({
-      email: data.email.toLowerCase(),
-      passwordHash,
-      name: data.name,
-      virtFusionUserId: data.virtFusionUserId,
-      extRelationId: data.extRelationId,
-    }).returning();
-    return user;
-  }
-
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
-    return user;
-  }
-
-  async getUserById(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-
-  async updateUserVirtFusionData(userId: number, data: { virtFusionUserId: number; extRelationId: string; name?: string }): Promise<void> {
-    await db.update(users).set({
-      virtFusionUserId: data.virtFusionUserId,
-      extRelationId: data.extRelationId,
-      name: data.name || undefined,
-    }).where(eq(users.id, userId));
-  }
-
-  async updateUser(userId: number, data: { name?: string }): Promise<void> {
-    await db.update(users).set(data).where(eq(users.id, userId));
-  }
-
-  async updateUserPassword(userId: number, newPassword: string): Promise<void> {
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
-  }
-
-  async updateUserStatus(userId: number, status: 'active' | 'disabled'): Promise<void> {
-    await db.update(users).set({ status }).where(eq(users.id, userId));
-  }
-
-  async verifyPassword(user: User, password: string): Promise<boolean> {
-    return bcrypt.compare(password, user.passwordHash);
-  }
+export class MemoryStorage implements IStorage {
+  private sessions: Map<string, Session> = new Map();
 
   async createSession(data: {
     visitorId?: number;
@@ -115,35 +40,52 @@ export class DatabaseStorage implements IStorage {
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
-    const [session] = await db.insert(sessions).values({
+    const session: Session = {
       id,
-      userId: data.visitorId,
-      auth0UserId: data.auth0UserId,
-      virtFusionUserId: data.virtFusionUserId,
-      extRelationId: data.extRelationId,
+      userId: data.visitorId || null,
+      auth0UserId: data.auth0UserId || null,
+      virtFusionUserId: data.virtFusionUserId || null,
+      extRelationId: data.extRelationId || null,
       email: data.email,
-      name: data.name,
+      name: data.name || null,
       expiresAt: data.expiresAt,
-    }).returning();
+    };
+    this.sessions.set(id, session);
     return session;
   }
 
   async getSession(id: string): Promise<Session | undefined> {
-    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
+    const session = this.sessions.get(id);
+    if (session && new Date(session.expiresAt) < new Date()) {
+      this.sessions.delete(id);
+      return undefined;
+    }
     return session;
   }
 
   async deleteSession(id: string): Promise<void> {
-    await db.delete(sessions).where(eq(sessions.id, id));
+    this.sessions.delete(id);
   }
 
   async deleteUserSessions(userId: number): Promise<void> {
-    await db.delete(sessions).where(eq(sessions.userId, userId));
+    const idsToDelete: string[] = [];
+    this.sessions.forEach((session, id) => {
+      if (session.userId === userId) {
+        idsToDelete.push(id);
+      }
+    });
+    idsToDelete.forEach(id => this.sessions.delete(id));
   }
 
   async deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void> {
-    await db.delete(sessions).where(eq(sessions.auth0UserId, auth0UserId));
+    const idsToDelete: string[] = [];
+    this.sessions.forEach((session, id) => {
+      if (session.auth0UserId === auth0UserId) {
+        idsToDelete.push(id);
+      }
+    });
+    idsToDelete.forEach(id => this.sessions.delete(id));
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemoryStorage();

@@ -49,12 +49,12 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
     req.userSession = {
       id: session.id,
-      userId: session.userId || 0,
-      auth0UserId: session.auth0UserId || null,
-      virtFusionUserId: session.virtFusionUserId,
-      extRelationId: session.extRelationId,
+      userId: session.userId ?? 0,
+      auth0UserId: session.auth0UserId ?? null,
+      virtFusionUserId: session.virtFusionUserId ?? null,
+      extRelationId: session.extRelationId ?? null,
       email: session.email,
-      name: session.name || undefined,
+      name: session.name ?? undefined,
     };
 
     next();
@@ -200,14 +200,19 @@ export async function registerRoutes(
 
       // Check for existing VirtFusion user ID in Auth0 metadata
       let virtFusionUserId = await auth0Client.getVirtFusionUserId(auth0Result.user.user_id);
+      let extRelationId: string | undefined;
       
       if (virtFusionUserId) {
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
+        // Get extRelationId from existing user
+        const vfUser = await virtfusionClient.getUserById(virtFusionUserId);
+        extRelationId = vfUser?.extRelationId;
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
         if (virtFusionUser) {
           virtFusionUserId = virtFusionUser.id;
+          extRelationId = virtFusionUser.extRelationId;
           
           // Store in Auth0 metadata for future logins
           await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, virtFusionUser.id);
@@ -222,8 +227,8 @@ export async function registerRoutes(
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
-        virtFusionUserId: virtFusionUserId,
-        extRelationId: undefined,
+        virtFusionUserId: virtFusionUserId ?? undefined,
+        extRelationId,
         email: email,
         name: auth0Result.user.name,
         auth0UserId: auth0Result.user.user_id,
@@ -520,9 +525,10 @@ export async function registerRoutes(
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;
+      const session = req.userSession!;
       
       // Get server to verify ownership and get UUID
-      const { server, error, status } = await getServerWithOwnershipCheck(serverId, req.userSession!.virtFusionUserId);
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
@@ -533,7 +539,22 @@ export async function registerRoutes(
 
       const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      // Use the standard VirtFusion console URL format with server UUID
+      // Try to generate a server authentication token for seamless login
+      if (session.extRelationId && server.id) {
+        try {
+          // Use numeric server ID from VirtFusion server object, not the string serverId from URL
+          const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), session.extRelationId);
+          if (tokenData?.token) {
+            // Use token-based URL for seamless authentication
+            const consoleUrl = `${panelUrl}/auth/token/${tokenData.token}?redirect=/server/${server.uuid}/vnc`;
+            return res.json({ url: consoleUrl });
+          }
+        } catch (tokenError: any) {
+          log(`Failed to generate auth token, falling back to direct URL: ${tokenError.message}`, 'api');
+        }
+      }
+      
+      // Fallback to direct URL (user may need to login on the panel)
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {
