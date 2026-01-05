@@ -144,17 +144,35 @@ export class VirtFusionClient {
 
   async findUserByEmail(email: string): Promise<VirtFusionUser | null> {
     try {
-      // Try the selfService endpoint to find user by email
-      const data = await this.request<{ data: VirtFusionUser }>(`/selfService/byUserEmail/${encodeURIComponent(email)}`);
-      if (data.data) {
-        return data.data;
+      // VirtFusion doesn't have a direct email lookup, so we paginate through users
+      const normalizedEmail = email.toLowerCase().trim();
+      let page = 1;
+      const maxPages = 50; // Safety limit
+      
+      while (page <= maxPages) {
+        const data = await this.request<{ 
+          data: VirtFusionUser[]; 
+          last_page: number;
+          current_page: number;
+        }>(`/users?page=${page}&results=100`);
+        
+        if (data.data && data.data.length > 0) {
+          const user = data.data.find(u => u.email?.toLowerCase() === normalizedEmail);
+          if (user) {
+            log(`Found VirtFusion user by email: ${email} (ID: ${user.id})`, 'virtfusion');
+            return user;
+          }
+        }
+        
+        // Check if we've reached the last page
+        if (page >= data.last_page || !data.data || data.data.length === 0) {
+          break;
+        }
+        page++;
       }
+      
       return null;
     } catch (error: any) {
-      // 404 means user doesn't exist - that's fine
-      if (error.message?.includes('404')) {
-        return null;
-      }
       log(`Failed to find user by email ${email}: ${error}`, 'virtfusion');
       return null;
     }
