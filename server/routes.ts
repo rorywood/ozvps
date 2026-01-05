@@ -547,7 +547,7 @@ export async function registerRoutes(
         log(`Failed to enable VNC for server ${serverId}: ${vncError.message}`, 'api');
       }
       
-      // Step 2: Get VNC access details
+      // Step 2: Get VNC access details for embedded noVNC
       let vncAccess = null;
       try {
         vncAccess = await virtfusionClient.getServerVncAccess(serverId);
@@ -556,7 +556,26 @@ export async function registerRoutes(
         log(`Failed to get VNC access: ${vncErr.message}`, 'api');
       }
       
-      // Step 3: Try to get auth token for SSO
+      // Return embedded VNC data if we have WebSocket access
+      if (vncAccess?.wss?.url && vncAccess?.password) {
+        // Build WebSocket URL from panel URL
+        const panelHost = new URL(panelUrl).host;
+        const wsUrl = `wss://${panelHost}${vncAccess.wss.url}`;
+        
+        log(`Embedded VNC WebSocket URL: ${wsUrl}`, 'api');
+        
+        return res.json({
+          embedded: true,
+          vnc: {
+            wsUrl,
+            password: vncAccess.password,
+            ip: vncAccess.ip,
+            port: vncAccess.port
+          }
+        });
+      }
+      
+      // Fallback: Try to get auth token for SSO to old panel (not preferred)
       try {
         const ownerData = await virtfusionClient.getServerOwner(serverId);
         const extRelationId = ownerData?.extRelationId;
@@ -574,8 +593,8 @@ export async function registerRoutes(
               const authUrl = `${panelUrl}/token_authenticate/?1=${tokens['1']}&2=${tokens['2']}`;
               const vncUrl = `${panelUrl}/server/${server.uuid}/vnc`;
               
-              log(`Generated auth URL: ${authUrl}`, 'api');
-              log(`VNC URL: ${vncUrl}`, 'api');
+              log(`Fallback: Generated auth URL: ${authUrl}`, 'api');
+              log(`Fallback: VNC URL: ${vncUrl}`, 'api');
               
               return res.json({ 
                 authUrl,
@@ -589,7 +608,7 @@ export async function registerRoutes(
         log(`Token generation failed: ${tokenErr.message}`, 'api');
       }
       
-      // Fallback to direct VNC URL
+      // Last fallback to direct VNC URL
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {
