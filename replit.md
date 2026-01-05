@@ -42,9 +42,15 @@ Preferred communication style: Simple, everyday language.
   - Sessions contain Auth0 user ID, VirtFusion user ID, extRelationId, email, and name
   - 7-day session expiry with httpOnly secure cookies
   - Sessions cleared on server restart (users re-login via Auth0)
-- **VNC Console Access**: Token-based seamless authentication
-  - Uses VirtFusion serverAuthenticationTokens API with extRelationId
-  - Generates one-time token URLs for VNC console access without re-authentication
+- **VNC Console Access**: Two-step seamless authentication (CRITICAL - DO NOT CHANGE)
+  - **Step 1**: Backend enables VNC via POST `/servers/{id}/vnc` with `{ action: 'enable' }`
+  - **Step 2**: Backend generates auth tokens via POST `/users/{extRelationId}/serverAuthenticationTokens/{serverId}`
+  - **Step 3**: Backend returns two URLs: `authUrl` (token auth) and `vncUrl` (VNC console)
+  - **Step 4**: Frontend loads `authUrl` in a HIDDEN IFRAME to authenticate user with VirtFusion
+  - **Step 5**: After 1.5 seconds, frontend redirects to `vncUrl` which opens the VNC console
+  - **IMPORTANT**: VirtFusion's `redirect_to` parameter does NOT work - must use hidden iframe approach
+  - **IMPORTANT**: Build auth URL using raw tokens (tokens['1'] and tokens['2']), NOT endpoint_complete (has HTML-encoded &amp;)
+  - extRelationId must be NUMERIC (1 to 18446744073709551615), not email string
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 
