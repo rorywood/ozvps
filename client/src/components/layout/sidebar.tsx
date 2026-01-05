@@ -21,7 +21,7 @@ export function Sidebar() {
   return (
     <div className="h-screen w-64 flex flex-col glass-panel border-r border-white/5 fixed left-0 top-0 z-50">
       <div className="p-6 flex items-center justify-center">
-        <img src={logo} alt="OzVPS" className="h-10 w-auto" data-testid="img-logo" />
+        <img src={logo} alt="OzVPS" className="h-16 w-auto" data-testid="img-logo" />
       </div>
 
       <div className="flex-1 px-3 py-4 space-y-1">
