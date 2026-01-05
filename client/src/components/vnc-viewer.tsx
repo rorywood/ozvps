@@ -35,6 +35,21 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
 
   const handleConnect = () => {
     setStatus('connected');
+    // Force cursor visibility on the canvas after connect
+    forceCursorVisible();
+  };
+  
+  // Force the canvas cursor to be visible by directly mutating the style
+  const forceCursorVisible = () => {
+    setTimeout(() => {
+      const vncContainer = document.querySelector('[data-testid="vnc-container"]');
+      if (vncContainer) {
+        const canvases = vncContainer.querySelectorAll('canvas');
+        canvases.forEach(canvas => {
+          canvas.style.setProperty('cursor', 'crosshair', 'important');
+        });
+      }
+    }, 100);
   };
 
   const handleDisconnect = () => {
@@ -145,6 +160,18 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Continuously force cursor visibility on canvas (noVNC uses inline styles)
+  useEffect(() => {
+    const forceInterval = setInterval(() => {
+      forceCursorVisible();
+    }, 500);
+    
+    // Initial force
+    forceCursorVisible();
+    
+    return () => clearInterval(forceInterval);
+  }, [key]);
 
   return (
     <div ref={containerRef} className="flex h-full bg-black">

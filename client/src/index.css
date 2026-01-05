@@ -78,4 +78,21 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
+
+  /* Override noVNC canvas cursor - force visible cursor on hover */
+  /* Target all canvas elements inside VNC container with maximum specificity */
+  [data-testid="vnc-container"] canvas,
+  [data-testid="vnc-container"] > canvas,
+  [data-testid="vnc-container"] div canvas,
+  [data-testid="vnc-container"] * canvas {
+    cursor: crosshair !important;
+  }
+  
+  /* Also target by class patterns noVNC might use */
+  canvas[class*="vnc"],
+  canvas[class*="rfb"],
+  .vnc-screen canvas,
+  div[class*="vnc"] canvas {
+    cursor: crosshair !important;
+  }
 }
