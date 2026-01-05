@@ -77,7 +77,8 @@ export default function ServerDetail() {
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
-    enabled: !!serverId
+    enabled: !!serverId,
+    refetchInterval: 10000, // Poll every 10 seconds for status updates
   });
 
   const { data: networkInfo } = useQuery({
