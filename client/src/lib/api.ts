@@ -29,6 +29,16 @@ export interface OsTemplate {
 class ApiClient {
   private baseUrl = '/api';
 
+  async checkHealth(): Promise<{ status: string; errorCode?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/health`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      return { status: 'error', errorCode: 'NETWORK_ERROR' };
+    }
+  }
+
   async listServers(): Promise<Server[]> {
     const response = await fetch(`${this.baseUrl}/servers`);
     if (!response.ok) throw new Error('Failed to fetch servers');

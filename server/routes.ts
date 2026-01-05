@@ -105,6 +105,29 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // System health check (public)
+  app.get('/api/health', async (req, res) => {
+    try {
+      const isConnected = await virtfusionClient.validateConnection();
+      if (!isConnected) {
+        log('Health check failed: VirtFusion API unreachable', 'api');
+        return res.status(503).json({ 
+          status: 'error', 
+          errorCode: 'VF_API_UNAVAILABLE',
+          message: 'VirtFusion API is unreachable'
+        });
+      }
+      res.json({ status: 'ok' });
+    } catch (error: any) {
+      log(`Health check error: ${error.message}`, 'api');
+      res.status(503).json({ 
+        status: 'error', 
+        errorCode: 'SYSTEM_ERROR',
+        message: 'System health check failed'
+      });
+    }
+  });
+
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
     try {

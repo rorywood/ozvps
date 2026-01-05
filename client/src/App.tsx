@@ -11,8 +11,33 @@ import ServerDetail from "@/pages/server-detail";
 import ServerConsole from "@/pages/server-console";
 import Account from "@/pages/account";
 import Login from "@/pages/login";
+import SystemError from "@/pages/system-error";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+
+function SystemHealthCheck({ children }: { children: React.ReactNode }) {
+  const { data: health, isLoading, refetch } = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api.checkHealth(),
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 30000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (health?.status === 'error') {
+    return <SystemError errorCode={health.errorCode} onRetry={() => refetch()} />;
+  }
+
+  return <>{children}</>;
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
@@ -106,7 +131,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <SystemHealthCheck>
+          <Router />
+        </SystemHealthCheck>
       </TooltipProvider>
     </QueryClientProvider>
   );
