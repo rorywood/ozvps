@@ -385,8 +385,24 @@ export class VirtFusionClient {
 
   async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
-      const body: any = { osid: osId };
-      if (hostname) body.hostname = hostname;
+      // First, get the current server to retrieve its name (required by VirtFusion API)
+      const serverResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
+      const server = serverResponse.data;
+      const serverName = server.name || `Server ${serverId}`;
+      
+      // Build the request body with all required parameters
+      // VirtFusion API requires: name, operatingSystemId
+      // Optional: hostname, vnc, ipv6, ssh_keys, email
+      const body: any = { 
+        name: serverName,
+        operatingSystemId: osId,
+      };
+      
+      if (hostname) {
+        body.hostname = hostname;
+      }
+      
+      log(`Reinstalling server ${serverId} with OS template ${osId}, name: ${serverName}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
