@@ -27,6 +27,10 @@ export default function Dashboard() {
     active_servers: servers.filter(s => s.status === 'running').length,
     total_cpu_cores: servers.reduce((sum, s) => sum + (s.plan?.specs?.vcpu || 0), 0),
     total_ram_gb: Math.round(servers.reduce((sum, s) => sum + (s.plan?.specs?.ram || 0), 0) / 1024),
+    total_disk_gb: servers.reduce((sum, s) => sum + (s.plan?.specs?.disk || 0), 0),
+    avg_disk_usage: servers.length > 0 
+      ? Math.round(servers.reduce((sum, s) => sum + (s.stats?.disk_usage || 0), 0) / servers.length) 
+      : 0,
   };
 
   return (
@@ -87,13 +91,16 @@ export default function Dashboard() {
           <GlassCard className="p-4 flex flex-col justify-between h-32 relative overflow-hidden group">
             <div className="absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-green-500/10 to-transparent group-hover:from-green-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between relative z-10">
-              <span className="text-sm font-medium text-muted-foreground">Status</span>
-              <Activity className="h-4 w-4 text-green-500" />
+              <span className="text-sm font-medium text-muted-foreground">Disk Storage</span>
+              <HardDrive className="h-4 w-4 text-green-500" />
             </div>
             <div className="relative z-10">
-              <div className="text-2xl font-bold text-green-400 font-display" data-testid="text-status">Ready</div>
+              <div className="text-3xl font-bold text-white font-display" data-testid="text-disk-gb">{stats.total_disk_gb} <span className="text-lg text-muted-foreground font-normal">GB</span></div>
+              <div className="w-full bg-white/10 h-1 mt-3 rounded-full overflow-hidden">
+                <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${stats.avg_disk_usage}%` }} />
+              </div>
               <div className="text-xs text-muted-foreground mt-1">
-                All Systems Online
+                {stats.avg_disk_usage}% avg usage
               </div>
             </div>
           </GlassCard>
@@ -170,6 +177,13 @@ export default function Dashboard() {
                         <div className="text-xs text-muted-foreground mb-1">RAM Usage</div>
                         <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
                           <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${server.stats?.ram_usage || 0}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="hidden lg:block">
+                        <div className="text-xs text-muted-foreground mb-1">Disk Usage</div>
+                        <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${server.stats?.disk_usage || 0}%` }} />
                         </div>
                       </div>
 
