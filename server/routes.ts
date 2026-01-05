@@ -204,16 +204,8 @@ export async function registerRoutes(
       
       if (virtFusionUserId) {
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
-        // Fetch the actual extRelationId from VirtFusion (may differ from email for legacy users)
-        const vfUser = await virtfusionClient.getUserById(virtFusionUserId);
-        if (vfUser) {
-          extRelationId = vfUser.extRelationId;
-          log(`Fetched extRelationId from VirtFusion: ${extRelationId}`, 'auth');
-        } else {
-          // Fallback to email if user lookup fails
-          extRelationId = email.toLowerCase().trim();
-          log(`VirtFusion user lookup failed, using email as extRelationId: ${extRelationId}`, 'auth');
-        }
+        // For existing users, we'll get extRelationId from server owner data when needed
+        // Don't set it here as user lookup by ID doesn't work reliably in VirtFusion
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
@@ -223,7 +215,7 @@ export async function registerRoutes(
           
           // Store in Auth0 metadata for future logins
           await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, virtFusionUser.id);
-          log(`Created VirtFusion user and stored in Auth0: ${virtFusionUser.id}`, 'auth');
+          log(`Created VirtFusion user and stored in Auth0: ${virtFusionUser.id} with extRelationId: ${extRelationId}`, 'auth');
         }
       }
 
@@ -544,25 +536,30 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Server is suspended. Console access is disabled.' });
       }
 
-      // Get VNC WebSocket data directly from VirtFusion API
-      const vncData = await virtfusionClient.getServerVncAccess(serverId);
+      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
       
-      if (vncData?.wss?.url) {
-        const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
-        // Return the VNC WebSocket URL with token - this provides direct console access
-        const consoleUrl = `${panelUrl}${vncData.wss.url}`;
-        return res.json({ 
-          url: consoleUrl,
-          vnc: {
-            password: vncData.password,
-            ip: vncData.ip,
-            port: vncData.port,
+      // Try to get extRelationId from server owner data and generate auth token
+      if (server.id) {
+        try {
+          // Fetch server with owner data to get the actual extRelationId
+          const ownerData = await virtfusionClient.getServerOwner(serverId);
+          if (ownerData?.extRelationId) {
+            const tokenData = await virtfusionClient.generateServerLoginTokens(server.id.toString(), ownerData.extRelationId);
+            if (tokenData?.token) {
+              // Use token-based URL for seamless authentication
+              const consoleUrl = `${panelUrl}/auth/token/${tokenData.token}?redirect=/server/${server.uuid}/vnc`;
+              log(`Generated console token URL for server ${serverId}`, 'api');
+              return res.json({ url: consoleUrl });
+            }
+          } else {
+            log(`Server ${serverId} owner has no extRelationId set`, 'api');
           }
-        });
+        } catch (tokenError: any) {
+          log(`Token auth failed: ${tokenError.message}`, 'api');
+        }
       }
       
-      // Fallback to direct panel URL (user may need to login)
-      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+      // Fallback to direct panel URL (user may need to login if extRelationId not set)
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {

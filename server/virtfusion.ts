@@ -96,6 +96,20 @@ export class VirtFusionClient {
     }
   }
 
+  // Generate a numeric ID from a string (for VirtFusion extRelationId which must be numeric)
+  private generateNumericId(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    // Make it positive and add timestamp suffix for uniqueness
+    const positiveHash = Math.abs(hash);
+    const timestamp = Date.now() % 1000000000; // Last 9 digits of timestamp
+    return `${positiveHash}${timestamp}`;
+  }
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/api/v1${endpoint}`;
     
@@ -179,15 +193,18 @@ export class VirtFusionClient {
   async createUser(email: string, name: string): Promise<VirtFusionUser | null> {
     try {
       const normalizedEmail = email.toLowerCase().trim();
+      // Generate a numeric extRelationId from email hash (VirtFusion requires numeric ID)
+      const numericExtRelationId = this.generateNumericId(normalizedEmail);
       const data = await this.request<{ data: VirtFusionUser }>('/users', {
         method: 'POST',
         body: JSON.stringify({
           email: normalizedEmail,
           name,
+          extRelationId: numericExtRelationId,
           sendMail: false,
         }),
       });
-      log(`Created VirtFusion user: ${email} with ID ${data.data.id}`, 'virtfusion');
+      log(`Created VirtFusion user: ${email} with ID ${data.data.id} and extRelationId ${numericExtRelationId}`, 'virtfusion');
       return data.data;
     } catch (error: any) {
       // If user already exists (409), try to extract user data from response
@@ -292,6 +309,16 @@ export class VirtFusionClient {
       return response.data.vnc || null;
     } catch (error) {
       log(`Failed to fetch VNC access for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  async getServerOwner(serverId: string): Promise<{ id: number; extRelationId: string | null; name: string; email: string } | null> {
+    try {
+      const response = await this.request<{ data: { owner: { id: number; extRelationId: string | null; name: string; email: string } } }>(`/servers/${serverId}?with=owner`);
+      return response.data.owner || null;
+    } catch (error) {
+      log(`Failed to fetch server owner for ${serverId}: ${error}`, 'virtfusion');
       return null;
     }
   }

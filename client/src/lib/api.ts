@@ -193,12 +193,13 @@ class ApiClient {
   }
 
   async getConsoleUrl(id: string): Promise<{ 
-    url: string; 
+    url?: string;
+    embedded?: boolean;
     vnc?: { 
+      wsUrl?: string;
       ip: string; 
       port: number; 
       password: string; 
-      enabled: boolean;
     }; 
   }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/console-url`, {

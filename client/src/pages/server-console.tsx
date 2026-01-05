@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Monitor } from "lucide-react";
+import { Link } from "wouter";
 
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
@@ -49,16 +50,14 @@ export default function ServerConsole() {
             Unable to enable VNC console. The server may be powered off or VNC may not be supported.
           </p>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => refetch()} className="border-white/10 hover:bg-white/5 text-white">
+            <Button variant="outline" onClick={() => refetch()} className="border-white/10 hover:bg-white/5 text-white" data-testid="button-retry">
               Try Again
             </Button>
-            <Button 
-              variant="outline" 
-              className="border-white/10 hover:bg-white/5 text-white"
-              onClick={() => window.close()}
-            >
-              Close Window
-            </Button>
+            <Link href={`/servers/${serverId}`}>
+              <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white" data-testid="button-back-to-server">
+                Back to Server
+              </Button>
+            </Link>
           </div>
         </GlassCard>
       </div>
