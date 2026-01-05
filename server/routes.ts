@@ -545,72 +545,51 @@ export async function registerRoutes(
         log(`VNC enabled successfully for server ${serverId}`, 'api');
       } catch (vncError: any) {
         log(`Failed to enable VNC for server ${serverId}: ${vncError.message}`, 'api');
-        // Continue anyway - VNC might already be enabled
       }
       
-      // Step 2: Get VNC details after enabling
-      let vncDetails = null;
+      // Step 2: Get VNC access details
+      let vncAccess = null;
       try {
-        vncDetails = await virtfusionClient.getVncDetails(serverId);
-        log(`VNC details for server ${serverId}: ${JSON.stringify(vncDetails)}`, 'api');
+        vncAccess = await virtfusionClient.getServerVncAccess(serverId);
+        log(`VNC access for server ${serverId}: ${JSON.stringify(vncAccess)}`, 'api');
       } catch (vncErr: any) {
-        log(`Failed to get VNC details: ${vncErr.message}`, 'api');
+        log(`Failed to get VNC access: ${vncErr.message}`, 'api');
       }
       
-      // Step 3: Try to get extRelationId and generate auth token
-      if (server.id) {
-        try {
-          const ownerData = await virtfusionClient.getServerOwner(serverId);
-          let extRelationId = ownerData?.extRelationId;
+      // Step 3: Try to get auth token for SSO
+      try {
+        const ownerData = await virtfusionClient.getServerOwner(serverId);
+        const extRelationId = ownerData?.extRelationId;
+        
+        if (extRelationId) {
+          const tokenData = await virtfusionClient.generateServerLoginTokens(
+            server.id.toString(), 
+            extRelationId.toString()
+          );
           
-          if (!extRelationId && ownerData?.id) {
-            log(`Owner ${ownerData.id} has no extRelationId, generating one...`, 'api');
-            const email = ownerData.email || session.email || '';
-            let hash = 0;
-            for (let i = 0; i < email.length; i++) {
-              const char = email.charCodeAt(i);
-              hash = ((hash << 5) - hash) + char;
-              hash = hash & hash;
-            }
-            const positiveHash = Math.abs(hash);
-            const timestamp = Date.now() % 1000000000;
-            extRelationId = `${positiveHash}${timestamp}`;
-            
-            const updated = await virtfusionClient.updateUserById(ownerData.id, { extRelationId });
-            if (updated) {
-              log(`Successfully set extRelationId ${extRelationId} for user ${ownerData.id}`, 'api');
-            } else {
-              log(`Failed to set extRelationId for user ${ownerData.id}`, 'api');
-              extRelationId = null;
+          if (tokenData?.authentication?.tokens) {
+            const tokens = tokenData.authentication.tokens;
+            if (tokens['1'] && tokens['2']) {
+              // Return auth URL and VNC URL separately - frontend will handle flow
+              const authUrl = `${panelUrl}/token_authenticate/?1=${tokens['1']}&2=${tokens['2']}`;
+              const vncUrl = `${panelUrl}/server/${server.uuid}/vnc`;
+              
+              log(`Generated auth URL: ${authUrl}`, 'api');
+              log(`VNC URL: ${vncUrl}`, 'api');
+              
+              return res.json({ 
+                authUrl,
+                vncUrl,
+                twoStep: true
+              });
             }
           }
-          
-          if (extRelationId) {
-            const tokenData = await virtfusionClient.generateServerLoginTokens(
-              server.id.toString(), 
-              extRelationId.toString()
-            );
-            if (tokenData?.authentication?.endpoint_complete) {
-              // Build tokens directly to avoid HTML entity issues
-              const tokens = tokenData.authentication.tokens;
-              if (tokens && tokens['1'] && tokens['2']) {
-                // Construct the URL manually using the raw tokens
-                const token1 = tokens['1'];
-                const token2 = tokens['2'];
-                const authUrl = `${panelUrl}/token_authenticate/?1=${token1}&2=${token2}&redirect_to=${encodeURIComponent('/server/' + server.uuid + '/vnc')}`;
-                log(`Generated console URL for server ${serverId}: ${authUrl}`, 'api');
-                return res.json({ url: authUrl });
-              }
-            }
-          } else {
-            log(`Server ${serverId} owner has no extRelationId and could not set one`, 'api');
-          }
-        } catch (tokenError: any) {
-          log(`Token auth failed: ${tokenError.message}`, 'api');
         }
+      } catch (tokenErr: any) {
+        log(`Token generation failed: ${tokenErr.message}`, 'api');
       }
       
-      // Fallback to direct panel URL
+      // Fallback to direct VNC URL
       const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
       res.json({ url: consoleUrl });
     } catch (error: any) {
