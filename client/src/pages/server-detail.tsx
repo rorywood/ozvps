@@ -86,6 +86,13 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
 
+  // Live stats polling every 5 seconds
+  const { data: liveStats } = useQuery({
+    queryKey: ['live-stats', serverId],
+    queryFn: () => api.getLiveStats(serverId || ''),
+    enabled: !!serverId && server?.status === 'running',
+    refetchInterval: 5000, // Poll every 5 seconds
+  });
 
   const powerMutation = useMutation({
     mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
@@ -370,6 +377,57 @@ export default function ServerDetail() {
 
           <TabsContent value="statistics" className="space-y-8 animate-in fade-in duration-300">
             
+            {/* Live Stats - Memory & CPU */}
+            {server.status === 'running' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Memory Card */}
+                <GlassCard className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Memory</h3>
+                    <span className="text-2xl font-bold text-white" data-testid="text-memory-percent">
+                      {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2 mb-3">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${liveStats?.ram_usage || 0}%` }}
+                      data-testid="progress-memory"
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span data-testid="text-memory-used">
+                      {liveStats?.memory_used_mb ? `${liveStats.memory_used_mb.toFixed(2)} MB of ${liveStats.memory_total_mb?.toFixed(2)} MB Used` : '— MB Used'}
+                    </span>
+                    <span data-testid="text-memory-free">
+                      {liveStats?.memory_free_mb ? `${liveStats.memory_free_mb.toFixed(2)} MB Free` : '— MB Free'}
+                    </span>
+                  </div>
+                </GlassCard>
+
+                {/* CPU Card */}
+                <GlassCard className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">CPU</h3>
+                    <span className="text-2xl font-bold text-white" data-testid="text-cpu-percent">
+                      {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2 mb-3">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${liveStats?.cpu_usage || 0}%` }}
+                      data-testid="progress-cpu"
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Intel Xeon Family</span>
+                    <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
+                  </div>
+                </GlassCard>
+              </div>
+            )}
+
             {/* Chart Container */}
             <GlassCard className="p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
