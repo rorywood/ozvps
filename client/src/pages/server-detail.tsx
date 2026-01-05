@@ -289,11 +289,17 @@ export default function ServerDetail() {
           description: "Console will automatically disable after 60 minutes.",
         });
         
-        // Open VNC console in VirtFusion panel using server UUID
-        const serverUuid = server?.uuid;
-        if (serverUuid) {
-          const panelUrl = `https://panel.ozvps.com.au/server/${serverUuid}/vnc`;
-          window.open(panelUrl, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+        // Open VNC console using the WebSocket URL from VirtFusion
+        if (result.vnc?.wss?.url) {
+          // Use the noVNC HTML5 client with the provided WebSocket URL
+          // VirtFusion provides a signed URL that includes authentication
+          window.open(result.vnc.wss.url, '_blank', 'width=1024,height=768,menubar=no,toolbar=no');
+        } else {
+          toast({
+            title: "Console Not Available",
+            description: "VNC console URL not available. Please try again.",
+            variant: "destructive",
+          });
         }
       }
     } catch (error) {

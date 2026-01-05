@@ -36,7 +36,8 @@ export default function ServerList() {
 
   const { data: servers, isLoading, isError } = useQuery({
     queryKey: ['servers'],
-    queryFn: () => api.listServers()
+    queryFn: () => api.listServers(),
+    refetchInterval: 10000, // Poll every 10 seconds for live stats updates
   });
 
   const powerMutation = useMutation({

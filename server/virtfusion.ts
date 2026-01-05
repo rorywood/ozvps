@@ -534,6 +534,47 @@ export class VirtFusionClient {
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();
     
+    // Calculate live stats from remoteState if available
+    let cpuUsage = 0;
+    let ramUsage = 0;
+    let diskUsage = 0;
+    
+    if (remoteState && status === 'running') {
+      // CPU usage - can be a number or in a cpu object
+      if (typeof remoteState.cpu === 'number') {
+        cpuUsage = Math.min(100, Math.max(0, remoteState.cpu));
+      } else if (typeof remoteState.cpu === 'string') {
+        cpuUsage = Math.min(100, Math.max(0, parseFloat(remoteState.cpu) || 0));
+      } else if (remoteState.cpu?.usage !== undefined) {
+        cpuUsage = Math.min(100, Math.max(0, parseFloat(remoteState.cpu.usage) || 0));
+      }
+      
+      // RAM usage from memory stats
+      const memory = remoteState.memory || {};
+      if (memory.memtotal && (memory.memavailable || memory.memfree)) {
+        const memTotal = parseInt(memory.memtotal) || 0;
+        const memAvailable = parseInt(memory.memavailable) || parseInt(memory.memfree) || 0;
+        if (memTotal > 0) {
+          ramUsage = Math.min(100, Math.max(0, ((memTotal - memAvailable) / memTotal) * 100));
+        }
+      }
+      
+      // Disk usage from disk stats
+      const diskData = remoteState.disk || {};
+      let diskTotalBytes = 0;
+      let diskUsedBytes = 0;
+      for (const key of Object.keys(diskData)) {
+        const d = diskData[key];
+        if (d && d.capacity && d.physical) {
+          diskTotalBytes += parseInt(d.capacity) || 0;
+          diskUsedBytes += parseInt(d.physical) || 0;
+        }
+      }
+      if (diskTotalBytes > 0) {
+        diskUsage = Math.min(100, Math.max(0, (diskUsedBytes / diskTotalBytes) * 100));
+      }
+    }
+    
     return {
       id: server.id.toString(),
       name: server.name || `Server ${server.id}`,
@@ -563,9 +604,9 @@ export class VirtFusionClient {
         distro: osDistro as 'linux' | 'windows',
       },
       stats: {
-        cpu_usage: 0,
-        ram_usage: 0,
-        disk_usage: 0,
+        cpu_usage: Math.round(cpuUsage * 10) / 10,
+        ram_usage: Math.round(ramUsage * 10) / 10,
+        disk_usage: Math.round(diskUsage * 10) / 10,
         net_in: 0,
         net_out: 0,
       },

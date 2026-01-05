@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { data: servers = [], isLoading, error } = useQuery<Server[]>({
     queryKey: ['servers'],
     queryFn: () => api.listServers(),
+    refetchInterval: 10000, // Poll every 10 seconds for live updates
   });
 
   const stats = {

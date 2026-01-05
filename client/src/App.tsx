@@ -7,7 +7,6 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ServerList from "@/pages/server-list";
 import ServerDetail from "@/pages/server-detail";
-import Networking from "@/pages/networking";
 import Account from "@/pages/account";
 
 function Router() {
@@ -19,7 +18,6 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/servers" component={ServerList} />
       <Route path="/servers/:id" component={ServerDetail} />
-      <Route path="/networking" component={Networking} />
       <Route path="/account" component={Account} />
       <Route component={NotFound} />
     </Switch>

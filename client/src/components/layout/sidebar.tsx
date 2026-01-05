@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
   Server, 
-  Network, 
   Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +13,6 @@ export function Sidebar() {
   const navItems = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/servers", icon: Server, label: "Servers" },
-    { href: "/networking", icon: Network, label: "Networking" },
     { href: "/account", icon: Settings, label: "Settings" },
   ];
 
