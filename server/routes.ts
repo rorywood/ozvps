@@ -238,6 +238,9 @@ export async function registerRoutes(
   app.get('/api/servers', authMiddleware, async (req, res) => {
     try {
       const userId = req.userSession!.virtFusionUserId;
+      if (!userId) {
+        return res.status(400).json({ error: 'VirtFusion account not linked' });
+      }
       const servers = await virtfusionClient.listServersWithStats(userId);
       res.json(servers);
     } catch (error: any) {
@@ -409,21 +412,28 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
-      const extRelationId = req.userSession!.extRelationId;
+      const serverId = req.params.id;
       
-      const tokens = await virtfusionClient.generateServerLoginTokens(req.params.id, extRelationId);
-      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+      // Get server VNC info directly
+      const serverData = await virtfusionClient.getServerWithVnc(serverId);
       
-      let consoleUrl = '';
-      if (tokens.token) {
-        consoleUrl = `${panelUrl}/sso?token=${tokens.token}&redirect=/server/${req.params.id}/console`;
-      } else if (tokens.url) {
-        consoleUrl = tokens.url;
-      } else {
-        consoleUrl = `${panelUrl}/server/${req.params.id}/console`;
+      if (!serverData || !serverData.vnc) {
+        return res.status(404).json({ error: 'VNC information not available' });
       }
       
-      res.json({ url: consoleUrl });
+      const vnc = serverData.vnc;
+      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+      
+      // If VNC has a WSS token, use it directly
+      if (vnc.wss?.url) {
+        // Construct the full noVNC URL with the WSS path
+        const consoleUrl = `${panelUrl}${vnc.wss.url}`;
+        return res.json({ url: consoleUrl, vnc });
+      }
+      
+      // Fallback to panel console page
+      const consoleUrl = `${panelUrl}/server/${serverId}/console`;
+      res.json({ url: consoleUrl, vnc });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
@@ -432,11 +442,18 @@ export async function registerRoutes(
 
   app.get('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      const user = await virtfusionClient.getUserById(req.userSession!.virtFusionUserId);
-      if (!user) {
+      const localUser = await storage.getUserById(req.userSession!.userId);
+      if (!localUser) {
         return res.status(404).json({ error: 'User not found' });
       }
-      res.json(user);
+      
+      res.json({
+        id: localUser.id,
+        email: localUser.email,
+        name: localUser.name,
+        virtFusionUserId: localUser.virtFusionUserId,
+        createdAt: localUser.createdAt,
+      });
     } catch (error: any) {
       log(`Error fetching user profile: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch user profile' });
@@ -445,16 +462,27 @@ export async function registerRoutes(
 
   app.put('/api/user/profile', authMiddleware, async (req, res) => {
     try {
-      const extRelationId = req.userSession!.extRelationId;
-      const { name, email, timezone } = req.body;
+      const { name } = req.body;
       
-      const updates: { name?: string; email?: string; timezone?: string } = {};
-      if (name) updates.name = name;
-      if (email) updates.email = email;
-      if (timezone) updates.timezone = timezone;
+      // Update local user profile
+      const localUser = await storage.getUserById(req.userSession!.userId);
+      if (!localUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
       
-      const user = await virtfusionClient.updateUser(extRelationId, updates);
-      res.json(user);
+      // Update name in local database if provided
+      if (name && name !== localUser.name) {
+        await storage.updateUser(localUser.id, { name });
+      }
+      
+      const updatedUser = await storage.getUserById(req.userSession!.userId);
+      res.json({
+        id: updatedUser!.id,
+        email: updatedUser!.email,
+        name: updatedUser!.name,
+        virtFusionUserId: updatedUser!.virtFusionUserId,
+        createdAt: updatedUser!.createdAt,
+      });
     } catch (error: any) {
       log(`Error updating user profile: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to update user profile' });
@@ -463,14 +491,28 @@ export async function registerRoutes(
 
   app.post('/api/user/password', authMiddleware, async (req, res) => {
     try {
-      const extRelationId = req.userSession!.extRelationId;
-      const { newPassword } = req.body;
+      const { currentPassword, newPassword } = req.body;
       
       if (!newPassword || newPassword.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
       
-      await virtfusionClient.resetUserPassword(extRelationId, newPassword);
+      // Update password in local database
+      const localUser = await storage.getUserById(req.userSession!.userId);
+      if (!localUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Verify current password if provided
+      if (currentPassword) {
+        const bcrypt = await import('bcrypt');
+        const validPassword = await bcrypt.compare(currentPassword, localUser.passwordHash);
+        if (!validPassword) {
+          return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+      }
+      
+      await storage.updateUserPassword(localUser.id, newPassword);
       res.json({ success: true, message: 'Password updated successfully' });
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
