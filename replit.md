@@ -1,8 +1,8 @@
-# VirtFusion Control Panel
+# OzVPS Panel
 
 ## Overview
 
-A custom cloud control panel built on top of the VirtFusion API for VPS management. The application provides a modern, glassmorphism-styled dark-first UI similar to CloudASN/TenantOS for managing virtual private servers. VirtFusion serves as the backend control plane and system of record, while this panel acts as a pure API consumer.
+A custom cloud control panel built on top of the VirtFusion API for VPS management. The application provides a modern, glassmorphism-styled dark-first UI for OzVPS customers to manage their virtual private servers. VirtFusion serves as the backend control plane and system of record, while this panel acts as a pure API consumer.
 
 ## User Preferences
 

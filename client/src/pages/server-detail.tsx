@@ -134,7 +134,7 @@ export default function ServerDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5" />
-                <span className="text-white/80">{server.id}.cloudasn.net</span>
+                <span className="text-white/80">{server.id}.ozvps.com.au</span>
               </div>
               <div className="flex items-center gap-2">
                 <AlignLeft className="h-3.5 w-3.5" />
@@ -318,24 +318,6 @@ export default function ServerDetail() {
                  </div>
               </div>
             </GlassCard>
-
-            <div className="space-y-4">
-               <h3 className="text-lg font-bold text-white">IPMI Sensors</h3>
-               <GlassCard className="p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-2 bg-white/5 p-1 rounded-md">
-                     <button className="px-3 py-1 rounded text-xs font-bold bg-white/10 text-white">24 HOURS</button>
-                     <button className="px-3 py-1 rounded text-xs font-bold text-muted-foreground hover:text-white">14 DAYS</button>
-                     <button className="px-3 py-1 rounded text-xs font-bold text-muted-foreground hover:text-white">30 DAYS</button>
-                     <button className="px-3 py-1 rounded text-xs font-bold text-blue-400 bg-blue-500/10">ALL</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Show Details</span>
-                    <div className="h-5 w-9 bg-white/10 rounded-full relative cursor-pointer">
-                      <div className="absolute left-1 top-1 h-3 w-3 bg-white/50 rounded-full" />
-                    </div>
-                  </div>
-               </GlassCard>
-            </div>
           </TabsContent>
 
           {["ip-management", "reinstallation", "rescue", "configuration", "inventory", "notes", "activity-log"].map(tab => (
