@@ -43,13 +43,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export default function ServerDetail() {
   const [, params] = useRoute("/servers/:id");
@@ -57,6 +50,8 @@ export default function ServerDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
+  const [reinstallInProgress, setReinstallInProgress] = useState(false);
+  const [reinstallStatus, setReinstallStatus] = useState<string>('');
   const [selectedOs, setSelectedOs] = useState<string>("");
   const [vncEnabled, setVncEnabled] = useState(false);
   const [vncTimeRemaining, setVncTimeRemaining] = useState<number>(0);
@@ -64,6 +59,8 @@ export default function ServerDetail() {
   const [isDisablingVnc, setIsDisablingVnc] = useState(false);
   const vncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const vncDisableTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reinstallPollRef = useRef<NodeJS.Timeout | null>(null);
+  const reinstallTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
@@ -110,12 +107,77 @@ export default function ServerDetail() {
     }
   });
 
+  // Helper to cleanup reinstall polling
+  const cleanupReinstallPolling = () => {
+    if (reinstallPollRef.current) {
+      clearInterval(reinstallPollRef.current);
+      reinstallPollRef.current = null;
+    }
+    if (reinstallTimeoutRef.current) {
+      clearTimeout(reinstallTimeoutRef.current);
+      reinstallTimeoutRef.current = null;
+    }
+  };
+
   const reinstallMutation = useMutation({
     mutationFn: ({ id, osId }: { id: string, osId: number }) => 
       api.reinstallServer(id, osId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       setReinstallDialogOpen(false);
+      setReinstallInProgress(true);
+      setReinstallStatus('Initializing reinstall...');
+      
+      // Cleanup any existing polls
+      cleanupReinstallPolling();
+      
+      // Poll server state to track rebuild progress
+      reinstallPollRef.current = setInterval(async () => {
+        try {
+          const serverData = await api.getServer(serverId || '');
+          const state = serverData?.status;
+          
+          if (state === 'provisioning' || state === 'building') {
+            setReinstallStatus('Installing operating system...');
+          } else if (state === 'running') {
+            cleanupReinstallPolling();
+            setReinstallInProgress(false);
+            setReinstallStatus('');
+            queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            toast({
+              title: "Reinstallation Complete",
+              description: "Your server has been successfully reinstalled.",
+            });
+          } else if (state === 'error') {
+            cleanupReinstallPolling();
+            setReinstallInProgress(false);
+            setReinstallStatus('');
+            toast({
+              title: "Reinstallation Failed",
+              description: "Server reinstallation encountered an error.",
+              variant: "destructive",
+            });
+          }
+        } catch (e) {
+          // Keep polling on error
+        }
+      }, 5000);
+      
+      // Timeout after 10 minutes - use ref check instead of stale closure
+      reinstallTimeoutRef.current = setTimeout(() => {
+        if (reinstallPollRef.current) {
+          cleanupReinstallPolling();
+          setReinstallInProgress(false);
+          setReinstallStatus('');
+          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+          toast({
+            title: "Reinstallation Timeout",
+            description: "Reinstallation is taking longer than expected. Please check your server status.",
+            variant: "destructive",
+          });
+        }
+      }, 600000);
+      
       toast({
         title: "Reinstallation Started",
         description: "Server is being reinstalled. This may take a few minutes.",
@@ -260,33 +322,65 @@ export default function ServerDetail() {
   const bandwidthAllowance = server?.plan?.specs?.traffic || 0;
   const currentMonth = new Date().getMonth() + 1;
 
-  // Parse OS templates - the API returns grouped templates with version and variant info
-  const osOptions: Array<{ id: string; name: string; version: string; variant: string; group: string }> = [];
-  if (osTemplates) {
-    if (Array.isArray(osTemplates)) {
-      osTemplates.forEach((group: any) => {
-        if (group.templates && Array.isArray(group.templates)) {
-          group.templates.forEach((template: any) => {
-            osOptions.push({
-              id: template.id?.toString() || '',
-              name: template.name || 'Unknown OS',
-              version: template.version || '',
-              variant: template.variant || '',
-              group: group.name || 'Other'
-            });
-          });
-        } else if (group.id) {
-          osOptions.push({
-            id: group.id?.toString() || '',
-            name: group.name || 'Unknown OS',
-            version: group.version || '',
-            variant: group.variant || '',
-            group: 'Other'
-          });
-        }
-      });
-    }
+  // Parse OS templates - group by distro, dedupe by uuid, show version + variant
+  interface OsTemplate {
+    id: string;
+    uuid: string;
+    name: string;
+    version: string;
+    variant: string;
+    group: string;
+    displayName: string;
   }
+  
+  const osTemplateMap = new Map<string, OsTemplate>();
+  const osGroups: Array<{ name: string; icon: string; templates: OsTemplate[] }> = [];
+  
+  if (osTemplates && Array.isArray(osTemplates)) {
+    osTemplates.forEach((group: any) => {
+      const groupTemplates: OsTemplate[] = [];
+      
+      if (group.templates && Array.isArray(group.templates)) {
+        group.templates.forEach((template: any) => {
+          const uuid = template.uuid || template.id?.toString() || '';
+          // Skip if we've already seen this template (dedupe by uuid)
+          if (osTemplateMap.has(uuid)) return;
+          
+          const version = template.version || '';
+          const variant = template.variant || '';
+          const templateName = template.name || 'Unknown OS';
+          // Create a proper display name with fallback to template name
+          const displayName = version 
+            ? `${version}${variant ? ` (${variant})` : ''}`
+            : templateName + (variant ? ` (${variant})` : '');
+          
+          const templateObj: OsTemplate = {
+            id: template.id?.toString() || '',
+            uuid,
+            name: template.name || 'Unknown OS',
+            version,
+            variant,
+            group: group.name || 'Other',
+            displayName
+          };
+          
+          osTemplateMap.set(uuid, templateObj);
+          groupTemplates.push(templateObj);
+        });
+      }
+      
+      if (groupTemplates.length > 0) {
+        osGroups.push({
+          name: group.name || 'Other',
+          icon: group.icon || 'linux_logo.png',
+          templates: groupTemplates
+        });
+      }
+    });
+  }
+  
+  // Flatten for backward compatibility
+  const osOptions = Array.from(osTemplateMap.values());
 
   if (isLoading) {
     return (
@@ -756,7 +850,7 @@ export default function ServerDetail() {
 
       {/* Reinstall Dialog */}
       <Dialog open={reinstallDialogOpen} onOpenChange={setReinstallDialogOpen}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white">
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Reinstall Server</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -764,35 +858,53 @@ export default function ServerDetail() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-white">Operating System</label>
-              <Select value={selectedOs} onValueChange={setSelectedOs}>
-                <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-os">
-                  <SelectValue placeholder="Select an operating system" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#0a0a0a] border-white/10">
-                  {osOptions.length > 0 ? (
-                    osOptions.map((os) => (
-                      <SelectItem 
-                        key={os.id} 
-                        value={os.id}
-                        className="text-white focus:bg-white/10"
+          <div className="flex-1 overflow-y-auto py-4 space-y-4">
+            {osGroups.length > 0 ? (
+              osGroups.map((group) => (
+                <div key={group.name} className="space-y-2">
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-sm font-semibold text-white">{group.name}</span>
+                    <span className="text-xs text-muted-foreground">({group.templates.length} options)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {group.templates.map((template) => (
+                      <button
+                        key={template.uuid}
+                        onClick={() => setSelectedOs(template.id)}
+                        className={cn(
+                          "p-3 rounded-lg border text-left transition-all",
+                          selectedOs === template.id
+                            ? "bg-primary/20 border-primary text-white"
+                            : "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20"
+                        )}
+                        data-testid={`button-os-${template.id}`}
                       >
-                        {os.name}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="unavailable" disabled className="text-muted-foreground">
-                      No templates available
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                        <div className="font-medium text-sm">{template.version || template.name}</div>
+                        {template.variant && (
+                          <div className="text-xs text-muted-foreground mt-0.5">{template.variant}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No operating systems available for this server.</p>
+              </div>
+            )}
+            
+            {selectedOs && (
+              <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="text-xs text-muted-foreground mb-1">Selected</div>
+                <div className="text-white font-medium">
+                  {osOptions.find(os => os.id === selectedOs)?.group} - {osOptions.find(os => os.id === selectedOs)?.displayName}
+                </div>
+              </div>
+            )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t border-white/10 pt-4">
             <Button 
               variant="outline" 
               onClick={() => setReinstallDialogOpen(false)}
@@ -816,6 +928,57 @@ export default function ServerDetail() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reinstall Progress Dialog */}
+      <Dialog open={reinstallInProgress} onOpenChange={() => {}}>
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-md" hideCloseButton>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+              Reinstalling Server
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Please wait while your server is being reinstalled. This may take several minutes.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">{reinstallStatus}</span>
+              </div>
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full animate-pulse"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span>Reinstall initiated</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  reinstallStatus.includes('Installing') ? "bg-primary animate-pulse" : "bg-white/20"
+                )} />
+                <span>Installing operating system</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-white/20" />
+                <span>Finalizing configuration</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="text-xs text-muted-foreground text-center">
+            Do not close this window. Your server will be available shortly.
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>
