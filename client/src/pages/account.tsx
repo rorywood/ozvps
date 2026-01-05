@@ -316,9 +316,15 @@ export default function Account() {
         )}
 
         {profile && (
-          <div className="text-center text-xs text-muted-foreground mt-8">
-            <span>Account ID: </span>
-            <span className="font-mono" data-testid="text-user-id">{profile?.virtFusionUserId || 'Not linked'}</span>
+          <div className="flex justify-center gap-6 text-xs text-muted-foreground mt-8">
+            <div>
+              <span>VirtFusion ID: </span>
+              <span className="font-mono" data-testid="text-vf-id">{profile?.virtFusionUserId || 'Not linked'}</span>
+            </div>
+            <div>
+              <span>Auth0 ID: </span>
+              <span className="font-mono" data-testid="text-auth0-id">{profile?.id || 'Unknown'}</span>
+            </div>
           </div>
         )}
       </div>
