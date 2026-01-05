@@ -2,7 +2,20 @@ import { useRef, useState, useEffect } from "react";
 import { VncScreen } from "react-vnc";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-import { Loader2, Maximize2, Minimize2, X, RefreshCw } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Loader2, 
+  Maximize2, 
+  Minimize2, 
+  X, 
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Keyboard,
+  Clipboard,
+  Send,
+  Copy
+} from "lucide-react";
 
 interface VncViewerProps {
   wsUrl: string;
@@ -17,6 +30,8 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [key, setKey] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [clipboardText, setClipboardText] = useState("");
 
   const handleConnect = () => {
     setStatus('connected');
@@ -46,6 +61,46 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
+  // Send Ctrl+Alt+Del
+  const sendCtrlAltDel = () => {
+    const rfb = vncRef.current?.rfb;
+    if (rfb) {
+      rfb.sendCtrlAltDel();
+    }
+  };
+
+  // Send key combination helper
+  const sendKey = (keysym: number, code: string) => {
+    const rfb = vncRef.current?.rfb;
+    if (rfb) {
+      rfb.sendKey(keysym, code, true);
+      rfb.sendKey(keysym, code, false);
+    }
+  };
+
+  // Send text to clipboard/paste
+  const sendClipboardText = () => {
+    const rfb = vncRef.current?.rfb;
+    if (rfb && clipboardText) {
+      // Type each character
+      for (const char of clipboardText) {
+        const code = char.charCodeAt(0);
+        rfb.sendKey(code, char, true);
+        rfb.sendKey(code, char, false);
+      }
+    }
+  };
+
+  // Paste from local clipboard
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setClipboardText(text);
+    } catch (e) {
+      console.error('Failed to read clipboard:', e);
+    }
+  };
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -55,96 +110,211 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   }, []);
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full bg-black">
-      <div className="flex items-center justify-between px-4 py-2 bg-[#0a0a0a] border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${
-            status === 'connected' ? 'bg-green-500' : 
-            status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
-            'bg-red-500'
-          }`} />
-          <span className="text-sm text-muted-foreground">
-            {status === 'connected' ? 'Connected' : 
-             status === 'connecting' ? 'Connecting...' : 
-             status === 'error' ? 'Connection Error' :
-             'Disconnected'}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {(status === 'disconnected' || status === 'error') && (
+    <div ref={containerRef} className="flex h-full bg-black">
+      {/* Side Control Panel */}
+      <div className={`flex-shrink-0 bg-[#0a0a0a] border-r border-white/10 transition-all duration-200 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`}>
+        <div className="p-4 h-full flex flex-col gap-4 min-w-[256px]">
+          <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+            <Keyboard className="h-4 w-4" />
+            Controls
+          </h3>
+          
+          {/* Keyboard Shortcuts */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">Keyboard</p>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={handleReconnect}
-              className="text-muted-foreground hover:text-white"
-              data-testid="button-vnc-reconnect"
+              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              onClick={sendCtrlAltDel}
+              disabled={status !== 'connected'}
+              data-testid="button-ctrl-alt-del"
             >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Reconnect
+              <Keyboard className="h-4 w-4 mr-2" />
+              Ctrl + Alt + Del
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleFullscreen}
-            className="text-muted-foreground hover:text-white h-8 w-8"
-            data-testid="button-vnc-fullscreen"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-          {onClose && (
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-white h-8 w-8"
-              data-testid="button-vnc-close"
+              variant="outline"
+              size="sm"
+              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              onClick={() => sendKey(0xFF09, 'Tab')}
+              disabled={status !== 'connected'}
+              data-testid="button-send-tab"
             >
-              <X className="h-4 w-4" />
+              <Keyboard className="h-4 w-4 mr-2" />
+              Tab
             </Button>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              onClick={() => sendKey(0xFF1B, 'Escape')}
+              disabled={status !== 'connected'}
+              data-testid="button-send-esc"
+            >
+              <Keyboard className="h-4 w-4 mr-2" />
+              Escape
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              onClick={() => sendKey(0xFF0D, 'Enter')}
+              disabled={status !== 'connected'}
+              data-testid="button-send-enter"
+            >
+              <Keyboard className="h-4 w-4 mr-2" />
+              Enter
+            </Button>
+          </div>
+          
+          {/* Clipboard */}
+          <div className="space-y-2 flex-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Clipboard className="h-3 w-3" />
+              Clipboard
+            </p>
+            <Textarea
+              placeholder="Type or paste text here..."
+              className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm min-h-[100px] resize-none"
+              value={clipboardText}
+              onChange={(e) => setClipboardText(e.target.value)}
+              data-testid="textarea-clipboard"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                onClick={pasteFromClipboard}
+                data-testid="button-paste-clipboard"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Paste
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-white/10 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400"
+                onClick={sendClipboardText}
+                disabled={status !== 'connected' || !clipboardText}
+                data-testid="button-send-clipboard"
+              >
+                <Send className="h-3 w-3 mr-1" />
+                Send
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Paste text from your clipboard, then click Send to type it into the server.
+            </p>
+          </div>
         </div>
       </div>
       
-      <div className="flex-1 relative">
-        {status === 'connecting' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
-            <GlassCard className="p-8 flex flex-col items-center">
-              <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-              <p className="text-white font-medium">Connecting to Console...</p>
-            </GlassCard>
+      {/* Toggle Sidebar Button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-[#0a0a0a] border border-white/10 border-l-0 rounded-r-md p-1.5 text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+        style={{ left: sidebarOpen ? '256px' : '0' }}
+        data-testid="button-toggle-sidebar"
+      >
+        {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </button>
+
+      {/* Main VNC Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-[#0a0a0a] border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${
+              status === 'connected' ? 'bg-green-500' : 
+              status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
+              'bg-red-500'
+            }`} />
+            <span className="text-sm text-muted-foreground">
+              {status === 'connected' ? 'Connected' : 
+               status === 'connecting' ? 'Connecting...' : 
+               status === 'error' ? 'Connection Error' :
+               'Disconnected'}
+            </span>
           </div>
-        )}
-        
-        {(status === 'disconnected' || status === 'error') && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
-            <GlassCard className="p-8 flex flex-col items-center">
-              <p className="text-white font-medium mb-4">
-                {status === 'error' ? 'Connection Failed' : 'Disconnected'}
-              </p>
-              <Button onClick={handleReconnect} className="bg-primary hover:bg-primary/90" data-testid="button-vnc-reconnect-main">
-                <RefreshCw className="h-4 w-4 mr-2" />
+          <div className="flex items-center gap-2">
+            {(status === 'disconnected' || status === 'error') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReconnect}
+                className="text-muted-foreground hover:text-white"
+                data-testid="button-vnc-reconnect"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
                 Reconnect
               </Button>
-            </GlassCard>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="text-muted-foreground hover:text-white h-8 w-8"
+              data-testid="button-vnc-fullscreen"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="text-muted-foreground hover:text-white h-8 w-8"
+                data-testid="button-vnc-close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
-        )}
+        </div>
         
-        <VncScreen
-          key={key}
-          url={wsUrl}
-          scaleViewport
-          background="#000000"
-          style={{ width: '100%', height: '100%', minHeight: '400px' }}
-          ref={vncRef}
-          onConnect={handleConnect}
-          onDisconnect={handleDisconnect}
-          onSecurityFailure={handleSecurityFailure}
-          rfbOptions={{
-            credentials: { password }
-          }}
-          data-testid="vnc-container"
-        />
+        {/* VNC Screen */}
+        <div className="flex-1 relative">
+          {status === 'connecting' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+              <GlassCard className="p-8 flex flex-col items-center">
+                <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
+                <p className="text-white font-medium">Connecting to Console...</p>
+              </GlassCard>
+            </div>
+          )}
+          
+          {(status === 'disconnected' || status === 'error') && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+              <GlassCard className="p-8 flex flex-col items-center">
+                <p className="text-white font-medium mb-4">
+                  {status === 'error' ? 'Connection Failed' : 'Disconnected'}
+                </p>
+                <Button onClick={handleReconnect} className="bg-primary hover:bg-primary/90" data-testid="button-vnc-reconnect-main">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reconnect
+                </Button>
+              </GlassCard>
+            </div>
+          )}
+          
+          <VncScreen
+            key={key}
+            url={wsUrl}
+            scaleViewport
+            background="#000000"
+            style={{ width: '100%', height: '100%', minHeight: '400px' }}
+            ref={vncRef}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onSecurityFailure={handleSecurityFailure}
+            rfbOptions={{
+              credentials: { password }
+            }}
+            data-testid="vnc-container"
+          />
+        </div>
       </div>
     </div>
   );
