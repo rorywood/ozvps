@@ -722,8 +722,9 @@ export class VirtFusionClient {
     const disk = settingsResources.storage || resources.storage || 20;
     const trafficLimit = settingsResources.traffic || resources.traffic || 0;
     
-    // Get location from server_info
-    const locationName = server.server_info?.name || 'Unknown';
+    // Get location from hypervisor group (e.g. "Brisbane Node") or hypervisor name
+    const rawServer = server as any;
+    const locationName = rawServer.hypervisor?.group?.name || rawServer.hypervisor?.displayName || server.server_info?.name || 'Unknown';
     
     // Get OS info - prefer template name from settings, then qemuAgent os.name
     const settingsOs = (server as any).os || {};
