@@ -16,29 +16,31 @@ declare module "http" {
   }
 }
 
-// Block access to sensitive files and paths
-app.use((req, res, next) => {
-  const blockedPatterns = [
-    /\.env/i,
-    /\.git/i,
-    /\.config/i,
-    /package\.json/i,
-    /package-lock\.json/i,
-    /tsconfig/i,
-    /vite\.config/i,
-    /drizzle\.config/i,
-    /replit\.md/i,
-    /node_modules/i,
-    /server\//i,
-    /shared\//i,
-  ];
-  
-  const path = req.path.toLowerCase();
-  if (blockedPatterns.some(pattern => pattern.test(path))) {
-    return res.status(404).send('Not found');
-  }
-  next();
-});
+// Block access to sensitive files and paths (only in production)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const blockedPatterns = [
+      /^\/?\.env/i,
+      /^\/?\.git/i,
+      /^\/?\.config/i,
+      /^\/?package\.json$/i,
+      /^\/?package-lock\.json$/i,
+      /^\/?tsconfig/i,
+      /^\/?vite\.config/i,
+      /^\/?drizzle\.config/i,
+      /^\/?replit\.md$/i,
+      /^\/?node_modules\//i,
+      /^\/?server\//i,
+      /^\/?shared\//i,
+    ];
+    
+    const reqPath = req.path.toLowerCase();
+    if (blockedPatterns.some(pattern => pattern.test(reqPath))) {
+      return res.status(404).send('Not found');
+    }
+    next();
+  });
+}
 
 // Security headers
 app.use(helmet({

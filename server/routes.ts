@@ -129,15 +129,18 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     }
 
     // Check for idle timeout (15 minutes of inactivity)
-    const lastActivity = new Date(session.lastActivityAt);
-    const now = new Date();
-    if (now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
-      await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
-      res.clearCookie(SESSION_COOKIE);
-      return res.status(401).json({ 
-        error: 'Your session expired due to inactivity. Please sign in again.',
-        code: 'SESSION_IDLE_TIMEOUT'
-      });
+    // Handle sessions without lastActivityAt (created before this feature)
+    if (session.lastActivityAt) {
+      const lastActivity = new Date(session.lastActivityAt);
+      const now = new Date();
+      if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
+        await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
+        res.clearCookie(SESSION_COOKIE);
+        return res.status(401).json({ 
+          error: 'Your session expired due to inactivity. Please sign in again.',
+          code: 'SESSION_IDLE_TIMEOUT'
+        });
+      }
     }
 
     // Update last activity timestamp
