@@ -199,49 +199,107 @@ echo "$REMOTE_VERSION" > "$VERSION_FILE"
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Installing dependencies"
 
-# Ensure PostgreSQL is running
+# Detect OS for package management
+if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    UPDATE_OS=$ID
+else
+    UPDATE_OS="unknown"
+fi
+
+# Ensure PostgreSQL is installed
 (
+    if ! command -v psql &>/dev/null; then
+        echo "PostgreSQL not found, installing..."
+        case "$UPDATE_OS" in
+            ubuntu|debian)
+                apt-get update
+                apt-get install -y postgresql postgresql-contrib
+                ;;
+            centos|rhel|rocky|almalinux)
+                yum install -y postgresql-server postgresql-contrib
+                postgresql-setup --initdb 2>/dev/null || true
+                ;;
+            *)
+                echo "WARNING: Unknown OS, cannot auto-install PostgreSQL"
+                ;;
+        esac
+    fi
+    
+    # Start PostgreSQL if not running
     if ! systemctl is-active postgresql &>/dev/null; then
         systemctl start postgresql 2>/dev/null || true
+        systemctl enable postgresql 2>/dev/null || true
     fi
+    
+    # Wait for PostgreSQL to be ready
+    for i in {1..30}; do
+        if sudo -u postgres psql -c "SELECT 1" &>/dev/null; then
+            echo "PostgreSQL is ready"
+            break
+        fi
+        sleep 1
+    done
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Checking PostgreSQL"
 
-# Database migrations (if DATABASE_URL is configured)
+# Validate .env has DATABASE_URL
+if [[ -f "$INSTALL_DIR/.env" ]]; then
+    if ! grep -q "^DATABASE_URL=" "$INSTALL_DIR/.env"; then
+        echo ""
+        echo -e "  ${RED}✗${NC}  DATABASE_URL missing from .env file"
+        echo ""
+        echo -e "  ${YELLOW}Your .env file is missing the database configuration.${NC}"
+        echo -e "  ${DIM}This can happen if the original installation was incomplete.${NC}"
+        echo ""
+        echo -e "  ${BOLD}To fix, add this line to $INSTALL_DIR/.env:${NC}"
+        echo -e "  ${CYAN}DATABASE_URL=postgresql://ozvps:YOUR_PASSWORD@localhost:5432/ozvps${NC}"
+        echo ""
+        echo -e "  ${DIM}Replace YOUR_PASSWORD with your database password, or run:${NC}"
+        echo -e "  ${CYAN}sudo bash <(curl -fsSL YOUR_REPLIT_URL/install.sh)${NC}"
+        echo ""
+        exit 1
+    fi
+else
+    echo ""
+    echo -e "  ${RED}✗${NC}  Configuration file not found"
+    echo ""
+    echo -e "  ${YELLOW}The .env file is missing. Please run the installer:${NC}"
+    echo -e "  ${CYAN}sudo bash <(curl -fsSL YOUR_REPLIT_URL/install.sh)${NC}"
+    echo ""
+    exit 1
+fi
+
+# Database migrations
 (
     cd "$INSTALL_DIR"
-    if [[ -f "$INSTALL_DIR/.env" ]]; then
-        set -a
-        source "$INSTALL_DIR/.env"
-        set +a
-    fi
-    if [[ -n "$DATABASE_URL" ]]; then
-        # Extract connection params from DATABASE_URL for psql check
-        # URL format: postgresql://user:pass@host:port/dbname
-        DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
-        DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
-        DB_NAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
-        DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-        DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-        
-        # Wait for database to be ready (increased timeout)
-        DB_READY=false
-        for i in {1..30}; do
-            if PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
-                DB_READY=true
-                break
-            fi
-            sleep 1
-        done
-        
-        if [[ "$DB_READY" == "true" ]]; then
-            npx drizzle-kit push --force
-        else
-            echo "WARNING: Could not connect to database after 30s, skipping migrations"
-            echo "You may need to run: cd $INSTALL_DIR && npx drizzle-kit push --force"
+    set -a
+    source "$INSTALL_DIR/.env"
+    set +a
+    
+    # Extract connection params from DATABASE_URL for psql check
+    # URL format: postgresql://user:pass@host:port/dbname
+    DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+    DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+    DB_NAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+    DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    
+    # Wait for database to be ready
+    DB_READY=false
+    for i in {1..30}; do
+        if PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
+            DB_READY=true
+            break
         fi
+        sleep 1
+    done
+    
+    if [[ "$DB_READY" == "true" ]]; then
+        npx drizzle-kit push --force
     else
-        echo "DATABASE_URL not configured, skipping migrations"
+        echo "WARNING: Could not connect to database after 30s"
+        echo "Check your DATABASE_URL in .env and PostgreSQL status"
     fi
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Updating database schema"

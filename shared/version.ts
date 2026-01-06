@@ -1,4 +1,4 @@
-export const VERSION = "1.7.3";
+export const VERSION = "1.7.4";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,15 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.4",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Update script now installs PostgreSQL if missing (Debian/Ubuntu/RHEL)",
+      "Fix: Validates DATABASE_URL exists in .env before proceeding",
+      "Fix: Clear error messages when configuration is incomplete",
+    ],
+  },
   {
     version: "1.7.3",
     date: "2026-01-06",
