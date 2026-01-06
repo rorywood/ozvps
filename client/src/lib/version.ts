@@ -20,6 +20,7 @@ export const VERSION_HISTORY = [
     date: "2026-01-06",
     changes: [
       "Improved login page spacing",
+      "Fixed login page background color",
     ],
   },
   {
