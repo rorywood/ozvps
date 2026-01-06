@@ -236,7 +236,7 @@ class Auth0Client {
     }
   }
 
-  async setVirtFusionUserId(auth0UserId: string, virtFusionUserId: number): Promise<boolean> {
+  async setVirtFusionUserId(auth0UserId: string, virtFusionUserId: number | null): Promise<boolean> {
     try {
       const managementToken = await this.getManagementToken();
 
@@ -262,7 +262,11 @@ class Auth0Client {
         return false;
       }
 
-      log(`Stored VirtFusion user ID ${virtFusionUserId} in Auth0 metadata for user ${auth0UserId}`, 'auth0');
+      if (virtFusionUserId === null) {
+        log(`Cleared VirtFusion user ID from Auth0 metadata for user ${auth0UserId}`, 'auth0');
+      } else {
+        log(`Stored VirtFusion user ID ${virtFusionUserId} in Auth0 metadata for user ${auth0UserId}`, 'auth0');
+      }
       return true;
     } catch (error: any) {
       log(`Auth0 metadata update error: ${error.message}`, 'auth0');

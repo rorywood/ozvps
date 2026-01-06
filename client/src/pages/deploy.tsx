@@ -1,15 +1,14 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearch } from "wouter";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/app-shell";
-import { useToast } from "@/hooks/use-toast";
 import { 
   Check,
   Loader2,
   Zap,
-  Plus,
+  Wallet,
   Cpu,
   MemoryStick,
   HardDrive,
@@ -64,32 +63,9 @@ function formatTransfer(gb: number): string {
 
 export default function DeployPage() {
   const [, setLocation] = useLocation();
-  const search = useSearch();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
-
-  const searchParams = new URLSearchParams(search);
-  const topupResult = searchParams.get('topup');
-
-  useEffect(() => {
-    if (topupResult === 'success') {
-      toast({
-        title: "Payment successful",
-        description: "Your wallet has been topped up.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      queryClient.invalidateQueries({ queryKey: ['me'] });
-    } else if (topupResult === 'cancelled') {
-      toast({
-        title: "Payment cancelled",
-        description: "Your payment was cancelled.",
-        variant: "destructive",
-      });
-    }
-  }, [topupResult, toast, queryClient]);
 
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
@@ -106,29 +82,6 @@ export default function DeployPage() {
     queryFn: () => api.getWallet(),
   });
 
-  const { data: stripeStatus } = useQuery({
-    queryKey: ['stripe-status'],
-    queryFn: () => api.getStripeStatus(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const stripeConfigured = stripeStatus?.configured ?? false;
-
-  const topupMutation = useMutation({
-    mutationFn: (amountCents: number) => api.createTopup(amountCents),
-    onSuccess: (data: { url: string }) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create checkout session",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Only show active plans (API already filters, but double-check on frontend)
   const plans = (plansData?.plans || []).filter(p => p.active);
@@ -143,11 +96,8 @@ export default function DeployPage() {
     setLocation(`/deploy/${selectedPlanId}?location=${selectedLocationCode}`);
   };
 
-  const handleTopupAndDeploy = () => {
-    if (!selectedPlan || !wallet) return;
-    const shortfall = selectedPlan.priceMonthly - wallet.balanceCents;
-    const topupNeeded = Math.max(shortfall, 500);
-    topupMutation.mutate(topupNeeded);
+  const handleAddFunds = () => {
+    setLocation('/billing');
   };
 
   return (
@@ -361,29 +311,15 @@ export default function DeployPage() {
                         <Zap className="h-4 w-4" />
                         Continue
                       </Button>
-                    ) : stripeConfigured ? (
-                      <Button 
-                        className="w-full h-11 gap-2" 
-                        onClick={handleTopupAndDeploy}
-                        disabled={topupMutation.isPending}
-                        data-testid="button-topup-deploy"
-                      >
-                        {topupMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4" />
-                            Top up & Deploy
-                          </>
-                        )}
-                      </Button>
                     ) : (
                       <Button 
-                        className="w-full h-11" 
-                        disabled 
-                        data-testid="button-deploy-no-stripe"
+                        className="w-full h-11 gap-2" 
+                        variant="outline"
+                        onClick={handleAddFunds}
+                        data-testid="button-add-funds"
                       >
-                        Insufficient balance
+                        <Wallet className="h-4 w-4" />
+                        Add Funds
                       </Button>
                     )}
                   </div>

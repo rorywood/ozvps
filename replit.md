@@ -51,11 +51,17 @@ Preferred communication style: Simple, everyday language.
   - Webhook for automatic balance crediting (idempotent via stripeEventId)
   - **Webhook Validation**: Validates payment_status=paid, currency=aud, and uses session.amount_total as authoritative source
   - **Enhanced Webhook Logging**: Logs payload size, livemode flag, and handles stripe-replit-sync errors non-fatally
-- **In-App Billing UI** (no external Stripe portal redirects):
+- **Billing Page** (`/billing`): Dedicated page for wallet management
+  - Add funds to wallet via Stripe checkout
+  - View wallet balance and Stripe customer ID
+  - Transaction history with type indicators
+  - Saved payment methods with delete functionality
+- **Billing API Endpoints**:
+  - `GET /api/wallet` - Get wallet balance
+  - `GET /api/wallet/transactions` - Transaction history
+  - `POST /api/wallet/topup` - Create Stripe checkout session for wallet top-up
   - `GET /api/billing/payment-methods` - List saved payment methods
-  - `POST /api/billing/setup-intent` - Create SetupIntent for adding new cards
   - `DELETE /api/billing/payment-methods/:id` - Remove a payment method
-  - `GET /api/billing/transactions` - Wallet transaction history
 - **Deploy Flow**: 
   1. User selects plan, verifies sufficient balance
   2. Atomic debit from wallet + order creation
@@ -113,6 +119,7 @@ Preferred communication style: Simple, everyday language.
   - Setup: See `docs/auth0-user-deletion-action.js` for Auth0 configuration
 - **Known API Limitations**:
   - **SSH Key Management**: VirtFusion public API v1 does NOT support SSH key endpoints (`/api/v1/ssh-keys/*` returns 404). SSH key management is only available through VirtFusion admin panel UI, not via REST API. This feature cannot be implemented until VirtFusion adds API support.
+  - **User Email Lookup**: VirtFusion API does NOT support looking up users by email. Users can only be looked up by ID or extRelationId. If a user exists in VirtFusion with a different extRelationId format (e.g., old panel users), they cannot be automatically linked and require admin intervention.
 
 ### Admin Access
 - **Admin Panel**: Available at `/admin` route for users with admin privileges

@@ -3,7 +3,6 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -16,33 +15,9 @@ import {
   Eye,
   EyeOff,
   Mail,
-  Clock,
-  CreditCard,
-  Trash2,
-  Wallet,
-  History,
-  Copy
+  Clock
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 export default function Account() {
   const { toast } = useToast();
@@ -53,7 +28,6 @@ export default function Account() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showStripeId, setShowStripeId] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
   const { data: profile, isLoading, error } = useQuery({
@@ -108,76 +82,6 @@ export default function Account() {
     }
   });
 
-  const { data: stripeStatus } = useQuery({
-    queryKey: ['stripe-status'],
-    queryFn: () => api.getStripeStatus(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const stripeConfigured = stripeStatus?.configured ?? false;
-
-  const { data: paymentMethodsData, isLoading: loadingPaymentMethods } = useQuery({
-    queryKey: ['payment-methods'],
-    queryFn: () => api.getPaymentMethods(),
-    enabled: stripeConfigured,
-  });
-
-  const { data: transactionsData, isLoading: loadingTransactions } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => api.getTransactions(),
-    enabled: stripeConfigured,
-  });
-
-  const { data: walletData } = useQuery({
-    queryKey: ['wallet'],
-    queryFn: () => api.getWallet(),
-  });
-
-  const deletePaymentMethodMutation = useMutation({
-    mutationFn: (id: string) => api.deletePaymentMethod(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
-      toast({
-        title: "Payment Method Removed",
-        description: "The payment method has been removed from your account.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to remove payment method.",
-        variant: "destructive",
-      });
-    }
-  });
-
-  const formatCardBrand = (brand: string) => {
-    const brands: Record<string, string> = {
-      visa: 'Visa',
-      mastercard: 'Mastercard',
-      amex: 'American Express',
-      discover: 'Discover',
-      diners: 'Diners Club',
-      jcb: 'JCB',
-      unionpay: 'UnionPay',
-    };
-    return brands[brand.toLowerCase()] || brand;
-  };
-
-  const formatTransactionType = (type: string) => {
-    const types: Record<string, string> = {
-      credit: 'Top-up',
-      debit: 'Payment',
-      refund: 'Refund',
-    };
-    return types[type] || type;
-  };
-
-  const formatCurrency = (cents: number) => {
-    const isNegative = cents < 0;
-    return `${isNegative ? '-' : '+'}$${(Math.abs(cents) / 100).toFixed(2)}`;
-  };
-  
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, email, timezone });
   };
@@ -408,191 +312,6 @@ export default function Account() {
                 </p>
               </div>
             </GlassCard>
-
-            {/* Stripe Not Configured Message */}
-            {!stripeConfigured && (
-              <GlassCard className="p-6" data-testid="stripe-not-configured">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500 border border-yellow-500/20">
-                    <CreditCard className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Payments Not Available</h3>
-                    <p className="text-sm text-muted-foreground">Payment system is being configured</p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Wallet top-ups and payment methods are temporarily unavailable. 
-                  Please contact support if you need to add funds to your account.
-                </p>
-              </GlassCard>
-            )}
-
-            {/* Wallet Balance Section */}
-            {stripeConfigured && (
-              <GlassCard className="p-6" data-testid="wallet-section">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
-                    <Wallet className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Wallet Balance</h3>
-                    <p className="text-sm text-muted-foreground">Your current account balance</p>
-                  </div>
-                </div>
-                <div className="text-3xl font-bold text-white mb-4">
-                  ${((walletData?.wallet?.balanceCents || 0) / 100).toFixed(2)} AUD
-                </div>
-                
-                {walletData?.wallet?.stripeCustomerId && (
-                  <div className="pt-3 border-t border-white/10">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
-                      <div className="flex items-center gap-2">
-                        <code 
-                          className="text-xs font-mono text-white/70 bg-black/30 px-2 py-1 rounded"
-                          data-testid="text-stripe-customer-id"
-                        >
-                          {showStripeId 
-                            ? walletData.wallet.stripeCustomerId 
-                            : '••••••••••••••••••••'}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
-                          onClick={() => setShowStripeId(!showStripeId)}
-                          data-testid="button-toggle-stripe-id"
-                        >
-                          {showStripeId ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </Button>
-                        {showStripeId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
-                            onClick={() => {
-                              navigator.clipboard.writeText(walletData.wallet.stripeCustomerId!);
-                              toast({
-                                title: "Copied",
-                                description: "Stripe Customer ID copied to clipboard",
-                              });
-                            }}
-                            data-testid="button-copy-stripe-id"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </GlassCard>
-            )}
-
-            {/* Payment Methods Section */}
-            {stripeConfigured && (
-              <GlassCard className="p-6" data-testid="payment-methods-section">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
-                    <CreditCard className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Payment Methods</h3>
-                    <p className="text-sm text-muted-foreground">Saved cards for wallet top-ups</p>
-                  </div>
-                </div>
-
-                {loadingPaymentMethods ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : paymentMethodsData?.paymentMethods && paymentMethodsData.paymentMethods.length > 0 ? (
-                  <div className="space-y-3">
-                    {paymentMethodsData.paymentMethods.map((pm) => (
-                      <div 
-                        key={pm.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/10"
-                        data-testid={`payment-method-${pm.id}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <CreditCard className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <div className="text-sm font-medium text-white">
-                              {formatCardBrand(pm.brand)} •••• {pm.last4}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Expires {pm.expMonth}/{pm.expYear}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
-                          disabled={deletePaymentMethodMutation.isPending}
-                          data-testid={`delete-payment-method-${pm.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-2">
-                    No saved payment methods. Add a card when you top up your wallet.
-                  </p>
-                )}
-              </GlassCard>
-            )}
-
-            {/* Transaction History Section */}
-            {stripeConfigured && (
-              <GlassCard className="p-6 lg:col-span-2" data-testid="transactions-section">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
-                    <History className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Transaction History</h3>
-                    <p className="text-sm text-muted-foreground">Your wallet transaction history</p>
-                  </div>
-                </div>
-
-                {loadingTransactions ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : transactionsData?.transactions && transactionsData.transactions.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {transactionsData.transactions.slice(0, 10).map((tx) => (
-                      <div 
-                        key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/10"
-                        data-testid={`transaction-${tx.id}`}
-                      >
-                        <div>
-                          <div className="text-sm font-medium text-white">
-                            {formatTransactionType(tx.type)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        <div className={`text-sm font-medium ${tx.amountCents >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {formatCurrency(tx.amountCents)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-2">
-                    No transactions yet. Your wallet activity will appear here.
-                  </p>
-                )}
-              </GlassCard>
-            )}
           </div>
         )}
 

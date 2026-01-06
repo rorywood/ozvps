@@ -424,9 +424,28 @@ export async function registerRoutes(
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
         // Fetch extRelationId from VirtFusion for existing users
         const existingUser = await virtfusionClient.getUserById(virtFusionUserId);
-        if (existingUser) {
+        if (existingUser && existingUser.extRelationId) {
           extRelationId = existingUser.extRelationId;
           log(`Fetched extRelationId for existing VirtFusion user: ${extRelationId}`, 'auth');
+        } else {
+          // VirtFusion user missing or has no extRelationId - clear stale metadata and re-create
+          log(`VirtFusion user ${virtFusionUserId} missing or has no extRelationId, clearing stale metadata`, 'auth');
+          // Clear the stale ID from Auth0 metadata
+          await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, null);
+          virtFusionUserId = null;
+          
+          // Try to create or find the user
+          const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
+          if (virtFusionUser) {
+            virtFusionUserId = virtFusionUser.id;
+            extRelationId = virtFusionUser.extRelationId;
+            await auth0Client.setVirtFusionUserId(auth0Result.user.user_id, virtFusionUser.id);
+            log(`Re-created VirtFusion user: ${virtFusionUser.id} with extRelationId: ${extRelationId}`, 'auth');
+          } else {
+            // VirtFusion user exists with this email but we can't retrieve their data
+            // This requires admin intervention in VirtFusion panel
+            log(`VirtFusion user exists for ${email} but cannot be retrieved - requires admin linking`, 'auth');
+          }
         }
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
@@ -441,6 +460,18 @@ export async function registerRoutes(
         }
       }
 
+      // Ensure we have both required IDs - critical for deployment functionality
+      if (!virtFusionUserId || !extRelationId) {
+        log(`Failed to establish VirtFusion account for ${email} - virtFusionUserId: ${virtFusionUserId}, extRelationId: ${extRelationId}`, 'auth');
+        // This typically occurs when a VirtFusion user exists with this email but was created
+        // through the old panel with a different extRelationId format. The VirtFusion API
+        // doesn't support email-based lookups, so admin intervention is required.
+        return res.status(401).json({ 
+          error: 'Your account requires manual setup. Please contact support with your email address.',
+          code: 'VIRTFUSION_SETUP_FAILED'
+        });
+      }
+
       // Check if user is admin (from Auth0 app_metadata)
       const isAdmin = await auth0Client.isUserAdmin(auth0Result.user.user_id);
       if (isAdmin) {
@@ -451,7 +482,7 @@ export async function registerRoutes(
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
-        virtFusionUserId: virtFusionUserId ?? undefined,
+        virtFusionUserId,
         extRelationId,
         email: email,
         name: auth0Result.user.name,
@@ -1365,8 +1396,8 @@ export async function registerRoutes(
           amountCents: String(amountCents),
           currency: 'aud',
         },
-        success_url: `${baseUrl}/deploy?topup=success`,
-        cancel_url: `${baseUrl}/deploy?topup=cancelled`,
+        success_url: `${baseUrl}/billing?topup=success`,
+        cancel_url: `${baseUrl}/billing?topup=cancelled`,
       });
 
       log(`Created checkout session for ${auth0UserId}: ${amountCents} cents`, 'stripe');

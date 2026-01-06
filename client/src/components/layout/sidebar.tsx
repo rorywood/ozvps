@@ -33,7 +33,8 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
-  { href: "/account", icon: Settings, label: "Account Settings" },
+  { href: "/billing", icon: Wallet, label: "Billing" },
+  { href: "/account", icon: Settings, label: "Account" },
 ];
 
 const adminNavItems = [
