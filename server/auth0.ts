@@ -275,6 +275,11 @@ class Auth0Client {
     return user?.app_metadata?.virtfusion_user_id || null;
   }
 
+  async isUserAdmin(auth0UserId: string): Promise<boolean> {
+    const user = await this.getUserById(auth0UserId);
+    return user?.app_metadata?.is_admin === true;
+  }
+
   async changePassword(auth0UserId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
       const managementToken = await this.getManagementToken();

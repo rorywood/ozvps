@@ -10,7 +10,8 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
-  Wallet
+  Wallet,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -33,6 +34,10 @@ const navItems = [
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
   { href: "/account", icon: Settings, label: "Account Settings" },
+];
+
+const adminNavItems = [
+  { href: "/admin", icon: ShieldCheck, label: "Admin Panel" },
 ];
 
 function VersionFooter() {
@@ -138,9 +143,27 @@ function BalanceDisplay() {
   );
 }
 
+interface UserMeResponse {
+  user: {
+    id: number | string;
+    email: string;
+    name?: string;
+    isAdmin?: boolean;
+  };
+}
+
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const { data: userData } = useQuery<UserMeResponse>({
+    queryKey: ['auth', 'me'],
+    queryFn: () => api.getCurrentUser(),
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
+  const isAdmin = userData?.user?.isAdmin ?? false;
 
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
@@ -179,6 +202,32 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             </Link>
           );
         })}
+
+        {isAdmin && (
+          <>
+            <div className="my-3 border-t border-white/10" />
+            {adminNavItems.map((item) => {
+              const isActive = location === item.href || location.startsWith(item.href);
+              return (
+                <Link key={item.href} href={item.href}>
+                  <div
+                    onClick={onNavClick}
+                    data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
+                      isActive
+                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+                        : "text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/5"
+                    )}
+                  >
+                    <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-amber-400" : "text-amber-400/70 group-hover:text-amber-400")} />
+                    {item.label}
+                  </div>
+                </Link>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <div className="p-4 border-t border-white/5 space-y-2">

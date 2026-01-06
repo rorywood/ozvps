@@ -11,6 +11,7 @@ export interface Session {
   extRelationId?: string | null;
   email: string;
   name?: string | null;
+  isAdmin?: boolean;
   expiresAt: Date;
   revokedAt?: Date | null;
   revokedReason?: string | null;
@@ -32,6 +33,7 @@ export interface IStorage {
     extRelationId?: string;
     email: string;
     name?: string;
+    isAdmin?: boolean;
     expiresAt: Date;
   }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
@@ -57,6 +59,7 @@ export class MemoryStorage implements IStorage {
     extRelationId?: string;
     email: string;
     name?: string;
+    isAdmin?: boolean;
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
@@ -69,6 +72,7 @@ export class MemoryStorage implements IStorage {
       extRelationId: data.extRelationId || null,
       email: data.email,
       name: data.name || null,
+      isAdmin: data.isAdmin || false,
       expiresAt: data.expiresAt,
       revokedAt: null,
       revokedReason: null,

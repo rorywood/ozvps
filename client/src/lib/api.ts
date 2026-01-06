@@ -296,9 +296,15 @@ class ApiClient {
     await fetch(`${this.baseUrl}/auth/logout`, { method: 'POST' });
   }
 
-  async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string } } | null> {
+  async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string; isAdmin?: boolean } } | null> {
     const response = await fetch(`${this.baseUrl}/auth/me`);
     if (!response.ok) return null;
+    return response.json();
+  }
+
+  async getCurrentUser(): Promise<{ user: { id: number | string; email: string; name?: string; isAdmin?: boolean } }> {
+    const response = await fetch(`${this.baseUrl}/auth/me`);
+    if (!response.ok) throw new Error('Not authenticated');
     return response.json();
   }
 

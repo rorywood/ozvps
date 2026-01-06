@@ -114,8 +114,18 @@ Preferred communication style: Simple, everyday language.
 - **Known API Limitations**:
   - **SSH Key Management**: VirtFusion public API v1 does NOT support SSH key endpoints (`/api/v1/ssh-keys/*` returns 404). SSH key management is only available through VirtFusion admin panel UI, not via REST API. This feature cannot be implemented until VirtFusion adds API support.
 
+### Admin Access
+- **Admin Panel**: Available at `/admin` route for users with admin privileges
+  - Shows quick reference guide for CLI commands
+  - Links to user management, wallet operations, and plan sync features
+- **Admin Detection**: Checked from Auth0 `app_metadata.is_admin` field
+  - Set `is_admin: true` in Auth0 dashboard → User Management → Select user → app_metadata
+  - Admin status is stored in session on login
+  - Sidebar shows "Admin Panel" link with amber styling when user is admin
+- **Security**: Non-admins are automatically redirected to dashboard if they try to access `/admin`
+
 ### Admin CLI Tool
-- **Command**: `ozvps-credits` (installed to /usr/local/bin)
+- **Command**: `ozvpsctl` (installed to /usr/local/bin)
 - **Authentication**: Requires `ADMIN_CLI_TOKEN` from .env (generated during installation)
 - **Features**:
   1. List all users and their wallet balances

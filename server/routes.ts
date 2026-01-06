@@ -21,6 +21,7 @@ declare global {
         extRelationId: string | null;
         email: string;
         name?: string;
+        isAdmin: boolean;
       };
     }
   }
@@ -170,6 +171,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       extRelationId: session.extRelationId ?? null,
       email: session.email,
       name: session.name ?? undefined,
+      isAdmin: session.isAdmin ?? false,
     };
 
     next();
@@ -439,6 +441,12 @@ export async function registerRoutes(
         }
       }
 
+      // Check if user is admin (from Auth0 app_metadata)
+      const isAdmin = await auth0Client.isUserAdmin(auth0Result.user.user_id);
+      if (isAdmin) {
+        log(`Admin user logged in: ${email}`, 'auth');
+      }
+
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
@@ -448,6 +456,7 @@ export async function registerRoutes(
         email: email,
         name: auth0Result.user.name,
         auth0UserId: auth0Result.user.user_id,
+        isAdmin,
         expiresAt,
       });
 
@@ -463,6 +472,7 @@ export async function registerRoutes(
           id: auth0Result.user.user_id,
           email: email,
           name: auth0Result.user.name,
+          isAdmin,
         },
       });
     } catch (error: any) {
@@ -509,6 +519,7 @@ export async function registerRoutes(
           name: session.name,
           virtFusionUserId: session.virtFusionUserId,
           extRelationId: session.extRelationId,
+          isAdmin: session.isAdmin ?? false,
         },
       });
     } catch (error: any) {
