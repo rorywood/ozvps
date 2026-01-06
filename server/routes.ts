@@ -242,6 +242,24 @@ export async function registerRoutes(
     }
   });
 
+  // Sync plans from VirtFusion on startup
+  (async () => {
+    try {
+      const packages = await virtfusionClient.getPackages();
+      if (packages.length > 0) {
+        const result = await dbStorage.syncPlansFromVirtFusion(packages);
+        log(`Plans synced from VirtFusion: ${result.synced} synced, ${result.errors.length} errors`, 'startup');
+        if (result.errors.length > 0) {
+          result.errors.forEach(err => log(`Plan sync error: ${err}`, 'startup'));
+        }
+      } else {
+        log('No packages found from VirtFusion to sync', 'startup');
+      }
+    } catch (error: any) {
+      log(`Failed to sync plans on startup: ${error.message}`, 'startup');
+    }
+  })();
+
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
     try {
@@ -268,6 +286,27 @@ export async function registerRoutes(
       const auth0UserId = `auth0|${auth0Result.user.user_id}`;
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
+
+      // Create Stripe customer and wallet for the new user
+      try {
+        const stripe = await getUncachableStripeClient();
+        const customer = await stripe.customers.create({
+          email,
+          name: name || undefined,
+          metadata: {
+            auth0UserId,
+            virtfusion_user_id: String(virtFusionUser.id),
+          },
+        });
+        
+        // Create wallet with Stripe customer linked
+        const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+        await dbStorage.updateWalletStripeCustomerId(auth0UserId, customer.id);
+        log(`Created Stripe customer ${customer.id} for new user ${auth0UserId}`, 'stripe');
+      } catch (stripeError: any) {
+        // Non-fatal: user can still register, Stripe customer will be created on first top-up
+        log(`Failed to create Stripe customer during registration: ${stripeError.message}`, 'stripe');
+      }
 
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
@@ -969,6 +1008,133 @@ export async function registerRoutes(
         configured: false,
         error: 'Stripe connector not set up',
       });
+    }
+  });
+
+  // List saved payment methods (authenticated)
+  app.get('/api/billing/payment-methods', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      
+      if (!wallet?.stripeCustomerId) {
+        return res.json({ paymentMethods: [] });
+      }
+
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: wallet.stripeCustomerId,
+        type: 'card',
+      });
+
+      res.json({
+        paymentMethods: paymentMethods.data.map(pm => ({
+          id: pm.id,
+          brand: pm.card?.brand || 'unknown',
+          last4: pm.card?.last4 || '****',
+          expMonth: pm.card?.exp_month,
+          expYear: pm.card?.exp_year,
+        })),
+      });
+    } catch (error: any) {
+      log(`Error listing payment methods: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to list payment methods' });
+    }
+  });
+
+  // Create SetupIntent for adding a new payment method (authenticated)
+  app.post('/api/billing/setup-intent', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const email = req.userSession!.email;
+      const name = req.userSession!.name;
+      
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      
+      // Get or create Stripe customer
+      let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      let stripeCustomerId = wallet.stripeCustomerId;
+
+      if (!stripeCustomerId) {
+        const customer = await stripe.customers.create({
+          email,
+          name: name || undefined,
+          metadata: { auth0UserId },
+        });
+        stripeCustomerId = customer.id;
+        await dbStorage.updateWalletStripeCustomerId(auth0UserId, stripeCustomerId);
+        log(`Created Stripe customer ${stripeCustomerId} for setup intent`, 'stripe');
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: stripeCustomerId,
+        payment_method_types: ['card'],
+        metadata: { auth0UserId },
+      });
+
+      res.json({
+        clientSecret: setupIntent.client_secret,
+      });
+    } catch (error: any) {
+      log(`Error creating setup intent: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to create setup intent' });
+    }
+  });
+
+  // Delete a payment method (authenticated)
+  app.delete('/api/billing/payment-methods/:id', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const paymentMethodId = req.params.id;
+      
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      
+      if (!wallet?.stripeCustomerId) {
+        return res.status(404).json({ error: 'No payment methods found' });
+      }
+
+      // Verify the payment method belongs to this customer
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== wallet.stripeCustomerId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      await stripe.paymentMethods.detach(paymentMethodId);
+      log(`Detached payment method ${paymentMethodId} for ${auth0UserId}`, 'stripe');
+
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error deleting payment method: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to delete payment method' });
+    }
+  });
+
+  // Get wallet transaction history (authenticated)
+  app.get('/api/billing/transactions', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const transactions = await dbStorage.getWalletTransactions(auth0UserId);
+      res.json({ transactions });
+    } catch (error: any) {
+      log(`Error fetching transactions: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch transactions' });
     }
   });
 

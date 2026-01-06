@@ -224,6 +224,48 @@ export const dbStorage = {
     return created;
   },
 
+  async syncPlansFromVirtFusion(packages: Array<{
+    id: number;
+    code: string;
+    name: string;
+    cpuCores: number;
+    memory: number;
+    primaryStorage: number;
+    traffic: number;
+    enabled: boolean;
+    prices?: Array<{ price: number; billingPeriod?: string }>;
+  }>): Promise<{ synced: number; errors: string[] }> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    for (const pkg of packages) {
+      try {
+        // Find monthly price (default to 0 if not found)
+        const monthlyPrice = pkg.prices?.find(p => 
+          p.billingPeriod === 'monthly' || p.billingPeriod === 'month' || !p.billingPeriod
+        );
+        const priceMonthly = monthlyPrice?.price || 0;
+
+        await this.upsertPlan({
+          code: pkg.code,
+          name: pkg.name,
+          vcpu: pkg.cpuCores,
+          ramMb: pkg.memory,
+          storageGb: pkg.primaryStorage,
+          transferGb: pkg.traffic,
+          priceMonthly,
+          virtfusionPackageId: pkg.id,
+          active: pkg.enabled,
+        });
+        synced++;
+      } catch (error: any) {
+        errors.push(`Failed to sync package ${pkg.code}: ${error.message}`);
+      }
+    }
+
+    return { synced, errors };
+  },
+
   // Wallets
   async getWallet(auth0UserId: string): Promise<Wallet | undefined> {
     const [wallet] = await db.select().from(wallets).where(eq(wallets.auth0UserId, auth0UserId));

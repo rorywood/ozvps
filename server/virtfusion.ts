@@ -1148,6 +1148,44 @@ export class VirtFusionClient {
     }
   }
 
+  // Get all packages from VirtFusion for syncing to local plans table
+  async getPackages(): Promise<Array<{
+    id: number;
+    code: string;
+    name: string;
+    cpuCores: number;
+    memory: number;       // MB
+    primaryStorage: number; // GB
+    traffic: number;      // GB
+    enabled: boolean;
+    prices?: Array<{
+      price: number;      // in cents
+      billingPeriod?: string;
+    }>;
+  }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/packages');
+      const packages = response.data || [];
+      
+      log(`Fetched ${packages.length} packages from VirtFusion`, 'virtfusion');
+      
+      return packages.map(pkg => ({
+        id: pkg.id,
+        code: pkg.code || `pkg-${pkg.id}`,
+        name: pkg.name || `Package ${pkg.id}`,
+        cpuCores: pkg.cpuCores || 1,
+        memory: pkg.memory || 1024,
+        primaryStorage: pkg.primaryStorage || 20,
+        traffic: pkg.traffic || 1000,
+        enabled: pkg.enabled !== false,
+        prices: pkg.prices || [],
+      }));
+    } catch (error) {
+      log(`Failed to fetch packages from VirtFusion: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
 }
 
 export const virtfusionClient = new VirtFusionClient();

@@ -386,6 +386,54 @@ class ApiClient {
     return response.json();
   }
 
+  async getPaymentMethods(): Promise<{ paymentMethods: Array<{
+    id: string;
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+  }> }> {
+    const response = await fetch(`${this.baseUrl}/billing/payment-methods`);
+    if (!response.ok) throw new Error('Failed to fetch payment methods');
+    return response.json();
+  }
+
+  async createSetupIntent(): Promise<{ clientSecret: string }> {
+    const response = await fetch(`${this.baseUrl}/billing/setup-intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create setup intent');
+    }
+    return response.json();
+  }
+
+  async deletePaymentMethod(id: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/billing/payment-methods/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete payment method');
+    }
+    return response.json();
+  }
+
+  async getTransactions(): Promise<{ transactions: Array<{
+    id: number;
+    type: string;
+    amountCents: number;
+    createdAt: string;
+    stripeEventId?: string;
+    metadata?: Record<string, unknown>;
+  }> }> {
+    const response = await fetch(`${this.baseUrl}/billing/transactions`);
+    if (!response.ok) throw new Error('Failed to fetch transactions');
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();

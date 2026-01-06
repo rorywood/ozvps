@@ -18,7 +18,9 @@ import {
   Mail,
   Clock,
   CreditCard,
-  ExternalLink
+  Trash2,
+  Wallet,
+  History
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -104,22 +106,6 @@ export default function Account() {
     }
   });
 
-  const billingPortalMutation = useMutation({
-    mutationFn: () => api.createBillingPortalSession(),
-    onSuccess: (data) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to open billing portal.",
-        variant: "destructive",
-      });
-    }
-  });
-
   const { data: stripeStatus } = useQuery({
     queryKey: ['stripe-status'],
     queryFn: () => api.getStripeStatus(),
@@ -127,6 +113,68 @@ export default function Account() {
   });
 
   const stripeConfigured = stripeStatus?.configured ?? false;
+
+  const { data: paymentMethodsData, isLoading: loadingPaymentMethods } = useQuery({
+    queryKey: ['payment-methods'],
+    queryFn: () => api.getPaymentMethods(),
+    enabled: stripeConfigured,
+  });
+
+  const { data: transactionsData, isLoading: loadingTransactions } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: () => api.getTransactions(),
+    enabled: stripeConfigured,
+  });
+
+  const { data: walletData } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+  });
+
+  const deletePaymentMethodMutation = useMutation({
+    mutationFn: (id: string) => api.deletePaymentMethod(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
+      toast({
+        title: "Payment Method Removed",
+        description: "The payment method has been removed from your account.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove payment method.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const formatCardBrand = (brand: string) => {
+    const brands: Record<string, string> = {
+      visa: 'Visa',
+      mastercard: 'Mastercard',
+      amex: 'American Express',
+      discover: 'Discover',
+      diners: 'Diners Club',
+      jcb: 'JCB',
+      unionpay: 'UnionPay',
+    };
+    return brands[brand.toLowerCase()] || brand;
+  };
+
+  const formatTransactionType = (type: string) => {
+    const types: Record<string, string> = {
+      credit: 'Top-up',
+      debit: 'Payment',
+      refund: 'Refund',
+    };
+    return types[type] || type;
+  };
+
+  const formatCurrency = (cents: number) => {
+    const isNegative = cents < 0;
+    return `${isNegative ? '-' : '+'}$${(Math.abs(cents) / 100).toFixed(2)}`;
+  };
   
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, email, timezone });
@@ -359,40 +407,125 @@ export default function Account() {
               </div>
             </GlassCard>
 
-            {/* Billing Section */}
+            {/* Wallet Balance Section */}
             {stripeConfigured && (
-              <GlassCard className="p-6 lg:col-span-2" data-testid="billing-section">
-                <div className="flex items-center gap-3 mb-6">
+              <GlassCard className="p-6" data-testid="wallet-section">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Wallet Balance</h3>
+                    <p className="text-sm text-muted-foreground">Your current account balance</p>
+                  </div>
+                </div>
+                <div className="text-3xl font-bold text-white">
+                  ${((walletData?.wallet?.balanceCents || 0) / 100).toFixed(2)} AUD
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Payment Methods Section */}
+            {stripeConfigured && (
+              <GlassCard className="p-6" data-testid="payment-methods-section">
+                <div className="flex items-center gap-3 mb-4">
                   <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
                     <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">Billing & Payment Methods</h3>
-                    <p className="text-sm text-muted-foreground">Manage your payment methods and billing history</p>
+                    <h3 className="font-semibold text-white">Payment Methods</h3>
+                    <p className="text-sm text-muted-foreground">Saved cards for wallet top-ups</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Access the Stripe Customer Portal to add or remove payment methods, view invoices, and manage your billing settings.
+                {loadingPaymentMethods ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : paymentMethodsData?.paymentMethods && paymentMethodsData.paymentMethods.length > 0 ? (
+                  <div className="space-y-3">
+                    {paymentMethodsData.paymentMethods.map((pm) => (
+                      <div 
+                        key={pm.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/10"
+                        data-testid={`payment-method-${pm.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <CreditCard className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <div className="text-sm font-medium text-white">
+                              {formatCardBrand(pm.brand)} •••• {pm.last4}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Expires {pm.expMonth}/{pm.expYear}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                          onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
+                          disabled={deletePaymentMethodMutation.isPending}
+                          data-testid={`delete-payment-method-${pm.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No saved payment methods. Add a card when you top up your wallet.
                   </p>
+                )}
+              </GlassCard>
+            )}
 
-                  <Button
-                    onClick={() => billingPortalMutation.mutate()}
-                    disabled={billingPortalMutation.isPending}
-                    className="gap-2"
-                    data-testid="button-billing-portal"
-                  >
-                    {billingPortalMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <ExternalLink className="h-4 w-4" />
-                        Open Billing Portal
-                      </>
-                    )}
-                  </Button>
+            {/* Transaction History Section */}
+            {stripeConfigured && (
+              <GlassCard className="p-6 lg:col-span-2" data-testid="transactions-section">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Transaction History</h3>
+                    <p className="text-sm text-muted-foreground">Your wallet transaction history</p>
+                  </div>
                 </div>
+
+                {loadingTransactions ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : transactionsData?.transactions && transactionsData.transactions.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {transactionsData.transactions.slice(0, 10).map((tx) => (
+                      <div 
+                        key={tx.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/10"
+                        data-testid={`transaction-${tx.id}`}
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-white">
+                            {formatTransactionType(tx.type)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <div className={`text-sm font-medium ${tx.amountCents >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {formatCurrency(tx.amountCents)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No transactions yet. Your wallet activity will appear here.
+                  </p>
+                )}
               </GlassCard>
             )}
           </div>

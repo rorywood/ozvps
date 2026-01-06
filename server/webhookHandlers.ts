@@ -4,6 +4,8 @@ import { log } from './index';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
+    log(`Webhook incoming: payload size=${payload.length} bytes`, 'stripe');
+    
     if (!Buffer.isBuffer(payload)) {
       throw new Error(
         'STRIPE WEBHOOK ERROR: Payload must be a Buffer. ' +
@@ -14,7 +16,13 @@ export class WebhookHandlers {
     }
 
     const sync = await getStripeSync();
-    await sync.processWebhook(payload, signature);
+    
+    try {
+      await sync.processWebhook(payload, signature);
+      log('stripe-replit-sync processed webhook successfully', 'stripe');
+    } catch (syncError: any) {
+      log(`stripe-replit-sync error (non-fatal): ${syncError.message}`, 'stripe');
+    }
 
     // Parse the event to handle wallet top-ups
     const stripe = await getUncachableStripeClient();
@@ -25,10 +33,16 @@ export class WebhookHandlers {
       return;
     }
     
-    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (signatureError: any) {
+      log(`Webhook signature verification failed: ${signatureError.message}`, 'stripe');
+      throw signatureError;
+    }
 
     // Log event details for debugging
-    log(`Webhook received: ${event.type} (${event.id})`, 'stripe');
+    log(`Webhook received: ${event.type} (${event.id}) livemode=${event.livemode}`, 'stripe');
 
     // Handle checkout.session.completed for wallet top-ups
     if (event.type === 'checkout.session.completed') {
