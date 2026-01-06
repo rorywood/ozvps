@@ -460,16 +460,10 @@ export async function registerRoutes(
         }
       }
 
-      // Ensure we have both required IDs - critical for deployment functionality
+      // Log if VirtFusion linking failed - user can still login but won't have full server management
       if (!virtFusionUserId || !extRelationId) {
-        log(`Failed to establish VirtFusion account for ${email} - virtFusionUserId: ${virtFusionUserId}, extRelationId: ${extRelationId}`, 'auth');
-        // This typically occurs when a VirtFusion user exists with this email but was created
-        // through the old panel with a different extRelationId format. The VirtFusion API
-        // doesn't support email-based lookups, so admin intervention is required.
-        return res.status(401).json({ 
-          error: 'Your account requires manual setup. Please contact support with your email address.',
-          code: 'VIRTFUSION_SETUP_FAILED'
-        });
+        log(`VirtFusion account not fully linked for ${email} - virtFusionUserId: ${virtFusionUserId}, extRelationId: ${extRelationId}`, 'auth');
+        // Continue with login - VirtFusion linking can be done later by admin
       }
 
       // Check if user is admin (from Auth0 app_metadata)
