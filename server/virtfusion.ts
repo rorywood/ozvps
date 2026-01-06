@@ -1040,6 +1040,79 @@ export class VirtFusionClient {
     }
   }
 
+  async deleteServer(serverId: number): Promise<boolean> {
+    try {
+      log(`Deleting server ${serverId}`, 'virtfusion');
+      await this.request(`/servers/${serverId}`, {
+        method: 'DELETE',
+      });
+      log(`Successfully deleted server ${serverId}`, 'virtfusion');
+      return true;
+    } catch (error: any) {
+      if (error.message?.includes('404')) {
+        log(`Server ${serverId} already deleted or not found`, 'virtfusion');
+        return true;
+      }
+      log(`Failed to delete server ${serverId}: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  async deleteUserById(userId: number): Promise<boolean> {
+    try {
+      log(`Deleting VirtFusion user ${userId}`, 'virtfusion');
+      await this.request(`/users/${userId}/byId`, {
+        method: 'DELETE',
+      });
+      log(`Successfully deleted VirtFusion user ${userId}`, 'virtfusion');
+      return true;
+    } catch (error: any) {
+      if (error.message?.includes('404')) {
+        log(`VirtFusion user ${userId} already deleted or not found`, 'virtfusion');
+        return true;
+      }
+      log(`Failed to delete VirtFusion user ${userId}: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  async cleanupUserAndServers(virtFusionUserId: number): Promise<{ success: boolean; serversDeleted: number; errors: string[] }> {
+    const errors: string[] = [];
+    let serversDeleted = 0;
+
+    try {
+      log(`Starting cleanup for VirtFusion user ${virtFusionUserId}`, 'virtfusion');
+
+      const servers = await this.listServersByUserId(virtFusionUserId);
+      log(`Found ${servers.length} servers for user ${virtFusionUserId}`, 'virtfusion');
+
+      for (const server of servers) {
+        const deleted = await this.deleteServer(server.id);
+        if (deleted) {
+          serversDeleted++;
+        } else {
+          errors.push(`Failed to delete server ${server.id}`);
+        }
+      }
+
+      if (errors.length === 0) {
+        const userDeleted = await this.deleteUserById(virtFusionUserId);
+        if (!userDeleted) {
+          errors.push(`Failed to delete VirtFusion user ${virtFusionUserId}`);
+        }
+      }
+
+      const success = errors.length === 0;
+      log(`Cleanup for user ${virtFusionUserId}: success=${success}, serversDeleted=${serversDeleted}, errors=${errors.length}`, 'virtfusion');
+      
+      return { success, serversDeleted, errors };
+    } catch (error: any) {
+      errors.push(`Cleanup error: ${error.message}`);
+      log(`Cleanup failed for user ${virtFusionUserId}: ${error}`, 'virtfusion');
+      return { success: false, serversDeleted, errors };
+    }
+  }
+
 }
 
 export const virtfusionClient = new VirtFusionClient();

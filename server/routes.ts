@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { createHmac, timingSafeEqual } from "crypto";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
 import { auth0Client } from "./auth0";
@@ -772,6 +773,83 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  app.post('/api/hooks/auth0-user-deleted', async (req, res) => {
+    try {
+      const webhookSecret = process.env.AUTH0_WEBHOOK_SECRET;
+      
+      if (!webhookSecret) {
+        log('Auth0 webhook secret not configured', 'webhook');
+        return res.status(500).json({ error: 'Webhook not configured' });
+      }
+
+      const signature = req.headers['x-auth0-signature'] as string;
+      if (!signature) {
+        log('Missing webhook signature header', 'webhook');
+        return res.status(401).json({ error: 'Missing signature' });
+      }
+
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        log('Missing raw body for signature verification', 'webhook');
+        return res.status(400).json({ error: 'Invalid request body' });
+      }
+
+      const expectedSignature = createHmac('sha256', webhookSecret)
+        .update(rawBody)
+        .digest('hex');
+      
+      const signatureBuffer = Buffer.from(signature, 'hex');
+      const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+      
+      if (signatureBuffer.length !== expectedBuffer.length || 
+          !timingSafeEqual(signatureBuffer, expectedBuffer)) {
+        log('Invalid webhook signature', 'webhook');
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+
+      const { auth0UserId, virtFusionUserId, email } = req.body;
+      
+      if (!auth0UserId) {
+        log('Missing auth0UserId in webhook payload', 'webhook');
+        return res.status(400).json({ error: 'Missing auth0UserId' });
+      }
+
+      log(`Processing user deletion webhook for Auth0 user: ${auth0UserId}, email: ${email}`, 'webhook');
+
+      await storage.deleteSessionsByAuth0UserId(auth0UserId);
+      log(`Deleted sessions for Auth0 user ${auth0UserId}`, 'webhook');
+
+      if (virtFusionUserId) {
+        const result = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
+        
+        if (result.success) {
+          log(`Successfully cleaned up VirtFusion user ${virtFusionUserId}: ${result.serversDeleted} servers deleted`, 'webhook');
+          return res.json({ 
+            success: true, 
+            message: `User and ${result.serversDeleted} servers deleted from VirtFusion` 
+          });
+        } else {
+          log(`Partial cleanup for VirtFusion user ${virtFusionUserId}: ${result.errors.join(', ')}`, 'webhook');
+          return res.status(207).json({ 
+            success: false, 
+            message: 'Partial cleanup completed',
+            serversDeleted: result.serversDeleted,
+            errors: result.errors 
+          });
+        }
+      } else {
+        log(`No VirtFusion user ID provided for Auth0 user ${auth0UserId}, skipping VirtFusion cleanup`, 'webhook');
+        return res.json({ 
+          success: true, 
+          message: 'No VirtFusion user linked, sessions cleared only' 
+        });
+      }
+    } catch (error: any) {
+      log(`Webhook error: ${error.message}`, 'webhook');
+      res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
 

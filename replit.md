@@ -62,6 +62,11 @@ Preferred communication style: Simple, everyday language.
   - **Credentials display**: After successful reinstall, shows server IP, username (root), and password with copy/reveal
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
+- **Auth0 User Deletion Sync**: When users are deleted from Auth0, automatically cleanup VirtFusion
+  - Webhook endpoint: `POST /api/hooks/auth0-user-deleted`
+  - Requires `AUTH0_WEBHOOK_SECRET` environment variable
+  - Flow: Receives signed webhook → Deletes user's sessions → Lists user's VirtFusion servers → Deletes each server → Deletes VirtFusion user
+  - Setup: See `docs/auth0-user-deletion-action.js` for Auth0 configuration
 - **Known API Limitations**:
   - **SSH Key Management**: VirtFusion public API v1 does NOT support SSH key endpoints (`/api/v1/ssh-keys/*` returns 404). SSH key management is only available through VirtFusion admin panel UI, not via REST API. This feature cannot be implemented until VirtFusion adds API support.
 
