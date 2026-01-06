@@ -151,7 +151,8 @@ export default function DeployPage() {
     },
   });
 
-  const plans = plansData?.plans || [];
+  // Only show active plans (API already filters, but double-check on frontend)
+  const plans = (plansData?.plans || []).filter(p => p.active);
   const locations = locationsData?.locations || [];
   const wallet = walletData?.wallet;
   const selectedPlan = plans.find(p => p.id === selectedPlanId);

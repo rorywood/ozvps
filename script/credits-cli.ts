@@ -2,7 +2,8 @@ import * as readline from 'readline';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { eq, desc, sql } from 'drizzle-orm';
-import { wallets, walletTransactions } from '../shared/schema';
+import * as schema from '../shared/schema';
+const { wallets, walletTransactions } = schema;
 
 const RED = '\x1b[0;31m';
 const GREEN = '\x1b[0;32m';
@@ -16,7 +17,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-const db = drizzle(pool);
+const db = drizzle(pool, { schema });
 
 const rl = readline.createInterface({
   input: process.stdin,
