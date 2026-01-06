@@ -1,4 +1,4 @@
-export const VERSION = "1.7.8";
+export const VERSION = "1.7.9";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",

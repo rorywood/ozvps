@@ -382,7 +382,9 @@ spinner $! "Updating tools"
 spinner $! "Restarting service"
 
 # Cleanup old backups (keep last 3)
-(ls -dt ${INSTALL_DIR}.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true) &
+(
+    ls -dt ${INSTALL_DIR}.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
+) &
 spinner $! "Cleaning up"
 
 echo ""
