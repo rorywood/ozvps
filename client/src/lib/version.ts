@@ -24,6 +24,7 @@ export const VERSION_HISTORY = [
       "Security: HTTPS-only enforcement for update downloads",
       "Update script now includes version identifier",
       "Removed public registration - login only",
+      "Fixed update script heredoc parsing issue",
     ],
   },
   {
