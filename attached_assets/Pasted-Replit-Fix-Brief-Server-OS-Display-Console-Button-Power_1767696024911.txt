@@ -1,0 +1,115 @@
+Replit Fix Brief: Server OS Display + Console Button + Power Icon + Server List Icon Update
+1) Show Operating System on Server Cards/List (Servers page)
+Requirement
+
+On the Servers list page (before clicking into a server), each server row/card must display the current installed OS.
+
+Implementation
+
+Source OS from VirtFusion server details (preferred fields in order):
+
+explicit operating_system / template_name / os_name
+
+image / distro / template label
+
+fallback: Unknown
+
+Display format (compact):
+
+OS icon (same mapping used in reinstall list where possible)
+
+Text: Ubuntu 22.04 / Debian 12 etc
+
+If VirtFusion only exposes “last installed template”, use that and label it as OS.
+
+UI placement
+
+In each server item near:
+
+CPU/RAM/Storage
+
+or directly under server name
+
+Keep it visible without expanding the row.
+
+2) Show Operating System on Dashboard server widgets
+Requirement
+
+On Dashboard, wherever servers are listed/summarised, show the installed OS the same way as the Servers list.
+
+Implementation
+
+Reuse the same server-to-os mapping function + logo mapping.
+
+Do not duplicate logic.
+
+3) Fix Console Button (currently broken)
+Requirement
+
+The “Console” button must reliably open the console page/view.
+
+Implementation checklist
+
+Verify route and handler:
+
+Button must navigate to correct route for server console (e.g. /servers/:id/console)
+
+Verify API call used to obtain console session/token:
+
+Ensure backend endpoint exists and returns what noVNC expects (URL + token + websocket endpoint)
+
+Common bug to fix:
+
+Using server internal ID vs VirtFusion server ID mismatch
+
+Button calling a removed endpoint after the reinstall changes
+
+Add a visible error state:
+
+If console session cannot be created, show inline error text and do not silently fail.
+
+Preserve the 15-second console lock rule already implemented:
+
+If locked, show countdown overlay rather than failing.
+
+4) Fix Power Button Icon Orientation (upside down)
+Requirement
+
+Power icon must be oriented correctly and visually consistent.
+
+Implementation
+
+Remove any CSS transform/rotation applied to the icon or its parent.
+
+Ensure the icon used is the correct glyph (power symbol, not “logout” or “standby” rotated).
+
+Standardise icon sizing in server list and server detail header.
+
+5) Replace Server Icon (far left) with better icon
+Requirement
+
+Change the far-left generic server icon to a cleaner, modern server glyph.
+
+Implementation
+
+Replace current icon component with a consistent “Server” icon across:
+
+Dashboard server list
+
+Servers list page
+
+Keep the OS logo separate; the server icon is just the server indicator.
+
+Use the same icon library you already use elsewhere (keep bundle minimal).
+
+Acceptance Criteria
+
+Servers list shows OS for every server (or “Unknown” if not available).
+
+Dashboard server list shows OS too.
+
+Console button works and opens the console reliably (or shows a real error).
+
+Power icon is no longer upside down.
+
+Server icon on the far left is replaced with a better consistent icon across pages.

@@ -888,6 +888,44 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
+  // Get available locations (Brisbane only for now)
+  app.get('/api/locations', async (req, res) => {
+    res.json({
+      locations: [
+        {
+          code: 'BNE',
+          name: 'Brisbane',
+          country: 'Australia',
+          countryCode: 'AU',
+          flag: '🇦🇺',
+        },
+      ],
+    });
+  });
+
+  // Get current user info with balance (authenticated)
+  app.get('/api/me', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+      const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      res.json({
+        user: {
+          id: req.userSession!.userId,
+          email: req.userSession!.email,
+          name: req.userSession!.name || req.userSession!.email,
+        },
+        balance: wallet.balanceCents,
+        balanceFormatted: `$${(wallet.balanceCents / 100).toFixed(2)}`,
+      });
+    } catch (error: any) {
+      log(`Error fetching user info: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch user info' });
+    }
+  });
+
   // Get available plans
   app.get('/api/plans', async (req, res) => {
     try {

@@ -9,11 +9,12 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  Zap
+  Zap,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -31,7 +32,7 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
-  { href: "/account", icon: Settings, label: "Settings" },
+  { href: "/account", icon: Settings, label: "Account Settings" },
 ];
 
 function VersionFooter() {
@@ -110,6 +111,33 @@ function VersionFooter() {
   );
 }
 
+function formatBalance(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function BalanceDisplay() {
+  const { data: walletData, isLoading } = useQuery<{ wallet: { balanceCents: number } }>({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  return (
+    <div className="px-3 py-2 mx-3 rounded-lg bg-primary/5 border border-primary/10" data-testid="global-balance-display">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Wallet className="h-3.5 w-3.5 text-primary" />
+          <span>Balance</span>
+        </div>
+        <span className="font-mono text-sm font-medium text-white" data-testid="text-global-balance">
+          {isLoading ? "—" : walletData?.wallet ? formatBalance(walletData.wallet.balanceCents) : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -127,6 +155,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div className="p-6 flex items-center justify-center">
         <img src={logo} alt="OzVPS" className="h-16 w-auto" data-testid="img-logo" />
       </div>
+
+      <BalanceDisplay />
 
       <div className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
@@ -175,6 +205,24 @@ export function DesktopSidebar() {
   );
 }
 
+function MobileBalanceDisplay() {
+  const { data: walletData, isLoading } = useQuery<{ wallet: { balanceCents: number } }>({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/10" data-testid="mobile-balance-display">
+      <Wallet className="h-3.5 w-3.5 text-primary" />
+      <span className="font-mono text-xs font-medium text-white">
+        {isLoading ? "—" : walletData?.wallet ? formatBalance(walletData.wallet.balanceCents) : "—"}
+      </span>
+    </div>
+  );
+}
+
 export function MobileHeader() {
   const [open, setOpen] = useState(false);
 
@@ -182,22 +230,25 @@ export function MobileHeader() {
     <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
       <div className="flex items-center justify-between p-4">
         <img src={logo} alt="OzVPS" className="h-10 w-auto" data-testid="img-logo-mobile" />
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-              data-testid="button-mobile-menu"
-              aria-label="Open navigation menu"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0 glass-panel border-r border-white/5">
-            <div className="h-full flex flex-col">
-              <SidebarContent onNavClick={() => setOpen(false)} />
-            </div>
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-3">
+          <MobileBalanceDisplay />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <button
+                className="p-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                data-testid="button-mobile-menu"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0 glass-panel border-r border-white/5">
+              <div className="h-full flex flex-col">
+                <SidebarContent onNavClick={() => setOpen(false)} />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
     </div>
   );

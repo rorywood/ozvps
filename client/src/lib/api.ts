@@ -308,6 +308,18 @@ class ApiClient {
     return response.json();
   }
 
+  async getLocations(): Promise<{ locations: any[] }> {
+    const response = await fetch(`${this.baseUrl}/locations`);
+    if (!response.ok) throw new Error('Failed to fetch locations');
+    return response.json();
+  }
+
+  async getMe(): Promise<{ user: any; balance: number; balanceFormatted: string }> {
+    const response = await fetch(`${this.baseUrl}/me`);
+    if (!response.ok) throw new Error('Failed to fetch user info');
+    return response.json();
+  }
+
   async getWallet(): Promise<{ wallet: any }> {
     const response = await fetch(`${this.baseUrl}/wallet`);
     if (!response.ok) throw new Error('Failed to fetch wallet');

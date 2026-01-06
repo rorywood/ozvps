@@ -1,0 +1,439 @@
+Replit Master Build Brief — OzVPS Deploy, Billing, Stripe, Wallet, DB, UI Fixes (Single Source of Truth)
+
+This replaces and consolidates all previous briefs and add-ons. Nothing is optional unless explicitly marked future.
+
+0) Objective
+
+Build a modern VPS Deploy + Billing system for OzVPS with:
+
+Vultr-style Deploy flow (simplified)
+
+Logged-in users only (external /pricing is read-only)
+
+Stripe-only payments
+
+Account wallet balance
+
+VirtFusion provisioning
+
+Zero-touch auto-install script (Node + PostgreSQL + DB + migrations + seeds)
+
+Clean, consistent UI with global balance visibility
+
+Only Brisbane (Australia) location.
+Only Shared CPU products.
+
+1) Navigation & Global UI Rules
+1.1 Global Account Balance (MANDATORY)
+
+Show Balance on all authenticated pages
+
+Placement: top header / navbar (desktop + mobile)
+
+Format:
+Balance $X.XX
+
+Data source:
+
+GET /api/me or GET /api/wallet
+
+Must refresh automatically after:
+
+Stripe top-up success
+
+Deploy debit
+
+If balance fetch fails: show Balance — silently
+
+1.2 Rename Navigation
+
+Rename “Settings” → “Account Settings”
+
+Change label everywhere:
+
+Sidebar
+
+Page titles
+
+Breadcrumbs
+
+Route may remain /settings, label must not say “Settings”
+
+2) Deploy Page (/deploy) — Logged-in Users
+Layout (Vultr-inspired, simplified)
+Left Column — Type
+
+Shared CPU
+
+Pre-selected
+
+Not clickable
+
+Middle Column — Location + Plan
+Location Selector (MANDATORY)
+
+Visible selector even with one option
+
+Options:
+
+🇦🇺 Brisbane (BNE) only
+
+Show Australian flag icon
+
+Selector must exist for future expansion
+
+Backend must validate location code
+
+Plan Selector
+
+Table layout
+
+Entire row clickable
+
+Columns:
+
+Name
+
+vCPU
+
+RAM
+
+NVMe
+
+Transfer
+
+Monthly price
+
+One plan selectable at a time
+
+Right Column — Deploy Summary
+
+Type: Shared CPU
+
+Location: Brisbane (with AU flag)
+
+Plan details
+
+Quantity: fixed 1
+
+Monthly price
+
+Account balance
+
+Due now (first month, flat — no proration)
+
+Primary button:
+
+Deploy
+
+OR Top up & Deploy if insufficient balance
+
+Button rules:
+
+Disabled until:
+
+Plan selected
+
+Location selected
+
+Wallet loaded
+
+If balance >= price → deploy immediately
+
+If balance < price → Stripe top-up flow for shortfall
+
+3) Public Pricing Page (/pricing)
+
+Read-only plan list
+
+Brisbane only
+
+Shared CPU only
+
+CTA:
+
+Logged out → Sign in
+
+Logged in → Go to /deploy with plan preselected
+
+4) Billing Model — Wallet System (MANDATORY)
+4.1 Wallet Rules
+
+Users maintain a prepaid balance
+
+Deploy deducts balance
+
+Stripe only used to top up balance
+
+No card storage
+
+No recurring billing (for now)
+
+4.2 Database Schema (PostgreSQL)
+
+users
+
+id (UUID)
+
+auth0_sub (unique)
+
+email
+
+created_at
+
+plans
+
+id
+
+code
+
+name
+
+vcpu
+
+ram_mb
+
+storage_gb
+
+transfer_gb
+
+price_monthly_cents
+
+active
+
+wallets
+
+user_id (unique)
+
+balance_cents (default 0)
+
+wallet_transactions
+
+id
+
+user_id
+
+type (topup|debit|refund|adjustment)
+
+amount_cents (signed)
+
+stripe_event_id (unique, nullable)
+
+stripe_payment_intent_id (nullable)
+
+metadata_json
+
+created_at
+
+deploy_orders
+
+id
+
+user_id
+
+plan_id
+
+location_code (BNE)
+
+price_cents
+
+status (pending_payment|paid|provisioning|active|failed|cancelled)
+
+virtfusion_server_id
+
+created_at
+
+5) Stripe Integration — REQUIRED FOR TESTING
+5.1 Required Environment Variables (NO DEFAULTS)
+
+App must fail fast if any are missing:
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+PUBLIC_BASE_URL=https://panel.ozvps.com.au
+
+5.2 What I must do (explicit)
+
+Log into Stripe Dashboard
+
+Enable Test Mode
+
+Copy:
+
+Test Secret Key
+
+Test Publishable Key
+
+Create webhook:
+
+URL: https://<PUBLIC_BASE_URL>/api/stripe/webhook
+
+Events:
+
+checkout.session.completed
+
+payment_intent.succeeded
+
+Copy webhook signing secret
+
+5.3 Stripe Flow
+
+User clicks Top up & Deploy
+
+Backend creates Stripe Checkout Session
+
+User pays
+
+Stripe webhook fires
+
+Backend:
+
+Verifies signature
+
+Inserts wallet credit
+
+Enforces idempotency via stripe_event_id
+
+UI refreshes balance and enables deploy
+
+5.4 Failure Rules
+
+No webhook → no balance credit
+
+Duplicate webhook → ignored
+
+Stripe misconfigured:
+
+Hide top-up buttons
+
+Disable deploy-with-top-up path
+
+6) Deploy Provisioning (VirtFusion)
+Backend POST /api/deploy
+
+Validate:
+
+User ownership
+
+Plan active
+
+Location allowed (BNE)
+
+Wallet balance sufficient
+
+In single DB transaction:
+
+Create deploy order
+
+Debit wallet
+
+Call VirtFusion API to provision
+
+Store server ID
+
+Set order → provisioning
+
+Failure handling
+
+If VirtFusion fails:
+
+Auto-refund wallet
+
+Mark order failed
+
+7) Required API Endpoints
+
+Plans
+
+GET /api/plans
+
+Wallet
+
+GET /api/wallet
+
+POST /api/wallet/topup
+
+POST /api/stripe/webhook
+
+Deploy
+
+POST /api/deploy
+
+GET /api/deploy/:orderId
+
+User
+
+GET /api/me (includes balance)
+
+Locations
+
+GET /api/locations → returns Brisbane only (for now)
+
+8) Zero-Touch Auto-Install / Auto-Update Script (MANDATORY)
+
+One command on a fresh VPS must result in a fully running system.
+
+Script must:
+
+Detect OS (Debian/Ubuntu + Alma/RHEL)
+
+Install system deps
+
+Install Node.js 18+
+
+Install PostgreSQL
+
+Enable & start Postgres
+
+Create:
+
+DB: ozvps_panel
+
+User: ozvps_panel_user
+
+Strong random password
+
+Write/update .env automatically:
+
+DATABASE_URL
+
+Preserve existing env vars
+
+Run migrations
+
+Seed plans (upsert)
+
+Build frontend if required
+
+Restart services
+
+Health-check app
+
+Exit non-zero on failure
+
+Constraints
+
+DB binds to localhost only
+
+Script must be idempotent
+
+No secrets printed to logs
+
+9) Acceptance Criteria
+
+Balance visible globally
+
+“Account Settings” label used everywhere
+
+Deploy page shows location selector with 🇦🇺 Brisbane
+
+Stripe test payments credit wallet via webhook only
+
+Deploy deducts wallet and provisions server
+
+One-command install works on a fresh VPS
+
+No manual DB, Stripe, or config steps after env vars are supplied
+
+This is the authoritative build spec. Any deviation requires explicit approval.
