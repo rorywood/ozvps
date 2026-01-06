@@ -1,4 +1,4 @@
-export const VERSION = "1.6.0";
+export const VERSION = "1.6.1";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -15,6 +15,15 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.6.1",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Session handling for backward compatibility with older sessions",
+      "Fix: Vite development mode no longer blocked by security filter",
+      "Improved: Install/update scripts now show clean progress output",
+    ],
+  },
   {
     version: "1.6.0",
     date: "2026-01-06",
