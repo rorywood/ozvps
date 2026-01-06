@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 interface PendingAction {
   action: string;
@@ -52,7 +51,6 @@ function saveToStorage(actions: PendingActionsMap) {
 
 export function PowerActionProvider({ children }: { children: ReactNode }) {
   const [pendingActions, setPendingActions] = useState<PendingActionsMap>(loadFromStorage);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     saveToStorage(pendingActions);

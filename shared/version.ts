@@ -1,4 +1,4 @@
-export const VERSION = "1.7.0";
+export const VERSION = "1.7.1";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,18 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.1",
+    date: "2026-01-06",
+    changes: [
+      "Feature: Cross-page power action status tracking with sessionStorage persistence",
+      "Feature: Transitional states (rebooting, starting, stopping) displayed across all pages",
+      "Feature: Stripe Customer ID display in account settings with show/hide toggle",
+      "Fix: Nano plan RAM corrected to 512 MB",
+      "Fix: VirtFusion user lookup now uses correct API endpoint",
+      "UI: Spinner icons during power action transitions",
+    ],
+  },
   {
     version: "1.7.0",
     date: "2026-01-06",
