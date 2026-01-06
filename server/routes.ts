@@ -775,5 +775,22 @@ export async function registerRoutes(
     }
   });
 
+  // Public install script endpoint (no auth required)
+  app.get('/install.sh', async (req, res) => {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const scriptPath = path.join(process.cwd(), 'public', 'install.sh');
+      const script = await fs.readFile(scriptPath, 'utf-8');
+      res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+      res.setHeader('Content-Disposition', 'inline; filename="install.sh"');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(script);
+    } catch (error: any) {
+      log(`Error serving install script: ${error.message}`, 'api');
+      res.status(404).send('# Install script not found');
+    }
+  });
+
   return httpServer;
 }
