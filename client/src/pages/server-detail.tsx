@@ -811,15 +811,13 @@ export default function ServerDetail() {
                   <div className="space-y-2">
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-bold text-white" data-testid="text-bandwidth-used">{usedGB} GB</span>
-                        <span className="text-xs text-muted-foreground">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
-                      </div>
+                      <span className="text-lg font-bold text-white whitespace-nowrap" data-testid="text-bandwidth-used">
+                        {usedGB} GB <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
+                      </span>
                       {remainingGB !== null ? (
-                        <div className="text-right">
-                          <span className="text-sm font-semibold text-green-400" data-testid="text-bandwidth-remaining">{remainingGB} GB</span>
-                          <span className="text-[10px] text-muted-foreground ml-1">left</span>
-                        </div>
+                        <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
+                          {remainingGB} GB <span className="text-[10px] text-muted-foreground font-normal">left</span>
+                        </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Unlimited</span>
                       )}
