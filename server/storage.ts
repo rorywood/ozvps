@@ -1,5 +1,7 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface Session {
   id: string;
@@ -190,3 +192,217 @@ export class MemoryStorage implements IStorage {
 }
 
 export const storage = new MemoryStorage();
+
+// Database storage for plans, wallets, and deploy orders
+export const dbStorage = {
+  // Plans
+  async getActivePlans(): Promise<Plan[]> {
+    return db.select().from(plans).where(eq(plans.active, true));
+  },
+
+  async getPlanById(id: number): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.id, id));
+    return plan;
+  },
+
+  async getPlanByCode(code: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.code, code));
+    return plan;
+  },
+
+  async upsertPlan(plan: InsertPlan): Promise<Plan> {
+    const existing = await this.getPlanByCode(plan.code);
+    if (existing) {
+      const [updated] = await db
+        .update(plans)
+        .set(plan)
+        .where(eq(plans.code, plan.code))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(plans).values(plan).returning();
+    return created;
+  },
+
+  // Wallets
+  async getWallet(auth0UserId: string): Promise<Wallet | undefined> {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.auth0UserId, auth0UserId));
+    return wallet;
+  },
+
+  async getOrCreateWallet(auth0UserId: string): Promise<Wallet> {
+    const existing = await this.getWallet(auth0UserId);
+    if (existing) return existing;
+    
+    const [wallet] = await db
+      .insert(wallets)
+      .values({ auth0UserId, balanceCents: 0 })
+      .returning();
+    return wallet;
+  },
+
+  async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
+    // Check for idempotency using stripeEventId
+    if (transaction.stripeEventId) {
+      const [existing] = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.stripeEventId, transaction.stripeEventId));
+      if (existing) {
+        // Already processed, return current wallet
+        return await this.getOrCreateWallet(auth0UserId);
+      }
+    }
+
+    // Create wallet if doesn't exist
+    await this.getOrCreateWallet(auth0UserId);
+
+    // Insert transaction
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      amountCents,
+      ...transaction,
+    });
+
+    // Update wallet balance
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+
+    return updated;
+  },
+
+  async debitWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<{ success: boolean; wallet?: Wallet; error?: string }> {
+    const wallet = await this.getOrCreateWallet(auth0UserId);
+    
+    if (wallet.balanceCents < amountCents) {
+      return { success: false, error: 'Insufficient balance' };
+    }
+
+    // Insert debit transaction
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'debit',
+      amountCents: -amountCents,
+      metadata: metadata || null,
+    });
+
+    // Update wallet balance
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+
+    return { success: true, wallet: updated };
+  },
+
+  async refundToWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<Wallet> {
+    await this.getOrCreateWallet(auth0UserId);
+
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'refund',
+      amountCents,
+      metadata: metadata || null,
+    });
+
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+
+    return updated;
+  },
+
+  async getWalletTransactions(auth0UserId: string, limit = 50): Promise<WalletTransaction[]> {
+    return db
+      .select()
+      .from(walletTransactions)
+      .where(eq(walletTransactions.auth0UserId, auth0UserId))
+      .orderBy(desc(walletTransactions.createdAt))
+      .limit(limit);
+  },
+
+  // Deploy Orders
+  async createDeployOrder(order: InsertDeployOrder): Promise<DeployOrder> {
+    const [created] = await db.insert(deployOrders).values(order).returning();
+    return created;
+  },
+
+  async getDeployOrder(id: number): Promise<DeployOrder | undefined> {
+    const [order] = await db.select().from(deployOrders).where(eq(deployOrders.id, id));
+    return order;
+  },
+
+  async getDeployOrdersByUser(auth0UserId: string): Promise<DeployOrder[]> {
+    return db
+      .select()
+      .from(deployOrders)
+      .where(eq(deployOrders.auth0UserId, auth0UserId))
+      .orderBy(desc(deployOrders.createdAt));
+  },
+
+  async updateDeployOrder(id: number, updates: Partial<DeployOrder>): Promise<DeployOrder | undefined> {
+    const [updated] = await db
+      .update(deployOrders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(deployOrders.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Combined: debit wallet + create order in transaction
+  async createDeployWithDebit(
+    auth0UserId: string,
+    planId: number,
+    priceCents: number,
+    hostname?: string
+  ): Promise<{ success: boolean; order?: DeployOrder; error?: string }> {
+    const wallet = await this.getOrCreateWallet(auth0UserId);
+    
+    if (wallet.balanceCents < priceCents) {
+      return { success: false, error: 'Insufficient balance' };
+    }
+
+    // Create order first
+    const order = await this.createDeployOrder({
+      auth0UserId,
+      planId,
+      locationCode: 'BNE',
+      hostname,
+      priceCents,
+      status: 'paid',
+    });
+
+    // Debit wallet
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'debit',
+      amountCents: -priceCents,
+      metadata: { deployOrderId: order.id },
+    });
+
+    await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} - ${priceCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId));
+
+    return { success: true, order };
+  },
+};
