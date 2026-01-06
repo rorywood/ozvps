@@ -672,11 +672,10 @@ export class VirtFusionClient {
       const serverName = server.name || `Server ${serverId}`;
       
       // Build the request body with all required parameters
-      // VirtFusion API requires: name, operatingSystemId
-      // Optional: hostname, vnc, ipv6, ssh_keys, email
+      // VirtFusion API requires: osId (not operatingSystemId)
+      // Optional: hostname, sshKeys, password
       const body: any = { 
-        name: serverName,
-        operatingSystemId: osId,
+        osId: osId,
       };
       
       if (hostname) {
