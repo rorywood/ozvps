@@ -1,21 +1,42 @@
-import { Filter } from 'bad-words';
-
-const filter = new Filter();
-
-const additionalBadWords = [
-  'porn', 'porno', 'xxx', 'nsfw', 'hentai', 'nude', 'nudes', 'naked',
-  'sex', 'sexy', 'onlyfans', 'fansly', 'chaturbate', 'pornhub',
-  'xvideos', 'xhamster', 'redtube', 'youporn', 'brazzers'
+const badWords = [
+  'fuck', 'shit', 'ass', 'asshole', 'bitch', 'damn', 'crap', 'bastard', 'cunt',
+  'dick', 'cock', 'pussy', 'whore', 'slut', 'fag', 'faggot', 'nigger',
+  'nigga', 'retard', 'porn', 'porno', 'xxx', 'nsfw', 'hentai', 'nude',
+  'nudes', 'naked', 'sex', 'sexy', 'onlyfans', 'fansly', 'chaturbate',
+  'pornhub', 'xvideos', 'xhamster', 'redtube', 'youporn', 'brazzers',
+  'shithead', 'dickhead', 'asshat', 'dumbass', 'jackass', 'motherfucker',
+  'fucker', 'fucking', 'fucked', 'shitting', 'shitted', 'bitchy',
+  'asses', 'dicks', 'cocks', 'pussies', 'sluts', 'whores', 'cunts'
 ];
 
-filter.addWords(...additionalBadWords);
+const badWordsSet = new Set(badWords.map(w => w.toLowerCase()));
 
 export function containsProfanity(text: string): boolean {
-  return filter.isProfane(text);
+  const lowerText = text.toLowerCase();
+  
+  for (const word of badWords) {
+    if (lowerText.includes(word)) {
+      return true;
+    }
+  }
+  
+  const normalized = lowerText.replace(/[\-_.\s]/g, '');
+  for (const word of badWords) {
+    if (normalized.includes(word)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 export function cleanText(text: string): string {
-  return filter.clean(text);
+  let result = text;
+  for (const word of badWords) {
+    const regex = new RegExp(word, 'gi');
+    result = result.replace(regex, '*'.repeat(word.length));
+  }
+  return result;
 }
 
 export function validateServerName(name: string): { valid: boolean; error?: string } {
