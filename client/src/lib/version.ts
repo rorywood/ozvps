@@ -1,4 +1,4 @@
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -10,9 +10,21 @@ export const FEATURES = [
   "OS reinstallation with template selection",
   "Server renaming",
   "Responsive mobile-friendly design",
+  "Precise bandwidth display with 2 decimal places",
+  "Prominent remaining bandwidth indicator",
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.1.0",
+    date: "2026-01-06",
+    changes: [
+      "Improved bandwidth display with precise GB values (2 decimal places)",
+      "Prominent remaining bandwidth indicator with green highlight",
+      "Reorganized bandwidth stats layout for clarity",
+      "Enhanced VNC cursor visibility",
+    ],
+  },
   {
     version: "1.0.0",
     date: "2026-01-05",

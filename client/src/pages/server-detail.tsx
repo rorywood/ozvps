@@ -793,32 +793,38 @@ export default function ServerDetail() {
                 const current = trafficData?.current;
                 const network = trafficData?.network;
                 
-                const usedGB = current?.total ? (current.total / (1024 * 1024 * 1024)).toFixed(1) : '0';
-                const rxGB = current?.rx ? (current.rx / (1024 * 1024 * 1024)).toFixed(1) : '0';
-                const txGB = current?.tx ? (current.tx / (1024 * 1024 * 1024)).toFixed(1) : '0';
+                // Calculate values with 2 decimal places for precision
+                const usedGBNum = current?.total ? current.total / (1024 * 1024 * 1024) : 0;
+                const usedGB = usedGBNum.toFixed(2);
+                const rxGB = current?.rx ? (current.rx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
+                const txGB = current?.tx ? (current.tx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
                 const limitGB = current?.limit || bandwidthAllowance || 0;
-                const remainingGB = limitGB > 0 ? Math.max(0, limitGB - parseFloat(usedGB)).toFixed(1) : null;
-                const usagePercent = limitGB > 0 ? Math.min(100, (parseFloat(usedGB) / limitGB) * 100) : 0;
+                const remainingGBNum = limitGB > 0 ? Math.max(0, limitGB - usedGBNum) : null;
+                const remainingGB = remainingGBNum !== null ? remainingGBNum.toFixed(2) : null;
+                const usagePercent = limitGB > 0 ? Math.min(100, (usedGBNum / limitGB) * 100) : 0;
                 
                 const periodStart = current?.periodStart ? new Date(current.periodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
                 const periodEnd = current?.periodEnd ? new Date(current.periodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
                 
                 return (
                   <div className="space-y-3">
-                    {/* Progress Section */}
-                    <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xl font-bold text-white" data-testid="text-bandwidth-used">{usedGB}</span>
-                          <span className="text-sm text-muted-foreground">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
+                    {/* Main Usage Display - Absolute Values */}
+                    <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                      {/* Used / Total */}
+                      <div className="text-center mb-3">
+                        <div className="text-3xl font-bold text-white" data-testid="text-bandwidth-used">
+                          {usedGB} <span className="text-lg text-muted-foreground">GB</span>
                         </div>
-                        <span className="text-lg font-semibold text-white" data-testid="text-bandwidth-percent">{usagePercent.toFixed(0)}%</span>
+                        <div className="text-sm text-muted-foreground">
+                          of {limitGB > 0 ? `${limitGB} GB` : 'Unlimited'}
+                        </div>
                       </div>
                       
-                      <div className="w-full bg-white/10 rounded-full h-2 mb-2">
+                      {/* Progress Bar */}
+                      <div className="w-full bg-white/10 rounded-full h-3 mb-3">
                         <div 
                           className={cn(
-                            "h-2 rounded-full transition-all duration-500",
+                            "h-3 rounded-full transition-all duration-500",
                             usagePercent > 90 ? "bg-red-500" :
                             usagePercent > 70 ? "bg-yellow-500" :
                             "bg-blue-500"
@@ -828,26 +834,35 @@ export default function ServerDetail() {
                         />
                       </div>
                       
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>
-                          {remainingGB !== null ? (
-                            <><span className="text-green-400">{remainingGB} GB</span> left</>
-                          ) : 'Unlimited'}
-                        </span>
-                        {periodStart && periodEnd && (
-                          <span>{periodStart} - {periodEnd}</span>
-                        )}
-                      </div>
+                      {/* Remaining - Prominent Display */}
+                      {remainingGB !== null ? (
+                        <div className="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                          <div className="text-2xl font-bold text-green-400" data-testid="text-bandwidth-remaining">
+                            {remainingGB} <span className="text-base">GB</span>
+                          </div>
+                          <div className="text-xs text-green-400/70">Remaining</div>
+                        </div>
+                      ) : (
+                        <div className="text-center text-sm text-muted-foreground">Unlimited bandwidth</div>
+                      )}
+                      
+                      {/* Period */}
+                      {periodStart && periodEnd && (
+                        <div className="text-center text-xs text-muted-foreground mt-2">
+                          Billing period: {periodStart} - {periodEnd}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Compact Stats Row */}
+                    {/* Detailed Stats Row */}
                     <div className="grid grid-cols-4 gap-2">
                       <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
                         <div className="flex items-center justify-center gap-1 mb-0.5">
                           <ArrowDownToLine className="h-3 w-3 text-green-400" />
                           <span className="text-[10px] text-muted-foreground">IN</span>
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-rx">{rxGB} GB</div>
+                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-rx">{rxGB}</div>
+                        <div className="text-[9px] text-muted-foreground">GB</div>
                       </div>
                       
                       <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
@@ -855,7 +870,8 @@ export default function ServerDetail() {
                           <ArrowUpFromLine className="h-3 w-3 text-blue-400" />
                           <span className="text-[10px] text-muted-foreground">OUT</span>
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-tx">{txGB} GB</div>
+                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-tx">{txGB}</div>
+                        <div className="text-[9px] text-muted-foreground">GB</div>
                       </div>
                       
                       <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
@@ -863,16 +879,17 @@ export default function ServerDetail() {
                           <Gauge className="h-3 w-3 text-purple-400" />
                           <span className="text-[10px] text-muted-foreground">PORT</span>
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
+                        <div className="text-sm font-semibold text-white" data-testid="text-port-speed">{network?.portSpeed || 500}</div>
+                        <div className="text-[9px] text-muted-foreground">Mbps</div>
                       </div>
                       
                       <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
                         <div className="flex items-center justify-center gap-1 mb-0.5">
                           <Network className="h-3 w-3 text-cyan-400" />
-                          <span className="text-[10px] text-muted-foreground">CAP</span>
+                          <span className="text-[10px] text-muted-foreground">USED</span>
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-allowance">
-                          {limitGB > 0 ? `${limitGB}G` : '∞'}
+                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-percent">
+                          {usagePercent.toFixed(1)}%
                         </div>
                       </div>
                     </div>
