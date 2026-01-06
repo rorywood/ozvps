@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 
 export interface ReinstallCredentials {
+  serverIp: string;
   username: string;
   password: string;
 }
@@ -207,8 +208,8 @@ export function useReinstallTask(serverId: string) {
     }
   }, [serverId, state.taskId, state.percent, state.timeline, addTimelineEvent, stopPolling]);
 
-  const startTask = useCallback((taskId?: string, password?: string) => {
-    const credentials = password ? { username: 'root', password } : null;
+  const startTask = useCallback((taskId?: string, password?: string, serverIp?: string) => {
+    const credentials = password ? { serverIp: serverIp || 'N/A', username: 'root', password } : null;
     const initialState: ReinstallTaskState = {
       isActive: true,
       taskId: taskId || null,

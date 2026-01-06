@@ -666,15 +666,16 @@ export class VirtFusionClient {
 
   async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
-      // VirtFusion API only requires operatingSystemId for rebuild
-      // Hostname is optional but we don't include it to match working curl test
       const body: any = { 
         operatingSystemId: osId,
       };
       
-      // NOTE: Not sending hostname - the working curl test only sent operatingSystemId
+      // Include hostname if provided
+      if (hostname) {
+        body.name = hostname;
+      }
       
-      log(`Reinstalling server ${serverId} with OS template ${osId}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}${hostname ? `, hostname: ${hostname}` : ''}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',

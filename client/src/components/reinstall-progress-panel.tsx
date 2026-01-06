@@ -28,13 +28,13 @@ function formatTimestamp(ts: number): string {
 export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPanelProps) {
   const { status, percent, error, timeline, isActive, credentials } = state;
   const [showPassword, setShowPassword] = useState(false);
-  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
+  const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
   const isRunning = isActive && !isComplete && !isFailed;
 
-  const handleCopy = async (value: string, field: 'username' | 'password') => {
+  const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedField(field);
@@ -83,6 +83,26 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
           <p className="text-xs text-muted-foreground">Save these credentials - they won't be shown again.</p>
           
           <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-muted-foreground">Server IP</span>
+                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-ip">
+                  {credentials.serverIp}
+                </p>
+              </div>
+              <button
+                onClick={() => handleCopy(credentials.serverIp, 'ip')}
+                className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                data-testid="button-copy-ip"
+              >
+                {copiedField === 'ip' ? (
+                  <Check className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+            
             <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground">Username</span>

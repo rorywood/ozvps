@@ -180,9 +180,9 @@ export default function ServerDetail() {
       setSelectedCategory("All");
       setReinstallDialogOpen(false);
       
-      // Start the reinstall task polling with the generated password
+      // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
-      reinstallTask.startTask(undefined, password);
+      reinstallTask.startTask(undefined, password, server?.primaryIp);
       
       // Start console lock (server will reboot after reinstall)
       consoleLock.startLock();
