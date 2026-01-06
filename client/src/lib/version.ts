@@ -23,6 +23,9 @@ export const VERSION_HISTORY = [
       "Prominent remaining bandwidth indicator with green highlight",
       "Reorganized bandwidth stats layout for clarity",
       "Enhanced VNC cursor visibility",
+      "Added update-ozvps command for easy one-command updates",
+      "Update script self-updates to stay current",
+      "Fixed bad-words package compatibility issue",
     ],
   },
   {
