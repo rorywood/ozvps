@@ -1195,12 +1195,12 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
-  // Location to hypervisor mapping
-  // NOTE: Update these IDs to match your VirtFusion hypervisors
-  // hypervisorId = the actual hypervisor node ID from /compute/hypervisors endpoint
-  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorId: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorId: 1, enabled: true },  // node01-bne.ozvps.com.au
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorId: 1, enabled: false },  // No Sydney node yet
+  // Location to hypervisor GROUP mapping
+  // NOTE: Update these IDs to match your VirtFusion hypervisor GROUPS (not individual hypervisors)
+  // hypervisorGroupId = the group ID from /compute/hypervisors response (group.id field)
+  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },  // "Brisbane Node" group
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },  // No Sydney node yet
   };
 
   // Get available locations
@@ -1642,12 +1642,12 @@ export async function registerRoutes(
 
       const { planId, osId, hostname, locationCode } = result.data;
 
-      // Get hypervisor from location (default to Brisbane)
+      // Get hypervisor GROUP from location (default to Brisbane)
       const location = LOCATION_CONFIG[locationCode || 'BNE'];
       if (!location || !location.enabled) {
         return res.status(400).json({ error: 'Invalid or unavailable location' });
       }
-      const hypervisorId = location.hypervisorId;
+      const hypervisorGroupId = location.hypervisorGroupId;
 
       // Get plan details
       const plan = await dbStorage.getPlanById(planId);
@@ -1702,7 +1702,7 @@ export async function registerRoutes(
           hostname: hostname,
           extRelationId,
           osId,
-          hypervisorId,
+          hypervisorGroupId,
         });
 
         // Update order with server ID
