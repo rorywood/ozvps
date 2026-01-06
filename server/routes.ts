@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 
@@ -82,7 +82,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const sessionId = req.cookies?.[SESSION_COOKIE];
   
   if (!sessionId) {
-    return res.status(401).json({ error: 'Not authenticated' });
+    return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
   }
 
   try {
@@ -90,13 +90,50 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     
     if (!session) {
       res.clearCookie(SESSION_COOKIE);
-      return res.status(401).json({ error: 'Session expired' });
+      return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
     }
 
     if (new Date(session.expiresAt) < new Date()) {
       await storage.deleteSession(sessionId);
       res.clearCookie(SESSION_COOKIE);
-      return res.status(401).json({ error: 'Session expired' });
+      return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
+    }
+
+    // Check if session was revoked
+    if (session.revokedAt) {
+      res.clearCookie(SESSION_COOKIE);
+      const reason = session.revokedReason;
+      
+      if (reason === SESSION_REVOKE_REASONS.CONCURRENT_LOGIN) {
+        return res.status(401).json({ 
+          error: 'You have been signed out because your account was accessed from another location.',
+          code: 'SESSION_REVOKED_CONCURRENT'
+        });
+      } else if (reason === SESSION_REVOKE_REASONS.USER_BLOCKED) {
+        return res.status(401).json({ 
+          error: 'Your account has been suspended. Please contact support.',
+          code: 'SESSION_REVOKED_BLOCKED'
+        });
+      } else {
+        return res.status(401).json({ 
+          error: 'Your session has ended. Please sign in again.',
+          code: 'SESSION_REVOKED'
+        });
+      }
+    }
+
+    // Check if user is blocked
+    if (session.auth0UserId) {
+      const userFlags = await storage.getUserFlags(session.auth0UserId);
+      if (userFlags?.blocked) {
+        // Revoke the session and return blocked error
+        await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
+        res.clearCookie(SESSION_COOKIE);
+        return res.status(401).json({ 
+          error: 'Your account has been suspended. Please contact support.',
+          code: 'SESSION_REVOKED_BLOCKED'
+        });
+      }
     }
 
     req.userSession = {
@@ -253,14 +290,22 @@ export async function registerRoutes(
         return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
 
+      // Check if user is blocked
+      const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
+      if (userFlags?.blocked) {
+        log(`Blocked user attempted login: ${email}`, 'auth');
+        return res.status(403).json({ 
+          error: 'Your account has been suspended. Please contact support.',
+          code: 'USER_BLOCKED'
+        });
+      }
+
       // Check for existing VirtFusion user ID in Auth0 metadata
       let virtFusionUserId = await auth0Client.getVirtFusionUserId(auth0Result.user.user_id);
       let extRelationId: string | undefined;
       
       if (virtFusionUserId) {
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
-        // For existing users, we'll get extRelationId from server owner data when needed
-        // Don't set it here as user lookup by ID doesn't work reliably in VirtFusion
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
@@ -274,8 +319,9 @@ export async function registerRoutes(
         }
       }
 
-      // Delete any existing sessions for this Auth0 user
-      await storage.deleteSessionsByAuth0UserId(auth0Result.user.user_id);
+      // Revoke any existing sessions for this Auth0 user (single session enforcement)
+      await storage.revokeSessionsByAuth0UserId(auth0Result.user.user_id, SESSION_REVOKE_REASONS.CONCURRENT_LOGIN);
+      log(`Revoked previous sessions for ${email} due to new login`, 'auth');
 
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
