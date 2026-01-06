@@ -117,7 +117,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
+      queryClient.clear();
       setLocation('/login');
     },
   });

@@ -33,7 +33,7 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: () => api.login(email, password),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth"] });
+      queryClient.clear();
       setLocation("/");
     },
     onError: (err: any) => {

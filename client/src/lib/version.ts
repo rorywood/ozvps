@@ -1,4 +1,4 @@
-export const VERSION = "1.5.2";
+export const VERSION = "1.5.3";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -15,6 +15,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.5.3",
+    date: "2026-01-06",
+    changes: [
+      "Security: Fixed cross-user data leak from cached server data",
+      "Clear all cached data on logout and login",
+    ],
+  },
   {
     version: "1.5.1",
     date: "2026-01-06",
