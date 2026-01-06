@@ -8,7 +8,7 @@ set -u
 set -o pipefail
 
 # Configuration
-REPO_URL="https://github.com/yourusername/ozvps-panel.git"
+DOWNLOAD_URL="${OZVPS_DOWNLOAD_URL:-}"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 NODE_VERSION="20"
@@ -136,27 +136,49 @@ main() {
         log_info "Dependencies installed successfully"
     }
 
-    # Clone or update repository
+    # Download and extract application
     setup_application() {
         log_step "Setting up OzVPS Panel..."
 
-        if [[ -d "$INSTALL_DIR" ]]; then
-            log_info "Existing installation found. Updating..."
-            cd "$INSTALL_DIR"
-            git pull origin main || git pull origin master || true
-        else
-            log_info "Cloning repository..."
+        # Determine download URL
+        if [[ -z "$DOWNLOAD_URL" ]]; then
+            echo ""
+            echo -e "${CYAN}Where would you like to download OzVPS Panel from?${NC}"
+            echo ""
+            echo "Enter the URL of your OzVPS Panel Replit app"
+            echo "(e.g., https://ozvps-panel.yourusername.repl.co)"
+            echo ""
+            read -p "Replit App URL: " REPLIT_URL
+            
+            # Remove trailing slash if present
+            REPLIT_URL="${REPLIT_URL%/}"
+            DOWNLOAD_URL="${REPLIT_URL}/download.tar.gz"
+        fi
+
+        # Create install directory
+        mkdir -p "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+
+        # Check for existing installation
+        if [[ -f "$INSTALL_DIR/package.json" ]]; then
+            log_info "Existing installation found. Backing up..."
+            mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
             mkdir -p "$INSTALL_DIR"
-            
-            # Check if we have a git repo URL or should prompt
-            if [[ "$REPO_URL" == *"yourusername"* ]]; then
-                log_warn "No repository URL configured."
-                read -p "Enter your OzVPS Panel git repository URL: " REPO_URL
-            fi
-            
-            git clone "$REPO_URL" "$INSTALL_DIR"
             cd "$INSTALL_DIR"
         fi
+
+        log_info "Downloading OzVPS Panel from: $DOWNLOAD_URL"
+        
+        # Download and extract
+        if ! curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-panel.tar.gz; then
+            log_error "Failed to download OzVPS Panel"
+            log_info "Please check the URL and try again"
+            exit 1
+        fi
+
+        log_info "Extracting application..."
+        tar -xzf /tmp/ozvps-panel.tar.gz -C "$INSTALL_DIR"
+        rm -f /tmp/ozvps-panel.tar.gz
 
         log_info "Installing npm dependencies..."
         npm install
@@ -240,6 +262,10 @@ EOF
 
         NGINX_CONF="/etc/nginx/sites-available/$SERVICE_NAME"
 
+        # Create sites-available directory if it doesn't exist (CentOS/RHEL)
+        mkdir -p /etc/nginx/sites-available
+        mkdir -p /etc/nginx/sites-enabled
+
         cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
@@ -265,6 +291,13 @@ EOF
         ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
         rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
+        # For CentOS/RHEL, include sites-enabled in nginx.conf if not already
+        if [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
+            if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
+                sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+            fi
+        fi
+
         # Test and reload nginx
         nginx -t
         systemctl reload nginx
@@ -278,7 +311,8 @@ EOF
         echo ""
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             log_step "Setting up SSL certificate..."
-            certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email admin@$PANEL_DOMAIN || {
+            read -p "Enter your email for SSL certificate notifications: " SSL_EMAIL
+            certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" || {
                 log_warn "Certbot failed. You can run it manually later:"
                 log_info "  sudo certbot --nginx -d $PANEL_DOMAIN"
             }
@@ -349,8 +383,8 @@ EOF
     echo "  Environment file: $INSTALL_DIR/.env"
     echo "  Nginx config: /etc/nginx/sites-available/$SERVICE_NAME"
     echo ""
-    echo -e "${YELLOW}To update the panel:${NC}"
-    echo "  cd $INSTALL_DIR && git pull && npm install && npm run build && pm2 restart $SERVICE_NAME"
+    echo -e "${YELLOW}To update the panel later:${NC}"
+    echo "  curl -fsSL <your-replit-url>/install.sh | sudo bash"
     echo ""
 }
 

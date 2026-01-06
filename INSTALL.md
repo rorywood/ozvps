@@ -31,12 +31,20 @@ You'll need the following credentials before installation:
 curl -fsSL https://your-replit-app.replit.app/install.sh | sudo bash
 ```
 
+The script will prompt you for:
+- Your Replit app URL (to download the panel code)
+- Auth0 credentials (domain, client ID, secret)
+- VirtFusion API credentials (panel URL, API token)
+- Your panel domain name
+
 Or download and review first (recommended):
 ```bash
 curl -fsSL https://your-replit-app.replit.app/install.sh -o install.sh
 chmod +x install.sh
 sudo ./install.sh
 ```
+
+**Note:** This installer downloads the panel directly from your Replit app - no GitHub required!
 
 ## Manual Installation
 

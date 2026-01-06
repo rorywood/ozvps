@@ -792,5 +792,76 @@ export async function registerRoutes(
     }
   });
 
+  // Public download endpoint - serves application code as tar.gz archive
+  app.get('/download.tar.gz', async (req, res) => {
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      const crypto = await import('crypto');
+      const execAsync = promisify(exec);
+      
+      const cwd = process.cwd();
+      // Use unique temp file to prevent race conditions
+      const uniqueId = crypto.randomBytes(8).toString('hex');
+      const archivePath = path.join('/tmp', `ozvps-panel-${uniqueId}.tar.gz`);
+      
+      // Files and directories to include - check which exist
+      const potentialFiles = [
+        'client',
+        'server', 
+        'shared',
+        'public',
+        'package.json',
+        'package-lock.json',
+        'tsconfig.json',
+        'vite.config.ts',
+        'vite-plugin-meta-images.ts',
+        'postcss.config.js',
+        'drizzle.config.ts',
+        'tailwind.config.ts',
+        'components.json',
+        'INSTALL.md'
+      ];
+      
+      // Filter to only existing files
+      const existingFiles: string[] = [];
+      for (const file of potentialFiles) {
+        try {
+          await fs.access(path.join(cwd, file));
+          existingFiles.push(file);
+        } catch {
+          // File doesn't exist, skip it
+        }
+      }
+      
+      if (existingFiles.length === 0) {
+        return res.status(500).send('No files found to archive');
+      }
+      
+      // Create tar.gz archive excluding node_modules, .env, and other unnecessary files
+      // Safely quote each file to handle spaces/special characters
+      const quotedFiles = existingFiles.map(f => `'${f.replace(/'/g, "'\\''")}'`).join(' ');
+      const tarCommand = `tar -czf '${archivePath}' --exclude='node_modules' --exclude='.env' --exclude='*.log' --exclude='.git' --exclude='dist' --exclude='.replit' --exclude='replit.nix' -C '${cwd}' ${quotedFiles}`;
+      
+      await execAsync(tarCommand);
+      
+      const archive = await fs.readFile(archivePath);
+      
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Disposition', 'attachment; filename="ozvps-panel.tar.gz"');
+      res.setHeader('Content-Length', archive.length);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(archive);
+      
+      // Cleanup
+      await fs.unlink(archivePath).catch(() => {});
+    } catch (error: any) {
+      log(`Error creating download archive: ${error.message}`, 'api');
+      res.status(500).send('Failed to create download archive');
+    }
+  });
+
   return httpServer;
 }
