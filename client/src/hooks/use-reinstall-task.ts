@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 
+export interface ReinstallCredentials {
+  username: string;
+  password: string;
+}
+
 export interface ReinstallTaskState {
   isActive: boolean;
   taskId: string | null;
@@ -8,6 +13,7 @@ export interface ReinstallTaskState {
   percent: number;
   error: string | null;
   timeline: TimelineEvent[];
+  credentials: ReinstallCredentials | null;
 }
 
 export type ReinstallStatus = 
@@ -101,6 +107,7 @@ export function useReinstallTask(serverId: string) {
         percent: stored.percent || 5,
         error: null,
         timeline: stored.timeline || [],
+        credentials: stored.credentials || null,
       };
     }
     return {
@@ -110,6 +117,7 @@ export function useReinstallTask(serverId: string) {
       percent: 0,
       error: null,
       timeline: [],
+      credentials: null,
     };
   });
 
@@ -199,7 +207,8 @@ export function useReinstallTask(serverId: string) {
     }
   }, [serverId, state.taskId, state.percent, state.timeline, addTimelineEvent, stopPolling]);
 
-  const startTask = useCallback((taskId?: string) => {
+  const startTask = useCallback((taskId?: string, password?: string) => {
+    const credentials = password ? { username: 'root', password } : null;
     const initialState: ReinstallTaskState = {
       isActive: true,
       taskId: taskId || null,
@@ -207,6 +216,7 @@ export function useReinstallTask(serverId: string) {
       percent: 5,
       error: null,
       timeline: [{ status: 'queued', timestamp: Date.now(), message: 'Reinstall started' }],
+      credentials,
     };
     
     setState(initialState);

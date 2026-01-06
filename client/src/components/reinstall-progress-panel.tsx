@@ -1,4 +1,5 @@
-import { AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import type { ReinstallTaskState, ReinstallStatus, TimelineEvent } from "@/hooks/use-reinstall-task";
@@ -25,11 +26,23 @@ function formatTimestamp(ts: number): string {
 }
 
 export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPanelProps) {
-  const { status, percent, error, timeline, isActive } = state;
+  const { status, percent, error, timeline, isActive, credentials } = state;
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
   const isRunning = isActive && !isComplete && !isFailed;
+
+  const handleCopy = async (value: string, field: 'username' | 'password') => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -63,6 +76,68 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
           <p className="text-sm text-red-400">{error}</p>
         )}
       </div>
+
+      {isComplete && credentials && (
+        <div className="space-y-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <h4 className="text-sm font-medium text-green-400">Login Credentials</h4>
+          <p className="text-xs text-muted-foreground">Save these credentials - they won't be shown again.</p>
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-muted-foreground">Username</span>
+                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-username">
+                  {credentials.username}
+                </p>
+              </div>
+              <button
+                onClick={() => handleCopy(credentials.username, 'username')}
+                className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                data-testid="button-copy-username"
+              >
+                {copiedField === 'username' ? (
+                  <Check className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-muted-foreground">Password</span>
+                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-password">
+                  {showPassword ? credentials.password : '••••••••••••'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                  data-testid="button-toggle-password"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleCopy(credentials.password, 'password')}
+                  className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                  data-testid="button-copy-password"
+                >
+                  {copiedField === 'password' ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {timeline.length > 0 && (
         <div className="space-y-2">

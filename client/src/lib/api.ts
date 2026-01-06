@@ -160,7 +160,7 @@ class ApiClient {
     return response.json();
   }
 
-  async reinstallServer(id: string, osId: number, hostname: string): Promise<{ success: boolean; error?: string }> {
+  async reinstallServer(id: string, osId: number, hostname: string): Promise<{ success: boolean; error?: string; data?: { generatedPassword?: string } }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

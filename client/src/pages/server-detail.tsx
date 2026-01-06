@@ -171,7 +171,7 @@ export default function ServerDetail() {
   const reinstallMutation = useMutation({
     mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname: string }) => 
       api.reinstallServer(id, osId, hostname),
-    onSuccess: () => {
+    onSuccess: (response) => {
       // Reset dialog state before closing
       setSelectedOs("");
       setHostname("");
@@ -180,8 +180,9 @@ export default function ServerDetail() {
       setSelectedCategory("All");
       setReinstallDialogOpen(false);
       
-      // Start the reinstall task polling
-      reinstallTask.startTask();
+      // Start the reinstall task polling with the generated password
+      const password = response.data?.generatedPassword;
+      reinstallTask.startTask(undefined, password);
       
       // Start console lock (server will reboot after reinstall)
       consoleLock.startLock();
