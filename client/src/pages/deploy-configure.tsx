@@ -16,10 +16,10 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  ArrowUpDown,
-  Server
+  ArrowUpDown
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
 
 interface Plan {
   id: number;
@@ -303,7 +303,12 @@ export default function DeployConfigurePage() {
                             }`}
                             data-testid={`radio-os-${template.id}`}
                           >
-                            <Server className="h-5 w-5 text-muted-foreground" />
+                            <img 
+                              src={getOsLogoUrl({ id: template.id, name: template.name, group: group.name })}
+                              alt={template.name}
+                              className="h-6 w-6 object-contain"
+                              onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
+                            />
                             <div className="flex-1 min-w-0">
                               <span className="font-medium text-white block truncate">
                                 {template.name}

@@ -384,6 +384,12 @@ export async function registerRoutes(
       
       if (virtFusionUserId) {
         log(`Found VirtFusion user ID in Auth0 metadata: ${virtFusionUserId}`, 'auth');
+        // Fetch extRelationId from VirtFusion for existing users
+        const existingUser = await virtfusionClient.getUserById(virtFusionUserId);
+        if (existingUser) {
+          extRelationId = existingUser.extRelationId;
+          log(`Fetched extRelationId for existing VirtFusion user: ${extRelationId}`, 'auth');
+        }
       } else {
         // Create VirtFusion user and store ID in Auth0 metadata
         const virtFusionUser = await virtfusionClient.findOrCreateUser(email, auth0Result.user.name || email.split('@')[0]);
