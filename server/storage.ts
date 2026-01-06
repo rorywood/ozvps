@@ -12,6 +12,7 @@ export interface Session {
   expiresAt: Date;
   revokedAt?: Date | null;
   revokedReason?: string | null;
+  lastActivityAt: Date;
 }
 
 export interface UserFlags {
@@ -36,6 +37,9 @@ export interface IStorage {
   deleteUserSessions(userId: number): Promise<void>;
   deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void>;
   revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void>;
+  hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean>;
+  revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
+  updateSessionActivity(sessionId: string): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
 }
@@ -54,6 +58,7 @@ export class MemoryStorage implements IStorage {
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
+    const now = new Date();
     const session: Session = {
       id,
       userId: data.visitorId || null,
@@ -65,6 +70,7 @@ export class MemoryStorage implements IStorage {
       expiresAt: data.expiresAt,
       revokedAt: null,
       revokedReason: null,
+      lastActivityAt: now,
     };
     this.sessions.set(id, session);
     return session;
@@ -117,6 +123,49 @@ export class MemoryStorage implements IStorage {
         session.revokedReason = reason;
       }
     });
+  }
+
+  async hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean> {
+    const now = new Date();
+    for (const session of this.sessions.values()) {
+      if (
+        session.auth0UserId === auth0UserId &&
+        !session.revokedAt &&
+        new Date(session.expiresAt) > now
+      ) {
+        const lastActivity = new Date(session.lastActivityAt);
+        const idleTime = now.getTime() - lastActivity.getTime();
+        if (idleTime <= idleTimeoutMs) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  async revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void> {
+    const now = new Date();
+    this.sessions.forEach((session) => {
+      if (
+        session.auth0UserId === auth0UserId &&
+        !session.revokedAt &&
+        new Date(session.expiresAt) > now
+      ) {
+        const lastActivity = new Date(session.lastActivityAt);
+        const idleTime = now.getTime() - lastActivity.getTime();
+        if (idleTime > idleTimeoutMs) {
+          session.revokedAt = now;
+          session.revokedReason = reason;
+        }
+      }
+    });
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.lastActivityAt = new Date();
+    }
   }
 
   async getUserFlags(auth0UserId: string): Promise<UserFlags | undefined> {

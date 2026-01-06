@@ -42,6 +42,9 @@ Preferred communication style: Simple, everyday language.
   - Sessions contain Auth0 user ID, VirtFusion user ID, extRelationId, email, and name
   - 7-day session expiry with httpOnly secure cookies
   - Sessions cleared on server restart (users re-login via Auth0)
+  - **Strict single-session**: Users cannot login if already logged in elsewhere
+  - **15-minute idle timeout**: Sessions auto-expire after 15 minutes of inactivity
+  - **Session activity tracking**: lastActivityAt updated on each authenticated request
 - **VNC Console Access**: Embedded noVNC viewer using WebSocket connection
   - **Step 1**: Backend enables VNC via POST `/servers/{id}/vnc` with `{ action: 'enable' }`
   - **Step 2**: Backend retrieves WebSocket URL and password from VirtFusion VNC response

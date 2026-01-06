@@ -26,6 +26,7 @@ declare global {
 
 const SESSION_COOKIE = 'ozvps_session';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 // CSRF protection middleware - validates Origin header for mutating requests
 function csrfProtection(req: Request, res: Response, next: NextFunction) {
@@ -114,6 +115,11 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
           error: 'Your account has been suspended. Please contact support.',
           code: 'SESSION_REVOKED_BLOCKED'
         });
+      } else if (reason === SESSION_REVOKE_REASONS.IDLE_TIMEOUT) {
+        return res.status(401).json({ 
+          error: 'Your session expired due to inactivity. Please sign in again.',
+          code: 'SESSION_IDLE_TIMEOUT'
+        });
       } else {
         return res.status(401).json({ 
           error: 'Your session has ended. Please sign in again.',
@@ -121,6 +127,21 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         });
       }
     }
+
+    // Check for idle timeout (15 minutes of inactivity)
+    const lastActivity = new Date(session.lastActivityAt);
+    const now = new Date();
+    if (now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
+      await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
+      res.clearCookie(SESSION_COOKIE);
+      return res.status(401).json({ 
+        error: 'Your session expired due to inactivity. Please sign in again.',
+        code: 'SESSION_IDLE_TIMEOUT'
+      });
+    }
+
+    // Update last activity timestamp
+    await storage.updateSessionActivity(sessionId);
 
     // Check if user is blocked
     if (session.auth0UserId) {
@@ -300,6 +321,19 @@ export async function registerRoutes(
         });
       }
 
+      // Revoke any idle sessions first (sessions that exceeded 15 min idle timeout)
+      await storage.revokeIdleSessions(auth0Result.user.user_id, IDLE_TIMEOUT_MS, SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
+
+      // Check if user already has an active session (strict single-session)
+      const hasExistingSession = await storage.hasActiveSession(auth0Result.user.user_id, IDLE_TIMEOUT_MS);
+      if (hasExistingSession) {
+        log(`User ${email} already has an active session - login blocked`, 'auth');
+        return res.status(403).json({ 
+          error: 'You are already logged in from another location. Please log out there first or wait for your session to expire.',
+          code: 'ALREADY_LOGGED_IN'
+        });
+      }
+
       // Check for existing VirtFusion user ID in Auth0 metadata
       let virtFusionUserId = await auth0Client.getVirtFusionUserId(auth0Result.user.user_id);
       let extRelationId: string | undefined;
@@ -318,10 +352,6 @@ export async function registerRoutes(
           log(`Created VirtFusion user and stored in Auth0: ${virtFusionUser.id} with extRelationId: ${extRelationId}`, 'auth');
         }
       }
-
-      // Revoke any existing sessions for this Auth0 user (single session enforcement)
-      await storage.revokeSessionsByAuth0UserId(auth0Result.user.user_id, SESSION_REVOKE_REASONS.CONCURRENT_LOGIN);
-      log(`Revoked previous sessions for ${email} due to new login`, 'auth');
 
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
