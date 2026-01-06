@@ -955,6 +955,23 @@ export async function registerRoutes(
     }
   });
 
+  // Get Stripe configuration status (check Replit connector)
+  app.get('/api/billing/stripe/status', async (req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({
+        configured: !!publishableKey,
+        publishableKey: publishableKey ? publishableKey.substring(0, 12) + '...' : null,
+      });
+    } catch (error: any) {
+      log(`Stripe not configured: ${error.message}`, 'api');
+      res.json({
+        configured: false,
+        error: 'Stripe connector not set up',
+      });
+    }
+  });
+
   // Get wallet balance (authenticated)
   app.get('/api/wallet', authMiddleware, async (req, res) => {
     try {

@@ -364,6 +364,16 @@ class ApiClient {
     return response.json();
   }
 
+  async getStripeStatus(): Promise<{
+    configured: boolean;
+    publishableKey?: string;
+    error?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/billing/stripe/status`);
+    if (!response.ok) throw new Error('Failed to fetch Stripe status');
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();

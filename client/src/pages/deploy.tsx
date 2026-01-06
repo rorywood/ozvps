@@ -105,6 +105,14 @@ export default function DeployPage() {
     queryFn: () => api.getWallet(),
   });
 
+  const { data: stripeStatus } = useQuery({
+    queryKey: ['stripe-status'],
+    queryFn: () => api.getStripeStatus(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const stripeConfigured = stripeStatus?.configured ?? false;
+
   const topupMutation = useMutation({
     mutationFn: (amountCents: number) => api.createTopup(amountCents),
     onSuccess: (data: { url: string }) => {
@@ -408,21 +416,27 @@ export default function DeployPage() {
                         <AlertCircle className="h-4 w-4" />
                         <span>Insufficient balance</span>
                       </div>
-                      <Button 
-                        className="w-full gap-2 h-11" 
-                        onClick={handleTopupAndDeploy}
-                        disabled={topupMutation.isPending}
-                        data-testid="button-topup-deploy"
-                      >
-                        {topupMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4" />
-                            Top Up & Deploy
-                          </>
-                        )}
-                      </Button>
+                      {stripeConfigured ? (
+                        <Button 
+                          className="w-full gap-2 h-11" 
+                          onClick={handleTopupAndDeploy}
+                          disabled={topupMutation.isPending}
+                          data-testid="button-topup-deploy"
+                        >
+                          {topupMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4" />
+                              Top Up & Deploy
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <div className="text-xs text-muted-foreground text-center py-2" data-testid="text-topup-disabled">
+                          Top-ups disabled - billing not configured
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <Button className="w-full h-11" disabled data-testid="button-deploy-disabled">
@@ -433,48 +447,50 @@ export default function DeployPage() {
               </div>
             </GlassCard>
 
-            {/* Quick Top-up */}
-            <GlassCard className="p-5">
-              <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-primary" />
-                Add Funds
-              </h2>
-              
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
-                  {[500, 1000, 2000, 5000, 10000, 20000].map((amount) => (
-                    <Button
-                      key={amount}
-                      variant={topupAmount === amount ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTopupAmount(amount)}
-                      className="font-mono text-xs"
-                      data-testid={`button-topup-${amount}`}
-                    >
-                      ${amount / 100}
-                    </Button>
-                  ))}
-                </div>
+            {/* Quick Top-up - only show if Stripe is configured */}
+            {stripeConfigured && (
+              <GlassCard className="p-5" data-testid="card-add-funds">
+                <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-primary" />
+                  Add Funds
+                </h2>
                 
-                <Button 
-                  className="w-full gap-2" 
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleTopup}
-                  disabled={topupMutation.isPending}
-                  data-testid="button-topup-submit"
-                >
-                  {topupMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4" />
-                      Add {formatCurrency(topupAmount)}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </GlassCard>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[500, 1000, 2000, 5000, 10000, 20000].map((amount) => (
+                      <Button
+                        key={amount}
+                        variant={topupAmount === amount ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setTopupAmount(amount)}
+                        className="font-mono text-xs"
+                        data-testid={`button-topup-${amount}`}
+                      >
+                        ${amount / 100}
+                      </Button>
+                    ))}
+                  </div>
+                  
+                  <Button 
+                    className="w-full gap-2" 
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleTopup}
+                    disabled={topupMutation.isPending}
+                    data-testid="button-topup-submit"
+                  >
+                    {topupMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Add {formatCurrency(topupAmount)}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </GlassCard>
+            )}
           </div>
         </div>
       </div>
