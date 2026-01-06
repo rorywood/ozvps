@@ -345,7 +345,13 @@ class ApiClient {
     return response.json();
   }
 
-  async deployServer(data: { planId: number; hostname?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
+  async getPlanTemplates(planId: number): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/plans/${planId}/templates`);
+    if (!response.ok) throw new Error('Failed to fetch OS templates');
+    return response.json();
+  }
+
+  async deployServer(data: { planId: number; osId: number; hostname: string; locationCode?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
     const response = await fetch(`${this.baseUrl}/deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

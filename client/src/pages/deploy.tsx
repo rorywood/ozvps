@@ -130,27 +130,6 @@ export default function DeployPage() {
     },
   });
 
-  const deployMutation = useMutation({
-    mutationFn: (data: { planId: number; hostname?: string; locationCode?: string }) => api.deployServer(data),
-    onSuccess: (data: { orderId: number; serverId: number }) => {
-      toast({
-        title: "Server deployed!",
-        description: "Your new VPS is being provisioned.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      queryClient.invalidateQueries({ queryKey: ['servers'] });
-      queryClient.invalidateQueries({ queryKey: ['me'] });
-      setLocation(`/servers/${data.serverId}`);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Deployment failed",
-        description: error.message || "Failed to deploy server",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Only show active plans (API already filters, but double-check on frontend)
   const plans = (plansData?.plans || []).filter(p => p.active);
   const locations = locationsData?.locations || [];
@@ -159,12 +138,9 @@ export default function DeployPage() {
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  const handleDeploy = () => {
+  const handleContinue = () => {
     if (!selectedPlanId || !selectedLocationCode) return;
-    deployMutation.mutate({
-      planId: selectedPlanId,
-      locationCode: selectedLocationCode,
-    });
+    setLocation(`/deploy/${selectedPlanId}?location=${selectedLocationCode}`);
   };
 
   const handleTopupAndDeploy = () => {
@@ -371,25 +347,19 @@ export default function DeployPage() {
                       <Button 
                         className="w-full h-11" 
                         disabled 
-                        data-testid="button-deploy-disabled"
+                        data-testid="button-continue-disabled"
                       >
                         Select a plan
                       </Button>
                     ) : canAfford ? (
                       <Button 
                         className="w-full h-11 gap-2" 
-                        onClick={handleDeploy}
-                        disabled={deployMutation.isPending || loadingWallet}
-                        data-testid="button-deploy"
+                        onClick={handleContinue}
+                        disabled={loadingWallet}
+                        data-testid="button-continue"
                       >
-                        {deployMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Zap className="h-4 w-4" />
-                            Deploy
-                          </>
-                        )}
+                        <Zap className="h-4 w-4" />
+                        Continue
                       </Button>
                     ) : stripeConfigured ? (
                       <Button 

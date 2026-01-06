@@ -13,6 +13,7 @@ import Account from "@/pages/account";
 import Order from "@/pages/order";
 import Pricing from "@/pages/pricing";
 import Deploy from "@/pages/deploy";
+import DeployConfigure from "@/pages/deploy-configure";
 import Login from "@/pages/login";
 import SystemError from "@/pages/system-error";
 import { api } from "@/lib/api";
@@ -136,6 +137,13 @@ function Router() {
         <AuthGuard>
           <Deploy />
         </AuthGuard>
+      </Route>
+      <Route path="/deploy/:planId">
+        {(params) => (
+          <AuthGuard>
+            <DeployConfigure />
+          </AuthGuard>
+        )}
       </Route>
       <Route component={NotFound} />
     </Switch>

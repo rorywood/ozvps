@@ -1079,12 +1079,13 @@ export class VirtFusionClient {
   async provisionServer(params: {
     userId: number;
     packageId: number;
-    hostname?: string;
+    hostname: string;
     extRelationId: string;
+    osId: number;
   }): Promise<{ serverId: number; name: string }> {
-    const { userId, packageId, hostname, extRelationId } = params;
+    const { userId, packageId, hostname, extRelationId, osId } = params;
     
-    log(`Provisioning server for user ${userId} with package ${packageId}`, 'virtfusion');
+    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}`, 'virtfusion');
     
     try {
       const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
@@ -1095,6 +1096,7 @@ export class VirtFusionClient {
           name: hostname,
           extRelationId,
           hypervisorId: 1, // Default hypervisor
+          operatingSystemId: osId,
         }),
       });
 
@@ -1183,6 +1185,17 @@ export class VirtFusionClient {
     } catch (error) {
       log(`Failed to fetch packages from VirtFusion: ${error}`, 'virtfusion');
       return [];
+    }
+  }
+
+  async getOsTemplatesForPackage(packageId: number) {
+    try {
+      log(`Fetching OS templates for package ${packageId}`, 'virtfusion');
+      const data = await this.request<{ data: any }>(`/media/templates/fromServerPackageSpec/${packageId}`);
+      return data.data;
+    } catch (error) {
+      log(`Failed to fetch OS templates for package ${packageId}: ${error}`, 'virtfusion');
+      return null;
     }
   }
 

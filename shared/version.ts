@@ -1,4 +1,4 @@
-export const VERSION = "1.6.2";
+export const VERSION = "1.7.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -8,6 +8,8 @@ export const FEATURES = [
   "Live server statistics and metrics",
   "Server power controls (Start, Reboot, Shutdown)",
   "OS reinstallation with template selection",
+  "Server deployment with OS and hostname selection",
+  "Prepaid wallet with Stripe integration",
   "Server renaming",
   "Responsive mobile-friendly design",
   "Precise bandwidth display with 2 decimal places",
@@ -15,6 +17,18 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.0",
+    date: "2026-01-06",
+    changes: [
+      "Deploy: New OS selection during server deployment",
+      "Deploy: Required hostname input with validation",
+      "Security: Stripe customer verification on wallet top-ups",
+      "Security: Webhook signature verification now mandatory",
+      "Fix: Plans sync uses VirtFusion package ID as unique key",
+      "Fix: Existing prices preserved when VirtFusion doesn't provide pricing",
+    ],
+  },
   {
     version: "1.6.2",
     date: "2026-01-06",

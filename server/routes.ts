@@ -1324,10 +1324,37 @@ export async function registerRoutes(
     }
   });
 
+  // Get OS templates for a plan (authenticated)
+  app.get('/api/plans/:id/templates', authMiddleware, async (req, res) => {
+    try {
+      const planId = parseInt(req.params.id, 10);
+      if (isNaN(planId)) {
+        return res.status(400).json({ error: 'Invalid plan ID' });
+      }
+
+      const plan = await dbStorage.getPlanById(planId);
+      if (!plan || !plan.active) {
+        return res.status(404).json({ error: 'Plan not found or inactive' });
+      }
+
+      if (!plan.virtfusionPackageId) {
+        return res.status(400).json({ error: 'Plan not configured for deployment' });
+      }
+
+      const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+      res.json(templates || []);
+    } catch (error: any) {
+      log(`Error fetching templates for plan ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch OS templates' });
+    }
+  });
+
   // Deploy a new VPS (authenticated)
   const deploySchema = z.object({
     planId: z.number(),
-    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i).optional(),
+    osId: z.number().min(1),
+    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i),
+    locationCode: z.string().optional(),
   });
 
   app.post('/api/deploy', authMiddleware, async (req, res) => {
@@ -1342,10 +1369,11 @@ export async function registerRoutes(
 
       const result = deploySchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ error: 'Invalid deploy request' });
+        const errorMessages = result.error.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ error: `Invalid deploy request: ${errorMessages}` });
       }
 
-      const { planId, hostname } = result.data;
+      const { planId, osId, hostname, locationCode } = result.data;
 
       // Get plan details
       const plan = await dbStorage.getPlanById(planId);
@@ -1355,6 +1383,24 @@ export async function registerRoutes(
 
       if (!plan.virtfusionPackageId) {
         return res.status(400).json({ error: 'Plan not configured for deployment' });
+      }
+
+      // Verify OS template is valid for this plan
+      const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+      let templateAllowed = false;
+      if (templates && Array.isArray(templates)) {
+        for (const group of templates) {
+          if (group.templates && Array.isArray(group.templates)) {
+            if (group.templates.some((t: any) => t.id === osId)) {
+              templateAllowed = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!templateAllowed) {
+        return res.status(403).json({ error: 'Selected operating system is not available for this plan' });
       }
 
       // Debit wallet and create order atomically
@@ -1379,8 +1425,9 @@ export async function registerRoutes(
         const serverResult = await virtfusionClient.provisionServer({
           userId: virtFusionUserId,
           packageId: plan.virtfusionPackageId,
-          hostname: hostname || `vps-${order.id}`,
+          hostname: hostname,
           extRelationId,
+          osId,
         });
 
         // Update order with server ID
