@@ -9,6 +9,21 @@ import { log } from "./index";
 const execAsync = promisify(exec);
 
 export function registerInstallAssets(app: Express) {
+  app.get('/update-ozvps.sh', async (req, res) => {
+    try {
+      const scriptPath = path.join(process.cwd(), 'public', 'update-ozvps.sh');
+      const script = await fs.readFile(scriptPath, 'utf8');
+      
+      res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+      res.setHeader('Content-Disposition', 'inline; filename="update-ozvps.sh"');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(script);
+    } catch (error: any) {
+      log(`Error serving update script: ${error.message}`, 'api');
+      res.status(404).send('# Update script not found');
+    }
+  });
+
   app.get('/install.sh', async (req, res) => {
     try {
       const scriptPath = path.join(process.cwd(), 'public', 'install.sh');

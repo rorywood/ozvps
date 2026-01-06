@@ -1,0 +1,233 @@
+#!/bin/bash
+set -e
+
+# OzVPS Panel Update Script
+# Run with: update-ozvps
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+INSTALL_DIR="/opt/ozvps-panel"
+CONFIG_FILE="$INSTALL_DIR/.update_config"
+SERVICE_NAME="ozvps-panel"
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "\n${CYAN}==>${NC} $1"; }
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+    log_error "This script must be run as root (use sudo)"
+    exit 1
+fi
+
+# Check if OzVPS Panel is installed
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    log_error "OzVPS Panel is not installed at $INSTALL_DIR"
+    log_info "Please run the installer first"
+    exit 1
+fi
+
+cd "$INSTALL_DIR"
+
+# Load saved config if exists
+SAVED_URL=""
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+    SAVED_URL="$REPLIT_URL"
+fi
+
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║              OzVPS Panel Update Script                        ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Ask for Replit URL
+if [[ -n "$SAVED_URL" ]]; then
+    echo -e "Last used Replit URL: ${GREEN}$SAVED_URL${NC}"
+    read -p "Press Enter to use this URL, or paste a new one: " NEW_URL </dev/tty
+    if [[ -n "$NEW_URL" ]]; then
+        REPLIT_URL="$NEW_URL"
+    else
+        REPLIT_URL="$SAVED_URL"
+    fi
+else
+    echo -e "${YELLOW}Enter your Replit development URL${NC}"
+    echo -e "Example: https://8d85f4f1-9822-43d8-8fef-61748f2aba09-00-3565k9mtun2wb.worf.replit.dev/"
+    read -p "Replit URL: " REPLIT_URL </dev/tty
+fi
+
+# Validate URL
+if [[ -z "$REPLIT_URL" ]]; then
+    log_error "Replit URL is required"
+    exit 1
+fi
+
+# Remove trailing slash if present
+REPLIT_URL="${REPLIT_URL%/}"
+
+# Save URL for next time
+echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
+
+DOWNLOAD_URL="$REPLIT_URL/download.tar.gz"
+
+log_step "Downloading latest OzVPS Panel..."
+log_info "From: $DOWNLOAD_URL"
+
+# Download archive
+if ! curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-update.tar.gz; then
+    log_error "Failed to download update"
+    log_info "Make sure your Replit app is running and the URL is correct"
+    exit 1
+fi
+
+log_step "Backing up current installation..."
+BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+cp -r "$INSTALL_DIR" "$BACKUP_DIR"
+log_info "Backup saved to: $BACKUP_DIR"
+
+log_step "Extracting update..."
+
+# Extract new files (preserving .env and ecosystem.config.cjs)
+cp "$INSTALL_DIR/.env" /tmp/ozvps-env-backup 2>/dev/null || true
+cp "$INSTALL_DIR/ecosystem.config.cjs" /tmp/ozvps-ecosystem-backup 2>/dev/null || true
+cp "$INSTALL_DIR/.update_config" /tmp/ozvps-update-config-backup 2>/dev/null || true
+cp "$INSTALL_DIR/.panel_domain" /tmp/ozvps-domain-backup 2>/dev/null || true
+
+# Remove old source files but keep node_modules for faster install
+rm -rf "$INSTALL_DIR/client" "$INSTALL_DIR/server" "$INSTALL_DIR/shared" "$INSTALL_DIR/public" "$INSTALL_DIR/script"
+rm -f "$INSTALL_DIR/package.json" "$INSTALL_DIR/package-lock.json" "$INSTALL_DIR/tsconfig.json"
+rm -f "$INSTALL_DIR/vite.config.ts" "$INSTALL_DIR/vite-plugin-meta-images.ts" "$INSTALL_DIR/postcss.config.js"
+rm -f "$INSTALL_DIR/drizzle.config.ts" "$INSTALL_DIR/tailwind.config.ts" "$INSTALL_DIR/components.json"
+
+# Extract new files
+tar -xzf /tmp/ozvps-update.tar.gz -C "$INSTALL_DIR"
+rm -f /tmp/ozvps-update.tar.gz
+
+# Restore config files
+cp /tmp/ozvps-env-backup "$INSTALL_DIR/.env" 2>/dev/null || true
+cp /tmp/ozvps-ecosystem-backup "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
+cp /tmp/ozvps-update-config-backup "$INSTALL_DIR/.update_config" 2>/dev/null || true
+cp /tmp/ozvps-domain-backup "$INSTALL_DIR/.panel_domain" 2>/dev/null || true
+
+log_step "Applying compatibility fixes..."
+
+# Remove bad-words package if present (has ESM/CJS issues)
+if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
+    cd "$INSTALL_DIR"
+    npm uninstall bad-words 2>/dev/null || true
+    log_info "Removed incompatible bad-words package"
+fi
+
+# Create fixed content-filter.ts
+cat > "$INSTALL_DIR/server/content-filter.ts" << 'CONTENTFILTER'
+const badWords = [
+  'fuck', 'shit', 'ass', 'asshole', 'bitch', 'damn', 'crap', 'bastard', 'cunt',
+  'dick', 'cock', 'pussy', 'whore', 'slut', 'fag', 'faggot', 'nigger',
+  'nigga', 'retard', 'porn', 'porno', 'xxx', 'nsfw', 'hentai', 'nude',
+  'nudes', 'naked', 'sex', 'sexy', 'onlyfans', 'fansly', 'chaturbate',
+  'pornhub', 'xvideos', 'xhamster', 'redtube', 'youporn', 'brazzers',
+  'shithead', 'dickhead', 'asshat', 'dumbass', 'jackass', 'motherfucker',
+  'fucker', 'fucking', 'fucked', 'shitting', 'shitted', 'bitchy',
+  'asses', 'dicks', 'cocks', 'pussies', 'sluts', 'whores', 'cunts'
+];
+
+export function containsProfanity(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  
+  for (const word of badWords) {
+    if (lowerText.includes(word)) {
+      return true;
+    }
+  }
+  
+  const normalized = lowerText.replace(/[\-_.\s]/g, '');
+  for (const word of badWords) {
+    if (normalized.includes(word)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+export function cleanText(text: string): string {
+  let result = text;
+  for (const word of badWords) {
+    const regex = new RegExp(word, 'gi');
+    result = result.replace(regex, '*'.repeat(word.length));
+  }
+  return result;
+}
+
+export function validateServerName(name: string): { valid: boolean; error?: string } {
+  const trimmed = name.trim();
+  
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Server name cannot be empty' };
+  }
+  
+  if (trimmed.length > 48) {
+    return { valid: false, error: 'Server name must be 48 characters or less' };
+  }
+  
+  if (trimmed.length < 2) {
+    return { valid: false, error: 'Server name must be at least 2 characters' };
+  }
+  
+  if (containsProfanity(trimmed)) {
+    return { valid: false, error: 'Server name contains inappropriate content' };
+  }
+  
+  const validPattern = /^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/;
+  if (!validPattern.test(trimmed)) {
+    return { valid: false, error: 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods' };
+  }
+  
+  return { valid: true };
+}
+CONTENTFILTER
+
+log_step "Installing dependencies..."
+cd "$INSTALL_DIR"
+npm install
+
+log_step "Building application..."
+npm run build
+
+log_step "Updating the update command..."
+# Self-update: copy the new update script to /usr/local/bin
+if [[ -f "$INSTALL_DIR/public/update-ozvps.sh" ]]; then
+    cp "$INSTALL_DIR/public/update-ozvps.sh" /usr/local/bin/update-ozvps
+    chmod +x /usr/local/bin/update-ozvps
+    log_info "Update command refreshed"
+fi
+
+log_step "Restarting application..."
+pm2 restart "$SERVICE_NAME" 2>/dev/null || pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
+pm2 save
+
+# Cleanup old backups (keep last 3)
+log_step "Cleaning up old backups..."
+ls -dt ${INSTALL_DIR}.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}║           OzVPS Panel Updated Successfully!                   ║${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${CYAN}Saved Replit URL:${NC} $REPLIT_URL"
+echo -e "${YELLOW}(You can change this on next update)${NC}"
+echo ""
+echo -e "${YELLOW}To check status:${NC} pm2 status"
+echo -e "${YELLOW}To view logs:${NC} pm2 logs $SERVICE_NAME"
+echo ""

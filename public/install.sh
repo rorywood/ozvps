@@ -550,6 +550,27 @@ EOFCONFIG
         log_info "Application started successfully"
     }
 
+    # Install update script
+    install_update_script() {
+        log_step "Installing update command..."
+        
+        # Download and install the update script
+        UPDATE_SCRIPT_URL="${DOWNLOAD_URL%/download.tar.gz}/update-ozvps.sh"
+        
+        if curl -fsSL "$UPDATE_SCRIPT_URL" -o /usr/local/bin/update-ozvps 2>/dev/null; then
+            chmod +x /usr/local/bin/update-ozvps
+            
+            # Save Replit URL for future updates
+            REPLIT_BASE_URL="${DOWNLOAD_URL%/download.tar.gz}"
+            echo "REPLIT_URL=\"$REPLIT_BASE_URL\"" > "$INSTALL_DIR/.update_config"
+            chmod 600 "$INSTALL_DIR/.update_config"
+            
+            log_info "Update command installed: update-ozvps"
+        else
+            log_warn "Could not install update command (non-critical)"
+        fi
+    }
+
     # Cleanup on error
     cleanup() {
         if [[ $? -ne 0 ]]; then
@@ -573,6 +594,7 @@ EOFCONFIG
     build_application
     configure_nginx
     start_application
+    install_update_script      # Install update command for easy updates
 
     # Success message
     echo ""
@@ -590,6 +612,7 @@ EOFCONFIG
     fi
     echo ""
     echo -e "${YELLOW}Useful Commands:${NC}"
+    echo "  update-ozvps               - Update to latest version"
     echo "  pm2 logs $SERVICE_NAME     - View application logs"
     echo "  pm2 restart $SERVICE_NAME  - Restart the application"
     echo "  pm2 status                 - Check PM2 status"
@@ -598,7 +621,7 @@ EOFCONFIG
     echo "  Environment file: $INSTALL_DIR/.env"
     echo "  Nginx config: /etc/nginx/sites-available/$SERVICE_NAME"
     echo ""
-    echo -e "${YELLOW}To update the panel later, run this script again.${NC}"
+    echo -e "${GREEN}To update the panel later, just run: update-ozvps${NC}"
     echo ""
 }
 
