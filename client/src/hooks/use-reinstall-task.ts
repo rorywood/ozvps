@@ -241,15 +241,50 @@ export function useReinstallTask(serverId: string) {
     lastStatusRef.current = 'idle';
   }, [serverId, stopPolling]);
 
+  // On mount, verify if there's actually an active task from VirtFusion
+  // This prevents stale UI when user refreshes after reinstall completes
   useEffect(() => {
-    if (state.isActive && !pollRef.current) {
+    const verifyActiveTask = async () => {
+      if (!serverId) return;
+      
+      try {
+        const buildStatus = await api.getBuildStatus(serverId);
+        
+        // If no active build and we have a stored state showing active, reset it
+        if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
+          // Check if the build completed while we were away
+          if (buildStatus.isComplete) {
+            setState(prev => ({
+              ...prev,
+              status: 'complete',
+              percent: 100,
+              isActive: true, // Keep open to show completion
+            }));
+            clearTaskState(serverId);
+          } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
+            // No active task at all - force reset
+            reset();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to verify reinstall task state:', e);
+      }
+    };
+
+    if (state.isActive) {
+      verifyActiveTask();
+    }
+  }, [serverId]); // Only run on mount
+
+  useEffect(() => {
+    if (state.isActive && state.status !== 'complete' && state.status !== 'failed' && !pollRef.current) {
       pollRef.current = setInterval(poll, 5000);
     }
 
     return () => {
       stopPolling();
     };
-  }, [state.isActive, poll, stopPolling]);
+  }, [state.isActive, state.status, poll, stopPolling]);
 
   return {
     ...state,

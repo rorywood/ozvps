@@ -291,16 +291,29 @@ export default function ServerDetail() {
   const handleReinstall = () => {
     if (!serverId || !selectedOs) return;
     
+    // Validate hostname
+    const normalizedHostname = hostname.trim().toLowerCase();
     const hostnameValidation = validateHostname(hostname);
     if (hostnameValidation) {
       setHostnameError(hostnameValidation);
       return;
     }
     
+    // Verify selected template is in the allowed list
+    const selectedTemplate = allTemplates.find(t => t.id === selectedOs);
+    if (!selectedTemplate) {
+      toast({
+        title: "Invalid Selection",
+        description: "Please select an available OS template.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     reinstallMutation.mutate({ 
       id: serverId, 
       osId: parseInt(selectedOs),
-      hostname: hostname.trim().toLowerCase()
+      hostname: normalizedHostname
     });
   };
 
@@ -1184,11 +1197,29 @@ export default function ServerDetail() {
         <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-md" hideCloseButton>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-              Reinstalling Server
+              {reinstallTask.status === 'complete' ? (
+                <>
+                  <Check className="h-5 w-5 text-green-500" />
+                  Reinstall Complete
+                </>
+              ) : reinstallTask.status === 'failed' ? (
+                <>
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                  Reinstall Failed
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                  Reinstalling Server
+                </>
+              )}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Please wait while your server is being reinstalled. This may take several minutes.
+              {reinstallTask.status === 'complete' 
+                ? 'Your server has been reinstalled successfully.'
+                : reinstallTask.status === 'failed'
+                ? 'There was a problem reinstalling your server.'
+                : 'Please wait while your server is being reinstalled. This may take several minutes.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -1203,9 +1234,11 @@ export default function ServerDetail() {
             />
           </div>
           
-          <div className="text-xs text-muted-foreground text-center">
-            Do not close this window. Your server will be available shortly.
-          </div>
+          {reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed' && (
+            <div className="text-xs text-muted-foreground text-center">
+              Do not close this window. Your server will be available shortly.
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </AppShell>
