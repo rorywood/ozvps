@@ -1,4 +1,4 @@
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -16,6 +16,17 @@ export const FEATURES = [
 
 export const VERSION_HISTORY = [
   {
+    version: "1.4.0",
+    date: "2026-01-06",
+    changes: [
+      "Security: Math CAPTCHA + honeypot on login page",
+      "Security: Blocked access to sensitive files (.env, package.json, server/, etc.)",
+      "Security: Rate limiting on install scripts",
+      "Renamed VirtFusion ID to VIRTID in settings",
+      "Added public Pricing page for new users (/pricing)",
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-01-06",
     changes: [
@@ -24,7 +35,6 @@ export const VERSION_HISTORY = [
       "Replaced favicon with OzVPS logo",
       "Removed third-party branding from codebase",
       "Added Order page (Coming Soon) to sidebar",
-      "Added public Pricing page for new users (/pricing)",
     ],
   },
   {

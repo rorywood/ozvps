@@ -4,7 +4,7 @@ set -e
 # OzVPS Panel Update Script
 # Run with: update-ozvps
 
-VERSION="1.0.0"
+VERSION="1.4.0"
 
 # Colors
 RED='\033[0;31m'
