@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 // Maps Auth0 users to VirtFusion users
@@ -33,6 +33,17 @@ export const sessions = pgTable("sessions", {
   name: text("name"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+});
+
+export const userFlags = pgTable("user_flags", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull().unique(),
+  blocked: boolean("blocked").default(false).notNull(),
+  blockedReason: text("blocked_reason"),
+  blockedAt: timestamp("blocked_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const loginSchema = z.object({
@@ -67,7 +78,17 @@ export const reinstallSchema = z.object({
 export type User = typeof users.$inferSelect;
 export type UserMapping = typeof userMappings.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type UserFlags = typeof userFlags.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ServerNameInput = z.infer<typeof serverNameSchema>;
 export type ReinstallInput = z.infer<typeof reinstallSchema>;
+
+export const SESSION_REVOKE_REASONS = {
+  CONCURRENT_LOGIN: 'CONCURRENT_LOGIN',
+  USER_BLOCKED: 'USER_BLOCKED',
+  ADMIN_REVOKED: 'ADMIN_REVOKED',
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED',
+} as const;
+
+export type SessionRevokeReason = typeof SESSION_REVOKE_REASONS[keyof typeof SESSION_REVOKE_REASONS];

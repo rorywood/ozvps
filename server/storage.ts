@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { SessionRevokeReason } from "@shared/schema";
 
 export interface Session {
   id: string;
@@ -9,6 +10,15 @@ export interface Session {
   email: string;
   name?: string | null;
   expiresAt: Date;
+  revokedAt?: Date | null;
+  revokedReason?: string | null;
+}
+
+export interface UserFlags {
+  auth0UserId: string;
+  blocked: boolean;
+  blockedReason?: string | null;
+  blockedAt?: Date | null;
 }
 
 export interface IStorage {
@@ -25,10 +35,14 @@ export interface IStorage {
   deleteSession(id: string): Promise<void>;
   deleteUserSessions(userId: number): Promise<void>;
   deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void>;
+  revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void>;
+  getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
+  setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
 }
 
 export class MemoryStorage implements IStorage {
   private sessions: Map<string, Session> = new Map();
+  private userFlagsMap: Map<string, UserFlags> = new Map();
 
   async createSession(data: {
     visitorId?: number;
@@ -49,6 +63,8 @@ export class MemoryStorage implements IStorage {
       email: data.email,
       name: data.name || null,
       expiresAt: data.expiresAt,
+      revokedAt: null,
+      revokedReason: null,
     };
     this.sessions.set(id, session);
     return session;
@@ -56,10 +72,17 @@ export class MemoryStorage implements IStorage {
 
   async getSession(id: string): Promise<Session | undefined> {
     const session = this.sessions.get(id);
-    if (session && new Date(session.expiresAt) < new Date()) {
+    if (!session) return undefined;
+    
+    if (new Date(session.expiresAt) < new Date()) {
       this.sessions.delete(id);
       return undefined;
     }
+    
+    if (session.revokedAt) {
+      return session;
+    }
+    
     return session;
   }
 
@@ -85,6 +108,35 @@ export class MemoryStorage implements IStorage {
       }
     });
     idsToDelete.forEach(id => this.sessions.delete(id));
+  }
+
+  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void> {
+    this.sessions.forEach((session) => {
+      if (session.auth0UserId === auth0UserId && !session.revokedAt) {
+        session.revokedAt = new Date();
+        session.revokedReason = reason;
+      }
+    });
+  }
+
+  async getUserFlags(auth0UserId: string): Promise<UserFlags | undefined> {
+    return this.userFlagsMap.get(auth0UserId);
+  }
+
+  async setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void> {
+    const existing = this.userFlagsMap.get(auth0UserId);
+    if (existing) {
+      existing.blocked = blocked;
+      existing.blockedReason = blocked ? (reason || null) : null;
+      existing.blockedAt = blocked ? new Date() : null;
+    } else {
+      this.userFlagsMap.set(auth0UserId, {
+        auth0UserId,
+        blocked,
+        blockedReason: blocked ? (reason || null) : null,
+        blockedAt: blocked ? new Date() : null,
+      });
+    }
   }
 }
 
