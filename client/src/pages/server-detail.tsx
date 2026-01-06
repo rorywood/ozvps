@@ -81,7 +81,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 
 export default function ServerDetail() {
@@ -201,6 +200,10 @@ export default function ServerDetail() {
     mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname?: string }) => 
       api.reinstallServer(id, osId, hostname),
     onSuccess: () => {
+      // Reset dialog state before closing
+      setSelectedOs("");
+      setHostname("");
+      setShowAdvancedOptions(false);
       setReinstallDialogOpen(false);
       setReinstallInProgress(true);
       setReinstallStatus('Initializing reinstall...');
