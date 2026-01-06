@@ -338,7 +338,7 @@ export default function Account() {
         {profile && (
           <div className="flex justify-center gap-6 text-xs text-muted-foreground mt-8">
             <div>
-              <span>VirtFusion ID: </span>
+              <span>VIRTID: </span>
               <span className="font-mono" data-testid="text-vf-id">{profile?.virtFusionUserId || 'Not linked'}</span>
             </div>
             <div>
