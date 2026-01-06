@@ -827,6 +827,30 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/admin/block-user', authMiddleware, async (req, res) => {
+    try {
+      const { auth0UserId, blocked, reason } = req.body;
+      
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'User ID is required' });
+      }
+      
+      await storage.setUserBlocked(auth0UserId, blocked, reason);
+      
+      if (blocked) {
+        await storage.revokeSessionsByAuth0UserId(auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
+        log(`User ${auth0UserId} blocked and sessions revoked: ${reason || 'No reason provided'}`, 'admin');
+      } else {
+        log(`User ${auth0UserId} unblocked`, 'admin');
+      }
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error blocking user: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update user status' });
+    }
+  });
+
   app.post('/api/hooks/auth0-user-deleted', async (req, res) => {
     try {
       const webhookSecret = process.env.AUTH0_WEBHOOK_SECRET;

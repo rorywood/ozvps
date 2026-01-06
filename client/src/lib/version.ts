@@ -1,4 +1,4 @@
-export const VERSION = "1.5.3";
+export const VERSION = "1.6.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -15,6 +15,16 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.6.0",
+    date: "2026-01-06",
+    changes: [
+      "Security: Single session enforcement - only one active session per user",
+      "Security: Auto-logout when blocked or logged in from another location",
+      "Security: Session invalidation messages on login page",
+      "Admin: Block/unblock user functionality",
+    ],
+  },
   {
     version: "1.5.3",
     date: "2026-01-06",

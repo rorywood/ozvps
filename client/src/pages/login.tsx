@@ -2,7 +2,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Calculator } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Calculator, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [sessionMessage, setSessionMessage] = useState<{ error: string; code: string } | null>(null);
   
   const [honeypot, setHoneypot] = useState("");
   const [challenge, setChallenge] = useState(generateMathChallenge);
@@ -28,6 +29,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     setChallenge(generateMathChallenge());
+    
+    // Check for session error from redirect
+    const storedError = sessionStorage.getItem('sessionError');
+    if (storedError) {
+      try {
+        const parsed = JSON.parse(storedError);
+        setSessionMessage(parsed);
+      } catch {}
+      sessionStorage.removeItem('sessionError');
+    }
   }, []);
 
   const loginMutation = useMutation({
@@ -152,6 +163,13 @@ export default function LoginPage() {
                 onChange={(e) => setHoneypot(e.target.value)}
               />
             </div>
+
+            {sessionMessage && (
+              <div className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-3" data-testid="text-session-message">
+                <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>{sessionMessage.error}</span>
+              </div>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-3" data-testid="text-error">

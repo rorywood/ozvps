@@ -1,7 +1,32 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-async function throwIfResNotOk(res: Response) {
+export interface SessionError {
+  error: string;
+  code?: string;
+}
+
+let sessionErrorCallback: ((error: SessionError) => void) | null = null;
+
+export function setSessionErrorCallback(callback: (error: SessionError) => void) {
+  sessionErrorCallback = callback;
+}
+
+async function handleResponse(res: Response): Promise<void> {
   if (!res.ok) {
+    if (res.status === 401) {
+      try {
+        const errorData = await res.json();
+        if (sessionErrorCallback && errorData.code) {
+          sessionErrorCallback(errorData);
+        }
+        throw new Error(errorData.error || 'Authentication required');
+      } catch (e) {
+        if (e instanceof Error && e.message !== 'Authentication required') {
+          throw new Error('Authentication required');
+        }
+        throw e;
+      }
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -19,7 +44,7 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
+  await handleResponse(res);
   return res;
 }
 
@@ -33,11 +58,29 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      try {
+        const errorData = await res.json();
+        if (sessionErrorCallback && errorData.code) {
+          sessionErrorCallback(errorData);
+        }
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
+        throw new Error(errorData.error || 'Authentication required');
+      } catch (e) {
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
+        throw e;
+      }
     }
 
-    await throwIfResNotOk(res);
+    if (!res.ok) {
+      const text = (await res.text()) || res.statusText;
+      throw new Error(`${res.status}: ${text}`);
+    }
+
     return await res.json();
   };
 

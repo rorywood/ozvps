@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, setSessionErrorCallback, SessionError } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -136,11 +136,30 @@ function Router() {
   );
 }
 
+function SessionErrorHandler() {
+  const [, setLocation] = useLocation();
+  
+  useEffect(() => {
+    setSessionErrorCallback((error: SessionError) => {
+      if (error.code) {
+        sessionStorage.setItem('sessionError', JSON.stringify(error));
+        queryClient.clear();
+        setLocation('/login');
+      }
+    });
+    
+    return () => setSessionErrorCallback(() => {});
+  }, [setLocation]);
+  
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <SessionErrorHandler />
         <SystemHealthCheck>
           <Router />
         </SystemHealthCheck>
