@@ -128,11 +128,18 @@ Preferred communication style: Simple, everyday language.
   - View user details (Auth0 ID, VirtFusion ID, wallet balance, email verification)
   - Add/remove credits with reason tracking
   - View user transaction history
+  - **Link VirtFusion accounts**: Manually link existing VirtFusion users to Auth0 accounts
 - **Admin API Endpoints**:
   - `GET /api/admin/wallets` - List all wallets
   - `POST /api/admin/wallet/adjust` - Add or remove credits (requires reason)
   - `GET /api/admin/users/search?email=` - Search users by email
   - `GET /api/admin/users/:auth0UserId/transactions` - Get user transaction history
+  - `POST /api/admin/link-virtfusion` - Link VirtFusion user to Auth0 account (for legacy users)
+- **VirtFusion User Linking**:
+  - For new users: System auto-creates VirtFusion user with deterministic numeric extRelationId
+  - For legacy users (from old panel): Admin must manually link via admin panel
+  - Linking updates VirtFusion extRelationId and stores the link in Auth0 app_metadata
+  - extRelationId is generated from email using a stable hash algorithm
 - **Admin Detection**: Checked from Auth0 `app_metadata.is_admin` field
   - Set `is_admin: true` in Auth0 dashboard → User Management → Select user → app_metadata
   - Admin status is stored in session on login

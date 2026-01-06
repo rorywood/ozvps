@@ -96,18 +96,27 @@ export class VirtFusionClient {
     }
   }
 
-  // Generate a numeric ID from a string (for VirtFusion extRelationId which must be numeric)
-  private generateNumericId(str: string): string {
+  // Generate a deterministic numeric ID from a string (for VirtFusion extRelationId which must be numeric)
+  // Uses a stable hash algorithm so the same email always produces the same ID
+  generateNumericId(email: string): string {
+    const str = email.toLowerCase().trim();
+    // Use a simple but stable hash: sum of char codes multiplied by position
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+      // Use a prime multiplier for better distribution
+      hash = (hash * 31 + char) >>> 0; // Use unsigned right shift to keep positive
     }
-    // Make it positive and add timestamp suffix for uniqueness
-    const positiveHash = Math.abs(hash);
-    const timestamp = Date.now() % 1000000000; // Last 9 digits of timestamp
-    return `${positiveHash}${timestamp}`;
+    // VirtFusion extRelationId must be between 1 and 18446744073709551615
+    // Use a reasonable range that's still unique for our users
+    // Combine two passes of the hash for more digits
+    let hash2 = hash;
+    for (let i = str.length - 1; i >= 0; i--) {
+      const char = str.charCodeAt(i);
+      hash2 = (hash2 * 37 + char) >>> 0;
+    }
+    // Combine both hashes for a longer, more unique number
+    return `${hash}${hash2}`;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -225,77 +234,37 @@ export class VirtFusionClient {
     }
   }
 
-  // List all VirtFusion users (paginated)
-  async listUsers(page: number = 1, perPage: number = 100): Promise<{ data: VirtFusionUser[]; meta?: { total?: number; lastPage?: number } }> {
-    try {
-      const response = await this.request<{ data: VirtFusionUser[]; meta?: { total?: number; lastPage?: number } }>(`/users?page=${page}&perPage=${perPage}`);
-      return response;
-    } catch (error) {
-      log(`Failed to list VirtFusion users: ${error}`, 'virtfusion');
-      return { data: [] };
-    }
-  }
-
-  // Search for a user by email across all VirtFusion users
-  async searchUserByEmail(email: string): Promise<VirtFusionUser | null> {
-    try {
-      const normalizedEmail = email.toLowerCase().trim();
-      log(`Searching VirtFusion users for email: ${normalizedEmail}`, 'virtfusion');
-      
-      // Paginate through all users to find the one with matching email
-      let page = 1;
-      let hasMore = true;
-      
-      while (hasMore) {
-        const response = await this.listUsers(page, 100);
-        const users = response.data || [];
-        
-        // Find user with matching email
-        const matchingUser = users.find(u => u.email?.toLowerCase() === normalizedEmail);
-        if (matchingUser) {
-          log(`Found VirtFusion user by email search: ${normalizedEmail} (ID: ${matchingUser.id}, extRelationId: ${matchingUser.extRelationId})`, 'virtfusion');
-          return matchingUser;
-        }
-        
-        // Check if there are more pages
-        const meta = response.meta;
-        if (meta?.lastPage && page < meta.lastPage) {
-          page++;
-        } else if (users.length === 100) {
-          // If we got a full page but no meta, try next page
-          page++;
-        } else {
-          hasMore = false;
-        }
-        
-        // Safety limit to prevent infinite loops
-        if (page > 100) {
-          log(`VirtFusion user search exceeded page limit for ${normalizedEmail}`, 'virtfusion');
-          hasMore = false;
-        }
-      }
-      
-      log(`No VirtFusion user found with email: ${normalizedEmail}`, 'virtfusion');
-      return null;
-    } catch (error) {
-      log(`Failed to search VirtFusion users by email ${email}: ${error}`, 'virtfusion');
-      return null;
-    }
-  }
+  // NOTE: VirtFusion API v1 does NOT support listing users (GET /users returns 405)
+  // Users can only be looked up by ID or extRelationId
+  // If a user exists with a different extRelationId format, they cannot be automatically linked
 
   async findOrCreateUser(email: string, name: string): Promise<VirtFusionUser | null> {
-    // First try to create - this handles both new users and existing users (via 409)
-    let user = await this.createUser(email, name);
-    if (!user) {
-      // If creation failed (409 conflict), search for existing user by email
-      log(`Creation failed for ${email}, searching for existing user...`, 'virtfusion');
-      user = await this.searchUserByEmail(email);
-      
-      // If still not found, try the legacy email-as-extRelationId lookup
-      if (!user) {
-        user = await this.findUserByEmail(email);
-      }
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // First, try to look up by the numeric extRelationId we would generate
+    const expectedExtRelationId = this.generateNumericId(normalizedEmail);
+    let user = await this.getUserByExtRelationId(expectedExtRelationId);
+    if (user) {
+      log(`Found existing VirtFusion user by expected extRelationId: ${expectedExtRelationId}`, 'virtfusion');
+      return user;
     }
+    
+    // Try to create - this handles new users
+    user = await this.createUser(email, name);
+    if (user) {
+      return user;
+    }
+    
+    // If creation failed (409 conflict), user exists but with different extRelationId format
+    // Try the legacy email-as-extRelationId lookup (for users created with old format)
+    log(`Creation failed for ${email}, trying legacy email-as-extRelationId lookup...`, 'virtfusion');
+    user = await this.findUserByEmail(email);
+    
+    if (!user) {
+      // User exists in VirtFusion but with incompatible extRelationId - cannot auto-link
+      log(`User ${email} exists in VirtFusion but cannot be auto-linked. Admin intervention required.`, 'virtfusion');
+    }
+    
     return user;
   }
 

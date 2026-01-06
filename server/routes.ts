@@ -1104,6 +1104,70 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Link VirtFusion user manually
+  const linkVirtfusionSchema = z.object({
+    auth0UserId: z.string().min(1, 'Auth0 user ID is required'),
+    virtfusionUserId: z.number().int().positive('VirtFusion user ID must be a positive integer'),
+  });
+
+  app.post('/api/admin/link-virtfusion', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const result = linkVirtfusionSchema.safeParse(req.body);
+      if (!result.success) {
+        const errorMessages = result.error.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ error: errorMessages });
+      }
+
+      const { auth0UserId, virtfusionUserId } = result.data;
+      log(`Admin ${req.userSession.email} linking VirtFusion user ${virtfusionUserId} to Auth0 user ${auth0UserId}`, 'admin');
+
+      // Verify Auth0 user exists
+      const auth0User = await auth0Client.getUser(auth0UserId);
+      if (!auth0User) {
+        return res.status(404).json({ error: 'Auth0 user not found' });
+      }
+
+      // Verify VirtFusion user exists and get their data
+      const vfUser = await virtfusionClient.getUserById(virtfusionUserId);
+      if (!vfUser) {
+        return res.status(404).json({ error: 'VirtFusion user not found' });
+      }
+
+      // Generate the numeric extRelationId we use for this email
+      const normalizedEmail = auth0User.email.toLowerCase().trim();
+      const expectedExtRelationId = virtfusionClient.generateNumericId(normalizedEmail);
+
+      // Update the VirtFusion user's extRelationId to match our expected format
+      const updatedVfUser = await virtfusionClient.updateUserById(virtfusionUserId, {
+        extRelationId: expectedExtRelationId,
+      });
+
+      if (!updatedVfUser) {
+        return res.status(500).json({ error: 'Failed to update VirtFusion user extRelationId' });
+      }
+
+      // Store the VirtFusion user ID in Auth0 metadata
+      await auth0Client.updateUserMetadata(auth0UserId, {
+        virtfusion_user_id: virtfusionUserId,
+      });
+
+      log(`Successfully linked VirtFusion user ${virtfusionUserId} (extRelationId: ${expectedExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
+
+      res.json({
+        success: true,
+        message: `VirtFusion user ${virtfusionUserId} linked to ${auth0User.email}`,
+        extRelationId: expectedExtRelationId,
+      });
+    } catch (error: any) {
+      log(`Error linking VirtFusion user: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to link VirtFusion user' });
+    }
+  });
+
   // ================== Wallet & Deploy Routes ==================
 
   // Get available locations

@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/sidebar";
-import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User } from "lucide-react";
+import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User, Link } from "lucide-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 interface UserMeResponse {
   user: {
@@ -48,6 +49,8 @@ export default function AdminPage() {
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [virtfusionUserId, setVirtfusionUserId] = useState("");
 
   const { data: userData, isLoading } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -96,6 +99,32 @@ export default function AdminPage() {
     },
   });
 
+  const linkMutation = useMutation({
+    mutationFn: async (data: { auth0UserId: string; virtfusionUserId: number }) => {
+      const response = await fetch('/api/admin/link-virtfusion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Link failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setLinkDialogOpen(false);
+      setVirtfusionUserId("");
+      toast.success(data.message || 'VirtFusion account linked successfully');
+      if (searchEmail) {
+        searchMutation.mutate(searchEmail);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
   const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
     queryKey: ['admin', 'transactions', selectedUser?.auth0UserId],
     queryFn: async () => {
@@ -128,6 +157,16 @@ export default function AdminPage() {
       auth0UserId: selectedUser.auth0UserId,
       amountCents,
       reason: adjustReason,
+    });
+  };
+
+  const handleLinkSubmit = () => {
+    if (!selectedUser || !virtfusionUserId) return;
+    const vfId = parseInt(virtfusionUserId, 10);
+    if (isNaN(vfId) || vfId <= 0) return;
+    linkMutation.mutate({
+      auth0UserId: selectedUser.auth0UserId,
+      virtfusionUserId: vfId,
     });
   };
 
@@ -269,6 +308,16 @@ export default function AdminPage() {
                   <History className="h-4 w-4 mr-2" />
                   View Transactions
                 </Button>
+                {!selectedUser.virtFusionUserId && (
+                  <Button
+                    data-testid="button-link-virtfusion"
+                    onClick={() => setLinkDialogOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Link className="h-4 w-4 mr-2" />
+                    Link VirtFusion
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -397,6 +446,63 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="bg-[#1a1a2e] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <Link className="h-5 w-5 text-blue-400" />
+              Link VirtFusion Account
+            </DialogTitle>
+            <DialogDescription>
+              Manually link an existing VirtFusion user to this account. 
+              This will update the user's extRelationId in VirtFusion and store the link in Auth0.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>User</Label>
+              <p className="text-sm text-white">{selectedUser?.email}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="virtfusionId">VirtFusion User ID</Label>
+              <Input
+                data-testid="input-virtfusion-id"
+                id="virtfusionId"
+                type="number"
+                min="1"
+                placeholder="Enter VirtFusion user ID..."
+                value={virtfusionUserId}
+                onChange={(e) => setVirtfusionUserId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Find this in the VirtFusion admin panel under Users.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              data-testid="button-confirm-link"
+              onClick={handleLinkSubmit}
+              disabled={!virtfusionUserId || linkMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {linkMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Link Account
+            </Button>
+          </DialogFooter>
+          {linkMutation.isError && (
+            <p className="text-red-400 text-sm mt-2">
+              {(linkMutation.error as Error).message}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </div>
