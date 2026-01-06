@@ -409,6 +409,25 @@ export default function Account() {
               </div>
             </GlassCard>
 
+            {/* Stripe Not Configured Message */}
+            {!stripeConfigured && (
+              <GlassCard className="p-6" data-testid="stripe-not-configured">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500 border border-yellow-500/20">
+                    <CreditCard className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Payments Not Available</h3>
+                    <p className="text-sm text-muted-foreground">Payment system is being configured</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Wallet top-ups and payment methods are temporarily unavailable. 
+                  Please contact support if you need to add funds to your account.
+                </p>
+              </GlassCard>
+            )}
+
             {/* Wallet Balance Section */}
             {stripeConfigured && (
               <GlassCard className="p-6" data-testid="wallet-section">

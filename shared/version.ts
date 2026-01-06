@@ -1,4 +1,4 @@
-export const VERSION = "1.8.2";
+export const VERSION = "1.8.3";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.8.3",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Improved VirtFusion price format detection",
+      "Fix: Account page shows message when payments unavailable",
+    ],
+  },
   {
     version: "1.8.2",
     date: "2026-01-06",

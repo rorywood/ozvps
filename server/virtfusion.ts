@@ -1171,17 +1171,50 @@ export class VirtFusionClient {
       
       log(`Fetched ${packages.length} packages from VirtFusion`, 'virtfusion');
       
-      return packages.map(pkg => ({
-        id: pkg.id,
-        code: pkg.code || `pkg-${pkg.id}`,
-        name: pkg.name || `Package ${pkg.id}`,
-        cpuCores: pkg.cpuCores || 1,
-        memory: pkg.memory || 1024,
-        primaryStorage: pkg.primaryStorage || 20,
-        traffic: pkg.traffic || 1000,
-        enabled: pkg.enabled !== false,
-        prices: pkg.prices || [],
-      }));
+      return packages.map(pkg => {
+        // Try to extract prices from various VirtFusion formats
+        let prices: Array<{ price: number; billingPeriod?: string }> = [];
+        
+        // Format 1: prices array with billingPeriod
+        if (Array.isArray(pkg.prices) && pkg.prices.length > 0) {
+          prices = pkg.prices.map((p: any) => ({
+            price: p.price || p.amount || 0,
+            billingPeriod: p.billingPeriod || p.period || p.term || 'monthly',
+          }));
+        }
+        // Format 2: packagePrices array (VirtFusion v2)
+        else if (Array.isArray(pkg.packagePrices) && pkg.packagePrices.length > 0) {
+          prices = pkg.packagePrices.map((p: any) => ({
+            price: p.price || p.amount || 0,
+            billingPeriod: p.billingPeriod || p.term?.name || 'monthly',
+          }));
+        }
+        // Format 3: defaultPrice or price field
+        else if (pkg.defaultPrice || pkg.price) {
+          prices = [{ price: pkg.defaultPrice || pkg.price, billingPeriod: 'monthly' }];
+        }
+        // Format 4: monthlyPrice field
+        else if (pkg.monthlyPrice) {
+          prices = [{ price: pkg.monthlyPrice, billingPeriod: 'monthly' }];
+        }
+        
+        // Log price info for debugging
+        if (prices.length === 0 || prices.every(p => p.price === 0)) {
+          log(`Package ${pkg.id} (${pkg.name}) has no valid pricing data`, 'virtfusion');
+        }
+        
+        return {
+          id: pkg.id,
+          code: pkg.code || `pkg-${pkg.id}`,
+          name: pkg.name || `Package ${pkg.id}`,
+          cpuCores: pkg.cpuCores || 1,
+          memory: pkg.memory || 1024,
+          primaryStorage: pkg.primaryStorage || 20,
+          traffic: pkg.traffic || 1000,
+          enabled: pkg.enabled !== false,
+          prices,
+        };
+      });
     } catch (error) {
       log(`Failed to fetch packages from VirtFusion: ${error}`, 'virtfusion');
       return [];
