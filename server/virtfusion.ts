@@ -98,25 +98,23 @@ export class VirtFusionClient {
 
   // Generate a deterministic numeric ID from a string (for VirtFusion extRelationId which must be numeric)
   // Uses a stable hash algorithm so the same email always produces the same ID
+  // VirtFusion extRelationId must be between 1 and 18446744073709551615
   generateNumericId(email: string): string {
     const str = email.toLowerCase().trim();
-    // Use a simple but stable hash: sum of char codes multiplied by position
-    let hash = 0;
+    // Use a simple but stable hash
+    let hash1 = 0;
+    let hash2 = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      // Use a prime multiplier for better distribution
-      hash = (hash * 31 + char) >>> 0; // Use unsigned right shift to keep positive
-    }
-    // VirtFusion extRelationId must be between 1 and 18446744073709551615
-    // Use a reasonable range that's still unique for our users
-    // Combine two passes of the hash for more digits
-    let hash2 = hash;
-    for (let i = str.length - 1; i >= 0; i--) {
-      const char = str.charCodeAt(i);
+      hash1 = (hash1 * 31 + char) >>> 0;
       hash2 = (hash2 * 37 + char) >>> 0;
     }
-    // Combine both hashes for a longer, more unique number
-    return `${hash}${hash2}`;
+    // Ensure we stay within VirtFusion's limit (max 18446744073709551615)
+    // Use modulo to keep numbers reasonable - max 10 digits each part
+    const part1 = (hash1 % 1000000000) + 1; // 1 to 999999999
+    const part2 = hash2 % 1000000000;       // 0 to 999999999
+    // Combined gives us a 10-18 digit number, well within limits
+    return `${part1}${part2}`;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
