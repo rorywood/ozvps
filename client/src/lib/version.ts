@@ -19,7 +19,10 @@ export const VERSION_HISTORY = [
     version: "1.2.0",
     date: "2026-01-06",
     changes: [
-      "Test release for update script verification",
+      "Security: Secure temp file handling with mktemp (prevents symlink attacks)",
+      "Security: Firewall now opens specific ports (22, 80, 443) instead of disabling",
+      "Security: HTTPS-only enforcement for update downloads",
+      "Update script now includes version identifier",
     ],
   },
   {
