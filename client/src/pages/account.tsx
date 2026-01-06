@@ -20,7 +20,8 @@ import {
   CreditCard,
   Trash2,
   Wallet,
-  History
+  History,
+  Copy
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -52,6 +53,7 @@ export default function Account() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showStripeId, setShowStripeId] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
   const { data: profile, isLoading, error } = useQuery({
@@ -419,9 +421,53 @@ export default function Account() {
                     <p className="text-sm text-muted-foreground">Your current account balance</p>
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-white">
+                <div className="text-3xl font-bold text-white mb-4">
                   ${((walletData?.wallet?.balanceCents || 0) / 100).toFixed(2)} AUD
                 </div>
+                
+                {walletData?.wallet?.stripeCustomerId && (
+                  <div className="pt-3 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
+                      <div className="flex items-center gap-2">
+                        <code 
+                          className="text-xs font-mono text-white/70 bg-black/30 px-2 py-1 rounded"
+                          data-testid="text-stripe-customer-id"
+                        >
+                          {showStripeId 
+                            ? walletData.wallet.stripeCustomerId 
+                            : '••••••••••••••••••••'}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                          onClick={() => setShowStripeId(!showStripeId)}
+                          data-testid="button-toggle-stripe-id"
+                        >
+                          {showStripeId ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </Button>
+                        {showStripeId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                            onClick={() => {
+                              navigator.clipboard.writeText(walletData.wallet.stripeCustomerId!);
+                              toast({
+                                title: "Copied",
+                                description: "Stripe Customer ID copied to clipboard",
+                              });
+                            }}
+                            data-testid="button-copy-stripe-id"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </GlassCard>
             )}
 
