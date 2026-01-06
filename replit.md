@@ -51,6 +51,13 @@ Preferred communication style: Simple, everyday language.
   - **Security**: VNC auto-disabled when user leaves console page; session cleanup on disconnect
   - **IMPORTANT**: Users never leave OzVPS panel - no access to old VirtFusion panel
   - extRelationId must be NUMERIC (1 to 18446744073709551615), not email string
+- **Server Reinstall Flow**:
+  - **Hostname is mandatory**: Required field at top of dialog, validated on both client and server
+  - **Hostname validation**: 1-63 characters, lowercase letters/numbers/hyphens, no leading/trailing hyphens
+  - **Filtered templates**: GET `/api/servers/:id/reinstall/templates` returns only allowed templates
+  - **Backend enforcement**: POST `/reinstall` validates hostname (400) and template ID (403)
+  - **Progress tracking**: Real polling of VirtFusion build status with sessionStorage persistence
+  - **Console lock**: 15-second lock after reinstall starts to prevent console access during boot
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 
