@@ -199,15 +199,59 @@ echo "$REMOTE_VERSION" > "$VERSION_FILE"
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Installing dependencies"
 
+# Database migrations (if DATABASE_URL is configured)
+(
+    cd "$INSTALL_DIR"
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        set -a
+        source "$INSTALL_DIR/.env"
+        set +a
+    fi
+    if [[ -n "$DATABASE_URL" ]]; then
+        # Extract connection params from DATABASE_URL for psql check
+        # URL format: postgresql://user:pass@host:port/dbname
+        DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+        DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+        DB_NAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+        DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+        DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+        
+        # Wait for database to be ready
+        DB_READY=false
+        for i in {1..10}; do
+            if PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
+                DB_READY=true
+                break
+            fi
+            sleep 1
+        done
+        
+        if [[ "$DB_READY" == "true" ]]; then
+            npx drizzle-kit push --force
+        else
+            echo "WARNING: Could not connect to database, skipping migrations"
+        fi
+    else
+        echo "DATABASE_URL not configured, skipping migrations"
+    fi
+) >>"$LOG_FILE" 2>&1 &
+spinner $! "Updating database schema"
+
 # Build
 (cd "$INSTALL_DIR" && npm run build) >>"$LOG_FILE" 2>&1 &
 spinner $! "Building application"
 
-# Update the update command
+# Update the update command and CLI tools
 (
     if [[ -f "$INSTALL_DIR/public/update-ozvps.sh" ]]; then
         cp "$INSTALL_DIR/public/update-ozvps.sh" /usr/local/bin/update-ozvps
         chmod +x /usr/local/bin/update-ozvps
+    fi
+    
+    # Install/update credits CLI
+    if [[ -f "$INSTALL_DIR/script/credits-cli.sh" ]]; then
+        cp "$INSTALL_DIR/script/credits-cli.sh" /usr/local/bin/ozvps-credits
+        chmod +x /usr/local/bin/ozvps-credits
     fi
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Updating tools"

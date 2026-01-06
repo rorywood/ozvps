@@ -106,6 +106,22 @@ Preferred communication style: Simple, everyday language.
 - **Known API Limitations**:
   - **SSH Key Management**: VirtFusion public API v1 does NOT support SSH key endpoints (`/api/v1/ssh-keys/*` returns 404). SSH key management is only available through VirtFusion admin panel UI, not via REST API. This feature cannot be implemented until VirtFusion adds API support.
 
+### Admin CLI Tool
+- **Command**: `ozvps-credits` (installed to /usr/local/bin)
+- **Authentication**: Requires `ADMIN_CLI_TOKEN` from .env (generated during installation)
+- **Features**:
+  1. List all users and their wallet balances
+  2. View user details with transaction history
+  3. Add credits to user wallet
+  4. Remove credits from user wallet  
+  5. Set user balance to specific amount
+- **Security**:
+  - CLI runs server-side only, requires root access
+  - Admin token validated before allowing operations
+  - All operations logged with audit metadata in `wallet_transactions`
+  - No card details exposed (all payment data stays in Stripe)
+- **Usage**: `sudo ozvps-credits` then enter admin token
+
 ### Project Structure
 ```
 client/           # React frontend application
@@ -120,6 +136,8 @@ server/           # Express backend
 └── storage.ts    # Data storage interface
 shared/           # Shared code between client/server
 └── schema.ts     # Drizzle database schema
+script/           # CLI and administrative tools
+└── credits-cli.ts   # Admin credit management CLI
 ```
 
 ### Security Features

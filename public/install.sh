@@ -120,6 +120,28 @@ main() {
     input_field "API Token" VIRTFUSION_API_TOKEN yes
     echo ""
 
+    echo -e "  ${CYAN}PostgreSQL Database${NC} ${DIM}(for billing & wallets)${NC}"
+    echo -e "  ${DIM}Leave blank to auto-generate secure password${NC}"
+    input_field "Database Name (default: ozvps)" DB_NAME
+    [[ -z "$DB_NAME" ]] && DB_NAME="ozvps"
+    input_field "Database User (default: ozvps)" DB_USER
+    [[ -z "$DB_USER" ]] && DB_USER="ozvps"
+    input_field "Database Password" DB_PASS yes
+    if [[ -z "$DB_PASS" ]]; then
+        DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
+        echo -e "  ${DIM}Generated secure password${NC}"
+    fi
+    echo ""
+
+    echo -e "  ${CYAN}Admin CLI Token${NC} ${DIM}(for server-side credit management)${NC}"
+    echo -e "  ${DIM}Leave blank to auto-generate secure token${NC}"
+    input_field "Admin Token" ADMIN_CLI_TOKEN yes
+    if [[ -z "$ADMIN_CLI_TOKEN" ]]; then
+        ADMIN_CLI_TOKEN=$(openssl rand -hex 32)
+        echo -e "  ${DIM}Generated secure admin token${NC}"
+    fi
+    echo ""
+
     echo -e "  ${CYAN}SSL Certificate${NC}"
     if confirm "Setup SSL with Let's Encrypt? (Y/n):"; then
         SETUP_SSL="yes"
@@ -134,6 +156,7 @@ main() {
     echo -e "  ${DIM}Domain:${NC}      $PANEL_DOMAIN"
     echo -e "  ${DIM}Auth0:${NC}       $AUTH0_DOMAIN"
     echo -e "  ${DIM}VirtFusion:${NC}  $VIRTFUSION_PANEL_URL"
+    echo -e "  ${DIM}Database:${NC}    $DB_NAME (user: $DB_USER)"
     echo -e "  ${DIM}SSL:${NC}         $SETUP_SSL"
     echo ""
 
@@ -165,20 +188,69 @@ main() {
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing Node.js"
 
-    # Dependencies
+    # Dependencies (including PostgreSQL)
     (
         case "$OS" in
             ubuntu|debian)
                 apt-get update
-                apt-get install -y git curl nginx certbot python3-certbot-nginx
+                apt-get install -y git curl nginx certbot python3-certbot-nginx postgresql postgresql-contrib
                 ;;
             centos|rhel|rocky|almalinux)
-                yum install -y git curl nginx certbot python3-certbot-nginx epel-release
+                yum install -y git curl nginx certbot python3-certbot-nginx epel-release postgresql-server postgresql-contrib
+                postgresql-setup --initdb 2>/dev/null || true
                 ;;
         esac
         npm install -g pm2
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing dependencies"
+
+    # PostgreSQL setup
+    (
+        set -e
+        
+        # On Debian/Ubuntu, the 'postgresql' service is a wrapper that manages all clusters
+        # On RHEL/CentOS, 'postgresql' is the main service (may need initdb first)
+        
+        # Try to start postgresql service (works on most systems)
+        if ! systemctl is-active postgresql &>/dev/null; then
+            systemctl start postgresql 2>/dev/null || true
+        fi
+        systemctl enable postgresql 2>/dev/null || true
+        
+        # Wait for PostgreSQL to be ready (max 30 seconds)
+        PG_READY=false
+        for i in {1..30}; do
+            if sudo -u postgres psql -c "SELECT 1" &>/dev/null; then
+                PG_READY=true
+                break
+            fi
+            sleep 1
+        done
+        
+        if [[ "$PG_READY" != "true" ]]; then
+            echo "ERROR: PostgreSQL failed to start after 30 seconds" >&2
+            exit 1
+        fi
+        
+        # Create database user and database
+        sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null || \
+            sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';"
+        sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || true
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
+        
+        # Allow password auth for local connections
+        PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" 2>/dev/null | tr -d ' ')
+        if [[ -n "$PG_HBA" && -f "$PG_HBA" ]]; then
+            if ! grep -q "host.*$DB_NAME.*$DB_USER" "$PG_HBA"; then
+                echo "host    $DB_NAME    $DB_USER    127.0.0.1/32    md5" >> "$PG_HBA"
+                echo "host    $DB_NAME    $DB_USER    ::1/128         md5" >> "$PG_HBA"
+                # Reload PostgreSQL to apply pg_hba changes
+                sudo -u postgres pg_ctl reload -D "$(sudo -u postgres psql -t -c "SHOW data_directory;" | tr -d ' ')" 2>/dev/null || \
+                    systemctl reload postgresql 2>/dev/null || true
+            fi
+        fi
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Configuring PostgreSQL"
 
     # Firewall
     (
@@ -218,6 +290,8 @@ AUTH0_CLIENT_ID=$AUTH0_CLIENT_ID
 AUTH0_CLIENT_SECRET=$AUTH0_CLIENT_SECRET
 VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
 VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
+DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
+ADMIN_CLI_TOKEN=$ADMIN_CLI_TOKEN
 NODE_ENV=production
 PORT=5000
 EOF
@@ -238,6 +312,31 @@ EOF
         npm install
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing packages"
+
+    # Database migrations
+    (
+        set -e
+        cd "$INSTALL_DIR"
+        export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
+        
+        # Verify database connection before migration
+        DB_READY=false
+        for i in {1..15}; do
+            if PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
+                DB_READY=true
+                break
+            fi
+            sleep 1
+        done
+        
+        if [[ "$DB_READY" != "true" ]]; then
+            echo "ERROR: Cannot connect to database after 15 seconds" >&2
+            exit 1
+        fi
+        
+        npx drizzle-kit push --force
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Setting up database schema"
 
     # Build
     (cd "$INSTALL_DIR" && npm run build) >>"$LOG_FILE" 2>&1 &
@@ -318,7 +417,7 @@ PMEOF
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Starting service"
 
-    # Update command
+    # Update command and CLI tools
     (
         UPDATE_URL="${DOWNLOAD_URL%/download.tar.gz}/update-ozvps.sh"
         curl -fsSL "$UPDATE_URL" -o /usr/local/bin/update-ozvps 2>/dev/null || exit 0
@@ -326,8 +425,14 @@ PMEOF
         REPLIT_BASE="${DOWNLOAD_URL%/download.tar.gz}"
         echo "REPLIT_URL=\"$REPLIT_BASE\"" > "$INSTALL_DIR/.update_config"
         chmod 600 "$INSTALL_DIR/.update_config"
+        
+        # Install credits CLI
+        if [[ -f "$INSTALL_DIR/script/credits-cli.sh" ]]; then
+            cp "$INSTALL_DIR/script/credits-cli.sh" /usr/local/bin/ozvps-credits
+            chmod +x /usr/local/bin/ozvps-credits
+        fi
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing update tool"
+    spinner $! "Installing tools"
 
     INSTALLED_VERSION=$(cat "$INSTALL_DIR/.version" 2>/dev/null || echo "1.0.0")
 
@@ -342,9 +447,14 @@ PMEOF
         echo -e "  ${BOLD}Panel:${NC}  http://$PANEL_DOMAIN"
     fi
     echo ""
-    echo -e "  ${DIM}Update:${NC}  update-ozvps"
-    echo -e "  ${DIM}Logs:${NC}    pm2 logs $SERVICE_NAME"
-    echo -e "  ${DIM}Status:${NC}  pm2 status"
+    echo -e "  ${DIM}Commands:${NC}"
+    echo -e "    ${DIM}update-ozvps${NC}    - Update to latest version"
+    echo -e "    ${DIM}ozvps-credits${NC}   - Manage user credits (admin)"
+    echo -e "    ${DIM}pm2 logs${NC}        - View application logs"
+    echo -e "    ${DIM}pm2 status${NC}      - Check service status"
+    echo ""
+    echo -e "  ${YELLOW}Important:${NC} Save your Admin CLI Token securely:"
+    echo -e "  ${DIM}$ADMIN_CLI_TOKEN${NC}"
     echo ""
 }
 
