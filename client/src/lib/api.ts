@@ -26,6 +26,14 @@ export interface OsTemplate {
   group?: string;
 }
 
+export interface SshKey {
+  id: number;
+  name: string;
+  publicKey: string;
+  fingerprint?: string;
+  createdAt?: string;
+}
+
 class ApiClient {
   private baseUrl = '/api';
 
@@ -160,11 +168,11 @@ class ApiClient {
     return response.json();
   }
 
-  async reinstallServer(id: string, osId: number, hostname: string): Promise<{ success: boolean; error?: string; data?: { generatedPassword?: string } }> {
+  async reinstallServer(id: string, osId: number, hostname: string, sshKeyIds?: number[]): Promise<{ success: boolean; error?: string; data?: { generatedPassword?: string } }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ osId, hostname })
+      body: JSON.stringify({ osId, hostname, sshKeyIds })
     });
     if (!response.ok) {
       const data = await response.json();
@@ -299,6 +307,37 @@ class ApiClient {
   async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string } } | null> {
     const response = await fetch(`${this.baseUrl}/auth/me`);
     if (!response.ok) return null;
+    return response.json();
+  }
+
+  // SSH Key Management
+  async listSshKeys(): Promise<SshKey[]> {
+    const response = await fetch(`${this.baseUrl}/ssh-keys`);
+    if (!response.ok) throw new Error('Failed to fetch SSH keys');
+    return response.json();
+  }
+
+  async createSshKey(name: string, publicKey: string): Promise<SshKey> {
+    const response = await fetch(`${this.baseUrl}/ssh-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, publicKey })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create SSH key');
+    }
+    return response.json();
+  }
+
+  async deleteSshKey(keyId: number): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/ssh-keys/${keyId}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete SSH key');
+    }
     return response.json();
   }
 }

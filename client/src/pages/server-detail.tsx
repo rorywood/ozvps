@@ -33,7 +33,9 @@ import {
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { api, type SshKey } from "@/lib/api";
+import { Checkbox } from "@/components/ui/checkbox";
+import { KeyRound } from "lucide-react";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -73,6 +75,7 @@ export default function ServerDetail() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isRenamingServer, setIsRenamingServer] = useState(false);
+  const [selectedSshKeyIds, setSelectedSshKeyIds] = useState<number[]>([]);
   
   const reinstallTask = useReinstallTask(serverId || '');
 
@@ -93,6 +96,13 @@ export default function ServerDetail() {
     queryKey: ['reinstall-templates', serverId],
     queryFn: () => api.getReinstallTemplates(serverId || ''),
     enabled: !!serverId && reinstallDialogOpen
+  });
+  
+  // SSH Keys for reinstall
+  const { data: sshKeys } = useQuery({
+    queryKey: ['sshKeys'],
+    queryFn: () => api.listSshKeys(),
+    enabled: reinstallDialogOpen
   });
 
   const { data: trafficData, isFetching: isTrafficFetching, refetch: refetchTraffic } = useQuery({
@@ -169,8 +179,8 @@ export default function ServerDetail() {
   });
 
   const reinstallMutation = useMutation({
-    mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname: string }) => 
-      api.reinstallServer(id, osId, hostname),
+    mutationFn: ({ id, osId, hostname, sshKeyIds }: { id: string, osId: number, hostname: string, sshKeyIds?: number[] }) => 
+      api.reinstallServer(id, osId, hostname, sshKeyIds),
     onSuccess: (response) => {
       // Reset dialog state before closing
       setSelectedOs("");
@@ -178,6 +188,7 @@ export default function ServerDetail() {
       setHostnameError("");
       setOsSearchQuery("");
       setSelectedCategory("All");
+      setSelectedSshKeyIds([]);
       setReinstallDialogOpen(false);
       
       // Start the reinstall task polling with the generated password and server IP
@@ -314,7 +325,8 @@ export default function ServerDetail() {
     reinstallMutation.mutate({ 
       id: serverId, 
       osId: parseInt(selectedOs),
-      hostname: normalizedHostname
+      hostname: normalizedHostname,
+      sshKeyIds: selectedSshKeyIds.length > 0 ? selectedSshKeyIds : undefined
     });
   };
 
@@ -1067,6 +1079,7 @@ export default function ServerDetail() {
           setHostnameError("");
           setOsSearchQuery("");
           setSelectedCategory("All");
+          setSelectedSshKeyIds([]);
         }
       }}>
         <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
@@ -1111,6 +1124,46 @@ export default function ServerDetail() {
               </p>
             )}
           </div>
+          
+          {/* SSH Key Selection */}
+          {sshKeys && sshKeys.length > 0 && (
+            <div className="px-6 pt-4">
+              <label className="text-sm font-medium text-white flex items-center gap-2 mb-3">
+                <KeyRound className="h-4 w-4 text-purple-400" />
+                SSH Keys (optional)
+              </label>
+              <div className="space-y-2 max-h-28 overflow-y-auto bg-white/5 rounded-lg p-3 border border-white/10">
+                {sshKeys.map((key) => (
+                  <label
+                    key={key.id}
+                    className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5 cursor-pointer transition-colors"
+                    data-testid={`checkbox-ssh-key-${key.id}`}
+                  >
+                    <Checkbox
+                      checked={selectedSshKeyIds.includes(key.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedSshKeyIds([...selectedSshKeyIds, key.id]);
+                        } else {
+                          setSelectedSshKeyIds(selectedSshKeyIds.filter(id => id !== key.id));
+                        }
+                      }}
+                      className="border-white/30 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{key.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate">
+                        {key.publicKey.substring(0, 40)}...
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Selected keys will be added to authorized_keys for root login
+              </p>
+            </div>
+          )}
 
           {/* Search and Category Filter */}
           <div className="px-6 pt-4 space-y-3">

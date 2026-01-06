@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallWithSshSchema, sshKeySchema } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 
@@ -514,14 +514,14 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Server is suspended. Reinstall is disabled.' });
       }
 
-      // Validate request body with Zod schema
-      const parseResult = reinstallSchema.safeParse(req.body);
+      // Validate request body with Zod schema (now includes optional sshKeyIds)
+      const parseResult = reinstallWithSshSchema.safeParse(req.body);
       if (!parseResult.success) {
         const errorMessage = parseResult.error.errors.map(e => e.message).join(', ');
         return res.status(400).json({ error: errorMessage });
       }
 
-      const { osId, hostname } = parseResult.data;
+      const { osId, hostname, sshKeyIds } = parseResult.data;
 
       // Verify template is allowed for this server
       // Templates are returned in groups, each group has a templates array
@@ -546,7 +546,23 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Selected OS template is not available for this server' });
       }
 
-      const result = await virtfusionClient.reinstallServer(req.params.id, osId, hostname);
+      // Validate SSH key ownership if keys are provided
+      let validatedSshKeyIds: number[] | undefined = undefined;
+      if (sshKeyIds && sshKeyIds.length > 0 && req.userSession!.virtFusionUserId) {
+        // Fetch user's SSH keys from VirtFusion to validate ownership
+        const userKeys = await virtfusionClient.listUserSshKeys(req.userSession!.virtFusionUserId);
+        const userKeyIds = new Set(userKeys.map(k => k.id));
+        
+        // Filter to only include keys that belong to this user
+        validatedSshKeyIds = sshKeyIds.filter(id => userKeyIds.has(id));
+        
+        // If any requested keys don't belong to user, reject the request
+        if (validatedSshKeyIds.length !== sshKeyIds.length) {
+          return res.status(403).json({ error: 'One or more SSH keys are not accessible' });
+        }
+      }
+
+      const result = await virtfusionClient.reinstallServer(req.params.id, osId, hostname, validatedSshKeyIds);
       res.json({ success: true, data: result });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
@@ -657,6 +673,73 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
+    }
+  });
+
+  // SSH Key Management Routes
+  app.get('/api/ssh-keys', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.virtFusionUserId) {
+        return res.status(400).json({ error: 'VirtFusion user not linked' });
+      }
+      
+      const keys = await virtfusionClient.listUserSshKeys(session.virtFusionUserId);
+      res.json(keys);
+    } catch (error: any) {
+      log(`Error fetching SSH keys: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch SSH keys' });
+    }
+  });
+
+  app.post('/api/ssh-keys', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.virtFusionUserId) {
+        return res.status(400).json({ error: 'VirtFusion user not linked' });
+      }
+      
+      // Validate request body
+      const parseResult = sshKeySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = parseResult.error.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ error: errorMessage });
+      }
+      
+      const { name, publicKey } = parseResult.data;
+      const key = await virtfusionClient.createSshKey(session.virtFusionUserId, name, publicKey);
+      res.json(key);
+    } catch (error: any) {
+      log(`Error creating SSH key: ${error.message}`, 'api');
+      res.status(500).json({ error: error.message || 'Failed to create SSH key' });
+    }
+  });
+
+  app.delete('/api/ssh-keys/:keyId', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.virtFusionUserId) {
+        return res.status(400).json({ error: 'VirtFusion user not linked' });
+      }
+      
+      const keyId = parseInt(req.params.keyId, 10);
+      if (isNaN(keyId)) {
+        return res.status(400).json({ error: 'Invalid key ID' });
+      }
+      
+      // Validate ownership - ensure this key belongs to the user
+      const userKeys = await virtfusionClient.listUserSshKeys(session.virtFusionUserId);
+      const keyBelongsToUser = userKeys.some(k => k.id === keyId);
+      
+      if (!keyBelongsToUser) {
+        return res.status(403).json({ error: 'SSH key not found or access denied' });
+      }
+      
+      await virtfusionClient.deleteSshKey(keyId);
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error deleting SSH key ${req.params.keyId}: ${error.message}`, 'api');
+      res.status(500).json({ error: error.message || 'Failed to delete SSH key' });
     }
   });
 
