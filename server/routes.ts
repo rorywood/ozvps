@@ -233,32 +233,6 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  // Force resync plans from VirtFusion (localhost only, for update script)
-  // Registered BEFORE CSRF to allow curl from update script
-  app.post('/api/admin/resync-plans', async (req, res) => {
-    // Only allow from localhost for security
-    const ip = req.ip || req.socket.remoteAddress || '';
-    const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-    if (!isLocalhost) {
-      log(`Plan resync rejected from non-local IP: ${ip}`, 'api');
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    try {
-      const packages = await virtfusionClient.getPackages();
-      if (packages.length > 0) {
-        const result = await dbStorage.syncPlansFromVirtFusion(packages);
-        log(`Plans resynced: ${result.synced} synced, ${result.errors.length} errors`, 'api');
-        res.json({ success: true, synced: result.synced, errors: result.errors });
-      } else {
-        res.json({ success: false, error: 'No packages found from VirtFusion' });
-      }
-    } catch (error: any) {
-      log(`Plan resync failed: ${error.message}`, 'api');
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -285,33 +259,18 @@ export async function registerRoutes(
     }
   });
 
-  // Plan sync function (reusable for startup and periodic sync)
-  const syncPlansFromVirtFusion = async (source: string) => {
+  // Seed plans from static config on startup (non-blocking)
+  (async () => {
     try {
-      const packages = await virtfusionClient.getPackages();
-      if (packages.length > 0) {
-        const result = await dbStorage.syncPlansFromVirtFusion(packages);
-        log(`Plans synced from VirtFusion: ${result.synced} synced, ${result.errors.length} errors`, source);
-        if (result.errors.length > 0) {
-          result.errors.forEach(err => log(`Plan sync error: ${err}`, source));
-        }
-      } else {
-        log('No packages found from VirtFusion to sync', source);
+      const result = await dbStorage.seedPlansFromConfig();
+      log(`Plans seeded: ${result.seeded} plans`, 'startup');
+      if (result.errors.length > 0) {
+        result.errors.forEach(err => log(`Plan seed error: ${err}`, 'startup'));
       }
     } catch (error: any) {
-      log(`Failed to sync plans: ${error.message}`, source);
+      log(`Failed to seed plans: ${error.message}`, 'startup');
     }
-  };
-
-  // Sync plans from VirtFusion on startup
-  syncPlansFromVirtFusion('startup');
-
-  // Periodic plan sync every 10 minutes
-  const PLAN_SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutes
-  setInterval(() => {
-    syncPlansFromVirtFusion('scheduled');
-  }, PLAN_SYNC_INTERVAL);
-  log(`Scheduled plan sync every ${PLAN_SYNC_INTERVAL / 60000} minutes`, 'startup');
+  })();
 
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
@@ -1015,6 +974,133 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error blocking user: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to update user status' });
+    }
+  });
+
+  // Admin: Get all wallets
+  app.get('/api/admin/wallets', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const allWallets = await dbStorage.getAllWallets();
+      res.json({ wallets: allWallets });
+    } catch (error: any) {
+      log(`Error fetching wallets: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch wallets' });
+    }
+  });
+
+  // Admin: Adjust wallet balance
+  const walletAdjustSchema = z.object({
+    auth0UserId: z.string().min(1, 'User ID is required'),
+    amountCents: z.number().int().refine(val => val !== 0, 'Amount cannot be zero'),
+    reason: z.string().min(3, 'Reason must be at least 3 characters').max(500, 'Reason too long'),
+  });
+
+  app.post('/api/admin/wallet/adjust', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const parsed = walletAdjustSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
+      }
+
+      const { auth0UserId, amountCents, reason } = parsed.data;
+
+      // Verify the user exists in Auth0 before adjusting
+      const userExists = await auth0Client.userExists(auth0UserId);
+      if (!userExists) {
+        return res.status(404).json({ error: 'User not found in Auth0' });
+      }
+
+      const result = await dbStorage.adjustWalletBalance(
+        auth0UserId,
+        amountCents,
+        reason.trim(),
+        req.userSession.email
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      log(`Admin ${req.userSession.email} adjusted wallet for ${auth0UserId}: ${amountCents > 0 ? '+' : ''}${amountCents} cents (${reason})`, 'admin');
+      res.json({ success: true, wallet: result.wallet });
+    } catch (error: any) {
+      log(`Error adjusting wallet: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to adjust wallet' });
+    }
+  });
+
+  // Admin: Search users by email
+  app.get('/api/admin/users/search', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const email = (req.query.email as string || '').trim().toLowerCase();
+      if (!email || email.length < 3) {
+        return res.status(400).json({ error: 'Email search query required (min 3 characters)' });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Search Auth0 for user (requires exact email match)
+      const auth0User = await auth0Client.getUserByEmail(email);
+      if (!auth0User) {
+        return res.json({ users: [] });
+      }
+
+      // Verify exact email match (case-insensitive)
+      if (auth0User.email.toLowerCase() !== email) {
+        return res.json({ users: [] });
+      }
+
+      // Get wallet info
+      const wallet = await dbStorage.getWallet(auth0User.user_id);
+
+      res.json({
+        users: [{
+          auth0UserId: auth0User.user_id,
+          email: auth0User.email,
+          name: auth0User.name,
+          emailVerified: auth0User.email_verified,
+          virtFusionUserId: auth0User.app_metadata?.virtfusion_user_id,
+          wallet: wallet ? {
+            balanceCents: wallet.balanceCents,
+            stripeCustomerId: wallet.stripeCustomerId,
+          } : null,
+        }],
+      });
+    } catch (error: any) {
+      log(`Error searching users: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to search users' });
+    }
+  });
+
+  // Admin: Get user transactions
+  app.get('/api/admin/users/:auth0UserId/transactions', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { auth0UserId } = req.params;
+      const transactions = await dbStorage.getWalletTransactions(auth0UserId, 100);
+      res.json({ transactions });
+    } catch (error: any) {
+      log(`Error fetching user transactions: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch transactions' });
     }
   });
 

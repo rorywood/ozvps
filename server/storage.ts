@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder } from "@shared/schema";
+import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
 
@@ -266,46 +267,30 @@ export const dbStorage = {
     return created;
   },
 
-  async syncPlansFromVirtFusion(packages: Array<{
-    id: number;
-    code: string;
-    name: string;
-    cpuCores: number;
-    memory: number;
-    primaryStorage: number;
-    traffic: number;
-    enabled: boolean;
-    prices?: Array<{ price: number; billingPeriod?: string }>;
-  }>): Promise<{ synced: number; errors: string[] }> {
+  async seedPlansFromConfig(): Promise<{ seeded: number; errors: string[] }> {
     const errors: string[] = [];
-    let synced = 0;
+    let seeded = 0;
 
-    for (const pkg of packages) {
+    for (const plan of STATIC_PLANS) {
       try {
-        // Find monthly price (default to 0 if not found)
-        const monthlyPrice = pkg.prices?.find(p => 
-          p.billingPeriod === 'monthly' || p.billingPeriod === 'month' || !p.billingPeriod
-        );
-        const priceMonthly = monthlyPrice?.price || 0;
-
         await this.upsertPlan({
-          code: pkg.code,
-          name: pkg.name,
-          vcpu: pkg.cpuCores,
-          ramMb: pkg.memory,
-          storageGb: pkg.primaryStorage,
-          transferGb: pkg.traffic,
-          priceMonthly,
-          virtfusionPackageId: pkg.id,
-          active: pkg.enabled,
+          code: plan.code,
+          name: plan.name,
+          vcpu: plan.vcpu,
+          ramMb: plan.ramMb,
+          storageGb: plan.storageGb,
+          transferGb: plan.transferGb,
+          priceMonthly: plan.priceMonthly,
+          virtfusionPackageId: plan.virtfusionPackageId,
+          active: plan.active,
         });
-        synced++;
+        seeded++;
       } catch (error: any) {
-        errors.push(`Failed to sync package ${pkg.code}: ${error.message}`);
+        errors.push(`Failed to seed plan ${plan.code}: ${error.message}`);
       }
     }
 
-    return { synced, errors };
+    return { seeded, errors };
   },
 
   // Wallets
@@ -432,6 +417,56 @@ export const dbStorage = {
       .where(eq(walletTransactions.auth0UserId, auth0UserId))
       .orderBy(desc(walletTransactions.createdAt))
       .limit(limit);
+  },
+
+  // Admin: Get all wallets
+  async getAllWallets(): Promise<Wallet[]> {
+    return db
+      .select()
+      .from(wallets)
+      .orderBy(desc(wallets.updatedAt));
+  },
+
+  // Admin: Adjust wallet balance (add or remove credits)
+  async adjustWalletBalance(
+    auth0UserId: string, 
+    amountCents: number, 
+    reason: string,
+    adminEmail: string
+  ): Promise<{ success: boolean; wallet?: Wallet; error?: string }> {
+    const wallet = await this.getWallet(auth0UserId);
+    if (!wallet) {
+      return { success: false, error: 'Wallet not found' };
+    }
+
+    // For negative adjustments, check balance
+    if (amountCents < 0 && wallet.balanceCents + amountCents < 0) {
+      return { success: false, error: 'Adjustment would result in negative balance' };
+    }
+
+    // Insert adjustment transaction
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'admin_adjustment',
+      amountCents,
+      metadata: { 
+        reason,
+        adminEmail,
+        adjustedAt: new Date().toISOString(),
+      },
+    });
+
+    // Update wallet balance
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+
+    return { success: true, wallet: updated };
   },
 
   // Deploy Orders

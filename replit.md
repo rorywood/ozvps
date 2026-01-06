@@ -36,14 +36,14 @@ Preferred communication style: Simple, everyday language.
 ### Billing & Wallet System
 - **Prepaid Wallet**: Users add funds via Stripe, then deploy servers instantly
 - **Database Tables**:
-  - `plans`: VPS plans with pricing (auto-synced from VirtFusion packages on startup)
+  - `plans`: VPS plans with pricing (seeded from static config in `shared/plans.ts`)
   - `wallets`: User balances stored in cents (integer precision), with `stripe_customer_id` for Stripe linking
-  - `wallet_transactions`: Transaction history (credits from Stripe, debits from deployments)
+  - `wallet_transactions`: Transaction history (credits from Stripe, debits from deployments, admin adjustments)
   - `deploy_orders`: Server provisioning orders with status tracking
-- **VirtFusion Plans Sync**: On startup, fetches all packages from VirtFusion and syncs to plans table
-  - Uses `virtfusionClient.getPackages()` to fetch available packages
-  - `dbStorage.syncPlansFromVirtFusion()` upserts plans by `virtfusion_package_id`
-  - Non-blocking: sync runs async so server boot isn't delayed
+- **Static Plans Configuration**: Plans are hardcoded in `shared/plans.ts` for simplicity
+  - Plans: Nano ($9.99), Starter ($14.99), Dev ($21.99), Lite ($27.99), Value ($36.99), Unlimited Bandwidth Micro ($59.99)
+  - Each plan maps to a VirtFusion package ID for deployment
+  - `dbStorage.seedPlansFromConfig()` upserts plans on startup
 - **Stripe Integration**: Using Replit Stripe connector with stripe-replit-sync
   - **Stripe Customer on Registration**: Automatically creates Stripe customer when user registers (similar to VirtFusion user creation)
   - **Stripe Customer Linking**: Stripe customer ID stored in `wallets.stripe_customer_id`
@@ -124,29 +124,23 @@ Preferred communication style: Simple, everyday language.
 
 ### Admin Access
 - **Admin Panel**: Available at `/admin` route for users with admin privileges
-  - Shows quick reference guide for CLI commands
-  - Links to user management, wallet operations, and plan sync features
+  - User search by email
+  - View user details (Auth0 ID, VirtFusion ID, wallet balance, email verification)
+  - Add/remove credits with reason tracking
+  - View user transaction history
+- **Admin API Endpoints**:
+  - `GET /api/admin/wallets` - List all wallets
+  - `POST /api/admin/wallet/adjust` - Add or remove credits (requires reason)
+  - `GET /api/admin/users/search?email=` - Search users by email
+  - `GET /api/admin/users/:auth0UserId/transactions` - Get user transaction history
 - **Admin Detection**: Checked from Auth0 `app_metadata.is_admin` field
   - Set `is_admin: true` in Auth0 dashboard → User Management → Select user → app_metadata
   - Admin status is stored in session on login
   - Sidebar shows "Admin Panel" link with amber styling when user is admin
-- **Security**: Non-admins are automatically redirected to dashboard if they try to access `/admin`
-
-### Admin CLI Tool
-- **Command**: `ozvpsctl` (installed to /usr/local/bin)
-- **Authentication**: Requires `ADMIN_CLI_TOKEN` from .env (generated during installation)
-- **Features**:
-  1. List all users and their wallet balances
-  2. View user details with transaction history
-  3. Add credits to user wallet
-  4. Remove credits from user wallet  
-  5. Set user balance to specific amount
-- **Security**:
-  - CLI runs server-side only, requires root access
-  - Admin token validated before allowing operations
-  - All operations logged with audit metadata in `wallet_transactions`
-  - No card details exposed (all payment data stays in Stripe)
-- **Usage**: `sudo ozvps-credits` then enter admin token
+- **Security**: 
+  - Non-admins are automatically redirected to dashboard if they try to access `/admin`
+  - All admin API endpoints check `req.userSession?.isAdmin` and return 403 if not admin
+  - All wallet adjustments are logged with admin email and reason in transaction metadata
 
 ### Project Structure
 ```
