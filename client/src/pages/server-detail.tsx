@@ -27,7 +27,6 @@ import {
   TrendingUp,
   Pencil,
   Check,
-  Settings,
   Search,
   AlertTriangle,
   Clock
@@ -37,11 +36,6 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { OsTemplateRow } from "@/components/os-template-row";
 import { getOsCategory, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
@@ -73,7 +67,7 @@ export default function ServerDetail() {
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
   const [selectedOs, setSelectedOs] = useState<string>("");
   const [hostname, setHostname] = useState<string>("");
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [hostnameError, setHostnameError] = useState<string>("");
   const [osSearchQuery, setOsSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -96,9 +90,9 @@ export default function ServerDetail() {
   });
 
   const { data: osTemplates } = useQuery({
-    queryKey: ['os-templates', serverId],
-    queryFn: () => api.getOsTemplates(serverId || ''),
-    enabled: !!serverId
+    queryKey: ['reinstall-templates', serverId],
+    queryFn: () => api.getReinstallTemplates(serverId || ''),
+    enabled: !!serverId && reinstallDialogOpen
   });
 
   const { data: trafficData, isFetching: isTrafficFetching, refetch: refetchTraffic } = useQuery({
@@ -175,13 +169,13 @@ export default function ServerDetail() {
   });
 
   const reinstallMutation = useMutation({
-    mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname?: string }) => 
+    mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname: string }) => 
       api.reinstallServer(id, osId, hostname),
     onSuccess: () => {
       // Reset dialog state before closing
       setSelectedOs("");
       setHostname("");
-      setShowAdvancedOptions(false);
+      setHostnameError("");
       setOsSearchQuery("");
       setSelectedCategory("All");
       setReinstallDialogOpen(false);
@@ -270,12 +264,43 @@ export default function ServerDetail() {
   };
 
 
+  const validateHostname = (value: string): string => {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) return 'Hostname is required';
+    if (trimmed.length > 63) return 'Hostname must be 63 characters or less';
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmed)) {
+      if (trimmed.startsWith('-') || trimmed.endsWith('-')) {
+        return 'Hostname cannot start or end with a hyphen';
+      }
+      return 'Hostname can only contain lowercase letters, numbers, and hyphens';
+    }
+    return '';
+  };
+
+  const handleHostnameChange = (value: string) => {
+    setHostname(value);
+    if (value.trim()) {
+      setHostnameError(validateHostname(value));
+    } else {
+      setHostnameError('');
+    }
+  };
+
+  const isHostnameValid = hostname.trim() && !validateHostname(hostname);
+
   const handleReinstall = () => {
     if (!serverId || !selectedOs) return;
+    
+    const hostnameValidation = validateHostname(hostname);
+    if (hostnameValidation) {
+      setHostnameError(hostnameValidation);
+      return;
+    }
+    
     reinstallMutation.mutate({ 
       id: serverId, 
       osId: parseInt(selectedOs),
-      hostname: hostname.trim() || undefined
+      hostname: hostname.trim().toLowerCase()
     });
   };
 
@@ -1022,7 +1047,7 @@ export default function ServerDetail() {
         if (!open) {
           setSelectedOs("");
           setHostname("");
-          setShowAdvancedOptions(false);
+          setHostnameError("");
           setOsSearchQuery("");
           setSelectedCategory("All");
         }
@@ -1044,6 +1069,30 @@ export default function ServerDetail() {
                 Reinstalling will completely wipe the disk. Make sure to backup any important data first.
               </p>
             </div>
+          </div>
+
+          {/* Hostname Input - Required */}
+          <div className="px-6 pt-4">
+            <label className="text-sm font-medium text-white block mb-2">
+              Hostname <span className="text-red-400">*</span>
+            </label>
+            <Input
+              value={hostname}
+              onChange={(e) => handleHostnameChange(e.target.value)}
+              placeholder="e.g., myserver"
+              className={cn(
+                "bg-white/5 border-white/10 text-white placeholder:text-muted-foreground",
+                hostnameError && "border-red-500/50 focus-visible:ring-red-500"
+              )}
+              data-testid="input-hostname"
+            />
+            {hostnameError ? (
+              <p className="text-xs text-red-400 mt-1">{hostnameError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Lowercase letters, numbers, and hyphens only (1-63 characters)
+              </p>
+            )}
           </div>
 
           {/* Search and Category Filter */}
@@ -1091,6 +1140,12 @@ export default function ServerDetail() {
                   />
                 ))}
               </div>
+            ) : osTemplates && osTemplates.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-yellow-500" />
+                <p className="font-medium">No OS templates available</p>
+                <p className="text-sm mt-1">There are no templates available for this server.</p>
+              </div>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <p>No operating systems found matching your search.</p>
@@ -1098,52 +1153,12 @@ export default function ServerDetail() {
             )}
           </div>
 
-          {/* Footer with Hostname and Install Button */}
-          <div className="border-t border-white/10 p-6 space-y-4">
-            {/* Advanced Options */}
-            <Collapsible open={showAdvancedOptions} onOpenChange={setShowAdvancedOptions}>
-              <div className="flex justify-end">
-                <CollapsibleTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="border-white/10 text-muted-foreground hover:text-white"
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Advanced Options
-                    <ChevronDown className={cn(
-                      "h-4 w-4 ml-2 transition-transform",
-                      showAdvancedOptions && "rotate-180"
-                    )} />
-                  </Button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="mt-4 space-y-4">
-                <div className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-3">
-                  <div>
-                    <label className="text-sm font-medium text-white block mb-2">
-                      Hostname
-                    </label>
-                    <Input
-                      value={hostname}
-                      onChange={(e) => setHostname(e.target.value)}
-                      placeholder="e.g., myserver.example.com"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
-                      data-testid="input-hostname"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Set the hostname for your server (optional)
-                    </p>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* Install Button */}
+          {/* Footer with Install Button */}
+          <div className="border-t border-white/10 p-6">
             <Button 
-              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold"
+              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold disabled:opacity-50"
               onClick={handleReinstall}
-              disabled={!selectedOs || reinstallMutation.isPending}
+              disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
             >
               {reinstallMutation.isPending ? (
@@ -1155,6 +1170,11 @@ export default function ServerDetail() {
                 'Reinstall Server'
               )}
             </Button>
+            {!isHostnameValid && hostname.trim() === '' && (
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Enter a hostname to continue
+              </p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

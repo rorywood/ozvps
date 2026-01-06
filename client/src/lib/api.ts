@@ -144,6 +144,12 @@ class ApiClient {
     return response.json();
   }
 
+  async getReinstallTemplates(id: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall/templates`);
+    if (!response.ok) throw new Error('Failed to fetch available templates');
+    return response.json();
+  }
+
   async renameServer(id: string, name: string): Promise<{ success: boolean; name: string }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
       method: 'PUT',
@@ -154,15 +160,19 @@ class ApiClient {
     return response.json();
   }
 
-  async reinstallServer(id: string, osId: number, hostname?: string): Promise<{ success: boolean }> {
+  async reinstallServer(id: string, osId: number, hostname: string): Promise<{ success: boolean; error?: string }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ osId, hostname })
     });
-    if (!response.ok) throw new Error('Failed to reinstall server');
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to reinstall server');
+    }
     return response.json();
   }
+
 
   async updateServerName(id: string, name: string): Promise<{ success: boolean; name: string }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
