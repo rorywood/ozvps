@@ -524,10 +524,23 @@ export async function registerRoutes(
       const { osId, hostname } = parseResult.data;
 
       // Verify template is allowed for this server
-      const templates = await virtfusionClient.getOsTemplates(req.params.id);
-      const templateAllowed = templates?.some((t: any) => 
-        String(t.id) === String(osId) || t.id === osId
-      );
+      // Templates are returned in groups, each group has a templates array
+      const templateGroups = await virtfusionClient.getOsTemplates(req.params.id);
+      let templateAllowed = false;
+      
+      if (templateGroups && Array.isArray(templateGroups)) {
+        for (const group of templateGroups) {
+          if (group.templates && Array.isArray(group.templates)) {
+            const found = group.templates.some((t: any) => 
+              String(t.id) === String(osId) || t.id === osId
+            );
+            if (found) {
+              templateAllowed = true;
+              break;
+            }
+          }
+        }
+      }
       
       if (!templateAllowed) {
         return res.status(403).json({ error: 'Selected OS template is not available for this server' });
