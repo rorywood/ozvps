@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { virtfusionClient } from "./virtfusion";
 import { storage } from "./storage";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 
@@ -486,6 +486,23 @@ export async function registerRoutes(
     }
   });
 
+  // Filtered templates endpoint - returns only templates allowed for this user/server
+  app.get('/api/servers/:id/reinstall/templates', authMiddleware, async (req, res) => {
+    try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      // Get templates from VirtFusion - these are already filtered by server capabilities
+      const templates = await virtfusionClient.getOsTemplates(req.params.id);
+      res.json(templates || []);
+    } catch (error: any) {
+      log(`Error fetching reinstall templates for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch available templates' });
+    }
+  });
+
   app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
@@ -497,17 +514,30 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Server is suspended. Reinstall is disabled.' });
       }
 
-      const { osId, hostname } = req.body;
+      // Validate request body with Zod schema
+      const parseResult = reinstallSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = parseResult.error.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ error: errorMessage });
+      }
+
+      const { osId, hostname } = parseResult.data;
+
+      // Verify template is allowed for this server
+      const templates = await virtfusionClient.getOsTemplates(req.params.id);
+      const templateAllowed = templates?.some((t: any) => 
+        String(t.id) === String(osId) || t.id === osId
+      );
       
-      if (!osId) {
-        return res.status(400).json({ error: 'OS ID is required' });
+      if (!templateAllowed) {
+        return res.status(403).json({ error: 'Selected OS template is not available for this server' });
       }
 
       const result = await virtfusionClient.reinstallServer(req.params.id, osId, hostname);
       res.json({ success: true, data: result });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to reinstall server' });
+      res.status(500).json({ error: error.message || 'Failed to reinstall server' });
     }
   });
 

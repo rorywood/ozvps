@@ -53,6 +53,17 @@ export const serverNameSchema = z.object({
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/, 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods'),
 });
 
+export const hostnameSchema = z.string()
+  .min(1, 'Hostname is required')
+  .max(63, 'Hostname must be 63 characters or less')
+  .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, 'Hostname must be lowercase, start and end with a letter or number, and contain only letters, numbers, and hyphens')
+  .transform(val => val.toLowerCase().trim());
+
+export const reinstallSchema = z.object({
+  osId: z.union([z.string(), z.number()]).refine(val => val !== '' && val !== null, 'OS template is required'),
+  hostname: hostnameSchema,
+});
+
 export type User = typeof users.$inferSelect;
 export type UserMapping = typeof userMappings.$inferSelect;
 export type Session = typeof sessions.$inferSelect;

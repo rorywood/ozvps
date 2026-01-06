@@ -1,0 +1,134 @@
+Replit Change Request: Reinstall Page Simplification + Hostname Enforcement + Allowed-OS Enforcement + Fix “Reinstalling” Animation End State
+1) Remove “advanced features” from reinstall flow
+
+Strip any non-essential controls and secondary panels on the reinstall page (anything beyond: template picker, hostname, reinstall button, progress/status).
+
+Keep the template list with icons.
+
+Keep progress UI, but remove extra timeline/advanced debug blocks if present.
+
+2) Hostname placement and UX
+
+Move Hostname input to the top of the reinstall section, directly above the template picker / reinstall action.
+
+Layout order (top → bottom):
+
+Hostname input
+
+OS template list (with icons)
+
+Reinstall button + confirmation text
+
+Progress/status panel (only visible while reinstall in progress)
+
+3) Hostname is mandatory and must be tied into the API
+
+Frontend rules
+
+Reinstall button stays disabled until:
+
+Hostname is non-empty AND passes validation
+
+A template is selected
+
+Allowed-OS check has passed (see section 4)
+
+Validate hostname client-side before calling reinstall:
+
+Trim whitespace
+
+Lowercase (or preserve case only if VirtFusion explicitly supports it; default lowercase)
+
+Enforce hostname pattern: letters/numbers/hyphen, no spaces, no leading/trailing hyphen, length 1–63 for the hostname label (or allow FQDN up to 253 if you already support it; simplest is 1–63 and no dots unless already supported)
+
+On reinstall submit, send hostname as part of the reinstall request payload; backend must forward to VirtFusion exactly in the expected parameter.
+
+Backend rules
+
+Reject reinstall requests without hostname (400).
+
+Validate hostname server-side with the same rules (never trust frontend).
+
+If VirtFusion rejects hostname, pass back the VirtFusion error message and show it cleanly in UI.
+
+4) Enforce “only OS templates the user is allowed to install” via API
+
+Do not filter purely in frontend.
+
+Implementation requirement
+
+Add or use an API endpoint that returns only the templates allowed for that user + that server.
+
+Example: GET /api/servers/:serverId/reinstall/templates
+
+Response: list of templates already filtered/authorised.
+
+The reinstall page must source the template list from this endpoint only.
+
+If current backend already pulls all VirtFusion templates
+
+Add filtering based on VirtFusion permissions/plan/feature flags:
+
+If VirtFusion provides an “available templates for server” endpoint, use that.
+
+Otherwise enforce a local allowlist policy keyed by:
+
+user plan / product
+
+server location/node
+
+server type (KVM/LXC if relevant)
+
+Backend must enforce again on reinstall submit:
+
+Example: POST /api/servers/:serverId/reinstall
+
+Backend checks selected templateId is in the allowed set for that user/server at request time.
+
+If not allowed: return 403 with a clear error.
+
+Frontend behaviour
+
+Template picker shows only what API returns.
+
+If API returns empty list: show a single-state message “No OS templates available for this server” and disable reinstall.
+
+5) Stop “Server reinstalling” animation when install completes
+
+This is a state machine bug: completion is not clearing the “reinstalling” UI state.
+
+Required behaviour
+
+While reinstall task is active: show animation + progress.
+
+When task reaches terminal state:
+
+Success: immediately stop animation, replace with “Install complete” state, enable controls (subject to console lock rules).
+
+Failed: stop animation, show error state, re-enable reinstall controls.
+
+Implementation detail
+
+Ensure polling hook sets isReinstalling=false on terminal statuses.
+
+Clear any persisted task markers:
+
+sessionStorage.removeItem(reinstallTaskId:<serverId>)
+
+clear any “reinstalling” flags stored in local/session state
+
+After completion:
+
+Trigger a refresh of server details/status from API so the server state updates and the UI doesn’t look stuck.
+
+Guard against stale UI on refresh:
+
+If there is no active task returned by API on page load, force isReinstalling=false regardless of prior sessionStorage state.
+
+Acceptance Criteria
+
+Hostname field is at the top, mandatory, and enforced by both frontend + backend.
+
+Template list is sourced from an endpoint that returns only allowed templates; backend rejects unauthorised template IDs even if forced.
+
+Reinstall animation always stops on success/failure and the UI transitions into a clear terminal state.
