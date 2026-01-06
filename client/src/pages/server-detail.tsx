@@ -924,7 +924,6 @@ export default function ServerDetail() {
                             <div key={ipIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-md">
                               <div className="flex items-center gap-3">
                                 <span className="font-mono text-white" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
-                                <span className="text-xs text-muted-foreground">/ {ip.netmask}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
