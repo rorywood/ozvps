@@ -26,6 +26,52 @@ declare global {
 const SESSION_COOKIE = 'ozvps_session';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// CSRF protection middleware - validates Origin header for mutating requests
+function csrfProtection(req: Request, res: Response, next: NextFunction) {
+  // Only check mutating methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  const host = req.headers.host;
+
+  // In development, allow requests without origin (e.g., from tools like curl)
+  if (process.env.NODE_ENV !== 'production') {
+    return next();
+  }
+
+  // Validate origin or referer matches the host
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      if (originUrl.host !== host) {
+        log(`CSRF blocked: Origin ${origin} doesn't match host ${host}`, 'security');
+        return res.status(403).json({ error: 'Invalid request origin' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Invalid request origin' });
+    }
+  } else if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      if (refererUrl.host !== host) {
+        log(`CSRF blocked: Referer ${referer} doesn't match host ${host}`, 'security');
+        return res.status(403).json({ error: 'Invalid request origin' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Invalid request origin' });
+    }
+  } else {
+    // No origin or referer - block in production
+    log(`CSRF blocked: No origin or referer header`, 'security');
+    return res.status(403).json({ error: 'Missing request origin' });
+  }
+
+  next();
+}
+
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const sessionId = req.cookies?.[SESSION_COOKIE];
   
@@ -100,6 +146,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Apply CSRF protection to all API routes
+  app.use('/api', csrfProtection);
 
   // System health check (public)
   app.get('/api/health', async (req, res) => {
