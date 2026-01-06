@@ -225,12 +225,76 @@ export class VirtFusionClient {
     }
   }
 
+  // List all VirtFusion users (paginated)
+  async listUsers(page: number = 1, perPage: number = 100): Promise<{ data: VirtFusionUser[]; meta?: { total?: number; lastPage?: number } }> {
+    try {
+      const response = await this.request<{ data: VirtFusionUser[]; meta?: { total?: number; lastPage?: number } }>(`/users?page=${page}&perPage=${perPage}`);
+      return response;
+    } catch (error) {
+      log(`Failed to list VirtFusion users: ${error}`, 'virtfusion');
+      return { data: [] };
+    }
+  }
+
+  // Search for a user by email across all VirtFusion users
+  async searchUserByEmail(email: string): Promise<VirtFusionUser | null> {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      log(`Searching VirtFusion users for email: ${normalizedEmail}`, 'virtfusion');
+      
+      // Paginate through all users to find the one with matching email
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const response = await this.listUsers(page, 100);
+        const users = response.data || [];
+        
+        // Find user with matching email
+        const matchingUser = users.find(u => u.email?.toLowerCase() === normalizedEmail);
+        if (matchingUser) {
+          log(`Found VirtFusion user by email search: ${normalizedEmail} (ID: ${matchingUser.id}, extRelationId: ${matchingUser.extRelationId})`, 'virtfusion');
+          return matchingUser;
+        }
+        
+        // Check if there are more pages
+        const meta = response.meta;
+        if (meta?.lastPage && page < meta.lastPage) {
+          page++;
+        } else if (users.length === 100) {
+          // If we got a full page but no meta, try next page
+          page++;
+        } else {
+          hasMore = false;
+        }
+        
+        // Safety limit to prevent infinite loops
+        if (page > 100) {
+          log(`VirtFusion user search exceeded page limit for ${normalizedEmail}`, 'virtfusion');
+          hasMore = false;
+        }
+      }
+      
+      log(`No VirtFusion user found with email: ${normalizedEmail}`, 'virtfusion');
+      return null;
+    } catch (error) {
+      log(`Failed to search VirtFusion users by email ${email}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
   async findOrCreateUser(email: string, name: string): Promise<VirtFusionUser | null> {
     // First try to create - this handles both new users and existing users (via 409)
     let user = await this.createUser(email, name);
     if (!user) {
-      // If creation failed for other reason, try direct lookup
-      user = await this.findUserByEmail(email);
+      // If creation failed (409 conflict), search for existing user by email
+      log(`Creation failed for ${email}, searching for existing user...`, 'virtfusion');
+      user = await this.searchUserByEmail(email);
+      
+      // If still not found, try the legacy email-as-extRelationId lookup
+      if (!user) {
+        user = await this.findUserByEmail(email);
+      }
     }
     return user;
   }

@@ -446,6 +446,12 @@ class ApiClient {
     return response.json();
   }
 
+  async getStripePublishableKey(): Promise<{ publishableKey: string }> {
+    const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/stripe/publishable-key`);
+    if (!response.ok) throw new Error('Failed to fetch Stripe publishable key');
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();

@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
-import { useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +30,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { loadStripe, Stripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 interface Wallet {
   id: number;
@@ -77,6 +78,131 @@ function formatDate(dateString: string): string {
 
 const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000];
 
+// Card element styling for dark theme
+const cardElementOptions = {
+  style: {
+    base: {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      '::placeholder': {
+        color: '#6b7280',
+      },
+      iconColor: '#9ca3af',
+    },
+    invalid: {
+      color: '#ef4444',
+      iconColor: '#ef4444',
+    },
+  },
+};
+
+// Add Card Form Component (used inside Stripe Elements)
+function AddCardFormInner({ 
+  onSuccess, 
+  onCancel 
+}: { 
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!stripe || !elements) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      // Get SetupIntent client secret from backend
+      const { clientSecret } = await api.createSetupIntent();
+      
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) {
+        throw new Error('Card element not found');
+      }
+
+      // Confirm card setup
+      const { error: stripeError, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: {
+          card: cardElement,
+        },
+      });
+
+      if (stripeError) {
+        throw new Error(stripeError.message || 'Failed to add card');
+      }
+
+      if (setupIntent?.status === 'succeeded') {
+        toast({
+          title: "Card added",
+          description: "Your payment method has been saved.",
+        });
+        onSuccess();
+      } else {
+        throw new Error('Card setup did not complete');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to add card');
+      toast({
+        title: "Error",
+        description: err.message || "Failed to add card",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="space-y-4">
+        <div className="p-4 rounded-lg bg-black/30 border border-white/10">
+          <CardElement options={cardElementOptions} />
+        </div>
+        
+        {error && (
+          <p className="text-sm text-red-500">{error}</p>
+        )}
+        
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="border-white/10"
+            disabled={isProcessing}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={!stripe || isProcessing}
+            data-testid="button-confirm-add-card"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Adding...
+              </>
+            ) : (
+              'Add Card'
+            )}
+          </Button>
+        </DialogFooter>
+      </div>
+    </form>
+  );
+}
+
 export default function BillingPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -87,6 +213,24 @@ export default function BillingPage() {
   const [topupDialogOpen, setTopupDialogOpen] = useState(false);
   const [customAmount, setCustomAmount] = useState("");
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+
+  // Load Stripe when dialog opens
+  useEffect(() => {
+    if (addCardDialogOpen && !stripePromise) {
+      // Fetch publishable key and load Stripe using API client
+      api.getStripePublishableKey()
+        .then(data => {
+          if (data.publishableKey) {
+            setStripePromise(loadStripe(data.publishableKey));
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load Stripe:', err);
+        });
+    }
+  }, [addCardDialogOpen, stripePromise]);
 
   const searchParams = new URLSearchParams(search);
   const topupResult = searchParams.get('topup');
@@ -488,14 +632,51 @@ export default function BillingPage() {
 
             <div className="space-y-6">
               <GlassCard className="p-6" data-testid="payment-methods-section">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
-                    <CreditCard className="h-5 w-5" />
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-white">Payment Methods</h3>
+                      <p className="text-sm text-muted-foreground">Saved cards</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Payment Methods</h3>
-                    <p className="text-sm text-muted-foreground">Saved cards</p>
-                  </div>
+                  <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        size="sm" 
+                        className="gap-1"
+                        data-testid="button-add-card"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Card
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md bg-zinc-900 border-white/10">
+                      <DialogHeader>
+                        <DialogTitle className="text-white">Add Payment Method</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                          Add a new card to your account for faster top-ups.
+                        </DialogDescription>
+                      </DialogHeader>
+                      {stripePromise ? (
+                        <Elements stripe={stripePromise}>
+                          <AddCardFormInner
+                            onSuccess={() => {
+                              setAddCardDialogOpen(false);
+                              queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
+                            }}
+                            onCancel={() => setAddCardDialogOpen(false)}
+                          />
+                        </Elements>
+                      ) : (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 {loadingPaymentMethods ? (
@@ -506,7 +687,7 @@ export default function BillingPage() {
                   <div className="text-center py-4">
                     <p className="text-sm text-muted-foreground">No saved payment methods</p>
                     <p className="text-xs text-muted-foreground/70 mt-1">
-                      Cards are saved when you top up
+                      Click "Add Card" to save a payment method
                     </p>
                   </div>
                 ) : (
