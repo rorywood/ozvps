@@ -666,47 +666,27 @@ export class VirtFusionClient {
 
   async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
-      // First, get the current server to retrieve its name (required by VirtFusion API)
-      const serverResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
-      const server = serverResponse.data;
-      const serverName = server.name || `Server ${serverId}`;
-      
-      // Generate a secure random password (VirtFusion requires password for reinstall)
-      const generatePassword = () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < 16; i++) {
-          password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return password;
-      };
-      const password = generatePassword();
-      
-      // Build the request body with all required parameters
-      // VirtFusion API requires: name, operatingSystemId, authentication object
+      // VirtFusion API only requires operatingSystemId for rebuild
+      // Hostname is optional
       const body: any = { 
-        name: serverName,
         operatingSystemId: osId,
-        authentication: {
-          type: 'password',
-          password: password,
-          passwordConfirmation: password,
-        },
       };
       
       if (hostname) {
         body.hostname = hostname;
       }
       
-      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
       
-      // Return the response with the generated password so the UI can show it
-      return { ...data.data, generatedPassword: password };
+      // VirtFusion auto-generates a password and returns it in settings.decryptedPassword
+      const generatedPassword = data.data?.settings?.decryptedPassword || null;
+      
+      return { ...data.data, generatedPassword };
     } catch (error) {
       log(`Failed to reinstall server ${serverId}: ${error}`, 'virtfusion');
       throw error;
