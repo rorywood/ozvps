@@ -249,6 +249,14 @@ EOF
 
     run_step "Writing configuration" write_env
 
+    # Fetch and save version
+    save_version() {
+        VERSION_JSON=$(curl -fsSL "${DOWNLOAD_URL%/download.tar.gz}/api/version" 2>/dev/null || echo '{}')
+        VERSION=$(echo "$VERSION_JSON" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+        [[ -n "$VERSION" ]] && echo "$VERSION" > "$INSTALL_DIR/.version"
+    }
+    run_step "Saving version info" save_version
+
     # Remove bad-words package if present (has ESM/CJS issues)
     if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
         (cd "$INSTALL_DIR" && npm uninstall bad-words 2>/dev/null || true) &

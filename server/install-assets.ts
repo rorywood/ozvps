@@ -5,10 +5,20 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import crypto from "crypto";
 import { log } from "./index";
+import { VERSION, VERSION_HISTORY } from "@shared/version";
 
 const execAsync = promisify(exec);
 
 export function registerInstallAssets(app: Express) {
+  // Version check endpoint for update script
+  app.get('/api/version', (req, res) => {
+    const latestChanges = VERSION_HISTORY[0]?.changes || [];
+    res.json({
+      version: VERSION,
+      date: VERSION_HISTORY[0]?.date || new Date().toISOString().split('T')[0],
+      changes: latestChanges
+    });
+  });
   app.get('/update-ozvps.sh', async (req, res) => {
     try {
       const scriptPath = path.join(process.cwd(), 'public', 'update-ozvps.sh');
