@@ -1,4 +1,4 @@
-export const VERSION = "1.7.7";
+export const VERSION = "1.7.8";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.8",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Rebuilt dist folder with latest v1.7.8 code",
+      "Fix: Resolved stale cache issue causing old v1.6.0 to be downloaded",
+    ],
+  },
   {
     version: "1.7.7",
     date: "2026-01-06",

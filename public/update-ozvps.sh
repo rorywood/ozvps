@@ -335,37 +335,16 @@ fi
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Updating database schema"
 
-# Build (or verify pre-built dist exists)
-(
-    cd "$INSTALL_DIR"
-    
-    # Check if pre-built dist exists from tarball
-    if [[ -f "dist/index.cjs" ]]; then
-        echo "Using pre-built application from package"
-    else
-        echo "Building application from source..."
-        npm run build
-        
-        if [[ ! -f "dist/index.cjs" ]]; then
-            echo "ERROR: Build failed - dist/index.cjs not created"
-            exit 1
-        fi
-    fi
-    
-    echo "Application ready"
-) >>"$LOG_FILE" 2>&1 &
-spinner $! "Preparing application"
-
-# Verify dist exists
+# Use pre-built dist from package (always included now)
 if [[ ! -f "$INSTALL_DIR/dist/index.cjs" ]]; then
     echo ""
-    echo -e "  ${RED}✗${NC}  Application not ready - dist/index.cjs missing"
+    echo -e "  ${RED}✗${NC}  Application package incomplete - dist/index.cjs missing"
     echo ""
-    echo -e "  ${DIM}Try rebuilding manually:${NC}"
-    echo -e "  ${CYAN}cd $INSTALL_DIR && npm run build${NC}"
+    echo -e "  ${DIM}The download may have failed. Try running update again.${NC}"
     echo ""
     exit 1
 fi
+echo -e "  ${GREEN}✓${NC}  Application ready"
 
 # Update the update command and CLI tools
 (
