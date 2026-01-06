@@ -7,8 +7,11 @@ set -e
 set -u
 set -o pipefail
 
-# Configuration
+# Pre-configured values (injected by server)
 DOWNLOAD_URL="${OZVPS_DOWNLOAD_URL:-}"
+PRECONFIGURED_VIRTFUSION_URL=""
+
+# Configuration
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 NODE_VERSION="20"
@@ -140,19 +143,11 @@ main() {
     setup_application() {
         log_step "Setting up OzVPS Panel..."
 
-        # Determine download URL
+        # Use pre-configured download URL if available
         if [[ -z "$DOWNLOAD_URL" ]]; then
-            echo ""
-            echo -e "${CYAN}Where would you like to download OzVPS Panel from?${NC}"
-            echo ""
-            echo "Enter the URL of your OzVPS Panel Replit app"
-            echo "(e.g., https://ozvps-panel.yourusername.repl.co)"
-            echo ""
-            read -p "Replit App URL: " REPLIT_URL
-            
-            # Remove trailing slash if present
-            REPLIT_URL="${REPLIT_URL%/}"
-            DOWNLOAD_URL="${REPLIT_URL}/download.tar.gz"
+            log_error "No download URL configured. This script should be downloaded from your Replit app."
+            log_info "Please run: curl -fsSL https://your-replit-app.replit.app/install.sh | sudo bash"
+            exit 1
         fi
 
         # Create install directory
@@ -162,17 +157,19 @@ main() {
         # Check for existing installation
         if [[ -f "$INSTALL_DIR/package.json" ]]; then
             log_info "Existing installation found. Backing up..."
-            mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+            mv "$INSTALL_DIR" "$BACKUP_DIR" 2>/dev/null || true
             mkdir -p "$INSTALL_DIR"
             cd "$INSTALL_DIR"
+            log_info "Backup saved to: $BACKUP_DIR"
         fi
 
-        log_info "Downloading OzVPS Panel from: $DOWNLOAD_URL"
+        log_info "Downloading OzVPS Panel..."
         
         # Download and extract
         if ! curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-panel.tar.gz; then
             log_error "Failed to download OzVPS Panel"
-            log_info "Please check the URL and try again"
+            log_info "Please check that your Replit app is running and try again"
             exit 1
         fi
 
@@ -199,25 +196,56 @@ main() {
         fi
 
         echo ""
-        echo -e "${CYAN}Please provide the following configuration values:${NC}"
+        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║                    Configuration Setup                       ║${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        # Panel Domain Configuration (for Nginx)
+        echo -e "${BLUE}━━━ Panel Domain Configuration ━━━${NC}"
+        echo ""
+        echo "This is the domain where YOUR OzVPS Panel will be accessible."
+        echo "Example: panel.yourdomain.com or vps.yourdomain.com"
+        echo ""
+        read -p "Panel Domain (where users will access your panel): " PANEL_DOMAIN
+        
+        if [[ -z "$PANEL_DOMAIN" ]]; then
+            log_error "Panel domain is required"
+            exit 1
+        fi
+        
         echo ""
 
         # Auth0 Configuration
-        echo -e "${BLUE}Auth0 Configuration${NC}"
+        echo -e "${BLUE}━━━ Auth0 Configuration ━━━${NC}"
+        echo ""
+        echo "Auth0 is used for user login/registration."
+        echo "Get these from: https://manage.auth0.com/ > Applications > Your App > Settings"
+        echo ""
         read -p "Auth0 Domain (e.g., your-tenant.auth0.com): " AUTH0_DOMAIN
         read -p "Auth0 Client ID: " AUTH0_CLIENT_ID
         read -sp "Auth0 Client Secret: " AUTH0_CLIENT_SECRET
         echo ""
-
-        # VirtFusion Configuration
-        echo -e "${BLUE}VirtFusion Configuration${NC}"
-        read -p "VirtFusion Panel URL (e.g., https://panel.example.com): " VIRTFUSION_PANEL_URL
-        read -sp "VirtFusion API Token: " VIRTFUSION_API_TOKEN
         echo ""
 
-        # Domain Configuration
-        echo -e "${BLUE}Domain Configuration${NC}"
-        read -p "Your panel domain (e.g., panel.yourdomain.com): " PANEL_DOMAIN
+        # VirtFusion Configuration
+        echo -e "${BLUE}━━━ VirtFusion Configuration ━━━${NC}"
+        echo ""
+        echo "VirtFusion is the backend for managing VPS servers."
+        
+        # Use pre-configured VirtFusion URL if available
+        if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
+            echo -e "VirtFusion Panel URL: ${GREEN}$PRECONFIGURED_VIRTFUSION_URL${NC} (pre-configured)"
+            VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
+        else
+            read -p "VirtFusion Panel URL (e.g., https://panel.example.com): " VIRTFUSION_PANEL_URL
+        fi
+        
+        echo ""
+        echo "Get your API token from: VirtFusion Admin Panel > Settings > API"
+        read -sp "VirtFusion API Token: " VIRTFUSION_API_TOKEN
+        echo ""
+        echo ""
 
         # Create .env file
         cat > "$ENV_FILE" << EOF
@@ -257,7 +285,10 @@ EOF
         PANEL_DOMAIN=$(cat "$INSTALL_DIR/.panel_domain" 2>/dev/null || echo "")
 
         if [[ -z "$PANEL_DOMAIN" ]]; then
-            read -p "Enter your panel domain (e.g., panel.yourdomain.com): " PANEL_DOMAIN
+            echo ""
+            echo "This is the domain where YOUR OzVPS Panel will be accessible."
+            read -p "Panel Domain (e.g., panel.yourdomain.com): " PANEL_DOMAIN
+            echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
         fi
 
         NGINX_CONF="/etc/nginx/sites-available/$SERVICE_NAME"
@@ -303,7 +334,7 @@ EOF
         systemctl reload nginx
         systemctl enable nginx
 
-        log_info "Nginx configured successfully"
+        log_info "Nginx configured for: $PANEL_DOMAIN"
 
         # SSL Certificate
         echo ""
@@ -383,8 +414,7 @@ EOF
     echo "  Environment file: $INSTALL_DIR/.env"
     echo "  Nginx config: /etc/nginx/sites-available/$SERVICE_NAME"
     echo ""
-    echo -e "${YELLOW}To update the panel later:${NC}"
-    echo "  curl -fsSL <your-replit-url>/install.sh | sudo bash"
+    echo -e "${YELLOW}To update the panel later, run this script again.${NC}"
     echo ""
 }
 
