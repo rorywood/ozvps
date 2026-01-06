@@ -60,15 +60,10 @@ Preferred communication style: Simple, everyday language.
   - **Progress tracking**: Real polling of VirtFusion build status with sessionStorage persistence
   - **Console lock**: 15-second lock after reinstall starts to prevent console access during boot
   - **Credentials display**: After successful reinstall, shows server IP, username (root), and password with copy/reveal
-  - **SSH Key Integration**: During reinstall, users can optionally select SSH keys to inject into the new server
-- **SSH Key Management**:
-  - **Account Settings**: Global SSH key manager in Account settings page (create, delete, view keys)
-  - **VirtFusion API**: Keys stored in VirtFusion via POST/GET/DELETE `/ssh-keys` endpoints
-  - **Key validation**: Only valid SSH public key formats accepted (ssh-rsa, ssh-ed25519, ecdsa-sha2-*)
-  - **Reinstall integration**: Optional multi-select checkbox list in reinstall dialog
-  - **Backend routes**: GET/POST/DELETE `/api/ssh-keys` proxied to VirtFusion
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
+- **Known API Limitations**:
+  - **SSH Key Management**: VirtFusion public API v1 does NOT support SSH key endpoints (`/api/v1/ssh-keys/*` returns 404). SSH key management is only available through VirtFusion admin panel UI, not via REST API. This feature cannot be implemented until VirtFusion adds API support.
 
 ### Project Structure
 ```
