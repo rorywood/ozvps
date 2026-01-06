@@ -302,6 +302,56 @@ class ApiClient {
     return response.json();
   }
 
+  async getPlans(): Promise<{ plans: any[] }> {
+    const response = await fetch(`${this.baseUrl}/plans`);
+    if (!response.ok) throw new Error('Failed to fetch plans');
+    return response.json();
+  }
+
+  async getWallet(): Promise<{ wallet: any }> {
+    const response = await fetch(`${this.baseUrl}/wallet`);
+    if (!response.ok) throw new Error('Failed to fetch wallet');
+    return response.json();
+  }
+
+  async getWalletTransactions(): Promise<{ transactions: any[] }> {
+    const response = await fetch(`${this.baseUrl}/wallet/transactions`);
+    if (!response.ok) throw new Error('Failed to fetch transactions');
+    return response.json();
+  }
+
+  async createTopup(amountCents: number): Promise<{ url: string }> {
+    const response = await fetch(`${this.baseUrl}/wallet/topup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountCents })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create checkout');
+    }
+    return response.json();
+  }
+
+  async deployServer(data: { planId: number; hostname?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to deploy server');
+    }
+    return response.json();
+  }
+
+  async getDeployOrder(orderId: number): Promise<{ order: any }> {
+    const response = await fetch(`${this.baseUrl}/deploy/${orderId}`);
+    if (!response.ok) throw new Error('Failed to fetch order');
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();
