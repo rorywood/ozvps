@@ -37,12 +37,15 @@ Preferred communication style: Simple, everyday language.
 - **Prepaid Wallet**: Users add funds via Stripe, then deploy servers instantly
 - **Database Tables**:
   - `plans`: VPS plans with pricing (synced from VirtFusion packages)
-  - `wallets`: User balances stored in cents (integer precision)
+  - `wallets`: User balances stored in cents (integer precision), with `stripe_customer_id` for Stripe linking
   - `wallet_transactions`: Transaction history (credits from Stripe, debits from deployments)
   - `deploy_orders`: Server provisioning orders with status tracking
 - **Stripe Integration**: Using Replit Stripe connector with stripe-replit-sync
-  - Checkout sessions for wallet top-ups
+  - **Stripe Customer Linking**: Auto-creates Stripe customers on first top-up, linked via `stripe_customer_id` in wallets table
+  - Checkout sessions for wallet top-ups (using customer ID for returning users)
   - Webhook for automatic balance crediting (idempotent via stripeEventId)
+  - **Webhook Validation**: Validates payment_status=paid, currency=aud, and uses session.amount_total as authoritative source
+  - **Stripe Customer Portal**: Users can manage payment methods and view billing history via `/api/billing/portal`
 - **Deploy Flow**: 
   1. User selects plan, verifies sufficient balance
   2. Atomic debit from wallet + order creation

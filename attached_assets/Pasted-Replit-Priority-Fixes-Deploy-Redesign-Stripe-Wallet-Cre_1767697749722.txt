@@ -1,0 +1,251 @@
+Replit Priority Fixes: Deploy Redesign + Stripe Wallet Credit Bug + Payment Methods + Stripe Customer Link
+1) Full Deploy page redesign (current layout rejected)
+
+Replace the current Deploy UI entirely. Build a clean two-panel layout that cannot look cluttered.
+
+Target layout
+
+Header row
+
+Title: Deploy
+
+Right side: Balance $X.XX (already global)
+
+Subtext: Shared CPU • Australia
+
+Main content: 2 columns
+
+Left panel (selection)
+
+Card sections stacked with consistent spacing:
+
+Location
+
+Radio-style tiles
+
+Brisbane (BNE) enabled with 🇦🇺 flag
+
+Sydney (SYD) visible but disabled (dark/grey), tag: Coming soon
+
+Selected location displayed clearly
+
+Plan
+
+Plans rendered as uniform selectable cards (not a table)
+
+Each plan card shows:
+
+Plan name
+
+Price / month
+
+vCPU, RAM, NVMe, Transfer in a 2×2 grid
+
+Entire card clickable
+
+Selected state: clear border + subtle background
+
+Right panel (summary + action)
+
+Single sticky card:
+
+Location (with flag)
+
+Plan name + specs
+
+Monthly price
+
+Balance
+
+Due now
+
+Primary action button (full-width, fixed height):
+
+Deploy if balance sufficient
+
+Top up & Deploy if insufficient
+
+Secondary text under button:
+
+“Charges deduct from wallet balance”
+
+No other buttons on this page.
+
+UI rules (non-negotiable)
+
+One button style system. One height. One radius. One padding.
+
+No mixed button sizes. No inline buttons scattered across sections.
+
+No tables on Deploy. Cards only.
+
+Brisbane flag must render using the same asset used elsewhere in the panel.
+
+2) Stripe test top-up not crediting wallet ($5 missing)
+
+This is a webhook/crediting pipeline failure. Fix the backend before touching UI.
+
+Required backend invariants
+
+Webhook must be the source of truth
+
+Wallet credit happens only inside /api/stripe/webhook, never on “return success” redirect.
+
+Stripe signature verification must work
+
+Express must use raw body for the webhook route:
+
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), ...)
+
+Do not apply JSON body parser to the webhook route before signature verification.
+
+Verify using STRIPE_WEBHOOK_SECRET.
+
+Correct event handling
+Implement exactly one of these and stick to it:
+
+If using Checkout
+
+Handle checkout.session.completed
+
+Expand session to obtain payment_intent and amount, or store the amount in session metadata and trust it only after verification.
+
+If using PaymentIntents
+
+Handle payment_intent.succeeded
+
+Idempotency
+
+Store event.id as stripe_event_id with a unique constraint.
+
+If already processed, return 200 immediately.
+
+Test mode consistency
+
+Ensure all keys and the webhook are in the same mode:
+
+sk_test + pk_test + test webhook endpoint + test checkout session
+
+If you ran a live-mode payment with test keys or vice versa, credit will never occur.
+
+Required debugging outputs (server logs)
+
+On every webhook:
+
+Log: event type, event id, customer id, amount_total, currency
+
+Log: credit applied yes/no and resulting balance
+No secrets in logs.
+
+Acceptance
+
+A $5 test top-up results in a wallet credit within seconds without page refresh.
+
+Header balance updates after wallet refresh.
+
+3) Payment methods management (link card, view saved methods)
+
+You cannot “pull cards” from Stripe without a Stripe Customer. Implement Stripe Customer linking first (section 4), then payment methods.
+
+Minimum viable approach
+
+Implement a Billing page under Account Settings with:
+
+“Saved payment methods” list (brand + last4 + expiry)
+
+Button: “Add card”
+
+Button per method: “Remove”
+
+Optional: “Set default”
+
+Implementation (Stripe)
+
+Create a SetupIntent for the logged-in user’s Stripe Customer
+
+Use Stripe Elements on frontend to collect card details
+
+Confirm SetupIntent client-side
+
+On success, the PaymentMethod is attached to the Customer
+
+Backend endpoints:
+
+POST /api/billing/setup-intent → returns client_secret
+
+GET /api/billing/payment-methods → lists attached card methods
+
+POST /api/billing/payment-methods/:pmId/default
+
+DELETE /api/billing/payment-methods/:pmId
+
+Rules:
+
+Never store card numbers in your DB.
+
+Only store Stripe IDs.
+
+Alternate (faster, less code)
+
+Use Stripe Customer Portal for payment method management.
+
+Backend creates a portal session
+
+Redirect user to Stripe-hosted page
+
+User manages cards there
+This is usually the cleanest approach.
+
+4) Link Stripe Customer to OzVPS account (like Auth0 + VirtFusion)
+
+Yes. Do it the same way as VirtFusion linking: deterministic mapping stored server-side.
+
+Database addition
+
+Add fields to users table:
+
+stripe_customer_id (nullable, unique)
+
+Customer creation strategy
+
+On first billing action (top-up attempt, add card, billing page open):
+
+If stripe_customer_id missing:
+
+Create Stripe Customer with email and metadata:
+
+auth0_sub
+
+ozvps_user_id
+
+Save stripe_customer_id in DB
+
+Backend helper:
+
+getOrCreateStripeCustomer(user) returns customer id every time.
+
+Critical rule
+
+Never key anything off email alone after creation. Always use stored stripe_customer_id.
+
+5) Wallet top-ups: future-proof to use saved card (optional next step)
+
+Once payment methods exist, you can add “Top up with saved card”:
+
+Create PaymentIntent with customer + payment_method + off_session=false for user-initiated
+
+On succeeded webhook, credit wallet exactly the same way.
+
+Deliverables Checklist
+
+Deploy page redesigned to the two-panel card layout; consistent buttons; Brisbane flag fixed; Sydney disabled.
+
+Webhook route corrected (raw body + signature verify) and wallet credit fixed.
+
+Stripe Customer linking implemented and persisted (stripe_customer_id).
+
+Billing section added under Account Settings with either:
+
+Stripe Customer Portal session, or
+
+Native saved payment methods via SetupIntents.

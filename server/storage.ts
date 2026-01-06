@@ -241,6 +241,20 @@ export const dbStorage = {
     return wallet;
   },
 
+  async updateWalletStripeCustomerId(auth0UserId: string, stripeCustomerId: string): Promise<Wallet> {
+    const [updated] = await db
+      .update(wallets)
+      .set({ stripeCustomerId, updatedAt: new Date() })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async getWalletByStripeCustomerId(stripeCustomerId: string): Promise<Wallet | undefined> {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.stripeCustomerId, stripeCustomerId));
+    return wallet;
+  },
+
   async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
     // Check for idempotency using stripeEventId
     if (transaction.stripeEventId) {

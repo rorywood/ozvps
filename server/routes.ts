@@ -972,6 +972,68 @@ export async function registerRoutes(
     }
   });
 
+  // Create Stripe Customer Portal session (authenticated)
+  app.post('/api/billing/portal', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const email = req.userSession!.email;
+      const name = req.userSession!.name;
+      
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      
+      // Get or create wallet - ensure it exists
+      let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      if (!wallet) {
+        log(`Failed to get/create wallet for portal: ${auth0UserId}`, 'stripe');
+        return res.status(500).json({ error: 'Failed to access billing account' });
+      }
+      
+      let stripeCustomerId = wallet.stripeCustomerId;
+
+      if (!stripeCustomerId) {
+        // Create Stripe customer and wait for persistence
+        try {
+          const customer = await stripe.customers.create({
+            email,
+            name: name || undefined,
+            metadata: {
+              auth0UserId,
+              ozvps_user_id: String(req.userSession!.userId || ''),
+            },
+          });
+          stripeCustomerId = customer.id;
+          
+          // Await the update and verify it succeeded
+          const updatedWallet = await dbStorage.updateWalletStripeCustomerId(auth0UserId, stripeCustomerId);
+          if (!updatedWallet?.stripeCustomerId) {
+            log(`Failed to persist Stripe customer ${stripeCustomerId} for portal`, 'stripe');
+            return res.status(500).json({ error: 'Failed to link payment account' });
+          }
+          log(`Created Stripe customer ${stripeCustomerId} for portal access`, 'stripe');
+        } catch (stripeError: any) {
+          log(`Failed to create Stripe customer for portal: ${stripeError.message}`, 'stripe');
+          return res.status(500).json({ error: 'Failed to set up payment account' });
+        }
+      }
+
+      // Create portal session
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: stripeCustomerId,
+        return_url: `${baseUrl}/account`,
+      });
+
+      res.json({ url: portalSession.url });
+    } catch (error: any) {
+      log(`Error creating portal session: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to create billing portal session' });
+    }
+  });
+
   // Get wallet balance (authenticated)
   app.get('/api/wallet', authMiddleware, async (req, res) => {
     try {
@@ -1011,6 +1073,7 @@ export async function registerRoutes(
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       const email = req.userSession!.email;
+      const name = req.userSession!.name;
       if (!auth0UserId) {
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
       }
@@ -1023,12 +1086,47 @@ export async function registerRoutes(
       const { amountCents } = result.data;
       const stripe = await getUncachableStripeClient();
 
+      // Get or create wallet - ensure it exists
+      let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      if (!wallet) {
+        log(`Failed to get/create wallet for ${auth0UserId}`, 'stripe');
+        return res.status(500).json({ error: 'Failed to initialize wallet' });
+      }
+      
+      let stripeCustomerId = wallet.stripeCustomerId;
+
+      if (!stripeCustomerId) {
+        // Create Stripe customer and wait for persistence
+        try {
+          const customer = await stripe.customers.create({
+            email,
+            name: name || undefined,
+            metadata: {
+              auth0UserId,
+              ozvps_user_id: String(req.userSession!.userId || ''),
+            },
+          });
+          stripeCustomerId = customer.id;
+          
+          // Await the update and verify it succeeded
+          const updatedWallet = await dbStorage.updateWalletStripeCustomerId(auth0UserId, stripeCustomerId);
+          if (!updatedWallet?.stripeCustomerId) {
+            log(`Failed to persist Stripe customer ${stripeCustomerId} for ${auth0UserId}`, 'stripe');
+            return res.status(500).json({ error: 'Failed to link payment account' });
+          }
+          log(`Created and linked Stripe customer ${stripeCustomerId} for ${auth0UserId}`, 'stripe');
+        } catch (stripeError: any) {
+          log(`Failed to create Stripe customer: ${stripeError.message}`, 'stripe');
+          return res.status(500).json({ error: 'Failed to set up payment account' });
+        }
+      }
+
       // Create a checkout session for wallet top-up
       const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
+        customer: stripeCustomerId,
         payment_method_types: ['card'],
-        customer_email: email,
         line_items: [
           {
             price_data: {
@@ -1046,11 +1144,13 @@ export async function registerRoutes(
           auth0UserId,
           type: 'wallet_topup',
           amountCents: String(amountCents),
+          currency: 'aud',
         },
         success_url: `${baseUrl}/deploy?topup=success`,
         cancel_url: `${baseUrl}/deploy?topup=cancelled`,
       });
 
+      log(`Created checkout session for ${auth0UserId}: ${amountCents} cents`, 'stripe');
       res.json({ url: session.url });
     } catch (error: any) {
       log(`Error creating checkout session: ${error.message}`, 'api');

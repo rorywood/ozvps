@@ -374,6 +374,18 @@ class ApiClient {
     return response.json();
   }
 
+  async createBillingPortalSession(): Promise<{ url: string }> {
+    const response = await fetch(`${this.baseUrl}/billing/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create billing portal session');
+    }
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();

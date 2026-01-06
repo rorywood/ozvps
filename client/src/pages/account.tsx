@@ -16,7 +16,9 @@ import {
   Eye,
   EyeOff,
   Mail,
-  Clock
+  Clock,
+  CreditCard,
+  ExternalLink
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -101,6 +103,30 @@ export default function Account() {
       });
     }
   });
+
+  const billingPortalMutation = useMutation({
+    mutationFn: () => api.createBillingPortalSession(),
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open billing portal.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const { data: stripeStatus } = useQuery({
+    queryKey: ['stripe-status'],
+    queryFn: () => api.getStripeStatus(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const stripeConfigured = stripeStatus?.configured ?? false;
   
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, email, timezone });
@@ -332,6 +358,43 @@ export default function Account() {
                 </p>
               </div>
             </GlassCard>
+
+            {/* Billing Section */}
+            {stripeConfigured && (
+              <GlassCard className="p-6 lg:col-span-2" data-testid="billing-section">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
+                    <CreditCard className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Billing & Payment Methods</h3>
+                    <p className="text-sm text-muted-foreground">Manage your payment methods and billing history</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Access the Stripe Customer Portal to add or remove payment methods, view invoices, and manage your billing settings.
+                  </p>
+
+                  <Button
+                    onClick={() => billingPortalMutation.mutate()}
+                    disabled={billingPortalMutation.isPending}
+                    className="gap-2"
+                    data-testid="button-billing-portal"
+                  >
+                    {billingPortalMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <ExternalLink className="h-4 w-4" />
+                        Open Billing Portal
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </GlassCard>
+            )}
           </div>
         )}
 
