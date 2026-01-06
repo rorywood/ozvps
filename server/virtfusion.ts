@@ -683,19 +683,22 @@ export class VirtFusionClient {
       const password = generatePassword();
       
       // Build the request body with all required parameters
-      // VirtFusion API requires: name, operatingSystemId, password
+      // VirtFusion API requires: name, operatingSystemId, authentication object
       const body: any = { 
         name: serverName,
         operatingSystemId: osId,
-        password: password,
+        authentication: {
+          type: 'password',
+          password: password,
+          passwordConfirmation: password,
+        },
       };
       
       if (hostname) {
         body.hostname = hostname;
       }
       
-      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}, password: [set]`, 'virtfusion');
-      log(`Request body: ${JSON.stringify({ ...body, password: '[REDACTED]' })}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
