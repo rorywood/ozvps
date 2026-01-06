@@ -295,9 +295,6 @@ PORT=5000
 EOF
         chmod 600 "$INSTALL_DIR/.env"
         echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
-        VERSION_JSON=$(curl -fsSL "${DOWNLOAD_URL%/download.tar.gz}/api/version" 2>/dev/null || echo '{}')
-        VERSION=$(echo "$VERSION_JSON" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-        [[ -n "$VERSION" ]] && echo "$VERSION" > "$INSTALL_DIR/.version"
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Writing configuration"
 
@@ -424,19 +421,17 @@ PMEOF
         echo "REPLIT_URL=\"$REPLIT_BASE\"" > "$INSTALL_DIR/.update_config"
         chmod 600 "$INSTALL_DIR/.update_config"
         
-        # Install credits CLI
-        if [[ -f "$INSTALL_DIR/script/credits-cli.sh" ]]; then
-            cp "$INSTALL_DIR/script/credits-cli.sh" /usr/local/bin/ozvps-credits
-            chmod +x /usr/local/bin/ozvps-credits
+        # Install ozvpsctl CLI
+        if [[ -f "$INSTALL_DIR/script/ozvpsctl.sh" ]]; then
+            cp "$INSTALL_DIR/script/ozvpsctl.sh" /usr/local/bin/ozvpsctl
+            chmod +x /usr/local/bin/ozvpsctl
         fi
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing tools"
 
-    INSTALLED_VERSION=$(cat "$INSTALL_DIR/.version" 2>/dev/null || echo "1.0.0")
-
     echo ""
     echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"
-    echo -e "${GREEN}│${NC}  ${BOLD}Installed v${INSTALLED_VERSION}${NC}                         ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  ${BOLD}Installation Complete${NC}                  ${GREEN}│${NC}"
     echo -e "${GREEN}└─────────────────────────────────────────┘${NC}"
     echo ""
     if [[ "$SETUP_SSL" == "yes" ]]; then
@@ -446,13 +441,10 @@ PMEOF
     fi
     echo ""
     echo -e "  ${DIM}Commands:${NC}"
-    echo -e "    ${DIM}update-ozvps${NC}    - Update to latest version"
-    echo -e "    ${DIM}ozvps-credits${NC}   - Manage user credits (admin)"
-    echo -e "    ${DIM}pm2 logs${NC}        - View application logs"
-    echo -e "    ${DIM}pm2 status${NC}      - Check service status"
-    echo ""
-    echo -e "  ${YELLOW}Important:${NC} Save your Admin CLI Token securely:"
-    echo -e "  ${DIM}$ADMIN_CLI_TOKEN${NC}"
+    echo -e "    ${DIM}update-ozvps${NC}  - Update to latest version"
+    echo -e "    ${DIM}ozvpsctl${NC}      - Admin management tool"
+    echo -e "    ${DIM}pm2 logs${NC}      - View application logs"
+    echo -e "    ${DIM}pm2 status${NC}    - Check service status"
     echo ""
 }
 

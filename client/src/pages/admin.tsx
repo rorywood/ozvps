@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ShieldCheck, Users, CreditCard, Package, RefreshCw, AlertTriangle } from "lucide-react";
-import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { Redirect } from "wouter";
 
 interface UserMeResponse {
   user: {
@@ -15,8 +14,6 @@ interface UserMeResponse {
 }
 
 export default function AdminPage() {
-  const [, setLocation] = useLocation();
-
   const { data: userData, isLoading } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
     queryFn: () => api.getCurrentUser(),
@@ -24,12 +21,6 @@ export default function AdminPage() {
   });
 
   const isAdmin = userData?.user?.isAdmin ?? false;
-
-  useEffect(() => {
-    if (!isLoading && !isAdmin) {
-      setLocation('/dashboard');
-    }
-  }, [isLoading, isAdmin, setLocation]);
 
   if (isLoading) {
     return (
@@ -48,7 +39,7 @@ export default function AdminPage() {
   }
 
   if (!isAdmin) {
-    return null;
+    return <Redirect to="/dashboard" />;
   }
 
   return (

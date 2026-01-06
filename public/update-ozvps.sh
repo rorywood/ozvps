@@ -4,7 +4,6 @@ set -e
 INSTALL_DIR="/opt/ozvps-panel"
 CONFIG_FILE="$INSTALL_DIR/.update_config"
 SERVICE_NAME="ozvps-panel"
-VERSION_FILE="$INSTALL_DIR/.version"
 
 # Colors
 RED='\033[0;31m'
@@ -104,54 +103,21 @@ REPLIT_URL="${REPLIT_URL%/}"
 echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
 chmod 600 "$CONFIG_FILE"
 
-# Get current installed version
-CURRENT_VERSION="unknown"
-[[ -f "$VERSION_FILE" ]] && CURRENT_VERSION=$(cat "$VERSION_FILE")
-
 echo ""
-echo -e "  ${DIM}Checking for updates...${NC}"
 
-# Fetch remote version
-REMOTE_VERSION_JSON=$(curl -fsSL "$REPLIT_URL/api/version" 2>/dev/null || echo '{}')
-
-if [[ "$REMOTE_VERSION_JSON" == "{}" ]] || [[ -z "$REMOTE_VERSION_JSON" ]]; then
+# Check server is reachable
+if ! curl -fsSL "$REPLIT_URL/api/health" &>/dev/null; then
     error_exit "Could not connect to server. Is your Replit app running?"
 fi
 
-REMOTE_VERSION=$(echo "$REMOTE_VERSION_JSON" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-REMOTE_DATE=$(echo "$REMOTE_VERSION_JSON" | grep -o '"date":"[^"]*"' | cut -d'"' -f4)
-
-if [[ -z "$REMOTE_VERSION" ]]; then
-    error_exit "Could not fetch version info from server"
-fi
-
-echo ""
-echo -e "  ${DIM}Installed:${NC}  ${BOLD}$CURRENT_VERSION${NC}"
-echo -e "  ${DIM}Available:${NC}  ${BOLD}$REMOTE_VERSION${NC} ${DIM}($REMOTE_DATE)${NC}"
-echo ""
-
-# Compare versions
-if [[ "$CURRENT_VERSION" == "$REMOTE_VERSION" ]]; then
-    echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"
-    echo -e "${GREEN}│${NC}  ${BOLD}Already up to date!${NC}                    ${GREEN}│${NC}"
-    echo -e "${GREEN}└─────────────────────────────────────────┘${NC}"
-    echo ""
-    exit 0
-fi
-
-# Show what's new
-echo -e "  ${CYAN}What's new in v${REMOTE_VERSION}:${NC}"
-echo "$REMOTE_VERSION_JSON" | grep -o '"changes":\[[^]]*\]' | sed 's/"changes":\[//;s/\]$//' | tr ',' '\n' | sed 's/"//g;s/^/    • /' | head -5
-echo ""
-
 # Ask to proceed
-if ! confirm "Download and install v${REMOTE_VERSION}? (Y/n):"; then
+if ! confirm "Download and install latest update? (Y/n):"; then
     echo "  Update cancelled."
     exit 0
 fi
 
 echo ""
-echo -e "${BOLD}  Updating to v${REMOTE_VERSION}...${NC}"
+echo -e "${BOLD}  Updating...${NC}"
 echo ""
 
 # Download
@@ -168,7 +134,6 @@ cp "$INSTALL_DIR/.env" "$TEMP_DIR/env-backup" 2>/dev/null || true
 cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem-backup" 2>/dev/null || true
 cp "$INSTALL_DIR/.update_config" "$TEMP_DIR/update-config-backup" 2>/dev/null || true
 cp "$INSTALL_DIR/.panel_domain" "$TEMP_DIR/domain-backup" 2>/dev/null || true
-cp "$INSTALL_DIR/.version" "$TEMP_DIR/version-backup" 2>/dev/null || true
 
 # Clean and extract
 (
@@ -185,9 +150,6 @@ cp "$TEMP_DIR/env-backup" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem-backup" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 cp "$TEMP_DIR/update-config-backup" "$INSTALL_DIR/.update_config" 2>/dev/null || true
 cp "$TEMP_DIR/domain-backup" "$INSTALL_DIR/.panel_domain" 2>/dev/null || true
-
-# Save new version
-echo "$REMOTE_VERSION" > "$VERSION_FILE"
 
 # Remove bad-words and install dependencies
 (
@@ -362,12 +324,7 @@ fi
         chmod +x /usr/local/bin/update-ozvps
     fi
     
-    # Install/update admin CLI tools
-    if [[ -f "$INSTALL_DIR/script/credits-cli.sh" ]]; then
-        cp "$INSTALL_DIR/script/credits-cli.sh" /usr/local/bin/ozvps-credits
-        chmod +x /usr/local/bin/ozvps-credits
-    fi
-    
+    # Install/update admin CLI tool
     if [[ -f "$INSTALL_DIR/script/ozvpsctl.sh" ]]; then
         cp "$INSTALL_DIR/script/ozvpsctl.sh" /usr/local/bin/ozvpsctl
         chmod +x /usr/local/bin/ozvpsctl
@@ -428,6 +385,6 @@ spinner $! "Cleaning up"
 
 echo ""
 echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"
-echo -e "${GREEN}│${NC}  ${BOLD}Updated to v${REMOTE_VERSION}${NC}                        ${GREEN}│${NC}"
+echo -e "${GREEN}│${NC}  ${BOLD}Update Complete${NC}                        ${GREEN}│${NC}"
 echo -e "${GREEN}└─────────────────────────────────────────┘${NC}"
 echo ""
