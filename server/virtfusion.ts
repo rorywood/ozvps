@@ -237,8 +237,8 @@ export class VirtFusionClient {
 
   async getUserById(userId: number): Promise<VirtFusionUser | null> {
     try {
-      // Use /byId endpoint which is the correct VirtFusion API format
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}/byId`);
+      // VirtFusion uses /users/{id} endpoint for getting user by ID
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}`);
       return data.data;
     } catch (error) {
       log(`Failed to fetch user by ID ${userId}: ${error}`, 'virtfusion');
