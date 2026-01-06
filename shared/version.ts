@@ -1,4 +1,4 @@
-export const VERSION = "1.8.3";
+export const VERSION = "1.9.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -18,10 +18,12 @@ export const FEATURES = [
 
 export const VERSION_HISTORY = [
   {
-    version: "1.8.3",
+    version: "1.9.0",
     date: "2026-01-06",
     changes: [
-      "Fix: Improved VirtFusion price format detection",
+      "Feature: ozvpsctl admin CLI for managing users, wallets, plans, and Stripe",
+      "Feature: Automatic plan sync from VirtFusion every 10 minutes",
+      "Fix: Improved VirtFusion price format detection (multiple formats supported)",
       "Fix: Account page shows message when payments unavailable",
     ],
   },

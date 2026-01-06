@@ -268,23 +268,33 @@ export async function registerRoutes(
     }
   });
 
-  // Sync plans from VirtFusion on startup
-  (async () => {
+  // Plan sync function (reusable for startup and periodic sync)
+  const syncPlansFromVirtFusion = async (source: string) => {
     try {
       const packages = await virtfusionClient.getPackages();
       if (packages.length > 0) {
         const result = await dbStorage.syncPlansFromVirtFusion(packages);
-        log(`Plans synced from VirtFusion: ${result.synced} synced, ${result.errors.length} errors`, 'startup');
+        log(`Plans synced from VirtFusion: ${result.synced} synced, ${result.errors.length} errors`, source);
         if (result.errors.length > 0) {
-          result.errors.forEach(err => log(`Plan sync error: ${err}`, 'startup'));
+          result.errors.forEach(err => log(`Plan sync error: ${err}`, source));
         }
       } else {
-        log('No packages found from VirtFusion to sync', 'startup');
+        log('No packages found from VirtFusion to sync', source);
       }
     } catch (error: any) {
-      log(`Failed to sync plans on startup: ${error.message}`, 'startup');
+      log(`Failed to sync plans: ${error.message}`, source);
     }
-  })();
+  };
+
+  // Sync plans from VirtFusion on startup
+  syncPlansFromVirtFusion('startup');
+
+  // Periodic plan sync every 10 minutes
+  const PLAN_SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutes
+  setInterval(() => {
+    syncPlansFromVirtFusion('scheduled');
+  }, PLAN_SYNC_INTERVAL);
+  log(`Scheduled plan sync every ${PLAN_SYNC_INTERVAL / 60000} minutes`, 'startup');
 
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
@@ -753,7 +763,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Selected OS template is not available for this server' });
       }
 
-      const result = await virtfusionClient.reinstallServer(req.params.id, osId, hostname);
+      const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
       res.json({ success: true, data: result });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');

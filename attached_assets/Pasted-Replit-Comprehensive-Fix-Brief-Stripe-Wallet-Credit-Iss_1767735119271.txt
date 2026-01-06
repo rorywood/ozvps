@@ -1,0 +1,745 @@
+Replit Comprehensive Fix Brief: Stripe Wallet Credit Issue, Auto-Update Script Overhaul, Full Automation, and Admin Control
+
+1) Stripe Wallet Credit Issue (Including Test Mode)
+Problem: Payments are not reflecting in the user’s wallet. We must ensure the webhook and customer linkage are correct.
+Required Fixes:
+
+
+Webhook Setup: Ensure the webhook route uses express.raw() for body parsing before signature verification. Verify signatures with STRIPE_WEBHOOK_SECRET and handle the correct event type (checkout.session.completed or payment_intent.succeeded).
+
+
+Idempotency Enforcement: Store the Stripe event.id in wallet_transactions to prevent duplicate credits.
+
+
+Customer Linkage: Create and store a stripe_customer_id in the users table on the first billing action. Always use this ID for identifying users in Stripe, not the email.
+
+
+Test Mode Consistency: Ensure all test mode keys (sk_test_..., pk_test_..., test webhook secret) are correctly configured. Webhooks must be created in test mode in Stripe’s dashboard.
+
+
+Logging for Debugging: Temporarily log each webhook event ID, type, customer ID, and user ID matched (without sensitive data) to identify where the credit process fails.
+
+
+
+2) Installer & Update Script: DB-Safe, Idempotent, Zero Overwrite
+Requirement: The installer must fully automate the setup with no manual intervention.
+
+
+SQL Server Install: Install PostgreSQL only if not already present.
+
+
+DB Creation: Create the ozvps_panel database and ozvps_panel_user only if they do not exist. Never overwrite existing data or rotate the password if the database already exists.
+
+
+Idempotent Behavior: The script must be safe to run multiple times without causing data loss or duplications. All .env values must be preserved.
+
+
+Migrations & Plan Sync: After database setup, run migrations and synchronize plans from the VirtFusion API.
+
+
+Service Restart & Health Check: Restart application services and perform a health check. Exit with a non-zero code if any step fails.
+
+
+
+3) Admin CLI Tool for Managing Credits and Users
+Requirement: Provide a CLI tool to manage users, credits, and plans without direct DB access.
+
+
+Users:
+ozvpsctl users list — List all users
+ozvpsctl users show <email|id> — Show details for a single user
+
+
+Wallet/Credits:
+ozvpsctl wallet show <user> — View a user’s balance
+ozvpsctl wallet add <user> <amount> — Add credit (in cents) to a user’s wallet
+ozvpsctl wallet deduct <user> <amount> — Deduct credit (in cents) from a user’s wallet
+ozvpsctl wallet history <user> — View a user’s transaction history
+All credit changes must insert a wallet_transactions entry and never directly mutate balances.
+
+
+Plans:
+ozvpsctl plans sync — Force a VirtFusion plan sync
+ozvpsctl plans list — List current plans
+
+
+Stripe:
+ozvpsctl stripe status — Check Stripe configuration status
+ozvpsctl stripe show <user> — Show a user’s linked Stripe customer ID
+
+
+CLI Rules:
+
+
+Uses the same DB and environment as the application.
+
+
+Requires confirmation for any destructive actions.
+
+
+Logs all actions to stdout for audit.
+
+
+No interactive prompts unless absolutely necessary.
+
+
+
+4) API Changes Summary (Backend)
+New/Updated Endpoints:
+
+
+GET /api/plans: Always DB-backed, reflecting plans synced from VirtFusion.
+
+
+POST /api/admin/plans/sync: Triggers a manual VirtFusion to DB plan sync (admin-only).
+
+
+
+5) Acceptance Criteria
+
+
+Stripe test top-ups correctly increase the user’s wallet balance via verified webhooks and idempotency checks.
+
+
+Plan names and pricing exactly
+
+Replit Full Printout: Fix Stripe Wallet Credits, Fix Auto-Updater/Installer, Stabilise Versioning, Add Admin CLI, Sync Plans From VirtFusion
+
+0) Scope and Non-Negotiables
+
+
+Fix fundamentals before adding new features.
+
+
+Do not rewrite the Stripe integration approach; keep the current Stripe approach and credentials already in the project for sandbox/testing.
+
+
+Auto-updater/installer must be fully automated and reliable. No manual installs.
+
+
+Plans/pricing shown in Deploy/Pricing must match VirtFusion packages (authoritative).
+
+
+Wallet credits must apply immediately after successful Stripe payment (including test mode).
+
+
+
+1) Stripe Wallet Credits Not Applying (BLOCKER)
+1.1 Expected behaviour
+
+
+User completes a Stripe top-up successfully.
+
+
+Wallet balance increases automatically within seconds.
+
+
+Credit is applied only once per payment (idempotent).
+
+
+Works in test mode and live mode identically (only keys differ).
+
+
+1.2 Root cause areas to audit (backend)
+This is almost always one of:
+
+
+Webhook route not using raw body parsing, so signature verification fails.
+
+
+Wrong event type handled (Checkout vs PaymentIntent mismatch).
+
+
+Stripe customer not linked to the user; webhook cannot map payment to user.
+
+
+Test/live mode mismatch (test checkout with live webhook secret, etc).
+
+
+Idempotency constraint missing → credit skipped or double-handled logic breaks.
+
+
+1.3 Required implementation (authoritative)
+A) Webhook must be the only place credits are applied
+
+
+Do not credit on frontend success page.
+
+
+Do not credit on redirect return.
+
+
+Credit only inside POST /api/stripe/webhook after signature verification.
+
+
+B) Webhook route must use raw body parsing
+
+
+POST /api/stripe/webhook must be registered with express.raw({ type: 'application/json' }).
+
+
+Ensure no global JSON parser runs before this route.
+
+
+Verify signature using STRIPE_WEBHOOK_SECRET.
+
+
+C) Use a single Stripe flow and handle the correct event
+Pick one and enforce it everywhere.
+If using Stripe Checkout (preferred):
+
+
+Handle checkout.session.completed.
+
+
+Session must be created with:
+
+
+customer = users.stripe_customer_id (preferred), OR
+
+
+metadata containing ozvps_user_id (fallback).
+
+
+
+
+Credit amount should come from session totals (amount_total) or from PaymentIntent after expansion.
+
+
+If using PaymentIntents directly:
+
+
+Handle payment_intent.succeeded.
+
+
+Credit amount comes from PaymentIntent amount.
+
+
+Do not “half-handle” both unless intentional and tested.
+D) Idempotency (mandatory)
+
+
+Store event.id in wallet_transactions.stripe_event_id with a UNIQUE constraint.
+
+
+If insert fails due to duplicate, return 200 and do nothing.
+
+
+E) Map Stripe event to OzVPS user (mandatory)
+
+
+Add stripe_customer_id to users table (unique, nullable).
+
+
+Implement getOrCreateStripeCustomer(user).
+
+
+Logic:
+
+
+If users.stripe_customer_id exists: use it.
+
+
+Else create Stripe Customer:
+
+
+email set
+
+
+metadata includes auth0_sub and internal ozvps_user_id
+
+
+save stripe_customer_id in DB
+
+
+
+
+When to create Stripe customer:
+
+
+On first billing interaction:
+
+
+user clicks top-up
+
+
+user opens Billing/Payment Methods
+
+
+user hits “Top up & Deploy”
+
+
+
+
+Not on account creation.
+F) Credit application transaction (mandatory)
+On verified webhook:
+
+
+Resolve user by stripe_customer_id OR metadata ozvps_user_id
+
+
+Insert wallet_transactions (type=topup, amount_cents=+X, stripe_event_id=event.id, stripe_payment_intent_id)
+
+
+Update wallets.balance_cents = balance_cents + X
+
+
+Commit
+
+
+Return 200
+
+
+G) Test mode must work identically
+
+
+If keys are sk_test... then everything must be configured in test mode:
+
+
+webhook endpoint created in test mode
+
+
+correct whsec_... from test webhook config
+
+
+
+
+No special-casing required beyond using correct secrets.
+
+
+H) Temporary logging (until fixed)
+Log per webhook (no secrets):
+
+
+event.id
+
+
+event.type
+
+
+customer id
+
+
+amount
+
+
+resolved user id or “NOT FOUND”
+
+
+“credited: yes/no”
+
+
+1.4 Acceptance checks (Stripe)
+
+
+Run one test top-up ($5) → wallet increases by 500 cents.
+
+
+Re-send the same webhook (Stripe retries) → wallet does not increase again (idempotent).
+
+
+If mapping fails, logs clearly show “NOT FOUND” and why.
+
+
+
+2) Plans/Pricing MUST Sync From VirtFusion (Pricing currently wrong)
+2.1 Requirement
+
+
+Plans and pricing displayed in /deploy and /pricing must match VirtFusion packages.
+
+
+VirtFusion is the single source of truth.
+
+
+No hardcoded pricing in frontend.
+
+
+2.2 Backend sync job
+Implement VirtFusion → DB plan sync:
+
+
+Fetch packages/products via VirtFusion API.
+
+
+Upsert into plans table.
+
+
+DB changes:
+
+
+Add virtfusion_package_id (unique) to plans.
+
+
+Fields to map (inspect API response and map appropriately):
+
+
+name
+
+
+price monthly (AUD) → price_monthly_cents
+
+
+vCPU, RAM, storage, bandwidth/transfer
+
+
+active/enabled
+
+
+Sync schedule:
+
+
+On app startup
+
+
+Every 10 minutes
+
+
+Manual trigger endpoint + CLI command
+
+
+API:
+
+
+GET /api/plans returns DB-backed plans.
+
+
+POST /api/admin/plans/sync triggers sync (admin-only).
+
+
+Deploy enforcement:
+
+
+At deploy time, validate selected plan is active and has a valid virtfusion_package_id.
+
+
+Acceptance:
+
+
+Changing package name/price in VirtFusion updates UI automatically after sync.
+
+
+
+3) Auto-Updater/Installer Overhaul (Caching/Old Files + Not Installing Correctly)
+3.1 Requirement
+
+
+One command installs everything required.
+
+
+Must not “cache old files” or leave stale builds behind.
+
+
+Must be safe to re-run and perform upgrades reliably.
+
+
+3.2 DB-safe, idempotent, zero overwrite (exact requirements)
+Installer/update script must:
+
+
+Install SQL server only if missing
+
+
+Create DB and user only if missing
+
+
+Never overwrite or reset existing data
+
+
+Be safe to run repeatedly
+
+
+SQL choice:
+
+
+PostgreSQL
+
+
+Script behaviour (non-negotiable) on every run:
+
+
+Detect OS (Debian/Ubuntu, Alma/RHEL)
+
+
+Install Node 18+ if missing
+
+
+Install PostgreSQL if not installed
+
+
+Ensure PostgreSQL service is running + enabled
+
+
+Check if DB exists:
+
+
+DB: ozvps_panel
+
+
+User: ozvps_panel_user
+
+
+
+
+If DB/user exists:
+
+
+Do nothing
+
+
+
+
+If missing:
+
+
+Create DB
+
+
+Create user
+
+
+Generate strong password
+
+
+Store in .env as DATABASE_URL
+
+
+
+
+Preserve all existing .env values
+
+
+Run migrations (safe/idempotent)
+
+
+Run plan sync from VirtFusion
+
+
+Restart services
+
+
+Health check
+
+
+Exit non-zero on failure
+
+
+Absolute rules:
+
+
+Never drop DB
+
+
+Never reset wallet balances
+
+
+Never rotate DB password if DB exists
+
+
+Never print secrets to stdout
+
+
+3.3 Fix version/updater correctness
+
+
+Ensure update process does not serve stale frontend bundles.
+
+
+Ensure git pull/release fetch is followed by:
+
+
+dependency install (npm ci)
+
+
+build step if required
+
+
+service restart
+
+
+
+
+Clear only build artifacts as needed; do not delete user data.
+
+
+Version display must reflect deployed commit/tag reliably, not a cached value.
+
+
+Acceptance:
+
+
+Re-running updater on same version changes nothing.
+
+
+Updater reliably deploys newest code and restarts services.
+
+
+No stale UI after update.
+
+
+
+4) Add Server-Side Admin CLI Tool (VERY IMPORTANT)
+4.1 Deliverable
+A CLI tool runnable from server shell, e.g.:
+
+
+ozvpsctl
+or
+
+
+node scripts/ozvps.js
+
+
+4.2 CLI capabilities (MVP set)
+Users:
+
+
+List users
+ozvpsctl users list
+
+
+Show single user
+ozvpsctl users show <email|user_id>
+
+
+Wallet / Credits:
+
+
+View balance
+ozvpsctl wallet show <user>
+
+
+Add credit
+ozvpsctl wallet add <user> <amount_cents>
+
+
+Deduct credit
+ozvpsctl wallet deduct <user> <amount_cents>
+
+
+Transaction history
+ozvpsctl wallet history <user>
+
+
+Rules:
+
+
+All wallet changes must insert wallet_transactions.
+
+
+Never mutate balances directly without a transaction record.
+
+
+Plans:
+
+
+Force VirtFusion sync
+ozvpsctl plans sync
+
+
+List current plans
+ozvpsctl plans list
+
+
+Stripe:
+
+
+Check Stripe configuration status
+ozvpsctl stripe status
+
+
+Show linked Stripe customer
+ozvpsctl stripe show <user>
+
+
+CLI rules:
+
+
+Uses same DB + env as app
+
+
+Requires confirmation for destructive actions
+
+
+Logs actions to stdout
+
+
+No interactive prompts unless explicitly required
+
+
+
+5) API Changes Summary (Backend)
+New/updated endpoints:
+
+
+GET /api/plans
+
+
+Always DB-backed
+
+
+DB kept in sync with VirtFusion
+
+
+
+
+POST /api/admin/plans/sync
+
+
+Triggers VirtFusion → DB sync
+
+
+Admin-only
+
+
+
+
+Stripe-related (must exist and function):
+
+
+POST /api/stripe/webhook
+
+
+raw body parsing + signature verification
+
+
+credits wallet
+
+
+idempotent
+
+
+
+
+Optional but recommended for ops visibility:
+
+
+GET /api/billing/stripe/status
+
+
+indicates presence of Stripe env vars, mode, webhook URL
+
+
+
+
+
+6) Acceptance Criteria (Final)
+
+
+Stripe top-ups credit wallet via verified webhook, idempotent, including test mode.
+
+
+Stripe customer is created and linked on first billing action and stored in DB.
+
+
+Plan names/prices/specs match VirtFusion and auto-update after sync.
+
+
+Installer/update script is fully automated, idempotent, DB-safe, and never overwrites data.
+
+
+Auto-updater no longer deploys stale/cached builds and accurately updates version.
+
+
+CLI tool exists and can manage users, credits, plans, and Stripe linkage.

@@ -362,10 +362,15 @@ fi
         chmod +x /usr/local/bin/update-ozvps
     fi
     
-    # Install/update credits CLI
+    # Install/update admin CLI tools
     if [[ -f "$INSTALL_DIR/script/credits-cli.sh" ]]; then
         cp "$INSTALL_DIR/script/credits-cli.sh" /usr/local/bin/ozvps-credits
         chmod +x /usr/local/bin/ozvps-credits
+    fi
+    
+    if [[ -f "$INSTALL_DIR/script/ozvpsctl.sh" ]]; then
+        cp "$INSTALL_DIR/script/ozvpsctl.sh" /usr/local/bin/ozvpsctl
+        chmod +x /usr/local/bin/ozvpsctl
     fi
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Updating tools"
