@@ -683,7 +683,8 @@ export class VirtFusionClient {
         body.hostname = hostname;
       }
       
-      log(`Reinstalling server ${serverId} with OS template ${osId}, name: ${serverName}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}`, 'virtfusion');
+      log(`Reinstall request body: ${JSON.stringify(body)}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
