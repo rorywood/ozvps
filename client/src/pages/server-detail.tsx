@@ -794,14 +794,29 @@ export default function ServerDetail() {
                 const current = trafficData?.current;
                 const network = trafficData?.network;
                 
-                // Calculate values with 2 decimal places for precision
-                const usedGBNum = current?.total ? current.total / (1024 * 1024 * 1024) : 0;
-                const usedGB = usedGBNum.toFixed(2);
-                const rxGB = current?.rx ? (current.rx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
-                const txGB = current?.tx ? (current.tx / (1024 * 1024 * 1024)).toFixed(2) : '0.00';
+                // Smart unit formatter - shows MB for small values, GB for large
+                const formatBytes = (bytes: number): string => {
+                  if (bytes === 0) return '0 MB';
+                  const gb = bytes / (1024 * 1024 * 1024);
+                  if (gb >= 1) {
+                    return `${gb.toFixed(2)} GB`;
+                  }
+                  const mb = bytes / (1024 * 1024);
+                  if (mb >= 1) {
+                    return `${mb.toFixed(1)} MB`;
+                  }
+                  const kb = bytes / 1024;
+                  return `${kb.toFixed(0)} KB`;
+                };
+                
+                const usedBytes = current?.total || 0;
+                const usedGBNum = usedBytes / (1024 * 1024 * 1024);
+                const usedDisplay = formatBytes(usedBytes);
+                const rxDisplay = formatBytes(current?.rx || 0);
+                const txDisplay = formatBytes(current?.tx || 0);
                 const limitGB = current?.limit || bandwidthAllowance || 0;
-                const remainingGBNum = limitGB > 0 ? Math.max(0, limitGB - usedGBNum) : null;
-                const remainingGB = remainingGBNum !== null ? remainingGBNum.toFixed(2) : null;
+                const remainingBytes = limitGB > 0 ? Math.max(0, (limitGB * 1024 * 1024 * 1024) - usedBytes) : null;
+                const remainingDisplay = remainingBytes !== null ? formatBytes(remainingBytes) : null;
                 const usagePercent = limitGB > 0 ? Math.min(100, (usedGBNum / limitGB) * 100) : 0;
                 
                 const periodStart = current?.periodStart ? new Date(current.periodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
@@ -812,11 +827,11 @@ export default function ServerDetail() {
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-white whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedGB} GB <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
                       </span>
-                      {remainingGB !== null ? (
+                      {remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
-                          {remainingGB} GB <span className="text-[10px] text-muted-foreground font-normal">left</span>
+                          {remainingDisplay} <span className="text-[10px] text-muted-foreground font-normal">left</span>
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Unlimited</span>
@@ -843,13 +858,13 @@ export default function ServerDetail() {
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <ArrowDownToLine className="h-2.5 w-2.5 text-green-400" />IN
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-rx">{rxGB}</div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-rx">{rxDisplay}</div>
                       </div>
                       <div className="p-1.5 bg-white/5 rounded border border-white/10">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <ArrowUpFromLine className="h-2.5 w-2.5 text-blue-400" />OUT
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-tx">{txGB}</div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-tx">{txDisplay}</div>
                       </div>
                       <div className="p-1.5 bg-white/5 rounded border border-white/10">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
