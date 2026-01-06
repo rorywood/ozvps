@@ -29,7 +29,9 @@ import {
   Check,
   Search,
   AlertTriangle,
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -42,6 +44,7 @@ import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTempla
 import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
 import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
+import { useRescueMode } from "@/hooks/use-rescue-mode";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1049,14 +1052,17 @@ export default function ServerDetail() {
             </GlassCard>
           </TabsContent>
 
-          {/* Other Tabs Placeholder */}
-          {["rescue", "configuration"].map(tab => (
-            <TabsContent key={tab} value={tab}>
-               <GlassCard className="p-12 text-center border-dashed border-white/10 bg-transparent">
-                  <p className="text-muted-foreground">This feature is coming soon.</p>
-               </GlassCard>
-            </TabsContent>
-          ))}
+          {/* Rescue Mode Tab */}
+          <TabsContent value="rescue" className="space-y-4 animate-in fade-in duration-300">
+            <RescueModePanel serverId={serverId!} isSuspended={isSuspended} />
+          </TabsContent>
+
+          {/* Configuration Tab Placeholder */}
+          <TabsContent value="configuration">
+            <GlassCard className="p-12 text-center border-dashed border-white/10 bg-transparent">
+              <p className="text-muted-foreground">This feature is coming soon.</p>
+            </GlassCard>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -1248,5 +1254,271 @@ export default function ServerDetail() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+// Rescue Mode Panel Component
+function RescueModePanel({ serverId, isSuspended }: { serverId: string; isSuspended: boolean }) {
+  const rescue = useRescueMode(serverId);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleCopy = async (value: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(field);
+      setTimeout(() => setCopied(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleEnableRescue = async () => {
+    try {
+      await rescue.enableRescue();
+      toast({
+        title: "Rescue Mode Enabling",
+        description: "Your server is booting into rescue mode. This may take a few minutes.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to Enable Rescue Mode",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDisableRescue = async () => {
+    try {
+      await rescue.disableRescue();
+      toast({
+        title: "Exiting Rescue Mode",
+        description: "Your server is rebooting to normal mode.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to Exit Rescue Mode",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (rescue.isLoading) {
+    return (
+      <GlassCard className="p-6">
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </GlassCard>
+    );
+  }
+
+  if (!rescue.isSupported) {
+    return (
+      <GlassCard className="p-6">
+        <div className="text-center py-8">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+          <h3 className="text-lg font-medium text-white mb-2">Rescue Mode Not Available</h3>
+          <p className="text-muted-foreground">
+            Rescue mode is not supported for this server type.
+          </p>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard className="p-6">
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="text-lg font-bold text-white">Rescue Mode</h3>
+            {rescue.isActive && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 rounded-full border border-yellow-500/30">
+                Active
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Boot your server into a rescue environment to troubleshoot issues, 
+            recover data, or fix configuration problems.
+          </p>
+        </div>
+
+        {rescue.isActive && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <div className="font-medium text-yellow-400">Server is in Rescue Mode</div>
+                <div className="text-sm text-yellow-400/80">
+                  Your server is currently booted into the rescue environment. 
+                  Use the console to access the system and perform recovery tasks.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {rescue.credentials && (
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
+            <h4 className="text-sm font-medium text-blue-400">Rescue Login Credentials</h4>
+            <p className="text-xs text-muted-foreground">Use these credentials to access the rescue system via console.</p>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-muted-foreground">Username</span>
+                  <p className="text-sm font-mono text-white">{rescue.credentials.username}</p>
+                </div>
+                <button
+                  onClick={() => handleCopy(rescue.credentials!.username, 'username')}
+                  className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                  data-testid="button-copy-rescue-username"
+                >
+                  {copied === 'username' ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-muted-foreground">Password</span>
+                  <p className="text-sm font-mono text-white">
+                    {showPassword ? rescue.credentials.password : '••••••••••••'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                    data-testid="button-toggle-rescue-password"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleCopy(rescue.credentials!.password, 'password')}
+                    className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                    data-testid="button-copy-rescue-password"
+                  >
+                    {copied === 'password' ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!rescue.credentials && rescue.isActive && (
+          <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              Rescue login credentials have been sent to your account email address.
+            </p>
+          </div>
+        )}
+
+        {(rescue.isEnabling || rescue.isDisabling) && (
+          <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div>
+                <div className="font-medium text-white">
+                  {rescue.isEnabling ? 'Preparing Rescue Session...' : 'Exiting Rescue Mode...'}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {rescue.isEnabling 
+                    ? 'Your server is booting into the rescue environment.'
+                    : 'Your server is rebooting to normal mode.'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {rescue.error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+              <div>
+                <div className="font-medium text-red-400">Error</div>
+                <div className="text-sm text-red-400/80">{rescue.error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          {!rescue.isActive ? (
+            <Button
+              className={cn(
+                "text-white",
+                isSuspended || rescue.isEnabling || rescue.isDisabling
+                  ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              )}
+              onClick={handleEnableRescue}
+              disabled={isSuspended || rescue.isEnabling || rescue.isDisabling}
+              data-testid="button-enable-rescue"
+            >
+              {rescue.isEnabling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Enabling...
+                </>
+              ) : (
+                <>
+                  <Power className="h-4 w-4 mr-2" />
+                  Enter Rescue Mode
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              className={cn(
+                "text-white",
+                isSuspended || rescue.isEnabling || rescue.isDisabling
+                  ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                  : "bg-red-600 hover:bg-red-700"
+              )}
+              onClick={handleDisableRescue}
+              disabled={isSuspended || rescue.isEnabling || rescue.isDisabling}
+              data-testid="button-disable-rescue"
+            >
+              {rescue.isDisabling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Exiting...
+                </>
+              ) : (
+                <>
+                  <Power className="h-4 w-4 mr-2" />
+                  Exit Rescue Mode
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {isSuspended && (
+          <p className="text-sm text-yellow-400/80">
+            Rescue mode is disabled while the server is suspended.
+          </p>
+        )}
+      </div>
+    </GlassCard>
   );
 }

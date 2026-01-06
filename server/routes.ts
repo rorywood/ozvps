@@ -564,6 +564,102 @@ export async function registerRoutes(
     }
   });
 
+  // ============ Rescue Mode Endpoints ============
+
+  // Simple in-memory rate limiting for rescue mode operations
+  const rescueRateLimits = new Map<string, number>();
+  const RESCUE_RATE_LIMIT_MS = 30000; // 30 seconds between rescue operations
+
+  app.get('/api/servers/:id/rescue/status', authMiddleware, async (req, res) => {
+    try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      const rescueStatus = await virtfusionClient.getRescueStatus(req.params.id);
+      const isSupported = await virtfusionClient.isRescueModeSupported(req.params.id);
+      
+      res.json({
+        ...rescueStatus,
+        isSupported,
+      });
+    } catch (error: any) {
+      log(`Error fetching rescue status for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch rescue status' });
+    }
+  });
+
+  app.post('/api/servers/:id/rescue/enable', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Rescue mode is disabled.' });
+      }
+
+      // Check rate limit
+      const userId = req.userSession!.id;
+      const rateLimitKey = `${userId}:${serverId}:rescue`;
+      const lastAttempt = rescueRateLimits.get(rateLimitKey);
+      if (lastAttempt && Date.now() - lastAttempt < RESCUE_RATE_LIMIT_MS) {
+        const waitTime = Math.ceil((RESCUE_RATE_LIMIT_MS - (Date.now() - lastAttempt)) / 1000);
+        return res.status(429).json({ error: `Please wait ${waitTime} seconds before trying again.` });
+      }
+      rescueRateLimits.set(rateLimitKey, Date.now());
+
+      // Check if rescue mode is supported
+      const isSupported = await virtfusionClient.isRescueModeSupported(serverId);
+      if (!isSupported) {
+        return res.status(400).json({ error: 'Rescue mode is not supported for this server.' });
+      }
+
+      const result = await virtfusionClient.enableRescueMode(serverId);
+      
+      log(`Rescue mode enabled for server ${serverId}`, 'api');
+      res.json(result);
+    } catch (error: any) {
+      log(`Error enabling rescue mode for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: error.message || 'Failed to enable rescue mode' });
+    }
+  });
+
+  app.post('/api/servers/:id/rescue/disable', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Rescue mode is disabled.' });
+      }
+
+      // Check rate limit
+      const userId = req.userSession!.id;
+      const rateLimitKey = `${userId}:${serverId}:rescue`;
+      const lastAttempt = rescueRateLimits.get(rateLimitKey);
+      if (lastAttempt && Date.now() - lastAttempt < RESCUE_RATE_LIMIT_MS) {
+        const waitTime = Math.ceil((RESCUE_RATE_LIMIT_MS - (Date.now() - lastAttempt)) / 1000);
+        return res.status(429).json({ error: `Please wait ${waitTime} seconds before trying again.` });
+      }
+      rescueRateLimits.set(rateLimitKey, Date.now());
+
+      const result = await virtfusionClient.disableRescueMode(serverId);
+      
+      log(`Rescue mode disabled for server ${serverId}`, 'api');
+      res.json(result);
+    } catch (error: any) {
+      log(`Error disabling rescue mode for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: error.message || 'Failed to disable rescue mode' });
+    }
+  });
+
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;

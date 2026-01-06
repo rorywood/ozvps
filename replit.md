@@ -56,9 +56,19 @@ Preferred communication style: Simple, everyday language.
   - **Hostname validation**: 1-63 characters, lowercase letters/numbers/hyphens, no leading/trailing hyphens
   - **Filtered templates**: GET `/api/servers/:id/reinstall/templates` returns only allowed templates
   - **Backend enforcement**: POST `/reinstall` validates hostname (400) and template ID (403)
-  - **VirtFusion API**: Only send `operatingSystemId` in request body - VirtFusion auto-generates password
+  - **VirtFusion API**: Send `operatingSystemId` and optional `name` (hostname) - VirtFusion auto-generates password
   - **Progress tracking**: Real polling of VirtFusion build status with sessionStorage persistence
   - **Console lock**: 15-second lock after reinstall starts to prevent console access during boot
+  - **Credentials display**: After successful reinstall, shows server IP, username (root), and password with copy/reveal
+- **Rescue Mode**:
+  - **Purpose**: Boot server into rescue environment for troubleshooting, data recovery, or fixing issues
+  - **Backend endpoints**: GET/POST `/api/servers/:id/rescue/status`, `/rescue/enable`, `/rescue/disable`
+  - **Rate limiting**: 30-second cooldown between rescue enable/disable operations
+  - **Ownership verification**: All rescue endpoints verify user owns the server
+  - **Architecture check**: Rescue mode only supported for x86/AMD64 servers
+  - **Frontend state**: `useRescueMode` hook manages status polling and UI state
+  - **Credentials**: If VirtFusion returns credentials, shown in UI; otherwise message says "sent to email"
+  - **UI states**: Idle, Enabling, Active (with Exit button), Disabling
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 

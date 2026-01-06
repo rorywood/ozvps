@@ -202,6 +202,51 @@ class ApiClient {
     return response.json();
   }
 
+  // ============ Rescue Mode Methods ============
+
+  async getRescueStatus(id: string): Promise<{
+    isActive: boolean;
+    isEnabling: boolean;
+    isDisabling: boolean;
+    isSupported: boolean;
+    taskProgress?: number;
+    error?: string;
+    credentials?: { username: string; password: string };
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/rescue/status`);
+    if (!response.ok) throw new Error('Failed to fetch rescue status');
+    return response.json();
+  }
+
+  async enableRescueMode(id: string): Promise<{
+    success: boolean;
+    taskId?: string;
+    credentials?: { username: string; password: string };
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/rescue/enable`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to enable rescue mode');
+    }
+    return response.json();
+  }
+
+  async disableRescueMode(id: string): Promise<{
+    success: boolean;
+    taskId?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/rescue/disable`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to disable rescue mode');
+    }
+    return response.json();
+  }
+
   async getConsoleUrl(id: string): Promise<{ 
     url?: string;
     authUrl?: string;

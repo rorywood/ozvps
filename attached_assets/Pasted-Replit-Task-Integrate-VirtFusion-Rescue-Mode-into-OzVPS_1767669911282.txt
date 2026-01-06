@@ -1,0 +1,128 @@
+Replit Task: Integrate VirtFusion “Rescue Mode” into OzVPS Panel (API-backed)
+
+VirtFusion v6 added customer-facing Rescue Mode for x86 servers. 
+docs.virtfusion.com
+ Implement this as a first-class panel feature using VirtFusion API calls via the backend (never from the browser).
+
+1) Behaviour to implement (end-user experience)
+Button states
+
+Enter Rescue Mode (primary)
+
+Exit Rescue Mode (danger)
+
+While rescue task running: disable both; show status
+
+What “Rescue Mode” means in VirtFusion terms
+
+It boots the VM into a Linux live/rescue environment so the user can mount disks and fix issues. Providers describe it as “create rescue session” and credentials are typically emailed to the account. 
+GreenCloud
++1
+
+2) API integration requirements (backend)
+Use the correct VirtFusion API surface
+
+Prefer the segregated end-user API (VirtFusion 6.1+) where possible; VirtFusion explicitly added an end-user API with docs accessible inside each user account. 
+docs.virtfusion.com
+
+If the end-user API does not expose rescue endpoints in your deployment, proxy through the admin API but enforce ownership/authorisation strictly in OzVPS backend.
+
+Backend endpoints to add in OzVPS app
+
+Expose these to the React frontend:
+
+POST /api/servers/:serverId/rescue/enable
+
+POST /api/servers/:serverId/rescue/disable
+
+GET /api/servers/:serverId/rescue/status
+
+Optional (if VirtFusion returns session credentials via API; otherwise omit):
+
+GET /api/servers/:serverId/rescue/credentials
+
+Backend enforcement (non-negotiable)
+
+On every request:
+
+Verify authenticated user owns serverId (or is explicitly permitted).
+
+Verify server is x86 and rescue is supported (VirtFusion side will also enforce; still gate UI).
+
+Rate-limit enable/disable to prevent abuse.
+
+Treat rescue enable/disable as long-running tasks; return a task id/status handle to the UI.
+
+3) Implementation strategy (what Replit should actually do)
+Strategy A (preferred): Native VirtFusion Rescue Mode endpoints
+
+Call VirtFusion “enable rescue / create rescue session” for the server.
+
+Poll task progress until terminal state.
+
+On success, mark server UI as rescueActive=true.
+
+Evidence VirtFusion has a dedicated “enable rescue” concept (event hooks include server-before-enable-rescue). 
+docs.virtfusion.com
+
+Strategy B (fallback): ISO-based rescue workflow (only if native rescue endpoints aren’t available)
+
+VirtFusion supports end-user custom ISO URLs (streamed) when enabled. 
+docs.virtfusion.com
+
+Fallback implementation becomes:
+
+Insert/attach a known rescue ISO (provider-hosted, immutable)
+
+Reboot server
+
+Provide console access after the existing 15-second lock
+
+Exit rescue = eject ISO + reboot
+
+Use this only if VirtFusion rescue endpoints are unavailable in your build/API scope.
+
+4) Frontend requirements (React)
+UI states
+
+Idle (not in rescue): show “Enter Rescue Mode”
+
+Enabling rescue: show progress spinner + “Preparing rescue session…”
+
+Rescue active: show “Exit Rescue Mode” + badge “Rescue Active”
+
+Disabling rescue: show progress spinner + “Exiting rescue mode…”
+
+Status + polling
+
+On enable/disable call, start polling GET /rescue/status every 2s → 5s until complete/fail.
+
+On terminal success: stop polling and refresh server details.
+
+Credentials handling
+
+Providers commonly send rescue login details via email after session creation. 
+GreenCloud
++1
+
+Panel behaviour:
+
+If your VirtFusion API returns credentials: display them once with a “copy” affordance.
+
+If credentials are emailed only: show a single instruction line “Rescue login details are sent to the account email” and do not invent credentials.
+
+5) Safety + consistency rules
+
+Block reinstall/backup/restore actions while rescue enable/disable task is running.
+
+Apply the existing 15-second console lock after any rescue-triggered reboot.
+
+Ensure rescue UI never shows active once VirtFusion reports normal boot again (authoritative source is API).
+
+6) Acceptance criteria
+
+Clicking “Enter Rescue Mode” triggers VirtFusion-side rescue enable (or ISO fallback), shows progress, and reaches a stable “Rescue Active” state.
+
+Clicking “Exit Rescue Mode” cleanly restores normal boot and clears the rescue state.
+
+All calls are backend-proxied, ownership-verified, rate-limited, and task-polled.
