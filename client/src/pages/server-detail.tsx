@@ -42,6 +42,7 @@ import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTempla
 import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
 import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
+import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -113,12 +114,20 @@ export default function ServerDetail() {
   const consoleLock = useConsoleLock(serverId || '', server?.status);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
+  const { markPending, clearPending, getDisplayStatus } = usePowerActions();
+  
+  useSyncPowerActions(server ? [server] : []);
+  
+  const displayStatus = server ? getDisplayStatus(server.id, server.status) : 'unknown';
+  const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
 
   const powerMutation = useMutation({
     mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' | 'poweroff' }) => 
       api.powerAction(id, action),
-    onMutate: ({ action }) => {
+    onMutate: ({ id, action }) => {
       setPowerActionPending(action);
+      const actionMap: Record<string, string> = { boot: 'start', reboot: 'reboot', shutdown: 'shutdown', poweroff: 'shutdown' };
+      markPending(id, actionMap[action] || action);
     },
     onSuccess: (_, { action }) => {
       toast({
@@ -146,6 +155,7 @@ export default function ServerDetail() {
           if (isComplete) {
             clearInterval(pollInterval);
             setPowerActionPending(null);
+            if (serverId) clearPending(serverId);
             queryClient.invalidateQueries({ queryKey: ['servers'] });
           }
         }
@@ -154,12 +164,14 @@ export default function ServerDetail() {
       setTimeout(() => {
         clearInterval(pollInterval);
         setPowerActionPending(null);
+        if (serverId) clearPending(serverId);
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
       }, 30000);
     },
     onError: () => {
       setPowerActionPending(null);
+      if (serverId) clearPending(serverId);
       toast({
         title: "Action Failed",
         description: "Failed to perform power action. Please try again.",
@@ -486,21 +498,24 @@ export default function ServerDetail() {
                   )}
                 </div>
               )}
-              {powerActionPending ? (
+              {(powerActionPending || isTransitioning) ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
                   <span className="text-xs text-yellow-400 font-medium">
-                    {powerActionPending === 'boot' ? 'Starting...' :
+                    {displayStatus === 'starting' ? 'Starting...' :
+                     displayStatus === 'rebooting' ? 'Rebooting...' :
+                     displayStatus === 'stopping' ? 'Stopping...' :
+                     powerActionPending === 'boot' ? 'Starting...' :
                      powerActionPending === 'reboot' ? 'Rebooting...' :
                      powerActionPending === 'poweroff' ? 'Stopping...' :
-                     'Shutting down...'}
+                     'Processing...'}
                   </span>
                 </div>
               ) : (
                 <div className={cn(
                   "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
-                  server.status === 'running' ? "bg-green-500 shadow-green-500/50" : 
-                  server.status === 'stopped' ? "bg-red-500 shadow-red-500/50" :
+                  displayStatus === 'running' ? "bg-green-500 shadow-green-500/50" : 
+                  displayStatus === 'stopped' ? "bg-red-500 shadow-red-500/50" :
                   "bg-yellow-500 shadow-yellow-500/50"
                 )} data-testid="status-indicator" />
               )}

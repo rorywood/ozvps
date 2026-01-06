@@ -16,13 +16,17 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import flagAU from "@/assets/flag-au.png";
 import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
+import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 
 export default function Dashboard() {
+  const { getDisplayStatus } = usePowerActions();
   const { data: servers = [], isLoading, error } = useQuery<Server[]>({
     queryKey: ['servers'],
     queryFn: () => api.listServers(),
-    refetchInterval: 10000, // Poll every 10 seconds for live updates
+    refetchInterval: 10000,
   });
+
+  useSyncPowerActions(servers);
 
   const stats = {
     total_servers: servers.length,
@@ -145,18 +149,25 @@ export default function Dashboard() {
             </GlassCard>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {servers.map((server) => (
+              {servers.map((server) => {
+                const displayStatus = getDisplayStatus(server.id, server.status);
+                const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
+                return (
                 <Link key={server.id} href={`/servers/${server.id}`}>
                   <GlassCard variant="interactive" className="p-4 flex items-center justify-between group cursor-pointer" data-testid={`card-server-${server.id}`}>
                     <div className="flex items-center gap-4">
                       <div className={cn(
                         "h-10 w-10 rounded-lg flex items-center justify-center border",
                         server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500" :
-                        server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500" : 
-                        server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500" :
-                        "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 animate-pulse"
+                        displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500" : 
+                        displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                        "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
                       )}>
-                        <ServerIcon className="h-5 w-5" />
+                        {isTransitioning ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <ServerIcon className="h-5 w-5" />
+                        )}
                       </div>
                       <div>
                         <h3 className="font-medium text-white group-hover:text-primary transition-colors">{server.name}</h3>
@@ -204,23 +215,24 @@ export default function Dashboard() {
                         <div className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border",
                           server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :
-                          server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
-                          server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                          displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
+                          displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
                           "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
                         )}>
                           <div className={cn("w-1.5 h-1.5 rounded-full", 
                             server.suspended ? "bg-yellow-400" :
-                            server.status === 'running' ? "bg-green-400" : 
-                            server.status === 'stopped' ? "bg-red-400" : 
-                            "bg-yellow-400"
+                            displayStatus === 'running' ? "bg-green-400" : 
+                            displayStatus === 'stopped' ? "bg-red-400" : 
+                            "bg-yellow-400 animate-pulse"
                           )} />
-                          {server.suspended ? 'SUSPENDED' : server.status.toUpperCase()}
+                          {server.suspended ? 'SUSPENDED' : displayStatus.toUpperCase()}
                         </div>
                       </div>
                     </div>
                   </GlassCard>
                 </Link>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>

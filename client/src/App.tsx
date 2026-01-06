@@ -4,6 +4,7 @@ import { queryClient, setSessionErrorCallback, SessionError } from "./lib/queryC
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PowerActionProvider } from "@/hooks/use-power-actions";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ServerList from "@/pages/server-list";
@@ -171,13 +172,15 @@ function SessionErrorHandler() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <SessionErrorHandler />
-        <SystemHealthCheck>
-          <Router />
-        </SystemHealthCheck>
-      </TooltipProvider>
+      <PowerActionProvider>
+        <TooltipProvider>
+          <Toaster />
+          <SessionErrorHandler />
+          <SystemHealthCheck>
+            <Router />
+          </SystemHealthCheck>
+        </TooltipProvider>
+      </PowerActionProvider>
     </QueryClientProvider>
   );
 }

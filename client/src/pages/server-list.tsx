@@ -31,21 +31,29 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import flagAU from "@/assets/flag-au.png";
 
 export default function ServerList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { markPending, getDisplayStatus } = usePowerActions();
 
   const { data: servers, isLoading, isError } = useQuery({
     queryKey: ['servers'],
     queryFn: () => api.listServers(),
-    refetchInterval: 10000, // Poll every 10 seconds for live stats updates
+    refetchInterval: 10000,
   });
+
+  useSyncPowerActions(servers);
 
   const powerMutation = useMutation({
     mutationFn: ({ id, action }: { id: string, action: 'boot' | 'reboot' | 'shutdown' }) => 
       api.powerAction(id, action),
+    onMutate: ({ id, action }) => {
+      const actionMap: Record<string, string> = { boot: 'start', reboot: 'reboot', shutdown: 'shutdown' };
+      markPending(id, actionMap[action] || action);
+    },
     onSuccess: (_, { action }) => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       toast({
@@ -119,35 +127,47 @@ export default function ServerList() {
                   
                   {/* Status Icon & Basic Info */}
                   <div className="flex items-center gap-4 min-w-[250px]">
-                    <div className={cn(
-                      "h-12 w-12 rounded-xl flex items-center justify-center border shadow-[0_0_15px_-3px_rgba(0,0,0,0.5)]",
-                      server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 shadow-yellow-500/20" :
-                      server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-green-500/20" : 
-                      server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/20" :
-                      "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 animate-pulse"
-                    )}>
-                      <ServerIcon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
-                        {server.suspended ? (
-                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
-                            SUSPENDED
-                          </span>
-                        ) : (
-                          <span className={cn(
-                            "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border",
-                            server.status === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
-                            server.status === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
-                            "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                    {(() => {
+                      const displayStatus = getDisplayStatus(server.id, server.status);
+                      const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
+                      return (
+                        <>
+                          <div className={cn(
+                            "h-12 w-12 rounded-xl flex items-center justify-center border shadow-[0_0_15px_-3px_rgba(0,0,0,0.5)]",
+                            server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 shadow-yellow-500/20" :
+                            displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-green-500/20" : 
+                            displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/20" :
+                            "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
                           )}>
-                            {server.status}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground font-mono mt-0.5">{server.primaryIp}</p>
-                    </div>
+                            {isTransitioning ? (
+                              <Loader2 className="h-6 w-6 animate-spin" />
+                            ) : (
+                              <ServerIcon className="h-6 w-6" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
+                              {server.suspended ? (
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
+                                  SUSPENDED
+                                </span>
+                              ) : (
+                                <span className={cn(
+                                  "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border",
+                                  displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-400" : 
+                                  displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                                  "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                                )}>
+                                  {displayStatus}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground font-mono mt-0.5">{server.primaryIp}</p>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Specs Grid */}
