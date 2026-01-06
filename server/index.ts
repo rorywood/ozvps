@@ -16,6 +16,30 @@ declare module "http" {
   }
 }
 
+// Block access to sensitive files and paths
+app.use((req, res, next) => {
+  const blockedPatterns = [
+    /\.env/i,
+    /\.git/i,
+    /\.config/i,
+    /package\.json/i,
+    /package-lock\.json/i,
+    /tsconfig/i,
+    /vite\.config/i,
+    /drizzle\.config/i,
+    /replit\.md/i,
+    /node_modules/i,
+    /server\//i,
+    /shared\//i,
+  ];
+  
+  const path = req.path.toLowerCase();
+  if (blockedPatterns.some(pattern => pattern.test(path))) {
+    return res.status(404).send('Not found');
+  }
+  next();
+});
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
@@ -57,6 +81,9 @@ const apiLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/', apiLimiter);
+app.use('/install.sh', apiLimiter);
+app.use('/update-ozvps.sh', apiLimiter);
+app.use('/ozvps-panel.tar.gz', apiLimiter);
 
 app.use(
   express.json({

@@ -2,12 +2,18 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Calculator } from "lucide-react";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
+
+function generateMathChallenge() {
+  const num1 = Math.floor(Math.random() * 10) + 1;
+  const num2 = Math.floor(Math.random() * 10) + 1;
+  return { num1, num2, answer: num1 + num2 };
+}
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -15,6 +21,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  
+  const [honeypot, setHoneypot] = useState("");
+  const [challenge, setChallenge] = useState(generateMathChallenge);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+
+  useEffect(() => {
+    setChallenge(generateMathChallenge());
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: () => api.login(email, password),
@@ -24,6 +38,8 @@ export default function LoginPage() {
     },
     onError: (err: any) => {
       setError(err.message || "Invalid email or password");
+      setChallenge(generateMathChallenge());
+      setCaptchaAnswer("");
     },
   });
 
@@ -31,8 +47,21 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     
+    if (honeypot) {
+      setError("Verification failed. Please try again.");
+      return;
+    }
+    
     if (!email.trim() || !password) {
       setError("Please enter your email and password");
+      return;
+    }
+    
+    const userAnswer = parseInt(captchaAnswer, 10);
+    if (isNaN(userAnswer) || userAnswer !== challenge.answer) {
+      setError("Incorrect answer. Please solve the math problem.");
+      setChallenge(generateMathChallenge());
+      setCaptchaAnswer("");
       return;
     }
 
@@ -89,6 +118,39 @@ export default function LoginPage() {
                   data-testid="input-password"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="captcha">
+                <span className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  What is {challenge.num1} + {challenge.num2}?
+                </span>
+              </Label>
+              <Input 
+                id="captcha" 
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Enter the answer"
+                className="bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                value={captchaAnswer}
+                onChange={(e) => setCaptchaAnswer(e.target.value)}
+                autoComplete="off"
+                data-testid="input-captcha"
+              />
+            </div>
+
+            <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
+              <Label htmlFor="website">Website</Label>
+              <Input 
+                id="website" 
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+              />
             </div>
 
             {error && (
