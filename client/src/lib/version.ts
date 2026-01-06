@@ -1,4 +1,4 @@
-export const VERSION = "1.4.0";
+export const VERSION = "1.5.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -15,6 +15,15 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.5.0",
+    date: "2026-01-06",
+    changes: [
+      "Auth0 Event Streams integration for user deletion sync",
+      "Automatic VirtFusion cleanup when users are deleted from Auth0",
+      "Bearer token authentication for webhooks",
+    ],
+  },
   {
     version: "1.4.0",
     date: "2026-01-06",
