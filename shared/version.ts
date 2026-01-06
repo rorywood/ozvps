@@ -1,4 +1,4 @@
-export const VERSION = "1.7.5";
+export const VERSION = "1.7.6";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.6",
+    date: "2026-01-06",
+    changes: [
+      "Fix: PM2 restart now uses delete+start for clean restarts",
+      "Fix: Update script waits for app health check after restart",
+    ],
+  },
   {
     version: "1.7.5",
     date: "2026-01-06",

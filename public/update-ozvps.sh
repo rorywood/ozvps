@@ -354,8 +354,24 @@ spinner $! "Building application"
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Updating tools"
 
-# Restart
-(pm2 restart "$SERVICE_NAME" 2>/dev/null || pm2 start "$INSTALL_DIR/ecosystem.config.cjs"; pm2 save) >>"$LOG_FILE" 2>&1 &
+# Restart service
+(
+    cd "$INSTALL_DIR"
+    # Stop any existing instance
+    pm2 delete "$SERVICE_NAME" 2>/dev/null || true
+    # Start fresh from ecosystem config
+    pm2 start "$INSTALL_DIR/ecosystem.config.cjs" --update-env
+    pm2 save --force
+    
+    # Wait for app to be healthy (max 30 seconds)
+    for i in {1..30}; do
+        if curl -s http://127.0.0.1:5000/api/health &>/dev/null; then
+            echo "App is healthy"
+            break
+        fi
+        sleep 1
+    done
+) >>"$LOG_FILE" 2>&1 &
 spinner $! "Restarting service"
 
 # Cleanup old backups (keep last 3)
