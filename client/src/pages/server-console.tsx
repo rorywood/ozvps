@@ -7,6 +7,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Monitor, ArrowLeft, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
+import { useConsoleLock } from "@/hooks/use-console-lock";
+import { ConsoleLockedOverlay } from "@/components/console-locked-overlay";
 
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
@@ -16,6 +18,9 @@ export default function ServerConsole() {
   
   // Check if this is a popout window
   const isPopout = searchString.includes('popout=true');
+  
+  // Console lock for 15 seconds after boot
+  const consoleLock = useConsoleLock(serverId || '');
 
   const { data: consoleData, isLoading, error, refetch } = useQuery({
     queryKey: ['console-url', serverId],
@@ -23,7 +28,7 @@ export default function ServerConsole() {
       const result = await api.getConsoleUrl(serverId || '');
       return result;
     },
-    enabled: !!serverId,
+    enabled: !!serverId && !consoleLock.isLocked,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,
   });
@@ -67,6 +72,15 @@ export default function ServerConsole() {
       window.close();
     }
   };
+
+  // Show console locked overlay during lock period
+  if (consoleLock.isLocked) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a]">
+        <ConsoleLockedOverlay remainingSeconds={consoleLock.remainingSeconds} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

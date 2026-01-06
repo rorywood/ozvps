@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,10 @@ import {
   TrendingUp,
   Pencil,
   Check,
-  Settings
+  Settings,
+  Search,
+  AlertTriangle,
+  Clock
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -35,38 +38,16 @@ import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-
-// Distro logos
-import almaLinuxLogo from "@assets/stock_images/almalinux_logo_icon_0e841815.jpg";
-import centosLogo from "@assets/stock_images/centos_linux_logo_ic_12121183.jpg";
-import debianLogo from "@assets/stock_images/debian_linux_logo_ic_fcef002b.jpg";
-import fedoraLogo from "@assets/stock_images/fedora_linux_logo_ic_dae186fe.jpg";
-import ubuntuLogo from "@assets/stock_images/ubuntu_linux_logo_ic_9938217b.jpg";
-import opensuseLogo from "@assets/stock_images/opensuse_linux_logo_38c4f468.jpg";
-import oracleLogo from "@assets/stock_images/oracle_linux_logo_895a7022.jpg";
-
-// Map distro names to logos
-const distroLogos: Record<string, string> = {
-  "AlmaLinux": almaLinuxLogo,
-  "CentOS": centosLogo,
-  "Debian": debianLogo,
-  "Fedora": fedoraLogo,
-  "Ubuntu": ubuntuLogo,
-  "openSUSE": opensuseLogo,
-  "Oracle Linux": oracleLogo,
-  "Other": debianLogo, // fallback
-};
 import { cn } from "@/lib/utils";
+import { OsTemplateRow } from "@/components/os-template-row";
+import { getOsCategory, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
+import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
+import { useReinstallTask } from "@/hooks/use-reinstall-task";
+import { useConsoleLock } from "@/hooks/use-console-lock";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -90,16 +71,16 @@ export default function ServerDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
-  const [reinstallInProgress, setReinstallInProgress] = useState(false);
-  const [reinstallStatus, setReinstallStatus] = useState<string>('');
   const [selectedOs, setSelectedOs] = useState<string>("");
   const [hostname, setHostname] = useState<string>("");
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [osSearchQuery, setOsSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isRenamingServer, setIsRenamingServer] = useState(false);
-  const reinstallPollRef = useRef<NodeJS.Timeout | null>(null);
-  const reinstallTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const reinstallTask = useReinstallTask(serverId || '');
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
@@ -134,6 +115,9 @@ export default function ServerDetail() {
     refetchInterval: 5000, // Poll every 5 seconds
   });
 
+  // Console lock hook - must be after server query
+  const consoleLock = useConsoleLock(serverId || '', server?.status);
+
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
 
   const powerMutation = useMutation({
@@ -150,6 +134,12 @@ export default function ServerDetail() {
                      action === 'poweroff' ? "Force stopping server..." :
                      "Shutting down server...",
       });
+      
+      // Start console lock for boot/reboot actions
+      if (action === 'boot' || action === 'reboot') {
+        consoleLock.startLock();
+      }
+      
       // Poll for status updates
       const pollInterval = setInterval(async () => {
         await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
@@ -184,18 +174,6 @@ export default function ServerDetail() {
     }
   });
 
-  // Helper to cleanup reinstall polling
-  const cleanupReinstallPolling = () => {
-    if (reinstallPollRef.current) {
-      clearInterval(reinstallPollRef.current);
-      reinstallPollRef.current = null;
-    }
-    if (reinstallTimeoutRef.current) {
-      clearTimeout(reinstallTimeoutRef.current);
-      reinstallTimeoutRef.current = null;
-    }
-  };
-
   const reinstallMutation = useMutation({
     mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname?: string }) => 
       api.reinstallServer(id, osId, hostname),
@@ -204,60 +182,15 @@ export default function ServerDetail() {
       setSelectedOs("");
       setHostname("");
       setShowAdvancedOptions(false);
+      setOsSearchQuery("");
+      setSelectedCategory("All");
       setReinstallDialogOpen(false);
-      setReinstallInProgress(true);
-      setReinstallStatus('Initializing reinstall...');
       
-      // Cleanup any existing polls
-      cleanupReinstallPolling();
+      // Start the reinstall task polling
+      reinstallTask.startTask();
       
-      // Poll build status to track rebuild progress (uses buildFailed flag for reliable error detection)
-      reinstallPollRef.current = setInterval(async () => {
-        try {
-          const buildStatus = await api.getBuildStatus(serverId || '');
-          
-          if (buildStatus.isError) {
-            // Only trigger error if buildFailed is explicitly true
-            cleanupReinstallPolling();
-            setReinstallInProgress(false);
-            setReinstallStatus('');
-            toast({
-              title: "Reinstallation Failed",
-              description: "Server reinstallation encountered an error.",
-              variant: "destructive",
-            });
-          } else if (buildStatus.isBuilding) {
-            setReinstallStatus(buildStatus.phase === 'queued' ? 'Queued for installation...' : 'Installing operating system...');
-          } else if (buildStatus.isComplete) {
-            cleanupReinstallPolling();
-            setReinstallInProgress(false);
-            setReinstallStatus('');
-            queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
-            toast({
-              title: "Reinstallation Complete",
-              description: "Your server has been successfully reinstalled.",
-            });
-          }
-        } catch (e) {
-          // Keep polling on error
-        }
-      }, 5000);
-      
-      // Timeout after 10 minutes - use ref check instead of stale closure
-      reinstallTimeoutRef.current = setTimeout(() => {
-        if (reinstallPollRef.current) {
-          cleanupReinstallPolling();
-          setReinstallInProgress(false);
-          setReinstallStatus('');
-          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-          toast({
-            title: "Reinstallation Timeout",
-            description: "Reinstallation is taking longer than expected. Please check your server status.",
-            variant: "destructive",
-          });
-        }
-      }, 600000);
+      // Start console lock (server will reboot after reinstall)
+      consoleLock.startLock();
       
       toast({
         title: "Reinstallation Started",
@@ -281,6 +214,9 @@ export default function ServerDetail() {
 
   const handleOpenVnc = () => {
     if (!serverId) return;
+    // Don't open console if locked
+    if (consoleLock.isLocked) return;
+    
     // Open console in a popout window
     const width = 1024;
     const height = 768;
@@ -355,65 +291,59 @@ export default function ServerDetail() {
   const bandwidthAllowance = server?.plan?.specs?.traffic || 0;
   const currentMonth = new Date().getMonth() + 1;
 
-  // Parse OS templates - group by distro, dedupe by uuid, show version + variant
-  interface OsTemplate {
-    id: string;
-    uuid: string;
-    name: string;
-    version: string;
-    variant: string;
-    group: string;
-    displayName: string;
-  }
-  
-  const osTemplateMap = new Map<string, OsTemplate>();
-  const osGroups: Array<{ name: string; icon: string; templates: OsTemplate[] }> = [];
-  
-  if (osTemplates && Array.isArray(osTemplates)) {
-    osTemplates.forEach((group: any) => {
-      const groupTemplates: OsTemplate[] = [];
+  // Parse OS templates into flat list with categories
+  const allTemplates = useMemo(() => {
+    const templates: OsTemplateType[] = [];
+    const seenUuids = new Set<string>();
+    
+    if (osTemplates && Array.isArray(osTemplates)) {
+      osTemplates.forEach((group: any) => {
+        if (group.templates && Array.isArray(group.templates)) {
+          group.templates.forEach((template: any) => {
+            const uuid = template.uuid || template.id?.toString() || '';
+            if (seenUuids.has(uuid)) return;
+            seenUuids.add(uuid);
+            
+            templates.push({
+              id: template.id?.toString() || '',
+              uuid,
+              name: template.name || 'Unknown OS',
+              version: template.version || '',
+              variant: template.variant || '',
+              distro: template.distro || group.name || '',
+              slug: template.slug || '',
+              description: template.description || group.description || '',
+              group: group.name || 'Other',
+            });
+          });
+        }
+      });
+    }
+    return templates;
+  }, [osTemplates]);
+
+  // Get unique categories
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    allTemplates.forEach(t => cats.add(getOsCategory(t)));
+    return ['All', ...Array.from(cats)];
+  }, [allTemplates]);
+
+  // Filter templates by search and category
+  const filteredTemplates = useMemo(() => {
+    return allTemplates.filter(t => {
+      const matchesSearch = osSearchQuery === '' || 
+        t.name.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
+        t.version.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
+        t.variant.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
+        (t.group || '').toLowerCase().includes(osSearchQuery.toLowerCase());
       
-      if (group.templates && Array.isArray(group.templates)) {
-        group.templates.forEach((template: any) => {
-          const uuid = template.uuid || template.id?.toString() || '';
-          // Skip if we've already seen this template (dedupe by uuid)
-          if (osTemplateMap.has(uuid)) return;
-          
-          const version = template.version || '';
-          const variant = template.variant || '';
-          const templateName = template.name || 'Unknown OS';
-          // Create a proper display name with fallback to template name
-          const displayName = version 
-            ? `${version}${variant ? ` (${variant})` : ''}`
-            : templateName + (variant ? ` (${variant})` : '');
-          
-          const templateObj: OsTemplate = {
-            id: template.id?.toString() || '',
-            uuid,
-            name: template.name || 'Unknown OS',
-            version,
-            variant,
-            group: group.name || 'Other',
-            displayName
-          };
-          
-          osTemplateMap.set(uuid, templateObj);
-          groupTemplates.push(templateObj);
-        });
-      }
+      const matchesCategory = selectedCategory === 'All' || 
+        getOsCategory(t) === selectedCategory;
       
-      if (groupTemplates.length > 0) {
-        osGroups.push({
-          name: group.name || 'Other',
-          icon: group.icon || 'linux_logo.png',
-          templates: groupTemplates
-        });
-      }
+      return matchesSearch && matchesCategory;
     });
-  }
-  
-  // Flatten for backward compatibility
-  const osOptions = Array.from(osTemplateMap.values());
+  }, [allTemplates, osSearchQuery, selectedCategory]);
 
   if (isLoading) {
     return (
@@ -570,11 +500,20 @@ export default function ServerDetail() {
                   : "bg-white/5 hover:bg-white/10 text-white border-white/10"
               )}
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
               data-testid="button-console"
             >
-              <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-              Console
+              {consoleLock.isLocked ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Console ({consoleLock.remainingSeconds}s)
+                </>
+              ) : (
+                <>
+                  <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Console
+                </>
+              )}
             </Button>
             
             <DropdownMenu>
@@ -1077,96 +1016,89 @@ export default function ServerDetail() {
         </Tabs>
       </div>
 
-      {/* Reinstall Dialog - Accordion Style */}
+      {/* Reinstall Dialog - Searchable Template Picker */}
       <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
         setReinstallDialogOpen(open);
         if (!open) {
           setSelectedOs("");
           setHostname("");
           setShowAdvancedOptions(false);
+          setOsSearchQuery("");
+          setSelectedCategory("All");
         }
       }}>
         <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="p-6 pb-4 border-b border-white/10">
             <DialogTitle className="text-xl">Reinstall Server</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              The server requires a valid operating system. Select the operating system from the list below that you would like to be automatically installed on the server.
+              Select an operating system to install on your server.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Warning Banner */}
+          <div className="mx-6 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-400">Warning: All data will be erased</p>
+              <p className="text-xs text-red-400/80 mt-0.5">
+                Reinstalling will completely wipe the disk. Make sure to backup any important data first.
+              </p>
+            </div>
+          </div>
+
+          {/* Search and Category Filter */}
+          <div className="px-6 pt-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={osSearchQuery}
+                onChange={(e) => setOsSearchQuery(e.target.value)}
+                placeholder="Search templates..."
+                className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                data-testid="input-os-search"
+              />
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                    selectedCategory === cat
+                      ? "bg-primary text-white"
+                      : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white"
+                  )}
+                  data-testid={`button-category-${cat.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
           
-          <div className="flex-1 overflow-y-auto">
-            {osGroups.length > 0 ? (
-              <Accordion type="single" collapsible className="w-full">
-                {osGroups.map((group) => {
-                  const logoSrc = distroLogos[group.name] || distroLogos["Other"];
-                  const groupDescription = osTemplates?.find((g: any) => g.name === group.name)?.description || "";
-                  
-                  return (
-                    <AccordionItem 
-                      key={group.name} 
-                      value={group.name}
-                      className="border-b border-white/10"
-                    >
-                      <AccordionTrigger className="px-6 py-4 hover:bg-white/5 hover:no-underline [&[data-state=open]]:bg-primary/20">
-                        <div className="flex items-center gap-4">
-                          <img 
-                            src={logoSrc} 
-                            alt={group.name} 
-                            className="w-10 h-10 rounded-lg object-cover"
-                          />
-                          <span className="font-semibold text-white text-base">{group.name}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-6 pb-4 pt-2 bg-white/5">
-                        {groupDescription && (
-                          <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-                            {groupDescription}
-                          </p>
-                        )}
-                        <div className="space-y-2">
-                          {group.templates.map((template) => (
-                            <button
-                              key={template.uuid}
-                              onClick={() => setSelectedOs(template.id)}
-                              className={cn(
-                                "w-full p-4 rounded-lg border text-left transition-all flex items-start gap-4",
-                                selectedOs === template.id
-                                  ? "bg-primary/20 border-primary"
-                                  : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
-                              )}
-                              data-testid={`button-os-${template.id}`}
-                            >
-                              <img 
-                                src={logoSrc} 
-                                alt={template.name} 
-                                className="w-8 h-8 rounded-md object-cover flex-shrink-0 mt-0.5"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-white">
-                                  {template.name} {template.version} {template.variant && `(${template.variant})`}
-                                </div>
-                                {template.description && (
-                                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                    {template.description}
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
+          {/* Template List */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {filteredTemplates.length > 0 ? (
+              <div className="space-y-2">
+                {filteredTemplates.map((template) => (
+                  <OsTemplateRow
+                    key={template.uuid || template.id}
+                    template={template}
+                    isSelected={selectedOs === template.id.toString()}
+                    onSelect={() => setSelectedOs(template.id.toString())}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
-                <p>No operating systems available for this server.</p>
+                <p>No operating systems found matching your search.</p>
               </div>
             )}
           </div>
 
-          {/* Footer with Advanced Options */}
+          {/* Footer with Hostname and Install Button */}
           <div className="border-t border-white/10 p-6 space-y-4">
             {/* Advanced Options */}
             <Collapsible open={showAdvancedOptions} onOpenChange={setShowAdvancedOptions}>
@@ -1209,7 +1141,7 @@ export default function ServerDetail() {
 
             {/* Install Button */}
             <Button 
-              className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold"
+              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold"
               onClick={handleReinstall}
               disabled={!selectedOs || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
@@ -1220,7 +1152,7 @@ export default function ServerDetail() {
                   Installing...
                 </>
               ) : (
-                'Install'
+                'Reinstall Server'
               )}
             </Button>
           </div>
@@ -1228,7 +1160,7 @@ export default function ServerDetail() {
       </Dialog>
 
       {/* Reinstall Progress Dialog */}
-      <Dialog open={reinstallInProgress} onOpenChange={() => {}}>
+      <Dialog open={reinstallTask.isActive} onOpenChange={() => {}}>
         <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-md" hideCloseButton>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1240,36 +1172,15 @@ export default function ServerDetail() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-6 space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{reinstallStatus}</span>
-              </div>
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary rounded-full animate-pulse"
-                  style={{ width: '100%' }}
-                />
-              </div>
-            </div>
-            
-            <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span>Reinstall initiated</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "w-2 h-2 rounded-full",
-                  reinstallStatus.includes('Installing') ? "bg-primary animate-pulse" : "bg-white/20"
-                )} />
-                <span>Installing operating system</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-white/20" />
-                <span>Finalizing configuration</span>
-              </div>
-            </div>
+          <div className="py-4">
+            <ReinstallProgressPanel 
+              state={reinstallTask} 
+              onDismiss={() => {
+                reinstallTask.reset();
+                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                queryClient.invalidateQueries({ queryKey: ['servers'] });
+              }}
+            />
           </div>
           
           <div className="text-xs text-muted-foreground text-center">
