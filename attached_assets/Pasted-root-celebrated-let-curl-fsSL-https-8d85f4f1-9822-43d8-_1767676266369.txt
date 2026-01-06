@@ -1,0 +1,561 @@
+root@celebrated-let:~# curl -fsSL https://8d85f4f1-9822-43d8-8fef-61748f2aba09-00-3565k9mtun2wb.worf.replit.dev/install.sh | sudo bash
+
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║              OzVPS Panel Installation Script                 ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+[INFO] Detected OS: Ubuntu 22.04.5 LTS
+[STEP] Collecting configuration...
+
+╔══════════════════════════════════════════════════════════════╗
+║           Please provide the following information           ║
+╚══════════════════════════════════════════════════════════════╝
+
+━━━ 1. Panel Domain (for Nginx) ━━━
+
+This is the domain where YOUR OzVPS Panel will be accessible.
+Example: panel.yourdomain.com or vps.yourdomain.com
+
+Enter your panel domain: app.ozvps.com.au
+
+━━━ 2. Auth0 Configuration ━━━
+
+Auth0 is used for user login/registration.
+Get these from: https://manage.auth0.com/ > Applications > Your App
+
+Auth0 Domain (e.g., your-tenant.auth0.com): dev-xmuayk0mzf2vteec.us.auth0.com
+Auth0 Client ID: 6O27go985xNb45YQmSjAIbCEBJSVwPzm
+Auth0 Client Secret:
+
+━━━ 3. VirtFusion Configuration ━━━
+
+VirtFusion Panel URL: https://panel.ozvps.com.au (pre-configured)
+
+Get your API token from: VirtFusion Admin Panel > Settings > API
+VirtFusion API Token:
+
+━━━ 4. SSL Certificate ━━━
+
+Set up SSL with Let's Encrypt? (Y/n): y
+Email for SSL certificate notifications: rorywood10@gmail.com
+
+[INFO] Configuration collected successfully
+
+━━━ Configuration Summary ━━━
+  Panel Domain: app.ozvps.com.au
+  Auth0 Domain: dev-xmuayk0mzf2vteec.us.auth0.com
+  VirtFusion URL: https://panel.ozvps.com.au
+  SSL Setup: yes
+
+Proceed with installation? (Y/n): y
+
+[STEP] Configuring firewall...
+Firewall stopped and disabled on system startup
+[INFO] UFW firewall disabled
+[INFO] Firewall configured
+[STEP] Installing Node.js 20.x...
+2026-01-06 05:06:19 - Installing pre-requisites
+Hit:1 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:2 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:3 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+All packages are up to date.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+ca-certificates is already the newest version (20240203~22.04.1).
+ca-certificates set to manually installed.
+curl is already the newest version (7.81.0-1ubuntu1.21).
+curl set to manually installed.
+gnupg is already the newest version (2.2.27-3ubuntu2.4).
+gnupg set to manually installed.
+The following NEW packages will be installed:
+  apt-transport-https
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 1510 B of archives.
+After this operation, 170 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu jammy-updates/universe amd64 apt-transport-https all 2.4.14 [1510 B]
+Fetched 1510 B in 1s (2427 B/s)
+Selecting previously unselected package apt-transport-https.
+(Reading database ... 64641 files and directories currently installed.)
+Preparing to unpack .../apt-transport-https_2.4.14_all.deb ...
+Unpacking apt-transport-https (2.4.14) ...
+Setting up apt-transport-https (2.4.14) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Get:1 https://deb.nodesource.com/node_20.x nodistro InRelease [12.1 kB]
+Get:2 https://deb.nodesource.com/node_20.x nodistro/main amd64 Packages [13.2 kB]
+Hit:3 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:5 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:6 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Fetched 25.3 kB in 1s (17.3 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+All packages are up to date.
+2026-01-06 05:06:36 - Repository configured successfully.
+2026-01-06 05:06:36 - To install Node.js, run: apt install nodejs -y
+2026-01-06 05:06:36 - You can use N|solid Runtime as a node.js alternative
+2026-01-06 05:06:36 - To install N|solid Runtime, run: apt install nsolid -y
+
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  nodejs
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 32.0 MB of archives.
+After this operation, 197 MB of additional disk space will be used.
+Get:1 https://deb.nodesource.com/node_20.x nodistro/main amd64 nodejs amd64 20.19.6-1nodesource1 [32.0 MB]
+Fetched 32.0 MB in 1s (27.2 MB/s)
+Selecting previously unselected package nodejs.
+(Reading database ... 64645 files and directories currently installed.)
+Preparing to unpack .../nodejs_20.19.6-1nodesource1_amd64.deb ...
+Unpacking nodejs (20.19.6-1nodesource1) ...
+Setting up nodejs (20.19.6-1nodesource1) ...
+Processing triggers for man-db (2.10.2-1) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+[INFO] Node.js v20.19.6 installed successfully
+[STEP] Installing system dependencies...
+Hit:1 https://deb.nodesource.com/node_20.x nodistro InRelease
+Hit:2 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Hit:3 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:5 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Reading package lists... Done
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+curl is already the newest version (7.81.0-1ubuntu1.21).
+git is already the newest version (1:2.34.1-1ubuntu1.15).
+git set to manually installed.
+The following additional packages will be installed:
+  fontconfig-config fonts-dejavu-core libdeflate0 libfontconfig1 libgd3 libjbig0 libjpeg-turbo8 libjpeg8
+  libnginx-mod-http-geoip2 libnginx-mod-http-image-filter libnginx-mod-http-xslt-filter libnginx-mod-mail
+  libnginx-mod-stream libnginx-mod-stream-geoip2 libtiff5 libwebp7 libxpm4 nginx-common nginx-core python3-acme
+  python3-certbot python3-configargparse python3-icu python3-josepy python3-parsedatetime python3-requests-toolbelt
+  python3-rfc3339 python3-zope.component python3-zope.event python3-zope.hookable
+Suggested packages:
+  python-certbot-doc python3-certbot-apache libgd-tools fcgiwrap nginx-doc ssl-cert python-acme-doc
+  python-certbot-nginx-doc
+The following NEW packages will be installed:
+  certbot fontconfig-config fonts-dejavu-core libdeflate0 libfontconfig1 libgd3 libjbig0 libjpeg-turbo8 libjpeg8
+  libnginx-mod-http-geoip2 libnginx-mod-http-image-filter libnginx-mod-http-xslt-filter libnginx-mod-mail
+  libnginx-mod-stream libnginx-mod-stream-geoip2 libtiff5 libwebp7 libxpm4 nginx nginx-common nginx-core python3-acme
+  python3-certbot python3-certbot-nginx python3-configargparse python3-icu python3-josepy python3-parsedatetime
+  python3-requests-toolbelt python3-rfc3339 python3-zope.component python3-zope.event python3-zope.hookable
+0 upgraded, 33 newly installed, 0 to remove and 0 not upgraded.
+Need to get 3687 kB of archives.
+After this operation, 13.4 MB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu jammy/main amd64 fonts-dejavu-core all 2.37-2build1 [1041 kB]
+Get:2 http://archive.ubuntu.com/ubuntu jammy/main amd64 fontconfig-config all 2.13.1-4.2ubuntu5 [29.1 kB]
+Get:3 http://archive.ubuntu.com/ubuntu jammy/main amd64 libdeflate0 amd64 1.10-2 [70.9 kB]
+Get:4 http://archive.ubuntu.com/ubuntu jammy/main amd64 libfontconfig1 amd64 2.13.1-4.2ubuntu5 [131 kB]
+Get:5 http://archive.ubuntu.com/ubuntu jammy/main amd64 libjpeg-turbo8 amd64 2.1.2-0ubuntu1 [134 kB]
+Get:6 http://archive.ubuntu.com/ubuntu jammy/main amd64 libjpeg8 amd64 8c-2ubuntu10 [2264 B]
+Get:7 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libjbig0 amd64 2.1-3.1ubuntu0.22.04.1 [29.2 kB]
+Get:8 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libwebp7 amd64 1.2.2-2ubuntu0.22.04.2 [206 kB]
+Get:9 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libtiff5 amd64 4.3.0-6ubuntu0.12 [185 kB]
+Get:10 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libxpm4 amd64 1:3.5.12-1ubuntu0.22.04.2 [36.7 kB]
+Get:11 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libgd3 amd64 2.3.0-2ubuntu2.3 [129 kB]
+Get:12 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 nginx-common all 1.18.0-6ubuntu14.7 [40.1 kB]
+Get:13 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-http-geoip2 amd64 1.18.0-6ubuntu14.7 [12.0 kB]
+Get:14 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-http-image-filter amd64 1.18.0-6ubuntu14.7 [15.5 kB]
+Get:15 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-http-xslt-filter amd64 1.18.0-6ubuntu14.7 [13.8 kB]
+Get:16 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-mail amd64 1.18.0-6ubuntu14.7 [45.8 kB]
+Get:17 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-stream amd64 1.18.0-6ubuntu14.7 [73.0 kB]
+Get:18 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 libnginx-mod-stream-geoip2 amd64 1.18.0-6ubuntu14.7 [10.1 kB]
+Get:19 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 nginx-core amd64 1.18.0-6ubuntu14.7 [483 kB]
+Get:20 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 nginx amd64 1.18.0-6ubuntu14.7 [3878 B]
+Get:21 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-josepy all 1.10.0-1 [22.0 kB]
+Get:22 http://archive.ubuntu.com/ubuntu jammy/main amd64 python3-requests-toolbelt all 0.9.1-1 [38.0 kB]
+Get:23 http://archive.ubuntu.com/ubuntu jammy/main amd64 python3-rfc3339 all 1.1-3 [7110 B]
+Get:24 http://archive.ubuntu.com/ubuntu jammy-updates/universe amd64 python3-acme all 1.21.0-1ubuntu0.1 [36.4 kB]
+Get:25 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-configargparse all 1.5.3-1 [26.9 kB]
+Get:26 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-parsedatetime all 2.6-2 [32.9 kB]
+Get:27 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-zope.hookable amd64 5.1.0-1build1 [11.6 kB]
+Get:28 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-zope.event all 4.4-3 [8180 B]
+Get:29 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-zope.component all 4.3.0-3 [38.3 kB]
+Get:30 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-certbot all 1.21.0-1build1 [175 kB]
+Get:31 http://archive.ubuntu.com/ubuntu jammy/universe amd64 certbot all 1.21.0-1build1 [21.3 kB]
+Get:32 http://archive.ubuntu.com/ubuntu jammy/universe amd64 python3-certbot-nginx all 1.21.0-1 [35.4 kB]
+Get:33 http://archive.ubuntu.com/ubuntu jammy/main amd64 python3-icu amd64 2.8.1-0ubuntu2 [540 kB]
+Fetched 3687 kB in 13s (275 kB/s)
+Extracting templates from packages: 100%
+Preconfiguring packages ...
+Selecting previously unselected package fonts-dejavu-core.
+(Reading database ... 70008 files and directories currently installed.)
+Preparing to unpack .../00-fonts-dejavu-core_2.37-2build1_all.deb ...
+Unpacking fonts-dejavu-core (2.37-2build1) ...
+Selecting previously unselected package fontconfig-config.
+Preparing to unpack .../01-fontconfig-config_2.13.1-4.2ubuntu5_all.deb ...
+Unpacking fontconfig-config (2.13.1-4.2ubuntu5) ...
+Selecting previously unselected package libdeflate0:amd64.
+Preparing to unpack .../02-libdeflate0_1.10-2_amd64.deb ...
+Unpacking libdeflate0:amd64 (1.10-2) ...
+Selecting previously unselected package libfontconfig1:amd64.
+Preparing to unpack .../03-libfontconfig1_2.13.1-4.2ubuntu5_amd64.deb ...
+Unpacking libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Selecting previously unselected package libjpeg-turbo8:amd64.
+Preparing to unpack .../04-libjpeg-turbo8_2.1.2-0ubuntu1_amd64.deb ...
+Unpacking libjpeg-turbo8:amd64 (2.1.2-0ubuntu1) ...
+Selecting previously unselected package libjpeg8:amd64.
+Preparing to unpack .../05-libjpeg8_8c-2ubuntu10_amd64.deb ...
+Unpacking libjpeg8:amd64 (8c-2ubuntu10) ...
+Selecting previously unselected package libjbig0:amd64.
+Preparing to unpack .../06-libjbig0_2.1-3.1ubuntu0.22.04.1_amd64.deb ...
+Unpacking libjbig0:amd64 (2.1-3.1ubuntu0.22.04.1) ...
+Selecting previously unselected package libwebp7:amd64.
+Preparing to unpack .../07-libwebp7_1.2.2-2ubuntu0.22.04.2_amd64.deb ...
+Unpacking libwebp7:amd64 (1.2.2-2ubuntu0.22.04.2) ...
+Selecting previously unselected package libtiff5:amd64.
+Preparing to unpack .../08-libtiff5_4.3.0-6ubuntu0.12_amd64.deb ...
+Unpacking libtiff5:amd64 (4.3.0-6ubuntu0.12) ...
+Selecting previously unselected package libxpm4:amd64.
+Preparing to unpack .../09-libxpm4_1%3a3.5.12-1ubuntu0.22.04.2_amd64.deb ...
+Unpacking libxpm4:amd64 (1:3.5.12-1ubuntu0.22.04.2) ...
+Selecting previously unselected package libgd3:amd64.
+Preparing to unpack .../10-libgd3_2.3.0-2ubuntu2.3_amd64.deb ...
+Unpacking libgd3:amd64 (2.3.0-2ubuntu2.3) ...
+Selecting previously unselected package nginx-common.
+Preparing to unpack .../11-nginx-common_1.18.0-6ubuntu14.7_all.deb ...
+Unpacking nginx-common (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-http-geoip2.
+Preparing to unpack .../12-libnginx-mod-http-geoip2_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-http-geoip2 (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-http-image-filter.
+Preparing to unpack .../13-libnginx-mod-http-image-filter_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-http-image-filter (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-http-xslt-filter.
+Preparing to unpack .../14-libnginx-mod-http-xslt-filter_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-http-xslt-filter (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-mail.
+Preparing to unpack .../15-libnginx-mod-mail_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-mail (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-stream.
+Preparing to unpack .../16-libnginx-mod-stream_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-stream (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package libnginx-mod-stream-geoip2.
+Preparing to unpack .../17-libnginx-mod-stream-geoip2_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking libnginx-mod-stream-geoip2 (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package nginx-core.
+Preparing to unpack .../18-nginx-core_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking nginx-core (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package nginx.
+Preparing to unpack .../19-nginx_1.18.0-6ubuntu14.7_amd64.deb ...
+Unpacking nginx (1.18.0-6ubuntu14.7) ...
+Selecting previously unselected package python3-josepy.
+Preparing to unpack .../20-python3-josepy_1.10.0-1_all.deb ...
+Unpacking python3-josepy (1.10.0-1) ...
+Selecting previously unselected package python3-requests-toolbelt.
+Preparing to unpack .../21-python3-requests-toolbelt_0.9.1-1_all.deb ...
+Unpacking python3-requests-toolbelt (0.9.1-1) ...
+Selecting previously unselected package python3-rfc3339.
+Preparing to unpack .../22-python3-rfc3339_1.1-3_all.deb ...
+Unpacking python3-rfc3339 (1.1-3) ...
+Selecting previously unselected package python3-acme.
+Preparing to unpack .../23-python3-acme_1.21.0-1ubuntu0.1_all.deb ...
+Unpacking python3-acme (1.21.0-1ubuntu0.1) ...
+Selecting previously unselected package python3-configargparse.
+Preparing to unpack .../24-python3-configargparse_1.5.3-1_all.deb ...
+Unpacking python3-configargparse (1.5.3-1) ...
+Selecting previously unselected package python3-parsedatetime.
+Preparing to unpack .../25-python3-parsedatetime_2.6-2_all.deb ...
+Unpacking python3-parsedatetime (2.6-2) ...
+Selecting previously unselected package python3-zope.hookable.
+Preparing to unpack .../26-python3-zope.hookable_5.1.0-1build1_amd64.deb ...
+Unpacking python3-zope.hookable (5.1.0-1build1) ...
+Selecting previously unselected package python3-zope.event.
+Preparing to unpack .../27-python3-zope.event_4.4-3_all.deb ...
+Unpacking python3-zope.event (4.4-3) ...
+Selecting previously unselected package python3-zope.component.
+Preparing to unpack .../28-python3-zope.component_4.3.0-3_all.deb ...
+Unpacking python3-zope.component (4.3.0-3) ...
+Selecting previously unselected package python3-certbot.
+Preparing to unpack .../29-python3-certbot_1.21.0-1build1_all.deb ...
+Unpacking python3-certbot (1.21.0-1build1) ...
+Selecting previously unselected package certbot.
+Preparing to unpack .../30-certbot_1.21.0-1build1_all.deb ...
+Unpacking certbot (1.21.0-1build1) ...
+Selecting previously unselected package python3-certbot-nginx.
+Preparing to unpack .../31-python3-certbot-nginx_1.21.0-1_all.deb ...
+Unpacking python3-certbot-nginx (1.21.0-1) ...
+Selecting previously unselected package python3-icu.
+Preparing to unpack .../32-python3-icu_2.8.1-0ubuntu2_amd64.deb ...
+Unpacking python3-icu (2.8.1-0ubuntu2) ...
+Setting up python3-configargparse (1.5.3-1) ...
+Setting up python3-requests-toolbelt (0.9.1-1) ...
+Setting up python3-parsedatetime (2.6-2) ...
+Setting up libxpm4:amd64 (1:3.5.12-1ubuntu0.22.04.2) ...
+Setting up python3-icu (2.8.1-0ubuntu2) ...
+Setting up python3-zope.event (4.4-3) ...
+Setting up libdeflate0:amd64 (1.10-2) ...
+Setting up nginx-common (1.18.0-6ubuntu14.7) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/nginx.service → /lib/systemd/system/nginx.service.
+Setting up libjbig0:amd64 (2.1-3.1ubuntu0.22.04.1) ...
+Setting up libnginx-mod-http-xslt-filter (1.18.0-6ubuntu14.7) ...
+Setting up python3-zope.hookable (5.1.0-1build1) ...
+Setting up fonts-dejavu-core (2.37-2build1) ...
+Setting up libjpeg-turbo8:amd64 (2.1.2-0ubuntu1) ...
+Setting up libwebp7:amd64 (1.2.2-2ubuntu0.22.04.2) ...
+Setting up python3-josepy (1.10.0-1) ...
+Setting up python3-rfc3339 (1.1-3) ...
+Setting up libnginx-mod-http-geoip2 (1.18.0-6ubuntu14.7) ...
+Setting up libjpeg8:amd64 (8c-2ubuntu10) ...
+Setting up libnginx-mod-mail (1.18.0-6ubuntu14.7) ...
+Setting up fontconfig-config (2.13.1-4.2ubuntu5) ...
+Setting up libnginx-mod-stream (1.18.0-6ubuntu14.7) ...
+Setting up python3-zope.component (4.3.0-3) ...
+Setting up python3-acme (1.21.0-1ubuntu0.1) ...
+Setting up python3-certbot (1.21.0-1build1) ...
+Setting up certbot (1.21.0-1build1) ...
+Created symlink /etc/systemd/system/timers.target.wants/certbot.timer → /lib/systemd/system/certbot.timer.
+Setting up libtiff5:amd64 (4.3.0-6ubuntu0.12) ...
+Setting up libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Setting up libnginx-mod-stream-geoip2 (1.18.0-6ubuntu14.7) ...
+Setting up libgd3:amd64 (2.3.0-2ubuntu2.3) ...
+Setting up libnginx-mod-http-image-filter (1.18.0-6ubuntu14.7) ...
+Setting up nginx-core (1.18.0-6ubuntu14.7) ...
+ * Upgrading binary nginx                                                [ OK ]
+Setting up nginx (1.18.0-6ubuntu14.7) ...
+Setting up python3-certbot-nginx (1.21.0-1) ...
+Processing triggers for ufw (0.36.1-4ubuntu0.1) ...
+Processing triggers for man-db (2.10.2-1) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.11) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+added 133 packages in 21s
+
+13 packages are looking for funding
+  run `npm fund` for details
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.7.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+npm notice To update run: npm install -g npm@11.7.0
+npm notice
+[INFO] Dependencies installed successfully
+[STEP] Setting up OzVPS Panel...
+[INFO] Downloading OzVPS Panel...
+[INFO] Extracting application...
+[INFO] Installing npm dependencies...
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+
+added 465 packages, and audited 466 packages in 26s
+
+44 packages are looking for funding
+  run `npm fund` for details
+
+4 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[INFO] Application setup complete
+[STEP] Writing environment configuration...
+[INFO] Environment configured successfully
+[STEP] Building application...
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v7.1.12 building for production...
+✓ 1872 modules transformed.
+rendering chunks (1)...[meta-images] no Replit deployment domain found, skipping meta tag updates
+../dist/public/index.html                     1.21 kB │ gzip:   0.54 kB
+../dist/public/assets/logo-CgCbI-Jm.png       5.64 kB
+../dist/public/assets/flag-au-D7-GQr69.png   60.24 kB
+../dist/public/assets/index-BCWNyzSj.css    113.12 kB │ gzip:  18.34 kB
+../dist/public/assets/index-CCYj9cTK.js     828.34 kB │ gzip: 239.58 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 12.83s
+building server...
+
+  dist/index.cjs  1001.0kb
+
+⚡ Done in 519ms
+[INFO] Application built successfully
+[STEP] Configuring Nginx...
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Synchronizing state of nginx.service with SysV service script with /lib/systemd/systemd-sysv-install.
+Executing: /lib/systemd/systemd-sysv-install enable nginx
+[INFO] Nginx configured for: app.ozvps.com.au
+[STEP] Setting up SSL certificate...
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Account registered.
+Requesting a certificate for app.ozvps.com.au
+
+Successfully received certificate.
+Certificate is saved at: /etc/letsencrypt/live/app.ozvps.com.au/fullchain.pem
+Key is saved at:         /etc/letsencrypt/live/app.ozvps.com.au/privkey.pem
+This certificate expires on 2026-04-06.
+These files will be updated when the certificate renews.
+Certbot has set up a scheduled task to automatically renew this certificate in the background.
+
+Deploying certificate
+Successfully deployed certificate for app.ozvps.com.au to /etc/nginx/sites-enabled/ozvps-panel
+Congratulations! You have successfully enabled HTTPS on https://app.ozvps.com.au
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[STEP] Starting application with PM2...
+
+                        -------------
+
+__/\\\\\\\\\\\\\____/\\\\____________/\\\\____/\\\\\\\\\_____
+ _\/\\\/////////\\\_\/\\\\\\________/\\\\\\__/\\\///////\\\___
+  _\/\\\_______\/\\\_\/\\\//\\\____/\\\//\\\_\///______\//\\\__
+   _\/\\\\\\\\\\\\\/__\/\\\\///\\\/\\\/_\/\\\___________/\\\/___
+    _\/\\\/////////____\/\\\__\///\\\/___\/\\\________/\\\//_____
+     _\/\\\_____________\/\\\____\///_____\/\\\_____/\\\//________
+      _\/\\\_____________\/\\\_____________\/\\\___/\\\/___________
+       _\/\\\_____________\/\\\_____________\/\\\__/\\\\\\\\\\\\\\\_
+        _\///______________\///______________\///__\///////////////__
+
+
+                          Runtime Edition
+
+        PM2 is a Production Process Manager for Node.js applications
+                     with a built-in Load Balancer.
+
+                Start and Daemonize any application:
+                $ pm2 start app.js
+
+                Load Balance 4 instances of api.js:
+                $ pm2 start api.js -i 4
+
+                Monitor in production:
+                $ pm2 monitor
+
+                Make pm2 auto-boot at server restart:
+                $ pm2 startup
+
+                To go further checkout:
+                http://pm2.io/
+
+
+                        -------------
+
+[PM2] Spawning PM2 daemon with pm2_home=/root/.pm2
+[PM2] PM2 Successfully daemonized
+[PM2] Starting /usr/bin/npm in fork_mode (1 instance)
+[PM2] Done.
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 0  │ ozvps-panel        │ fork     │ 0    │ online    │ 0%       │ 38.7mb   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+[PM2] Saving current process list...
+[PM2] Successfully saved in /root/.pm2/dump.pm2
+[PM2] Init System found: systemd
+Platform systemd
+Template
+[Unit]
+Description=PM2 process manager
+Documentation=https://pm2.keymetrics.io/
+After=network.target
+
+[Service]
+Type=forking
+User=root
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=PM2_HOME=/root/.pm2
+PIDFile=/root/.pm2/pm2.pid
+Restart=on-failure
+
+ExecStart=/usr/lib/node_modules/pm2/bin/pm2 resurrect
+ExecReload=/usr/lib/node_modules/pm2/bin/pm2 reload all
+ExecStop=/usr/lib/node_modules/pm2/bin/pm2 kill
+
+[Install]
+WantedBy=multi-user.target
+
+Target path
+/etc/systemd/system/pm2-root.service
+Command list
+[ 'systemctl enable pm2-root' ]
+[PM2] Writing init configuration in /etc/systemd/system/pm2-root.service
+[PM2] Making script booting at startup...
+[PM2] [-] Executing: systemctl enable pm2-root...
+Created symlink /etc/systemd/system/multi-user.target.wants/pm2-root.service → /etc/systemd/system/pm2-root.service.
+[PM2] [v] Command successfully executed.
++---------------------------------------+
+[PM2] Freeze a process list on reboot via:
+$ pm2 save
+
+[PM2] Remove init script via:
+$ pm2 unstartup systemd
+[INFO] Application started successfully
+
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║          OzVPS Panel Installed Successfully!                 ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+Access your panel at: https://app.ozvps.com.au
+
+Useful Commands:
+  pm2 logs ozvps-panel     - View application logs
+  pm2 restart ozvps-panel  - Restart the application
+  pm2 status                 - Check PM2 status
+
+Configuration:
+  Environment file: /opt/ozvps-panel/.env
+  Nginx config: /etc/nginx/sites-available/ozvps-panel
+
+To update the panel later, run this script again.
+
+root@celebrated-let:~#

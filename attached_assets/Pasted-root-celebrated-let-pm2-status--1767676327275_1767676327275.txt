@@ -1,0 +1,83 @@
+root@celebrated-let:~# pm2 status
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 0  │ ozvps-panel        │ fork     │ 15   │ errored   │ 0%       │ 0b       │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+root@celebrated-let:~# pm2 logs ozvps-panel --lines 50
+[TAILING] Tailing last 50 lines for [ozvps-panel] process (change the value with --lines option)
+/root/.pm2/logs/ozvps-panel-out.log last 50 lines:
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+
+/root/.pm2/logs/ozvps-panel-error.log last 50 lines:
+0|ozvps-pa | (!o.success){let f=o.error.errors.map(m=>m.message).join(", ");return a.status(400).json({error:f})}let{osId:p,hostname:c}=o.data,u=await K.getOsTemplates(r.params.id),l=!1;if(u&&Array.isArray(u)){for(let f of u)if(f.templates&&Array.isArray(f.templates)&&f.templates.some(g=>String(g.id)===String(p)||g.id===p)){l=!0;break}}if(!l)return a.status(403).json({error:"Selected OS template is not available for this server"});let d=await K.reinstallServer(r.params.id,p,c);a.json({success:!0,data:d})}catch(n){y(`Error reinstalling server ${r.params.id}: ${n.message}`,"api"),a.status(500).json({error:n.message||"Failed to reinstall server"})}}),e.get("/api/servers/:id/build-status",ie,async(r,a)=>{try{let n=await K.getServerBuildStatus(r.params.id);a.json(n)}catch(n){y(`Error fetching build status for server ${r.params.id}: ${n.message}`,"api"),a.status(500).json({error:"Failed to fetch build status"})}}),e.post("/api/servers/:id/console-url",ie,async(r,a)=>{try{let n=r.params.id,i=r.userSession,{server:s,error:o,status:p}=await Er(n,i.virtFusionUserId);if(!s)return a.status(p||403).json({error:o||"Access denied"});if(s.suspended)return a.status(403).json({error:"Server is suspended. Console access is disabled."});let c=process.env.VIRTFUSION_PANEL_URL||"";try{y(`Enabling VNC for server ${n}...`,"api"),await K.enableVnc(n),y(`VNC enabled successfully for server ${n}`,"api")}catch(d){y(`Failed to enable VNC for server ${n}: ${d.message}`,"api")}let u=null;try{u=await K.getServerVncAccess(n),y(`VNC access for server ${n}: ${JSON.stringify(u)}`,"api")}catch(d){y(`Failed to get VNC access: ${d.message}`,"api")}if(u?.wss?.url&&u?.password){let f=`wss://${new URL(c).host}${u.wss.url}`;return y(`Embedded VNC WebSocket URL: ${f}`,"api"),a.json({embedded:!0,vnc:{wsUrl:f,password:u.password,ip:u.ip,port:u.port}})}try{let f=(await K.getServerOwner(n))?.extRelationId;if(f){let m=await K.generateServerLoginTokens(s.id.toString(),f.toString());if(m?.authentication?.tokens){let g=m.authentication.tokens;if(g[1]&&g[2]){let x=`${c}/token_authenticate/?1=${g[1]}&2=${g[2]}`,k=`${c}/server/${s.uuid}/vnc`;return y(`Fallback: Generated auth URL: ${x}`,"api"),y(`Fallback: VNC URL: ${k}`,"api"),a.json({authUrl:x,vncUrl:k,twoStep:!0})}}}}catch(d){y(`Token generation failed: ${d.message}`,"api")}let l=`${c}/server/${s.uuid}/vnc`;a.json({url:l})}catch(n){y(`Error generating console URL for server ${r.params.id}: ${n.message}`,"api"),a.status(500).json({error:"Failed to generate console URL"})}}),e.get("/api/user/profile",ie,async(r,a)=>{try{let n=r.userSession;a.json({id:n.userId||n.id,email:n.email,name:n.name,virtFusionUserId:n.virtFusionUserId,createdAt:new Date().toISOString()})}catch(n){y(`Error fetching user profile: ${n.message}`,"api"),a.status(500).json({error:"Failed to fetch user profile"})}}),e.put("/api/user/profile",ie,async(r,a)=>{try{let n=r.userSession;a.json({id:n.userId||n.id,email:n.email,name:n.name,virtFusionUserId:n.virtFusionUserId,createdAt:new Date().toISOString()})}catch(n){y(`Error updating user profile: ${n.message}`,"api"),a.status(500).json({error:"Failed to update user profile"})}}),e.post("/api/user/password",ie,async(r,a)=>{try{let n=r.userSession,{newPassword:i}=r.body;if(!i)return a.status(400).json({error:"New password is required"});if(i.length<8)return a.status(400).json({error:"Password must be at least 8 characters"});if(!n.auth0UserId)return a.status(400).json({error:"Unable to change password. Please contact support."});let s=await sr.changePassword(n.auth0UserId,i);if(!s.success)return a.status(400).json({error:s.error||"Failed to change password"});a.json({success:!0,message:"Password changed successfully"})}catch(n){y(`Error changing password: ${n.message}`,"api"),a.status(500).json({error:"Failed to change password"})}}),e.get("/install.sh",async(r,a)=>{try{let n=await import("fs/promises"),s=(await import("path")).join(process.cwd(),"public","install.sh"),o=await n.readFile(s,"utf-8"),p=r.headers["x-forwarded-proto"]||"https",c=r.headers.host||"",u=`${p}://${c}`,l=process.env.VIRTFUSION_PANEL_URL||"";o=o.replace('DOWNLOAD_URL="${OZVPS_DOWNLOAD_URL:-}"',`DOWNLOAD_URL="${u}/download.tar.gz"`),o=o.replace('PRECONFIGURED_VIRTFUSION_URL=""',`PRECONFIGURED_VIRTFUSION_URL="${l}"`),a.setHeader("Content-Type","text/x-shellscript; charset=utf-8"),a.setHeader("Content-Disposition",'inline; filename="install.sh"'),a.setHeader("Cache-Control","no-cache, no-store, must-revalidate"),a.send(o)}catch(n){y(`Error serving install script: ${n.message}`,"api"),a.status(404).send("# Install script not found")}}),e.get("/download.tar.gz",async(r,a)=>{try{let{exec:n}=await import("child_process"),{promisify:i}=await import("util"),s=await import("path"),o=await import("fs/promises"),p=await import("crypto"),c=i(n),u=process.cwd(),l=p.randomBytes(8).toString("hex"),d=s.join("/tmp",`ozvps-panel-${l}.tar.gz`),f=["client","server","shared","public","script","package.json","package-lock.json","tsconfig.json","vite.config.ts","vite-plugin-meta-images.ts","postcss.config.js","drizzle.config.ts","tailwind.config.ts","components.json","INSTALL.md"],m=[];for(let C of f)try{await o.access(s.join(u,C)),m.push(C)}catch{}if(m.length===0)return a.status(500).send("No files found to archive");let g=m.map(C=>`'${C.replace(/'/g,"'\\''")}'`).join(" "),x=`tar -czf '${d}' --exclude='node_modules' --exclude='.env' --exclude='*.log' --exclude='.git' --exclude='dist' --exclude='.replit' --exclude='replit.nix' -C '${u}' ${g}`;await c(x);let k=await o.readFile(d);a.setHeader("Content-Type","application/gzip"),a.setHeader("Content-Disposition",'attachment; filename="ozvps-panel.tar.gz"'),a.setHeader("Content-Length",k.length),a.setHeader("Cache-Control","no-cache, no-store, must-revalidate"),a.send(k),await o.unlink(d).catch(()=>{})}catch(n){y(`Error creating download archive: ${n.message}`,"api"),a.status(500).send("Failed to create download archive")}}),t}var hb=Ae(Tc(),1),vb=Ae(require("fs"),1),Iu=Ae(require("path"),1);function gb(t){let e=Iu.default.resolve(__dirname,"public");if(!vb.default.existsSync(e))throw new Error(`Could not find the build directory: ${e}, make sure to build the client first`);t.use(hb.default.static(e)),t.use("*",(r,a)=>{a.sendFile(Iu.default.resolve(e,"index.html"))})}var wb=require("http"),He=(0,is.default)(),xb=(0,wb.createServer)(He);He.use((0,bb.default)({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'","'unsafe-inline'"],styleSrc:["'self'","'unsafe-inline'","https://fonts.googleapis.com"],fontSrc:["'self'","https://fonts.gstatic.com"],imgSrc:["'self'","data:","https:"],connectSrc:["'self'","wss:","https:"],frameSrc:["'none'"],objectSrc:["'none'"]}},crossOriginEmbedderPolicy:!1}));var _b=Fc({windowMs:900*1e3,max:10,message:{error:"Too many authentication attempts. Please try again later."},standardHeaders:!0,legacyHeaders:!1,validate:{xForwardedForHeader:!1}}),vT=Fc({windowMs:60*1e3,max:100,message:{error:"Too many requests. Please slow down."},standardHeaders:!0,legacyHeaders:!1,validate:{xForwardedForHeader:!1}});He.use("/api/auth/login",_b);He.use("/api/auth/register",_b);He.use("/api/",vT);He.use(is.default.json({verify:(t,e,r)=>{t.rawBody=r}}));He.use(is.default.urlencoded({extended:!1}));He.use((0,yb.default)());var gT=["password","token","secret","apiKey","authorization","cookie","accessToken","refreshToken","credentials"];function Sb(t){if(!t||typeof t!="object")return t;let e=Array.isArray(t)?[]:{};for(let r in t){let a=r.toLowerCase();gT.some(n=>a.includes(n.toLowerCase()))?e[r]="[REDACTED]":typeof t[r]=="object"?e[r]=Sb(t[r]):e[r]=t[r]}return e}function y(t,e="express"){let r=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit",hour12:!0});console.log(`${r} [${e}] ${t}`)}He.use((t,e,r)=>{let a=Date.now(),n=t.path,i,s=e.json;e.json=function(o,...p){return i=o,s.apply(e,[o,...p])},e.on("finish",()=>{let o=Date.now()-a;if(n.startsWith("/api")){let p=`${t.method} ${n} ${e.statusCode} in ${o}ms`;if(i){let c=Sb(i);p+=` :: ${JSON.stringify(c)}`}y(p)}}),r()});(async()=>{await mb(xb,He),He.use((e,r,a,n)=>{let i=e.status||e.statusCode||500,s=e.message||"Internal Server Error";throw a.status(i).json({message:s}),e}),gb(He);let t=parseInt(process.env.PORT||"5000",10);xb.listen({port:t,host:"0.0.0.0",reusePort:!0},()=>{y(`serving on port ${t}`)})})();0&&(module.exports={log});
+0|ozvps-pa |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+0|ozvps-pa |
+0|ozvps-pa | Error: VIRTFUSION_PANEL_URL must be set
+0|ozvps-pa |     at new Dc (/opt/ozvps-panel/dist/index.cjs:63:35798)
+0|ozvps-pa |     at Object.<anonymous> (/opt/ozvps-panel/dist/index.cjs:63:50317)
+0|ozvps-pa |     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+0|ozvps-pa |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|ozvps-pa |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|ozvps-pa |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|ozvps-pa |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+0|ozvps-pa |     at node:internal/main/run_main_module:28:49
+0|ozvps-pa |
+0|ozvps-pa | Node.js v20.19.6
+
+netstat -tlnp | grep 5000
+^C
+root@celebrated-let:~# ^C
+root@celebrated-let:~# netstat -tlnp | grep 5000
+Command 'netstat' not found, but can be installed with:
+apt install net-tools
+root@celebrated-let:~#
