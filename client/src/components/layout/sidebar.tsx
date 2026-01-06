@@ -8,7 +8,8 @@ import {
   X,
   Info,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ShoppingCart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -29,6 +30,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/servers", icon: Server, label: "Servers" },
+  { href: "/order", icon: ShoppingCart, label: "Order" },
   { href: "/account", icon: Settings, label: "Settings" },
 ];
 

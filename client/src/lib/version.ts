@@ -23,6 +23,7 @@ export const VERSION_HISTORY = [
       "Fixed login page background color",
       "Replaced favicon with OzVPS logo",
       "Removed third-party branding from codebase",
+      "Added Order page (Coming Soon) to sidebar",
     ],
   },
   {

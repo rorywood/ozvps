@@ -10,6 +10,7 @@ import ServerList from "@/pages/server-list";
 import ServerDetail from "@/pages/server-detail";
 import ServerConsole from "@/pages/server-console";
 import Account from "@/pages/account";
+import Order from "@/pages/order";
 import Login from "@/pages/login";
 import SystemError from "@/pages/system-error";
 import { api } from "@/lib/api";
@@ -119,6 +120,11 @@ function Router() {
       <Route path="/account">
         <AuthGuard>
           <Account />
+        </AuthGuard>
+      </Route>
+      <Route path="/order">
+        <AuthGuard>
+          <Order />
         </AuthGuard>
       </Route>
       <Route component={NotFound} />
