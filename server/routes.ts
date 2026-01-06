@@ -833,6 +833,7 @@ export async function registerRoutes(
         'server', 
         'shared',
         'public',
+        'script',
         'package.json',
         'package-lock.json',
         'tsconfig.json',
