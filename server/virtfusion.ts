@@ -694,7 +694,8 @@ export class VirtFusionClient {
         body.hostname = hostname;
       }
       
-      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}, password: [set]`, 'virtfusion');
+      log(`Request body: ${JSON.stringify({ ...body, password: '[REDACTED]' })}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
