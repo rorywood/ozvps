@@ -1172,25 +1172,23 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
+  // Location to hypervisor group mapping
+  // NOTE: Update these IDs to match your VirtFusion hypervisor groups
+  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 1, enabled: true },
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },
+  };
+
   // Get available locations
   app.get('/api/locations', async (req, res) => {
     res.json({
-      locations: [
-        {
-          code: 'BNE',
-          name: 'Brisbane',
-          country: 'Australia',
-          countryCode: 'AU',
-          enabled: true,
-        },
-        {
-          code: 'SYD',
-          name: 'Sydney',
-          country: 'Australia',
-          countryCode: 'AU',
-          enabled: false,
-        },
-      ],
+      locations: Object.entries(LOCATION_CONFIG).map(([code, config]) => ({
+        code,
+        name: config.name,
+        country: config.country,
+        countryCode: config.countryCode,
+        enabled: config.enabled,
+      })),
     });
   });
 
@@ -1620,6 +1618,13 @@ export async function registerRoutes(
 
       const { planId, osId, hostname, locationCode } = result.data;
 
+      // Get hypervisor group from location (default to Brisbane)
+      const location = LOCATION_CONFIG[locationCode || 'BNE'];
+      if (!location || !location.enabled) {
+        return res.status(400).json({ error: 'Invalid or unavailable location' });
+      }
+      const hypervisorGroupId = location.hypervisorGroupId;
+
       // Get plan details
       const plan = await dbStorage.getPlanById(planId);
       if (!plan || !plan.active) {
@@ -1673,6 +1678,7 @@ export async function registerRoutes(
           hostname: hostname,
           extRelationId,
           osId,
+          hypervisorGroupId,
         });
 
         // Update order with server ID

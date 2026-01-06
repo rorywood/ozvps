@@ -1113,10 +1113,11 @@ export class VirtFusionClient {
     hostname: string;
     extRelationId: string;
     osId: number;
+    hypervisorGroupId?: number;
   }): Promise<{ serverId: number; name: string }> {
-    const { userId, packageId, hostname, extRelationId, osId } = params;
+    const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId = 1 } = params;
     
-    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}`, 'virtfusion');
+    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}, hypervisorGroup ${hypervisorGroupId}`, 'virtfusion');
     
     try {
       const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
@@ -1126,7 +1127,7 @@ export class VirtFusionClient {
           packageId,
           name: hostname,
           extRelationId,
-          hypervisorId: 1, // Default hypervisor
+          hypervisorGroupId,
           operatingSystemId: osId,
         }),
       });
