@@ -78,6 +78,7 @@ export function registerInstallAssets(app: Express) {
         'shared',
         'public',
         'script',
+        'dist',
         'package.json',
         'package-lock.json',
         'tsconfig.json',
@@ -104,7 +105,7 @@ export function registerInstallAssets(app: Express) {
       }
       
       const quotedFiles = existingFiles.map(f => `'${f.replace(/'/g, "'\\''")}'`).join(' ');
-      const tarCommand = `tar -czf '${archivePath}' --exclude='node_modules' --exclude='.env' --exclude='*.log' --exclude='.git' --exclude='dist' --exclude='.replit' --exclude='replit.nix' -C '${cwd}' ${quotedFiles}`;
+      const tarCommand = `tar -czf '${archivePath}' --exclude='node_modules' --exclude='.env' --exclude='*.log' --exclude='.git' --exclude='.replit' --exclude='replit.nix' -C '${cwd}' ${quotedFiles}`;
       
       await execAsync(tarCommand);
       

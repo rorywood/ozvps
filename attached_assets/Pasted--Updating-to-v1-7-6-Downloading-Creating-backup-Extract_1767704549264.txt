@@ -1,0 +1,68 @@
+  Updating to v1.7.6...
+
+  ✓  Downloading
+  ✓  Creating backup
+  ✓  Extracting files
+  ✓  Installing dependencies
+  ✓  Checking PostgreSQL
+  ✓  Updating database schema
+  ✓  Building application
+  ✓  Updating tools
+  ✓  Restarting service
+  ✓  Cleaning up
+
+┌─────────────────────────────────────────┐
+│  Updated to v1.7.6                        │
+└─────────────────────────────────────────┘
+
+root@celebrated-let:~# pm2 status
+┌────┬────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name           │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ ozvps-panel    │ default     │ N/A     │ fork    │ 21528    │ 44s    │ 0    │ online    │ 0%       │ 55.8mb   │ root     │ disabled │
+└────┴────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+root@celebrated-let:~# pm2 logs ozvps-panel --lines 20
+[TAILING] Tailing last 20 lines for [ozvps-panel] process (change the value with --lines option)
+/root/.pm2/logs/ozvps-panel-error.log last 20 lines:
+0|ozvps-pa |     at node:internal/main/run_main_module:28:49 {
+0|ozvps-pa |   code: 'MODULE_NOT_FOUND',
+0|ozvps-pa |   requireStack: []
+0|ozvps-pa | }
+0|ozvps-pa |
+0|ozvps-pa | Node.js v20.19.6
+0|ozvps-pa | node:internal/modules/cjs/loader:1210
+0|ozvps-pa |   throw err;
+0|ozvps-pa |   ^
+0|ozvps-pa |
+0|ozvps-pa | Error: Cannot find module '/opt/ozvps-panel/dist/index.cjs'
+0|ozvps-pa |     at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+0|ozvps-pa |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+0|ozvps-pa |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+0|ozvps-pa |     at node:internal/main/run_main_module:28:49 {
+0|ozvps-pa |   code: 'MODULE_NOT_FOUND',
+0|ozvps-pa |   requireStack: []
+0|ozvps-pa | }
+0|ozvps-pa |
+0|ozvps-pa | Node.js v20.19.6
+
+/root/.pm2/logs/ozvps-panel-out.log last 20 lines:
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa | 12:58:41 PM [stripe] Initializing Stripe schema...
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa | 1:00:59 PM [stripe] Initializing Stripe schema...
