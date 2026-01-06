@@ -34,6 +34,11 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
+  // Skip CSRF for webhook endpoints (they use their own auth)
+  if (req.path.startsWith('/api/hooks/')) {
+    return next();
+  }
+
   const origin = req.headers.origin;
   const referer = req.headers.referer;
   const host = req.headers.host;

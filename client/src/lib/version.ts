@@ -1,4 +1,4 @@
-export const VERSION = "1.5.0";
+export const VERSION = "1.5.1";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -15,6 +15,13 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.5.1",
+    date: "2026-01-06",
+    changes: [
+      "Fixed CSRF bypass for webhook endpoints",
+    ],
+  },
   {
     version: "1.5.0",
     date: "2026-01-06",
