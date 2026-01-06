@@ -1197,10 +1197,10 @@ export async function registerRoutes(
 
   // Location to hypervisor mapping
   // NOTE: Update these IDs to match your VirtFusion hypervisors
-  // Set hypervisorId to undefined to let VirtFusion auto-select
-  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorId?: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorId: undefined, enabled: true },
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorId: undefined, enabled: false },
+  // hypervisorId = the actual hypervisor node ID from /compute/hypervisors endpoint
+  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorId: number; enabled: boolean }> = {
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorId: 1, enabled: true },  // node01-bne.ozvps.com.au
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorId: 1, enabled: false },  // No Sydney node yet
   };
 
   // Get available locations
