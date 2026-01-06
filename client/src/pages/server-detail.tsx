@@ -668,7 +668,7 @@ export default function ServerDetail() {
         <Tabs defaultValue="statistics" className="space-y-6">
           <div className="border-b border-white/10">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
-              {["Statistics", "IP Management", "Reinstallation", "Configuration"].map(tab => (
+              {["Statistics", "IP Management", "Reinstallation"].map(tab => (
                  <TabsTrigger 
                     key={tab} 
                     value={tab.toLowerCase().replace(' ', '-')}
@@ -1049,12 +1049,6 @@ export default function ServerDetail() {
             </GlassCard>
           </TabsContent>
 
-          {/* Configuration Tab Placeholder */}
-          <TabsContent value="configuration">
-            <GlassCard className="p-12 text-center border-dashed border-white/10 bg-transparent">
-              <p className="text-muted-foreground">This feature is coming soon.</p>
-            </GlassCard>
-          </TabsContent>
         </Tabs>
       </div>
 
