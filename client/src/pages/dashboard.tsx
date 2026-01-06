@@ -159,11 +159,13 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <h3 className="font-medium text-white group-hover:text-primary transition-colors">{server.name}</h3>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                           <span>{server.primaryIp}</span>
                           <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                           <img src={flagAU} alt="AU" className="h-3 w-4 object-cover rounded-sm" />
                           <span>{server.location?.name || 'Unknown'}</span>
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                          <span className="truncate max-w-[120px]" title={server.image?.name}>{server.image?.name || 'Unknown OS'}</span>
                         </div>
                       </div>
                     </div>

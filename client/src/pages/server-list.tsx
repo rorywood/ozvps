@@ -13,7 +13,9 @@ import {
   Filter,
   Loader2,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Square,
+  MonitorCog
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -183,6 +185,12 @@ export default function ServerList() {
                       variant="outline" 
                       className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground hidden sm:flex"
                       disabled={server.suspended}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.location.href = `/servers/${server.id}/console`;
+                      }}
+                      data-testid={`button-console-${server.id}`}
                     >
                       <TerminalSquare className="h-4 w-4 sm:mr-2" />
                       <span className="hidden sm:inline">Console</span>
@@ -222,7 +230,7 @@ export default function ServerList() {
                         onClick={(e) => handlePowerAction(e, server.id, 'shutdown')}
                         aria-label="Stop server"
                       >
-                        <Power className="h-5 w-5 sm:h-4 sm:w-4 rotate-180" />
+                        <Square className="h-4 w-4 sm:h-3.5 sm:w-3.5 fill-current" />
                       </Button>
                     </div>
 
