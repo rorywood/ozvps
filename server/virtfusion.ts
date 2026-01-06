@@ -1076,6 +1076,41 @@ export class VirtFusionClient {
     }
   }
 
+  async provisionServer(params: {
+    userId: number;
+    packageId: number;
+    hostname?: string;
+    extRelationId: string;
+  }): Promise<{ serverId: number; name: string }> {
+    const { userId, packageId, hostname, extRelationId } = params;
+    
+    log(`Provisioning server for user ${userId} with package ${packageId}`, 'virtfusion');
+    
+    try {
+      const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId,
+          packageId,
+          name: hostname,
+          extRelationId,
+          hypervisorId: 1, // Default hypervisor
+        }),
+      });
+
+      const server = response.data;
+      log(`Server provisioned: ID=${server.id}, name=${server.name}`, 'virtfusion');
+      
+      return {
+        serverId: server.id,
+        name: server.name,
+      };
+    } catch (error: any) {
+      log(`Failed to provision server: ${error.message}`, 'virtfusion');
+      throw new Error(`Server provisioning failed: ${error.message}`);
+    }
+  }
+
   async cleanupUserAndServers(virtFusionUserId: number): Promise<{ success: boolean; serversDeleted: number; errors: string[] }> {
     const errors: string[] = [];
     let serversDeleted = 0;

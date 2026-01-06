@@ -1,12 +1,14 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
+import { z } from "zod";
 import { virtfusionClient } from "./virtfusion";
-import { storage } from "./storage";
+import { storage, dbStorage } from "./storage";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 declare global {
   namespace Express {
@@ -36,7 +38,7 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
   }
 
   // Skip CSRF for webhook endpoints (they use their own auth)
-  if (req.originalUrl.startsWith('/api/hooks/')) {
+  if (req.originalUrl.startsWith('/api/hooks/') || req.originalUrl.startsWith('/api/stripe/webhook')) {
     return next();
   }
 
@@ -883,6 +885,256 @@ export async function registerRoutes(
       res.status(500).json({ error: 'Failed to update user status' });
     }
   });
+
+  // ================== Wallet & Deploy Routes ==================
+
+  // Get available plans
+  app.get('/api/plans', async (req, res) => {
+    try {
+      const activePlans = await dbStorage.getActivePlans();
+      res.json({ plans: activePlans });
+    } catch (error: any) {
+      log(`Error fetching plans: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch plans' });
+    }
+  });
+
+  // Get Stripe publishable key
+  app.get('/api/stripe/publishable-key', async (req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (error: any) {
+      log(`Error getting Stripe publishable key: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to get Stripe configuration' });
+    }
+  });
+
+  // Get wallet balance (authenticated)
+  app.get('/api/wallet', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+      const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      res.json({ wallet });
+    } catch (error: any) {
+      log(`Error fetching wallet: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch wallet' });
+    }
+  });
+
+  // Get wallet transactions (authenticated)
+  app.get('/api/wallet/transactions', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+      const transactions = await dbStorage.getWalletTransactions(auth0UserId);
+      res.json({ transactions });
+    } catch (error: any) {
+      log(`Error fetching transactions: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+  });
+
+  // Create Stripe checkout session for wallet top-up (authenticated)
+  const topupSchema = z.object({
+    amountCents: z.number().min(500).max(50000), // $5 to $500 AUD
+  });
+
+  app.post('/api/wallet/topup', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const email = req.userSession!.email;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const result = topupSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: 'Invalid amount. Must be between $5 and $500.' });
+      }
+
+      const { amountCents } = result.data;
+      const stripe = await getUncachableStripeClient();
+
+      // Create a checkout session for wallet top-up
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        customer_email: email,
+        line_items: [
+          {
+            price_data: {
+              currency: 'aud',
+              product_data: {
+                name: 'Wallet Top-Up',
+                description: `Add $${(amountCents / 100).toFixed(2)} AUD to your OzVPS wallet`,
+              },
+              unit_amount: amountCents,
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          auth0UserId,
+          type: 'wallet_topup',
+          amountCents: String(amountCents),
+        },
+        success_url: `${baseUrl}/deploy?topup=success`,
+        cancel_url: `${baseUrl}/deploy?topup=cancelled`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      log(`Error creating checkout session: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // Deploy a new VPS (authenticated)
+  const deploySchema = z.object({
+    planId: z.number(),
+    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i).optional(),
+  });
+
+  app.post('/api/deploy', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const virtFusionUserId = req.userSession!.virtFusionUserId;
+      const extRelationId = req.userSession!.extRelationId;
+
+      if (!auth0UserId || !virtFusionUserId || !extRelationId) {
+        return res.status(400).json({ error: 'Invalid session state' });
+      }
+
+      const result = deploySchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: 'Invalid deploy request' });
+      }
+
+      const { planId, hostname } = result.data;
+
+      // Get plan details
+      const plan = await dbStorage.getPlanById(planId);
+      if (!plan || !plan.active) {
+        return res.status(404).json({ error: 'Plan not found or inactive' });
+      }
+
+      if (!plan.virtfusionPackageId) {
+        return res.status(400).json({ error: 'Plan not configured for deployment' });
+      }
+
+      // Debit wallet and create order atomically
+      const deployResult = await dbStorage.createDeployWithDebit(
+        auth0UserId,
+        planId,
+        plan.priceMonthly,
+        hostname
+      );
+
+      if (!deployResult.success || !deployResult.order) {
+        return res.status(400).json({ error: deployResult.error || 'Failed to create deploy order' });
+      }
+
+      const order = deployResult.order;
+
+      // Update order to provisioning status
+      await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
+
+      // Provision server via VirtFusion
+      try {
+        const serverResult = await virtfusionClient.provisionServer({
+          userId: virtFusionUserId,
+          packageId: plan.virtfusionPackageId,
+          hostname: hostname || `vps-${order.id}`,
+          extRelationId,
+        });
+
+        // Update order with server ID
+        await dbStorage.updateDeployOrder(order.id, {
+          status: 'active',
+          virtfusionServerId: serverResult.serverId,
+        });
+
+        res.json({
+          success: true,
+          orderId: order.id,
+          serverId: serverResult.serverId,
+        });
+      } catch (provisionError: any) {
+        log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
+        
+        // Refund the wallet
+        await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
+          reason: 'provisioning_failed',
+          orderId: order.id,
+        });
+
+        await dbStorage.updateDeployOrder(order.id, {
+          status: 'failed',
+          errorMessage: provisionError.message,
+        });
+
+        return res.status(500).json({ error: 'Server provisioning failed. Your wallet has been refunded.' });
+      }
+    } catch (error: any) {
+      log(`Deploy error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to deploy server' });
+    }
+  });
+
+  // Get deploy order status (authenticated)
+  app.get('/api/deploy/:orderId', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const orderId = parseInt(req.params.orderId, 10);
+      if (isNaN(orderId)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
+
+      const order = await dbStorage.getDeployOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // Verify ownership
+      if (order.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      res.json({ order });
+    } catch (error: any) {
+      log(`Error fetching order: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch order' });
+    }
+  });
+
+  // Get user's deploy orders (authenticated)
+  app.get('/api/deploy', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const orders = await dbStorage.getDeployOrdersByUser(auth0UserId);
+      res.json({ orders });
+    } catch (error: any) {
+      log(`Error fetching orders: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch orders' });
+    }
+  });
+
+  // ================== Webhook Routes ==================
 
   app.post('/api/hooks/auth0-user-deleted', async (req, res) => {
     try {
