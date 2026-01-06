@@ -86,7 +86,7 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
 
-  const { data: trafficData } = useQuery({
+  const { data: trafficData, isFetching: isTrafficFetching, refetch: refetchTraffic } = useQuery({
     queryKey: ['traffic', serverId],
     queryFn: () => api.getTrafficHistory(serverId || ''),
     enabled: !!serverId
@@ -782,10 +782,11 @@ export default function ServerDetail() {
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ['traffic', serverId] })}
+                  onClick={() => refetchTraffic()}
+                  disabled={isTrafficFetching}
                   data-testid="button-refresh-bandwidth"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw className={cn("h-3.5 w-3.5", isTrafficFetching && "animate-spin")} />
                 </Button>
               </div>
 
@@ -811,7 +812,7 @@ export default function ServerDetail() {
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-bold text-white" data-testid="text-bandwidth-used">{usedGB}</span>
+                        <span className="text-lg font-bold text-white" data-testid="text-bandwidth-used">{usedGB} GB</span>
                         <span className="text-xs text-muted-foreground">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
                       </div>
                       {remainingGB !== null ? (
