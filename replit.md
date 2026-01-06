@@ -81,6 +81,15 @@ shared/           # Shared code between client/server
 └── schema.ts     # Drizzle database schema
 ```
 
+### Security Features
+- **Session Security**: Cookies use `httpOnly`, `secure` (production), `sameSite=strict` flags
+- **Security Headers**: Helmet middleware with CSP (production), HSTS, X-Frame-Options, etc.
+- **Rate Limiting**: Auth endpoints (10 attempts/15 min), general API (100 requests/min)
+- **CSRF Protection**: Origin/Referer validation for all mutating requests (production)
+- **Input Validation**: Zod schema validation on all API routes accepting user input
+- **Log Sanitization**: Sensitive fields (password, token, secret, etc.) automatically redacted from logs
+- **Server Ownership**: All server operations verify user ownership via VirtFusion userId
+
 ### Key Design Patterns
 - **API Proxy Pattern**: Backend proxies all VirtFusion API calls, never exposing tokens to frontend
 - **Component Composition**: GlassCard wrapper component for consistent glassmorphism styling
