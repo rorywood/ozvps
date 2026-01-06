@@ -1,0 +1,175 @@
+root@celebrated-let:~# cd /opt/ozvps-panel
+
+# Re-download the updated code
+curl -fsSL https://ozvps-panel.replit.app/download.tar.gz -o /tmp/ozvps-panel.tar.gz
+tar -xzf /tmp/ozvps-panel.tar.gz -C /opt/ozvps-panel --strip-components=0
+rm -f /tmp/ozvps-panel.tar.gz
+
+# Reinstall dependencies and rebuild
+npm install
+npm run build
+
+# Restart PM2
+pm2 restart ozvps-panel
+pm2 logs ozvps-panel --lines 20
+curl: (22) The requested URL returned error: 404
+tar (child): /tmp/ozvps-panel.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+
+up to date, audited 466 packages in 4s
+
+44 packages are looking for funding
+  run `npm fund` for details
+
+4 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v7.1.12 building for production...
+✓ 1872 modules transformed.
+rendering chunks (1)...[meta-images] no Replit deployment domain found, skipping meta tag updates
+../dist/public/index.html                     1.21 kB │ gzip:   0.54 kB
+../dist/public/assets/logo-CgCbI-Jm.png       5.64 kB
+../dist/public/assets/flag-au-D7-GQr69.png   60.24 kB
+../dist/public/assets/index-BCWNyzSj.css    113.12 kB │ gzip:  18.34 kB
+../dist/public/assets/index-CCYj9cTK.js     828.34 kB │ gzip: 239.58 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 13.27s
+building server...
+
+  dist/index.cjs  1001.0kb
+
+⚡ Done in 255ms
+Use --update-env to update environment variables
+[PM2] Applying action restartProcessId on app [ozvps-panel](ids: [ 0 ])
+[PM2][ERROR] Process 0 not found
+[TAILING] Tailing last 20 lines for [ozvps-panel] process (change the value with --lines option)
+/root/.pm2/logs/ozvps-panel-out.log last 20 lines:
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+0|ozvps-pa |
+0|ozvps-pa | > rest-express@1.0.0 start
+0|ozvps-pa | > NODE_ENV=production node dist/index.cjs
+0|ozvps-pa |
+
+/root/.pm2/logs/ozvps-panel-error.log last 20 lines:
+0|ozvps-pa |     at node:internal/main/run_main_module:28:49 {
+0|ozvps-pa |   code: 'MODULE_NOT_FOUND',
+0|ozvps-pa |   requireStack: []
+0|ozvps-pa | }
+0|ozvps-pa |
+0|ozvps-pa | Node.js v20.19.6
+0|ozvps-pa | node:internal/modules/cjs/loader:1210
+0|ozvps-pa |   throw err;
+0|ozvps-pa |   ^
+0|ozvps-pa |
+0|ozvps-pa | Error: Cannot find module '/opt/ozvps-panel/dist/index.cjs'
+0|ozvps-pa |     at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+0|ozvps-pa |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+0|ozvps-pa |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+0|ozvps-pa |     at node:internal/main/run_main_module:28:49 {
+0|ozvps-pa |   code: 'MODULE_NOT_FOUND',
+0|ozvps-pa |   requireStack: []
+0|ozvps-pa | }
+0|ozvps-pa |
+0|ozvps-pa | Node.js v20.19.6
+
+0|ozvps-panel  | > rest-express@1.0.0 start
+0|ozvps-panel  | > NODE_ENV=production node dist/index.cjs
+0|ozvps-panel  | file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2
+0|ozvps-panel  | Object.defineProperty(exports, "__esModule", { value: true });
+0|ozvps-panel  |                       ^
+0|ozvps-panel  | ReferenceError: exports is not defined in ES module scope
+0|ozvps-panel  | This file is being treated as an ES module because it has a '.js' file extension and '/opt/ozvps-panel/node_modules/bad-words/package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+0|ozvps-panel  |     at file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2:23
+0|ozvps-panel  |     at ModuleJobSync.runSync (node:internal/modules/esm/module_job:437:37)
+0|ozvps-panel  |     at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:389:47)
+0|ozvps-panel  |     at loadESMFromCJS (node:internal/modules/cjs/loader:1363:24)
+0|ozvps-panel  |     at Module._compile (node:internal/modules/cjs/loader:1503:5)
+0|ozvps-panel  |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|ozvps-panel  |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|ozvps-panel  |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|ozvps-panel  |     at Module.require (node:internal/modules/cjs/loader:1289:19)
+0|ozvps-panel  |     at require (node:internal/modules/helpers:182:18)
+0|ozvps-panel  | Node.js v20.19.6
+0|ozvps-panel  | > rest-express@1.0.0 start
+0|ozvps-panel  | > NODE_ENV=production node dist/index.cjs
+0|ozvps-panel  | file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2
+0|ozvps-panel  | Object.defineProperty(exports, "__esModule", { value: true });
+0|ozvps-panel  |                       ^
+0|ozvps-panel  | ReferenceError: exports is not defined in ES module scope
+0|ozvps-panel  | This file is being treated as an ES module because it has a '.js' file extension and '/opt/ozvps-panel/node_modules/bad-words/package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+0|ozvps-panel  |     at file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2:23
+0|ozvps-panel  |     at ModuleJobSync.runSync (node:internal/modules/esm/module_job:437:37)
+0|ozvps-panel  |     at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:389:47)
+0|ozvps-panel  |     at loadESMFromCJS (node:internal/modules/cjs/loader:1363:24)
+0|ozvps-panel  |     at Module._compile (node:internal/modules/cjs/loader:1503:5)
+0|ozvps-panel  |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|ozvps-panel  |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|ozvps-panel  |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|ozvps-panel  |     at Module.require (node:internal/modules/cjs/loader:1289:19)
+0|ozvps-panel  |     at require (node:internal/modules/helpers:182:18)
+0|ozvps-panel  | Node.js v20.19.6
+0|ozvps-panel  | > rest-express@1.0.0 start
+0|ozvps-panel  | > NODE_ENV=production node dist/index.cjs
+0|ozvps-panel  | file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2
+0|ozvps-panel  | Object.defineProperty(exports, "__esModule", { value: true });
+0|ozvps-panel  |                       ^
+0|ozvps-panel  | ReferenceError: exports is not defined in ES module scope
+0|ozvps-panel  | This file is being treated as an ES module because it has a '.js' file extension and '/opt/ozvps-panel/node_modules/bad-words/package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+0|ozvps-panel  |     at file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2:23
+0|ozvps-panel  |     at ModuleJobSync.runSync (node:internal/modules/esm/module_job:437:37)
+0|ozvps-panel  |     at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:389:47)
+0|ozvps-panel  |     at loadESMFromCJS (node:internal/modules/cjs/loader:1363:24)
+0|ozvps-panel  |     at Module._compile (node:internal/modules/cjs/loader:1503:5)
+0|ozvps-panel  |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|ozvps-panel  |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|ozvps-panel  |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|ozvps-panel  |     at Module.require (node:internal/modules/cjs/loader:1289:19)
+0|ozvps-panel  |     at require (node:internal/modules/helpers:182:18)
+0|ozvps-panel  | Node.js v20.19.6
+0|ozvps-panel  | > rest-express@1.0.0 start
+0|ozvps-panel  | > NODE_ENV=production node dist/index.cjs
+0|ozvps-panel  | file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2
+0|ozvps-panel  | Object.defineProperty(exports, "__esModule", { value: true });
+0|ozvps-panel  |                       ^
+0|ozvps-panel  | ReferenceError: exports is not defined in ES module scope
+0|ozvps-panel  | This file is being treated as an ES module because it has a '.js' file extension and '/opt/ozvps-panel/node_modules/bad-words/package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+0|ozvps-panel  |     at file:///opt/ozvps-panel/node_modules/bad-words/dist/index.js:2:23
+0|ozvps-panel  |     at ModuleJobSync.runSync (node:internal/modules/esm/module_job:437:37)
+0|ozvps-panel  |     at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:389:47)
+0|ozvps-panel  |     at loadESMFromCJS (node:internal/modules/cjs/loader:1363:24)
+0|ozvps-panel  |     at Module._compile (node:internal/modules/cjs/loader:1503:5)
+0|ozvps-panel  |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|ozvps-panel  |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|ozvps-panel  |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|ozvps-panel  |     at Module.require (node:internal/modules/cjs/loader:1289:19)
+0|ozvps-panel  |     at require (node:internal/modules/helpers:182:18)
+0|ozvps-panel  | Node.js v20.19.6
