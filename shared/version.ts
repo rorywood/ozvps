@@ -1,4 +1,4 @@
-export const VERSION = "1.7.4";
+export const VERSION = "1.7.5";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,15 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.5",
+    date: "2026-01-06",
+    changes: [
+      "Feature: Fully automatic database setup - creates user, database, and configures pg_hba.conf",
+      "Feature: Credits CLI auto-runs update if DATABASE_URL is missing",
+      "Fix: No manual intervention required for database configuration",
+    ],
+  },
   {
     version: "1.7.4",
     date: "2026-01-06",

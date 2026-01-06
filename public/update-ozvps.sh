@@ -243,31 +243,62 @@ fi
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Checking PostgreSQL"
 
-# Validate .env has DATABASE_URL
-if [[ -f "$INSTALL_DIR/.env" ]]; then
-    if ! grep -q "^DATABASE_URL=" "$INSTALL_DIR/.env"; then
-        echo ""
-        echo -e "  ${RED}✗${NC}  DATABASE_URL missing from .env file"
-        echo ""
-        echo -e "  ${YELLOW}Your .env file is missing the database configuration.${NC}"
-        echo -e "  ${DIM}This can happen if the original installation was incomplete.${NC}"
-        echo ""
-        echo -e "  ${BOLD}To fix, add this line to $INSTALL_DIR/.env:${NC}"
-        echo -e "  ${CYAN}DATABASE_URL=postgresql://ozvps:YOUR_PASSWORD@localhost:5432/ozvps${NC}"
-        echo ""
-        echo -e "  ${DIM}Replace YOUR_PASSWORD with your database password, or run:${NC}"
-        echo -e "  ${CYAN}sudo bash <(curl -fsSL YOUR_REPLIT_URL/install.sh)${NC}"
-        echo ""
-        exit 1
+# Auto-configure DATABASE_URL if missing
+if [[ ! -f "$INSTALL_DIR/.env" ]]; then
+    touch "$INSTALL_DIR/.env"
+    chmod 600 "$INSTALL_DIR/.env"
+fi
+
+if ! grep -q "^DATABASE_URL=" "$INSTALL_DIR/.env"; then
+    echo -e "  ${YELLOW}!${NC}  DATABASE_URL missing - auto-configuring..."
+    
+    # Generate secure password
+    if command -v openssl &>/dev/null; then
+        AUTO_DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
+    else
+        AUTO_DB_PASS=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 24)
     fi
-else
-    echo ""
-    echo -e "  ${RED}✗${NC}  Configuration file not found"
-    echo ""
-    echo -e "  ${YELLOW}The .env file is missing. Please run the installer:${NC}"
-    echo -e "  ${CYAN}sudo bash <(curl -fsSL YOUR_REPLIT_URL/install.sh)${NC}"
-    echo ""
-    exit 1
+    AUTO_DB_USER="ozvps"
+    AUTO_DB_NAME="ozvps"
+    
+    # Create database user and database (idempotent)
+    (
+        # Wait for PostgreSQL to be ready
+        for i in {1..30}; do
+            if sudo -u postgres psql -c "SELECT 1" &>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+        
+        # Create or update user
+        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$AUTO_DB_USER'" | grep -q 1; then
+            sudo -u postgres psql -c "ALTER USER $AUTO_DB_USER WITH PASSWORD '$AUTO_DB_PASS';"
+        else
+            sudo -u postgres psql -c "CREATE USER $AUTO_DB_USER WITH PASSWORD '$AUTO_DB_PASS';"
+        fi
+        
+        # Create database if not exists
+        if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$AUTO_DB_NAME'" | grep -q 1; then
+            sudo -u postgres psql -c "CREATE DATABASE $AUTO_DB_NAME OWNER $AUTO_DB_USER;"
+        fi
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $AUTO_DB_NAME TO $AUTO_DB_USER;"
+        
+        # Configure pg_hba.conf for password auth
+        PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" 2>/dev/null | tr -d ' ')
+        if [[ -n "$PG_HBA" && -f "$PG_HBA" ]]; then
+            if ! grep -q "host.*$AUTO_DB_NAME.*$AUTO_DB_USER" "$PG_HBA"; then
+                echo "host    $AUTO_DB_NAME    $AUTO_DB_USER    127.0.0.1/32    md5" >> "$PG_HBA"
+                echo "host    $AUTO_DB_NAME    $AUTO_DB_USER    ::1/128         md5" >> "$PG_HBA"
+                systemctl reload postgresql 2>/dev/null || true
+            fi
+        fi
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Creating database"
+    
+    # Add DATABASE_URL to .env
+    echo "DATABASE_URL=postgresql://$AUTO_DB_USER:$AUTO_DB_PASS@localhost:5432/$AUTO_DB_NAME" >> "$INSTALL_DIR/.env"
+    echo -e "  ${GREEN}✓${NC}  Database configured automatically"
 fi
 
 # Database migrations

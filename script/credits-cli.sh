@@ -33,7 +33,16 @@ error_exit() {
 
 export $(grep -v '^#' "$INSTALL_DIR/.env" | xargs 2>/dev/null)
 
-[[ -z "$DATABASE_URL" ]] && error_exit "DATABASE_URL not configured in .env"
+if [[ -z "$DATABASE_URL" ]]; then
+    echo ""
+    echo -e "  ${YELLOW}DATABASE_URL not configured.${NC}"
+    echo -e "  ${DIM}Running update-ozvps to auto-configure database...${NC}"
+    echo ""
+    update-ozvps
+    # Re-source .env after update
+    export $(grep -v '^#' "$INSTALL_DIR/.env" | xargs 2>/dev/null)
+    [[ -z "$DATABASE_URL" ]] && error_exit "Database configuration failed. Check update-ozvps logs."
+fi
 
 read -sp "  Enter Admin Token: " INPUT_TOKEN < /dev/tty
 echo ""
