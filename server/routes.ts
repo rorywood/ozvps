@@ -1126,7 +1126,7 @@ export async function registerRoutes(
       log(`Admin ${req.userSession.email} linking VirtFusion user ${virtfusionUserId} to Auth0 user ${auth0UserId}`, 'admin');
 
       // Verify Auth0 user exists
-      const auth0User = await auth0Client.getUser(auth0UserId);
+      const auth0User = await auth0Client.getUserById(auth0UserId);
       if (!auth0User) {
         return res.status(404).json({ error: 'Auth0 user not found' });
       }
