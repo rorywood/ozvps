@@ -175,10 +175,6 @@ export default function LoginPage() {
           <p className="text-center text-sm text-muted-foreground mt-6">
             Need help? Contact support@ozvps.com
           </p>
-          
-          <p className="text-center text-xs text-yellow-400 mt-4" data-testid="text-test">
-            TEST TEXT - Update script is working!
-          </p>
         </div>
       </GlassCard>
     </div>

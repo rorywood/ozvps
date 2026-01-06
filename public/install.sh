@@ -112,31 +112,51 @@ main() {
         esac
     }
 
-    # Disable firewall
-    disable_firewall() {
+    # Configure firewall to allow HTTP/HTTPS traffic
+    configure_firewall() {
         log_step "Configuring firewall..."
         
-        # Disable UFW (Ubuntu/Debian)
+        # Configure UFW (Ubuntu/Debian)
         if command -v ufw &> /dev/null; then
-            ufw disable 2>/dev/null || true
-            log_info "UFW firewall disabled"
+            # Enable UFW if not already enabled
+            ufw --force enable 2>/dev/null || true
+            # Allow SSH to prevent lockout
+            ufw allow 22/tcp 2>/dev/null || true
+            # Allow HTTP and HTTPS
+            ufw allow 80/tcp 2>/dev/null || true
+            ufw allow 443/tcp 2>/dev/null || true
+            ufw reload 2>/dev/null || true
+            log_info "UFW: Allowed ports 22, 80, 443"
         fi
         
-        # Disable firewalld (CentOS/RHEL)
+        # Configure firewalld (CentOS/RHEL)
         if command -v firewall-cmd &> /dev/null; then
-            systemctl stop firewalld 2>/dev/null || true
-            systemctl disable firewalld 2>/dev/null || true
-            log_info "firewalld disabled"
+            # Start firewalld if not running
+            systemctl start firewalld 2>/dev/null || true
+            systemctl enable firewalld 2>/dev/null || true
+            # Allow HTTP and HTTPS
+            firewall-cmd --permanent --add-service=http 2>/dev/null || true
+            firewall-cmd --permanent --add-service=https 2>/dev/null || true
+            firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
+            firewall-cmd --reload 2>/dev/null || true
+            log_info "firewalld: Allowed http, https, ssh"
         fi
         
-        # Disable iptables if running as service
-        if systemctl is-active --quiet iptables 2>/dev/null; then
-            systemctl stop iptables 2>/dev/null || true
-            systemctl disable iptables 2>/dev/null || true
-            log_info "iptables service disabled"
+        # If neither UFW nor firewalld, add iptables rules directly
+        if ! command -v ufw &> /dev/null && ! command -v firewall-cmd &> /dev/null; then
+            if command -v iptables &> /dev/null; then
+                # Allow established connections
+                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+                # Allow SSH
+                iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+                # Allow HTTP/HTTPS
+                iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+                iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+                log_info "iptables: Allowed ports 22, 80, 443"
+            fi
         fi
         
-        log_info "Firewall configured"
+        log_info "Firewall configured - ports 80 and 443 open"
     }
 
     # Collect all configuration upfront
@@ -586,7 +606,7 @@ EOFCONFIG
     check_root
     detect_os
     collect_configuration      # Get all config FIRST
-    disable_firewall           # Disable firewall early
+    configure_firewall         # Configure firewall to allow HTTP/HTTPS
     install_nodejs
     install_dependencies
     setup_application

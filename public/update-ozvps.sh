@@ -4,6 +4,8 @@ set -e
 # OzVPS Panel Update Script
 # Run with: update-ozvps
 
+VERSION="1.0.0"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,10 +17,22 @@ INSTALL_DIR="/opt/ozvps-panel"
 CONFIG_FILE="$INSTALL_DIR/.update_config"
 SERVICE_NAME="ozvps-panel"
 
+# Create secure temp directory
+TEMP_DIR=$(mktemp -d -t ozvps-update.XXXXXXXXXX)
+chmod 700 "$TEMP_DIR"
+
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "\n${CYAN}==>${NC} $1"; }
+
+# Cleanup function to remove temp files on exit
+cleanup_temp() {
+    if [[ -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+trap cleanup_temp EXIT
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -72,6 +86,13 @@ fi
 # Remove trailing slash if present
 REPLIT_URL="${REPLIT_URL%/}"
 
+# Enforce HTTPS for security
+if [[ ! "$REPLIT_URL" =~ ^https:// ]]; then
+    log_error "URL must use HTTPS for security"
+    log_info "Example: https://your-app.replit.dev/"
+    exit 1
+fi
+
 # Save URL for next time
 echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
 chmod 600 "$CONFIG_FILE"
@@ -81,8 +102,9 @@ DOWNLOAD_URL="$REPLIT_URL/download.tar.gz"
 log_step "Downloading latest OzVPS Panel..."
 log_info "From: $DOWNLOAD_URL"
 
-# Download archive
-if ! curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-update.tar.gz; then
+# Download archive to secure temp directory
+ARCHIVE_FILE="$TEMP_DIR/ozvps-update.tar.gz"
+if ! curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE_FILE"; then
     log_error "Failed to download update"
     log_info "Make sure your Replit app is running and the URL is correct"
     exit 1
@@ -95,11 +117,11 @@ log_info "Backup saved to: $BACKUP_DIR"
 
 log_step "Extracting update..."
 
-# Extract new files (preserving .env and ecosystem.config.cjs)
-cp "$INSTALL_DIR/.env" /tmp/ozvps-env-backup 2>/dev/null || true
-cp "$INSTALL_DIR/ecosystem.config.cjs" /tmp/ozvps-ecosystem-backup 2>/dev/null || true
-cp "$INSTALL_DIR/.update_config" /tmp/ozvps-update-config-backup 2>/dev/null || true
-cp "$INSTALL_DIR/.panel_domain" /tmp/ozvps-domain-backup 2>/dev/null || true
+# Backup config files to secure temp directory
+cp "$INSTALL_DIR/.env" "$TEMP_DIR/env-backup" 2>/dev/null || true
+cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem-backup" 2>/dev/null || true
+cp "$INSTALL_DIR/.update_config" "$TEMP_DIR/update-config-backup" 2>/dev/null || true
+cp "$INSTALL_DIR/.panel_domain" "$TEMP_DIR/domain-backup" 2>/dev/null || true
 
 # Remove old source files but keep node_modules for faster install
 rm -rf "$INSTALL_DIR/client" "$INSTALL_DIR/server" "$INSTALL_DIR/shared" "$INSTALL_DIR/public" "$INSTALL_DIR/script"
@@ -108,14 +130,13 @@ rm -f "$INSTALL_DIR/vite.config.ts" "$INSTALL_DIR/vite-plugin-meta-images.ts" "$
 rm -f "$INSTALL_DIR/drizzle.config.ts" "$INSTALL_DIR/tailwind.config.ts" "$INSTALL_DIR/components.json"
 
 # Extract new files
-tar -xzf /tmp/ozvps-update.tar.gz -C "$INSTALL_DIR"
-rm -f /tmp/ozvps-update.tar.gz
+tar -xzf "$ARCHIVE_FILE" -C "$INSTALL_DIR"
 
 # Restore config files
-cp /tmp/ozvps-env-backup "$INSTALL_DIR/.env" 2>/dev/null || true
-cp /tmp/ozvps-ecosystem-backup "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
-cp /tmp/ozvps-update-config-backup "$INSTALL_DIR/.update_config" 2>/dev/null || true
-cp /tmp/ozvps-domain-backup "$INSTALL_DIR/.panel_domain" 2>/dev/null || true
+cp "$TEMP_DIR/env-backup" "$INSTALL_DIR/.env" 2>/dev/null || true
+cp "$TEMP_DIR/ecosystem-backup" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
+cp "$TEMP_DIR/update-config-backup" "$INSTALL_DIR/.update_config" 2>/dev/null || true
+cp "$TEMP_DIR/domain-backup" "$INSTALL_DIR/.panel_domain" 2>/dev/null || true
 
 log_step "Applying compatibility fixes..."
 
