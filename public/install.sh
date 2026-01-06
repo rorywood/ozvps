@@ -51,6 +51,29 @@ main() {
         echo -e "${BLUE}[STEP]${NC} $1"
     }
 
+    # Interactive read function that works when piped from curl
+    interactive_read() {
+        local prompt="$1"
+        local var_name="$2"
+        local is_secret="${3:-no}"
+        
+        if [[ "$is_secret" == "yes" ]]; then
+            read -sp "$prompt" "$var_name" < /dev/tty
+            echo ""
+        else
+            read -p "$prompt" "$var_name" < /dev/tty
+        fi
+    }
+
+    # Interactive confirm that works when piped from curl
+    interactive_confirm() {
+        local prompt="$1"
+        local response
+        read -p "$prompt" -n 1 -r response < /dev/tty
+        echo ""
+        [[ "$response" =~ ^[Yy]$ ]]
+    }
+
     # Check if running as root
     check_root() {
         if [[ $EUID -ne 0 ]]; then
@@ -80,13 +103,120 @@ main() {
                 ;;
             *)
                 log_warn "Unsupported OS: $OS. Installation may not work correctly."
-                read -p "Continue anyway? (y/N): " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                if interactive_confirm "Continue anyway? (y/N): "; then
+                    :
+                else
                     exit 1
                 fi
                 ;;
         esac
+    }
+
+    # Disable firewall
+    disable_firewall() {
+        log_step "Configuring firewall..."
+        
+        # Disable UFW (Ubuntu/Debian)
+        if command -v ufw &> /dev/null; then
+            ufw disable 2>/dev/null || true
+            log_info "UFW firewall disabled"
+        fi
+        
+        # Disable firewalld (CentOS/RHEL)
+        if command -v firewall-cmd &> /dev/null; then
+            systemctl stop firewalld 2>/dev/null || true
+            systemctl disable firewalld 2>/dev/null || true
+            log_info "firewalld disabled"
+        fi
+        
+        # Disable iptables if running as service
+        if systemctl is-active --quiet iptables 2>/dev/null; then
+            systemctl stop iptables 2>/dev/null || true
+            systemctl disable iptables 2>/dev/null || true
+            log_info "iptables service disabled"
+        fi
+        
+        log_info "Firewall configured"
+    }
+
+    # Collect all configuration upfront
+    collect_configuration() {
+        log_step "Collecting configuration..."
+        
+        echo ""
+        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║           Please provide the following information           ║${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        # Panel Domain Configuration (for Nginx)
+        echo -e "${BLUE}━━━ 1. Panel Domain (for Nginx) ━━━${NC}"
+        echo ""
+        echo "This is the domain where YOUR OzVPS Panel will be accessible."
+        echo "Example: panel.yourdomain.com or vps.yourdomain.com"
+        echo ""
+        interactive_read "Enter your panel domain: " PANEL_DOMAIN
+        
+        if [[ -z "$PANEL_DOMAIN" ]]; then
+            log_error "Panel domain is required"
+            exit 1
+        fi
+        echo ""
+
+        # Auth0 Configuration
+        echo -e "${BLUE}━━━ 2. Auth0 Configuration ━━━${NC}"
+        echo ""
+        echo "Auth0 is used for user login/registration."
+        echo "Get these from: https://manage.auth0.com/ > Applications > Your App"
+        echo ""
+        interactive_read "Auth0 Domain (e.g., your-tenant.auth0.com): " AUTH0_DOMAIN
+        interactive_read "Auth0 Client ID: " AUTH0_CLIENT_ID
+        interactive_read "Auth0 Client Secret: " AUTH0_CLIENT_SECRET yes
+        echo ""
+
+        # VirtFusion Configuration
+        echo -e "${BLUE}━━━ 3. VirtFusion Configuration ━━━${NC}"
+        echo ""
+        
+        # Use pre-configured VirtFusion URL if available
+        if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
+            echo -e "VirtFusion Panel URL: ${GREEN}$PRECONFIGURED_VIRTFUSION_URL${NC} (pre-configured)"
+            VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
+        else
+            interactive_read "VirtFusion Panel URL (e.g., https://panel.example.com): " VIRTFUSION_PANEL_URL
+        fi
+        
+        echo ""
+        echo "Get your API token from: VirtFusion Admin Panel > Settings > API"
+        interactive_read "VirtFusion API Token: " VIRTFUSION_API_TOKEN yes
+        echo ""
+
+        # SSL Email
+        echo -e "${BLUE}━━━ 4. SSL Certificate ━━━${NC}"
+        echo ""
+        if interactive_confirm "Set up SSL with Let's Encrypt? (Y/n): "; then
+            SETUP_SSL="yes"
+            interactive_read "Email for SSL certificate notifications: " SSL_EMAIL
+        else
+            SETUP_SSL="no"
+            SSL_EMAIL=""
+        fi
+        echo ""
+
+        log_info "Configuration collected successfully"
+        echo ""
+        echo -e "${CYAN}━━━ Configuration Summary ━━━${NC}"
+        echo "  Panel Domain: $PANEL_DOMAIN"
+        echo "  Auth0 Domain: $AUTH0_DOMAIN"
+        echo "  VirtFusion URL: $VIRTFUSION_PANEL_URL"
+        echo "  SSL Setup: $SETUP_SSL"
+        echo ""
+        
+        if ! interactive_confirm "Proceed with installation? (Y/n): "; then
+            log_info "Installation cancelled"
+            exit 0
+        fi
+        echo ""
     }
 
     # Install Node.js
@@ -183,71 +313,13 @@ main() {
         log_info "Application setup complete"
     }
 
-    # Configure environment
-    configure_environment() {
-        log_step "Configuring environment..."
+    # Write environment file
+    write_environment() {
+        log_step "Writing environment configuration..."
 
         ENV_FILE="$INSTALL_DIR/.env"
 
-        if [[ -f "$ENV_FILE" ]]; then
-            log_info "Environment file already exists. Skipping configuration."
-            log_info "Edit $ENV_FILE to update your settings."
-            return 0
-        fi
-
-        echo ""
-        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║                    Configuration Setup                       ║${NC}"
-        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-
-        # Panel Domain Configuration (for Nginx)
-        echo -e "${BLUE}━━━ Panel Domain Configuration ━━━${NC}"
-        echo ""
-        echo "This is the domain where YOUR OzVPS Panel will be accessible."
-        echo "Example: panel.yourdomain.com or vps.yourdomain.com"
-        echo ""
-        read -p "Panel Domain (where users will access your panel): " PANEL_DOMAIN
-        
-        if [[ -z "$PANEL_DOMAIN" ]]; then
-            log_error "Panel domain is required"
-            exit 1
-        fi
-        
-        echo ""
-
-        # Auth0 Configuration
-        echo -e "${BLUE}━━━ Auth0 Configuration ━━━${NC}"
-        echo ""
-        echo "Auth0 is used for user login/registration."
-        echo "Get these from: https://manage.auth0.com/ > Applications > Your App > Settings"
-        echo ""
-        read -p "Auth0 Domain (e.g., your-tenant.auth0.com): " AUTH0_DOMAIN
-        read -p "Auth0 Client ID: " AUTH0_CLIENT_ID
-        read -sp "Auth0 Client Secret: " AUTH0_CLIENT_SECRET
-        echo ""
-        echo ""
-
-        # VirtFusion Configuration
-        echo -e "${BLUE}━━━ VirtFusion Configuration ━━━${NC}"
-        echo ""
-        echo "VirtFusion is the backend for managing VPS servers."
-        
-        # Use pre-configured VirtFusion URL if available
-        if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
-            echo -e "VirtFusion Panel URL: ${GREEN}$PRECONFIGURED_VIRTFUSION_URL${NC} (pre-configured)"
-            VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
-        else
-            read -p "VirtFusion Panel URL (e.g., https://panel.example.com): " VIRTFUSION_PANEL_URL
-        fi
-        
-        echo ""
-        echo "Get your API token from: VirtFusion Admin Panel > Settings > API"
-        read -sp "VirtFusion API Token: " VIRTFUSION_API_TOKEN
-        echo ""
-        echo ""
-
-        # Create .env file
+        # Create .env file with collected configuration
         cat > "$ENV_FILE" << EOF
 # Auth0 Configuration
 AUTH0_DOMAIN=$AUTH0_DOMAIN
@@ -264,10 +336,11 @@ PORT=5000
 EOF
 
         chmod 600 "$ENV_FILE"
-        log_info "Environment configured successfully"
-
+        
         # Save domain for nginx config
         echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
+        
+        log_info "Environment configured successfully"
     }
 
     # Build application
@@ -281,15 +354,6 @@ EOF
     # Configure Nginx
     configure_nginx() {
         log_step "Configuring Nginx..."
-
-        PANEL_DOMAIN=$(cat "$INSTALL_DIR/.panel_domain" 2>/dev/null || echo "")
-
-        if [[ -z "$PANEL_DOMAIN" ]]; then
-            echo ""
-            echo "This is the domain where YOUR OzVPS Panel will be accessible."
-            read -p "Panel Domain (e.g., panel.yourdomain.com): " PANEL_DOMAIN
-            echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
-        fi
 
         NGINX_CONF="/etc/nginx/sites-available/$SERVICE_NAME"
 
@@ -337,12 +401,8 @@ EOF
         log_info "Nginx configured for: $PANEL_DOMAIN"
 
         # SSL Certificate
-        echo ""
-        read -p "Would you like to set up SSL with Let's Encrypt? (Y/n): " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        if [[ "$SETUP_SSL" == "yes" && -n "$SSL_EMAIL" ]]; then
             log_step "Setting up SSL certificate..."
-            read -p "Enter your email for SSL certificate notifications: " SSL_EMAIL
             certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" || {
                 log_warn "Certbot failed. You can run it manually later:"
                 log_info "  sudo certbot --nginx -d $PANEL_DOMAIN"
@@ -384,10 +444,12 @@ EOF
     # Main installation flow
     check_root
     detect_os
+    collect_configuration      # Get all config FIRST
+    disable_firewall           # Disable firewall early
     install_nodejs
     install_dependencies
     setup_application
-    configure_environment
+    write_environment          # Write env after collecting config
     build_application
     configure_nginx
     start_application
@@ -401,9 +463,11 @@ EOF
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    PANEL_DOMAIN=$(cat "$INSTALL_DIR/.panel_domain" 2>/dev/null || echo "your-domain.com")
-    
-    echo -e "${CYAN}Access your panel at:${NC} https://$PANEL_DOMAIN"
+    if [[ "$SETUP_SSL" == "yes" ]]; then
+        echo -e "${CYAN}Access your panel at:${NC} https://$PANEL_DOMAIN"
+    else
+        echo -e "${CYAN}Access your panel at:${NC} http://$PANEL_DOMAIN"
+    fi
     echo ""
     echo -e "${YELLOW}Useful Commands:${NC}"
     echo "  pm2 logs $SERVICE_NAME     - View application logs"
