@@ -267,6 +267,14 @@ export async function registerRoutes(
       if (result.errors.length > 0) {
         result.errors.forEach(err => log(`Plan seed error: ${err}`, 'startup'));
       }
+      
+      // Log available hypervisor groups on startup
+      try {
+        const hypervisorGroups = await virtfusionClient.getHypervisorGroups();
+        log(`VirtFusion hypervisor groups: ${JSON.stringify(hypervisorGroups)}`, 'startup');
+      } catch (hgErr) {
+        log(`Could not fetch hypervisor groups: ${hgErr}`, 'startup');
+      }
     } catch (error: any) {
       log(`Failed to seed plans: ${error.message}`, 'startup');
     }
@@ -1170,13 +1178,28 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get VirtFusion hypervisor groups (for debugging)
+  app.get('/api/admin/hypervisor-groups', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const groups = await virtfusionClient.getHypervisorGroups();
+      log(`Admin fetched hypervisor groups: ${JSON.stringify(groups)}`, 'admin');
+      res.json({ groups });
+    } catch (error: any) {
+      log(`Error fetching hypervisor groups: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch hypervisor groups' });
+    }
+  });
+
   // ================== Wallet & Deploy Routes ==================
 
   // Location to hypervisor group mapping
   // NOTE: Update these IDs to match your VirtFusion hypervisor groups
   const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 1, enabled: true },
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 3, enabled: false },
   };
 
   // Get available locations

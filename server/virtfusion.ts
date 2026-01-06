@@ -1182,6 +1182,23 @@ export class VirtFusionClient {
     }
   }
 
+  // Get hypervisor groups from VirtFusion
+  async getHypervisorGroups(): Promise<Array<{ id: number; name: string; enabled: boolean }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/hypervisorGroups');
+      const groups = response.data || [];
+      log(`Fetched ${groups.length} hypervisor groups from VirtFusion`, 'virtfusion');
+      return groups.map(g => ({
+        id: g.id,
+        name: g.name || `Group ${g.id}`,
+        enabled: g.enabled !== false,
+      }));
+    } catch (error) {
+      log(`Failed to fetch hypervisor groups: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
   // Get all packages from VirtFusion for syncing to local plans table
   async getPackages(): Promise<Array<{
     id: number;
