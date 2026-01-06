@@ -1,4 +1,6 @@
-import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, uuid, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Maps Auth0 users to VirtFusion users
@@ -45,6 +47,93 @@ export const userFlags = pgTable("user_flags", {
   blockedAt: timestamp("blocked_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Plans table - VPS packages available for deployment
+export const plans = pgTable("plans", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  vcpu: integer("vcpu").notNull(),
+  ramMb: integer("ram_mb").notNull(),
+  storageGb: integer("storage_gb").notNull(),
+  transferGb: integer("transfer_gb").notNull(),
+  priceMonthly: integer("price_monthly_cents").notNull(),
+  virtfusionPackageId: integer("virtfusion_package_id"),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Wallets table - user account balance
+export const wallets = pgTable("wallets", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull().unique(),
+  balanceCents: integer("balance_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Wallet transactions - credits, debits, refunds
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  type: text("type").notNull(), // topup, debit, refund, adjustment
+  amountCents: integer("amount_cents").notNull(), // signed: positive for credits, negative for debits
+  stripeEventId: text("stripe_event_id").unique(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeSessionId: text("stripe_session_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Deploy orders - server provisioning requests
+export const deployOrders = pgTable("deploy_orders", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  planId: integer("plan_id").notNull(),
+  locationCode: text("location_code").notNull().default("BNE"),
+  hostname: text("hostname"),
+  priceCents: integer("price_cents").notNull(),
+  status: text("status").notNull().default("pending_payment"), // pending_payment, paid, provisioning, active, failed, cancelled
+  virtfusionServerId: integer("virtfusion_server_id"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations
+export const walletsRelations = relations(wallets, ({ many }) => ({
+  transactions: many(walletTransactions),
+}));
+
+export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
+  wallet: one(wallets, {
+    fields: [walletTransactions.auth0UserId],
+    references: [wallets.auth0UserId],
+  }),
+}));
+
+export const deployOrdersRelations = relations(deployOrders, ({ one }) => ({
+  plan: one(plans, {
+    fields: [deployOrders.planId],
+    references: [plans.id],
+  }),
+}));
+
+// Insert schemas
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
+export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
+export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Types
+export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
+export type DeployOrder = typeof deployOrders.$inferSelect;
+export type InsertDeployOrder = z.infer<typeof insertDeployOrderSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
