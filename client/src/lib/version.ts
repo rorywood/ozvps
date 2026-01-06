@@ -21,6 +21,8 @@ export const VERSION_HISTORY = [
     changes: [
       "Improved login page spacing",
       "Fixed login page background color",
+      "Replaced favicon with OzVPS logo",
+      "Removed third-party branding from codebase",
     ],
   },
   {
