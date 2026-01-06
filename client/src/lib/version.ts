@@ -23,6 +23,7 @@ export const VERSION_HISTORY = [
       "Security: Firewall now opens specific ports (22, 80, 443) instead of disabling",
       "Security: HTTPS-only enforcement for update downloads",
       "Update script now includes version identifier",
+      "Removed public registration - login only",
     ],
   },
   {
