@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# OzVPS Panel Installation Script
-# Usage: curl -fsSL https://your-app.replit.app/install.sh | sudo bash
-# Or: sudo bash <(curl -fsSL https://your-app.replit.app/install.sh)
-
 set -e
 set -u
 set -o pipefail
@@ -22,231 +18,152 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
-# Guard against incomplete download
+# Spinner
+SPINNER='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+
 main() {
-    echo -e "${CYAN}"
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║                                                              ║"
-    echo "║              OzVPS Panel Installation Script                 ║"
-    echo "║                                                              ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
-    echo -e "${NC}"
-    echo ""
-
-    log_info() {
-        echo -e "${GREEN}[INFO]${NC} $1"
+    show_header() {
+        clear
+        echo ""
+        echo -e "${CYAN}┌─────────────────────────────────────────┐${NC}"
+        echo -e "${CYAN}│${NC}  ${BOLD}OzVPS Panel${NC} ${DIM}Installer${NC}                  ${CYAN}│${NC}"
+        echo -e "${CYAN}└─────────────────────────────────────────┘${NC}"
+        echo ""
     }
 
-    log_warn() {
-        echo -e "${YELLOW}[WARN]${NC} $1"
-    }
-
-    log_error() {
-        echo -e "${RED}[ERROR]${NC} $1" >&2
-    }
-
-    log_step() {
-        echo -e "${BLUE}[STEP]${NC} $1"
-    }
-
-    # Interactive read function that works when piped from curl
-    interactive_read() {
-        local prompt="$1"
-        local var_name="$2"
-        local is_secret="${3:-no}"
-        
-        if [[ "$is_secret" == "yes" ]]; then
-            read -sp "$prompt" "$var_name" < /dev/tty
-            echo ""
+    spinner() {
+        local pid=$1
+        local msg=$2
+        local i=0
+        while kill -0 $pid 2>/dev/null; do
+            printf "\r  ${CYAN}${SPINNER:i++%${#SPINNER}:1}${NC}  ${msg}"
+            sleep 0.1
+        done
+        wait $pid
+        local exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
+            printf "\r  ${GREEN}✓${NC}  ${msg}\n"
         else
-            read -p "$prompt" "$var_name" < /dev/tty
+            printf "\r  ${RED}✗${NC}  ${msg}\n"
+            return $exit_code
         fi
     }
 
-    # Interactive confirm that works when piped from curl
-    interactive_confirm() {
+    run_step() {
+        local msg=$1
+        shift
+        ("$@" > /dev/null 2>&1) &
+        spinner $! "$msg"
+    }
+
+    error_exit() {
+        echo ""
+        echo -e "  ${RED}✗${NC}  $1"
+        echo ""
+        exit 1
+    }
+
+    input_field() {
+        local prompt=$1
+        local var_name=$2
+        local is_secret="${3:-no}"
+        
+        if [[ "$is_secret" == "yes" ]]; then
+            read -sp "  $prompt: " "$var_name" < /dev/tty
+            echo ""
+        else
+            read -p "  $prompt: " "$var_name" < /dev/tty
+        fi
+    }
+
+    confirm() {
         local prompt="$1"
         local response
-        read -p "$prompt" -n 1 -r response < /dev/tty
+        read -p "  $prompt " -n 1 -r response < /dev/tty
         echo ""
         [[ "$response" =~ ^[Yy]$ ]]
     }
 
-    # Check if running as root
-    check_root() {
-        if [[ $EUID -ne 0 ]]; then
-            log_error "This script must be run as root or with sudo"
-            log_info "Run: sudo bash install.sh"
-            exit 1
-        fi
-    }
+    show_header
 
-    # Detect OS
-    detect_os() {
-        if [[ -f /etc/os-release ]]; then
-            . /etc/os-release
-            OS=$ID
-            VERSION=$VERSION_ID
-        else
-            log_error "Cannot detect operating system"
-            exit 1
-        fi
+    # Root check
+    if [[ $EUID -ne 0 ]]; then
+        error_exit "Please run as root: ${BOLD}sudo bash install.sh${NC}"
+    fi
 
-        case "$OS" in
-            ubuntu|debian)
-                log_info "Detected OS: $PRETTY_NAME"
-                ;;
-            centos|rhel|rocky|almalinux)
-                log_info "Detected OS: $PRETTY_NAME"
-                ;;
-            *)
-                log_warn "Unsupported OS: $OS. Installation may not work correctly."
-                if interactive_confirm "Continue anyway? (y/N): "; then
-                    :
-                else
-                    exit 1
-                fi
-                ;;
-        esac
-    }
+    # OS detection
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        error_exit "Cannot detect operating system"
+    fi
 
-    # Configure firewall to allow HTTP/HTTPS traffic
-    configure_firewall() {
-        log_step "Configuring firewall..."
-        
-        # Configure UFW (Ubuntu/Debian)
-        if command -v ufw &> /dev/null; then
-            # Enable UFW if not already enabled
-            ufw --force enable 2>/dev/null || true
-            # Allow SSH to prevent lockout
-            ufw allow 22/tcp 2>/dev/null || true
-            # Allow HTTP and HTTPS
-            ufw allow 80/tcp 2>/dev/null || true
-            ufw allow 443/tcp 2>/dev/null || true
-            ufw reload 2>/dev/null || true
-            log_info "UFW: Allowed ports 22, 80, 443"
-        fi
-        
-        # Configure firewalld (CentOS/RHEL)
-        if command -v firewall-cmd &> /dev/null; then
-            # Start firewalld if not running
-            systemctl start firewalld 2>/dev/null || true
-            systemctl enable firewalld 2>/dev/null || true
-            # Allow HTTP and HTTPS
-            firewall-cmd --permanent --add-service=http 2>/dev/null || true
-            firewall-cmd --permanent --add-service=https 2>/dev/null || true
-            firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
-            firewall-cmd --reload 2>/dev/null || true
-            log_info "firewalld: Allowed http, https, ssh"
-        fi
-        
-        # If neither UFW nor firewalld, add iptables rules directly
-        if ! command -v ufw &> /dev/null && ! command -v firewall-cmd &> /dev/null; then
-            if command -v iptables &> /dev/null; then
-                # Allow established connections
-                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-                # Allow SSH
-                iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-                # Allow HTTP/HTTPS
-                iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-                iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-                log_info "iptables: Allowed ports 22, 80, 443"
-            fi
-        fi
-        
-        log_info "Firewall configured - ports 80 and 443 open"
-    }
+    echo -e "  ${DIM}Detected:${NC} $PRETTY_NAME"
+    echo ""
 
-    # Collect all configuration upfront
-    collect_configuration() {
-        log_step "Collecting configuration..."
-        
-        echo ""
-        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║           Please provide the following information           ║${NC}"
-        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
+    # Configuration
+    echo -e "${BOLD}  Configuration${NC}"
+    echo -e "  ${DIM}─────────────────────────────────────${NC}"
+    echo ""
+    
+    echo -e "  ${BLUE}Panel Domain${NC} ${DIM}(where your panel will be accessible)${NC}"
+    input_field "Domain" PANEL_DOMAIN
+    [[ -z "$PANEL_DOMAIN" ]] && error_exit "Domain is required"
+    echo ""
 
-        # Panel Domain Configuration (for Nginx)
-        echo -e "${BLUE}━━━ 1. Panel Domain (for Nginx) ━━━${NC}"
-        echo ""
-        echo "This is the domain where YOUR OzVPS Panel will be accessible."
-        echo "Example: panel.yourdomain.com or vps.yourdomain.com"
-        echo ""
-        interactive_read "Enter your panel domain: " PANEL_DOMAIN
-        
-        if [[ -z "$PANEL_DOMAIN" ]]; then
-            log_error "Panel domain is required"
-            exit 1
-        fi
-        echo ""
+    echo -e "  ${BLUE}Auth0${NC} ${DIM}(from manage.auth0.com)${NC}"
+    input_field "Domain" AUTH0_DOMAIN
+    input_field "Client ID" AUTH0_CLIENT_ID
+    input_field "Client Secret" AUTH0_CLIENT_SECRET yes
+    echo ""
 
-        # Auth0 Configuration
-        echo -e "${BLUE}━━━ 2. Auth0 Configuration ━━━${NC}"
-        echo ""
-        echo "Auth0 is used for user login/registration."
-        echo "Get these from: https://manage.auth0.com/ > Applications > Your App"
-        echo ""
-        interactive_read "Auth0 Domain (e.g., your-tenant.auth0.com): " AUTH0_DOMAIN
-        interactive_read "Auth0 Client ID: " AUTH0_CLIENT_ID
-        interactive_read "Auth0 Client Secret: " AUTH0_CLIENT_SECRET yes
-        echo ""
+    echo -e "  ${BLUE}VirtFusion${NC}"
+    if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
+        echo -e "  ${DIM}Panel URL:${NC} $PRECONFIGURED_VIRTFUSION_URL"
+        VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
+    else
+        input_field "Panel URL" VIRTFUSION_PANEL_URL
+    fi
+    input_field "API Token" VIRTFUSION_API_TOKEN yes
+    echo ""
 
-        # VirtFusion Configuration
-        echo -e "${BLUE}━━━ 3. VirtFusion Configuration ━━━${NC}"
-        echo ""
-        
-        # Use pre-configured VirtFusion URL if available
-        if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
-            echo -e "VirtFusion Panel URL: ${GREEN}$PRECONFIGURED_VIRTFUSION_URL${NC} (pre-configured)"
-            VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
-        else
-            interactive_read "VirtFusion Panel URL (e.g., https://panel.example.com): " VIRTFUSION_PANEL_URL
-        fi
-        
-        echo ""
-        echo "Get your API token from: VirtFusion Admin Panel > Settings > API"
-        interactive_read "VirtFusion API Token: " VIRTFUSION_API_TOKEN yes
-        echo ""
+    echo -e "  ${BLUE}SSL Certificate${NC}"
+    if confirm "Setup SSL with Let's Encrypt? (Y/n):"; then
+        SETUP_SSL="yes"
+        input_field "Email for SSL" SSL_EMAIL
+    else
+        SETUP_SSL="no"
+        SSL_EMAIL=""
+    fi
+    echo ""
 
-        # SSL Email
-        echo -e "${BLUE}━━━ 4. SSL Certificate ━━━${NC}"
-        echo ""
-        if interactive_confirm "Set up SSL with Let's Encrypt? (Y/n): "; then
-            SETUP_SSL="yes"
-            interactive_read "Email for SSL certificate notifications: " SSL_EMAIL
-        else
-            SETUP_SSL="no"
-            SSL_EMAIL=""
-        fi
-        echo ""
+    # Summary
+    echo -e "  ${DIM}─────────────────────────────────────${NC}"
+    echo -e "  ${DIM}Domain:${NC}      $PANEL_DOMAIN"
+    echo -e "  ${DIM}Auth0:${NC}       $AUTH0_DOMAIN"
+    echo -e "  ${DIM}VirtFusion:${NC}  $VIRTFUSION_PANEL_URL"
+    echo -e "  ${DIM}SSL:${NC}         $SETUP_SSL"
+    echo ""
 
-        log_info "Configuration collected successfully"
-        echo ""
-        echo -e "${CYAN}━━━ Configuration Summary ━━━${NC}"
-        echo "  Panel Domain: $PANEL_DOMAIN"
-        echo "  Auth0 Domain: $AUTH0_DOMAIN"
-        echo "  VirtFusion URL: $VIRTFUSION_PANEL_URL"
-        echo "  SSL Setup: $SETUP_SSL"
-        echo ""
-        
-        if ! interactive_confirm "Proceed with installation? (Y/n): "; then
-            log_info "Installation cancelled"
-            exit 0
-        fi
-        echo ""
-    }
+    if ! confirm "Continue with installation? (Y/n):"; then
+        echo "  Installation cancelled."
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${BOLD}  Installing...${NC}"
+    echo ""
 
     # Install Node.js
     install_nodejs() {
-        log_step "Installing Node.js ${NODE_VERSION}.x..."
-
         if command -v node &> /dev/null; then
-            CURRENT_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-            if [[ "$CURRENT_VERSION" -ge "$NODE_VERSION" ]]; then
-                log_info "Node.js v$(node --version | cut -d'v' -f2) already installed"
+            CURRENT=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+            if [[ "$CURRENT" -ge "$NODE_VERSION" ]]; then
                 return 0
             fi
         fi
@@ -260,20 +177,13 @@ main() {
                 curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash -
                 yum install -y nodejs
                 ;;
-            *)
-                log_error "Cannot install Node.js on this OS automatically"
-                log_info "Please install Node.js ${NODE_VERSION}.x manually and re-run this script"
-                exit 1
-                ;;
         esac
-
-        log_info "Node.js $(node --version) installed successfully"
     }
 
-    # Install dependencies
-    install_dependencies() {
-        log_step "Installing system dependencies..."
+    run_step "Installing Node.js" install_nodejs
 
+    # Dependencies
+    install_deps() {
         case "$OS" in
             ubuntu|debian)
                 apt-get update
@@ -283,115 +193,92 @@ main() {
                 yum install -y git curl nginx certbot python3-certbot-nginx epel-release
                 ;;
         esac
-
-        # Install PM2 globally
         npm install -g pm2
-        log_info "Dependencies installed successfully"
     }
 
-    # Download and extract application
-    setup_application() {
-        log_step "Setting up OzVPS Panel..."
+    run_step "Installing dependencies" install_deps
 
-        # Use pre-configured download URL if available
-        if [[ -z "$DOWNLOAD_URL" ]]; then
-            log_error "No download URL configured. This script should be downloaded from your Replit app."
-            log_info "Please run: curl -fsSL https://your-replit-app.replit.app/install.sh | sudo bash"
-            exit 1
+    # Firewall
+    configure_fw() {
+        if command -v ufw &> /dev/null; then
+            ufw --force enable 2>/dev/null || true
+            ufw allow 22/tcp 2>/dev/null || true
+            ufw allow 80/tcp 2>/dev/null || true
+            ufw allow 443/tcp 2>/dev/null || true
+            ufw reload 2>/dev/null || true
+        elif command -v firewall-cmd &> /dev/null; then
+            systemctl start firewalld 2>/dev/null || true
+            firewall-cmd --permanent --add-service=http 2>/dev/null || true
+            firewall-cmd --permanent --add-service=https 2>/dev/null || true
+            firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
+            firewall-cmd --reload 2>/dev/null || true
         fi
+    }
 
-        # Create install directory
-        mkdir -p "$INSTALL_DIR"
-        cd "$INSTALL_DIR"
+    run_step "Configuring firewall" configure_fw
 
-        # Check for existing installation
-        if [[ -f "$INSTALL_DIR/package.json" ]]; then
-            log_info "Existing installation found. Backing up..."
-            BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-            mv "$INSTALL_DIR" "$BACKUP_DIR" 2>/dev/null || true
-            mkdir -p "$INSTALL_DIR"
-            cd "$INSTALL_DIR"
-            log_info "Backup saved to: $BACKUP_DIR"
-        fi
+    # Download
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        error_exit "No download URL. Run from your Replit app."
+    fi
 
-        log_info "Downloading OzVPS Panel..."
-        
-        # Download and extract
-        if ! curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-panel.tar.gz; then
-            log_error "Failed to download OzVPS Panel"
-            log_info "Please check that your Replit app is running and try again"
-            exit 1
-        fi
-
-        log_info "Extracting application..."
+    mkdir -p "$INSTALL_DIR"
+    
+    download_app() {
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-panel.tar.gz
         tar -xzf /tmp/ozvps-panel.tar.gz -C "$INSTALL_DIR"
         rm -f /tmp/ozvps-panel.tar.gz
-
-        # Fix: Remove broken bad-words package
-        log_info "Applying compatibility fixes..."
-        
-        # Remove bad-words package (it has ESM/CJS compatibility issues)
-        if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
-            cd "$INSTALL_DIR"
-            npm uninstall bad-words 2>/dev/null || true
-            log_info "Removed incompatible bad-words package"
-        fi
-
-        log_info "Installing npm dependencies..."
-        npm install
-
-        log_info "Application setup complete"
     }
 
-    # Write environment file
-    write_environment() {
-        log_step "Writing environment configuration..."
+    run_step "Downloading OzVPS Panel" download_app
 
-        ENV_FILE="$INSTALL_DIR/.env"
-
-        # Create .env file with collected configuration
-        cat > "$ENV_FILE" << EOF
-# Auth0 Configuration
+    # Environment
+    write_env() {
+        cat > "$INSTALL_DIR/.env" << EOF
 AUTH0_DOMAIN=$AUTH0_DOMAIN
 AUTH0_CLIENT_ID=$AUTH0_CLIENT_ID
 AUTH0_CLIENT_SECRET=$AUTH0_CLIENT_SECRET
-
-# VirtFusion Configuration
 VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
 VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
-
-# Application Settings
 NODE_ENV=production
 PORT=5000
 EOF
-
-        chmod 600 "$ENV_FILE"
-        
-        # Save domain for nginx config
+        chmod 600 "$INSTALL_DIR/.env"
         echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
-        
-        log_info "Environment configured successfully"
     }
 
-    # Build application
-    build_application() {
-        log_step "Building application..."
-        cd "$INSTALL_DIR"
-        npm run build
-        log_info "Application built successfully"
-    }
+    run_step "Writing configuration" write_env
 
-    # Configure Nginx
+    # Remove bad-words package if present (has ESM/CJS issues)
+    if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
+        (cd "$INSTALL_DIR" && npm uninstall bad-words 2>/dev/null || true) &
+        spinner $! "Removing incompatible packages"
+    fi
+
+    # NPM install
+    echo -e "  ${CYAN}○${NC}  Installing npm packages..."
+    cd "$INSTALL_DIR"
+    if ! npm install 2>/tmp/npm-error.log; then
+        echo -e "\r  ${RED}✗${NC}  Installing npm packages"
+        cat /tmp/npm-error.log
+        exit 1
+    fi
+    echo -e "\r  ${GREEN}✓${NC}  Installing npm packages"
+
+    # Build
+    echo -e "  ${CYAN}○${NC}  Building application..."
+    if ! npm run build 2>/tmp/build-error.log; then
+        echo -e "\r  ${RED}✗${NC}  Building application"
+        cat /tmp/build-error.log
+        exit 1
+    fi
+    echo -e "\r  ${GREEN}✓${NC}  Building application"
+
+    # Nginx
     configure_nginx() {
-        log_step "Configuring Nginx..."
+        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
-        NGINX_CONF="/etc/nginx/sites-available/$SERVICE_NAME"
-
-        # Create sites-available directory if it doesn't exist (CentOS/RHEL)
-        mkdir -p /etc/nginx/sites-available
-        mkdir -p /etc/nginx/sites-enabled
-
-        cat > "$NGINX_CONF" << EOF
+        cat > "/etc/nginx/sites-available/$SERVICE_NAME" << EOF
 server {
     listen 80;
     server_name $PANEL_DOMAIN;
@@ -412,168 +299,97 @@ server {
 }
 EOF
 
-        # Enable site
-        ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+        ln -sf "/etc/nginx/sites-available/$SERVICE_NAME" /etc/nginx/sites-enabled/
         rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
-        # For CentOS/RHEL, include sites-enabled in nginx.conf if not already
         if [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
             if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
                 sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
             fi
         fi
 
-        # Test and reload nginx
         nginx -t
         systemctl reload nginx
         systemctl enable nginx
-
-        log_info "Nginx configured for: $PANEL_DOMAIN"
-
-        # SSL Certificate
-        if [[ "$SETUP_SSL" == "yes" && -n "$SSL_EMAIL" ]]; then
-            log_step "Setting up SSL certificate..."
-            certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" || {
-                log_warn "Certbot failed. You can run it manually later:"
-                log_info "  sudo certbot --nginx -d $PANEL_DOMAIN"
-            }
-        fi
     }
 
-    # Start application with PM2
-    start_application() {
-        log_step "Starting application with PM2..."
-        cd "$INSTALL_DIR"
+    run_step "Configuring Nginx" configure_nginx
 
-        # Stop existing instance if running
+    # SSL
+    if [[ "$SETUP_SSL" == "yes" && -n "$SSL_EMAIL" ]]; then
+        (certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" 2>/dev/null) &
+        spinner $! "Setting up SSL certificate" || echo -e "  ${YELLOW}!${NC}  SSL setup failed - run manually: certbot --nginx -d $PANEL_DOMAIN"
+    fi
+
+    # PM2
+    start_pm2() {
+        cd "$INSTALL_DIR"
         pm2 delete "$SERVICE_NAME" 2>/dev/null || true
 
-        # Create PM2 ecosystem config that loads .env file
-        cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'EOFCONFIG'
+        cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
 const fs = require('fs');
 const path = require('path');
-
-// Load .env file manually
 const envPath = path.join(__dirname, '.env');
 const envVars = {};
-
 if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  envContent.split('\n').forEach(line => {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
     line = line.trim();
     if (line && !line.startsWith('#')) {
-      const [key, ...valueParts] = line.split('=');
-      if (key) {
-        envVars[key.trim()] = valueParts.join('=').trim();
-      }
+      const [key, ...val] = line.split('=');
+      if (key) envVars[key.trim()] = val.join('=').trim();
     }
   });
 }
-
 module.exports = {
   apps: [{
     name: 'ozvps-panel',
     script: 'npm',
     args: 'start',
     cwd: __dirname,
-    env: {
-      NODE_ENV: 'production',
-      ...envVars
-    },
-    watch: false,
+    env: { NODE_ENV: 'production', ...envVars },
     autorestart: true,
-    max_restarts: 10,
-    restart_delay: 5000
+    max_restarts: 10
   }]
 };
-EOFCONFIG
+PMEOF
 
-        # Start with ecosystem config
         pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
-
-        # Save PM2 configuration
         pm2 save
-
-        # Setup startup script
-        pm2 startup systemd -u root --hp /root || true
-
-        log_info "Application started successfully"
+        pm2 startup systemd -u root --hp /root 2>/dev/null || true
     }
 
-    # Install update script
-    install_update_script() {
-        log_step "Installing update command..."
-        
-        # Download and install the update script
-        UPDATE_SCRIPT_URL="${DOWNLOAD_URL%/download.tar.gz}/update-ozvps.sh"
-        
-        if curl -fsSL "$UPDATE_SCRIPT_URL" -o /usr/local/bin/update-ozvps 2>/dev/null; then
-            chmod +x /usr/local/bin/update-ozvps
-            
-            # Save Replit URL for future updates
-            REPLIT_BASE_URL="${DOWNLOAD_URL%/download.tar.gz}"
-            echo "REPLIT_URL=\"$REPLIT_BASE_URL\"" > "$INSTALL_DIR/.update_config"
-            chmod 600 "$INSTALL_DIR/.update_config"
-            
-            log_info "Update command installed: update-ozvps"
-        else
-            log_warn "Could not install update command (non-critical)"
-        fi
+    run_step "Starting application" start_pm2
+
+    # Update command
+    install_update() {
+        UPDATE_URL="${DOWNLOAD_URL%/download.tar.gz}/update-ozvps.sh"
+        curl -fsSL "$UPDATE_URL" -o /usr/local/bin/update-ozvps 2>/dev/null || return 0
+        chmod +x /usr/local/bin/update-ozvps
+        REPLIT_BASE="${DOWNLOAD_URL%/download.tar.gz}"
+        echo "REPLIT_URL=\"$REPLIT_BASE\"" > "$INSTALL_DIR/.update_config"
+        chmod 600 "$INSTALL_DIR/.update_config"
     }
 
-    # Cleanup on error
-    cleanup() {
-        if [[ $? -ne 0 ]]; then
-            log_error "Installation failed!"
-            log_info "Check the error messages above for details."
-            log_info "You can re-run this script after fixing any issues."
-        fi
-    }
+    run_step "Installing update command" install_update
 
-    trap cleanup EXIT
-
-    # Main installation flow
-    check_root
-    detect_os
-    collect_configuration      # Get all config FIRST
-    configure_firewall         # Configure firewall to allow HTTP/HTTPS
-    install_nodejs
-    install_dependencies
-    setup_application
-    write_environment          # Write env after collecting config
-    build_application
-    configure_nginx
-    start_application
-    install_update_script      # Install update command for easy updates
-
-    # Success message
+    # Done
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                                                              ║${NC}"
-    echo -e "${GREEN}║          OzVPS Panel Installed Successfully!                 ║${NC}"
-    echo -e "${GREEN}║                                                              ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"
+    echo -e "${GREEN}│${NC}  ${BOLD}Installation Complete!${NC}                 ${GREEN}│${NC}"
+    echo -e "${GREEN}└─────────────────────────────────────────┘${NC}"
     echo ""
     
     if [[ "$SETUP_SSL" == "yes" ]]; then
-        echo -e "${CYAN}Access your panel at:${NC} https://$PANEL_DOMAIN"
+        echo -e "  ${BOLD}Panel URL:${NC} https://$PANEL_DOMAIN"
     else
-        echo -e "${CYAN}Access your panel at:${NC} http://$PANEL_DOMAIN"
+        echo -e "  ${BOLD}Panel URL:${NC} http://$PANEL_DOMAIN"
     fi
     echo ""
-    echo -e "${YELLOW}Useful Commands:${NC}"
-    echo "  update-ozvps               - Update to latest version"
-    echo "  pm2 logs $SERVICE_NAME     - View application logs"
-    echo "  pm2 restart $SERVICE_NAME  - Restart the application"
-    echo "  pm2 status                 - Check PM2 status"
-    echo ""
-    echo -e "${YELLOW}Configuration:${NC}"
-    echo "  Environment file: $INSTALL_DIR/.env"
-    echo "  Nginx config: /etc/nginx/sites-available/$SERVICE_NAME"
-    echo ""
-    echo -e "${GREEN}To update the panel later, just run: update-ozvps${NC}"
+    echo -e "  ${DIM}Update:${NC}  update-ozvps"
+    echo -e "  ${DIM}Logs:${NC}    pm2 logs $SERVICE_NAME"
+    echo -e "  ${DIM}Status:${NC}  pm2 status"
+    echo -e "  ${DIM}Config:${NC}  $INSTALL_DIR/.env"
     echo ""
 }
 
-# Execute main function
 main "$@"
