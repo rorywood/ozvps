@@ -56,6 +56,7 @@ Preferred communication style: Simple, everyday language.
   - **Hostname validation**: 1-63 characters, lowercase letters/numbers/hyphens, no leading/trailing hyphens
   - **Filtered templates**: GET `/api/servers/:id/reinstall/templates` returns only allowed templates
   - **Backend enforcement**: POST `/reinstall` validates hostname (400) and template ID (403)
+  - **VirtFusion API**: Only send `operatingSystemId` in request body - VirtFusion auto-generates password
   - **Progress tracking**: Real polling of VirtFusion build status with sessionStorage persistence
   - **Console lock**: 15-second lock after reinstall starts to prevent console access during boot
 - **VirtFusion API**: Bearer token authentication for backend communication
