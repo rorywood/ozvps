@@ -163,6 +163,21 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       }
     }
 
+    // Verify Auth0 user still exists (with caching to avoid excessive API calls)
+    if (session.auth0UserId) {
+      const userExists = await auth0Client.userExists(session.auth0UserId);
+      if (!userExists) {
+        // User was deleted from Auth0 - revoke all their sessions
+        await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_DELETED);
+        res.clearCookie(SESSION_COOKIE);
+        log(`Auth0 user ${session.auth0UserId} deleted - revoking sessions`, 'auth0');
+        return res.status(401).json({ 
+          error: 'Your account no longer exists. Please contact support if this is unexpected.',
+          code: 'USER_DELETED'
+        });
+      }
+    }
+
     req.userSession = {
       id: session.id,
       userId: session.userId ?? 0,

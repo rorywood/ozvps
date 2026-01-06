@@ -30,6 +30,8 @@ class Auth0Client {
   private baseUrl: string;
   private managementToken: string | null = null;
   private managementTokenExpiry: number = 0;
+  private userExistsCache: Map<string, { exists: boolean; checkedAt: number }> = new Map();
+  private readonly USER_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     if (!AUTH0_DOMAIN) {
@@ -282,6 +284,48 @@ class Auth0Client {
   async isUserAdmin(auth0UserId: string): Promise<boolean> {
     const user = await this.getUserById(auth0UserId);
     return user?.app_metadata?.is_admin === true;
+  }
+
+  async userExists(auth0UserId: string): Promise<boolean> {
+    // Check cache first
+    const cached = this.userExistsCache.get(auth0UserId);
+    if (cached && Date.now() - cached.checkedAt < this.USER_EXISTS_CACHE_TTL_MS) {
+      return cached.exists;
+    }
+
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          headers: { Authorization: `Bearer ${managementToken}` },
+        }
+      );
+
+      if (response.status === 404) {
+        log(`Auth0 user ${auth0UserId} not found (deleted)`, 'auth0');
+        this.userExistsCache.set(auth0UserId, { exists: false, checkedAt: Date.now() });
+        return false;
+      }
+
+      if (!response.ok) {
+        log(`Auth0 user existence check failed: ${response.status}`, 'auth0');
+        // On error, assume user exists to avoid false positives
+        return true;
+      }
+
+      this.userExistsCache.set(auth0UserId, { exists: true, checkedAt: Date.now() });
+      return true;
+    } catch (error: any) {
+      log(`Auth0 user existence check error: ${error.message}`, 'auth0');
+      // On network error, assume user exists to avoid false positives
+      return true;
+    }
+  }
+
+  invalidateUserExistsCache(auth0UserId: string): void {
+    this.userExistsCache.delete(auth0UserId);
   }
 
   async changePassword(auth0UserId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
