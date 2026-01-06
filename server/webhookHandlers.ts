@@ -17,15 +17,19 @@ export class WebhookHandlers {
 
     const sync = await getStripeSync();
     
+    // SECURITY: Signature verification is REQUIRED
+    // stripe-replit-sync verifies the webhook signature internally
+    // If verification fails, we MUST NOT process the event
     try {
       await sync.processWebhook(payload, signature);
-      log('stripe-replit-sync processed webhook successfully', 'stripe');
+      log('stripe-replit-sync: signature verified and event processed', 'stripe');
     } catch (syncError: any) {
-      log(`stripe-replit-sync error (non-fatal): ${syncError.message}`, 'stripe');
+      // Signature verification failed - this could be a forged/tampered payload
+      log(`SECURITY: Webhook signature verification failed: ${syncError.message}`, 'stripe');
+      throw new Error('Webhook signature verification failed');
     }
 
-    // Parse the event directly - sync.processWebhook already verified the signature
-    // With managed webhooks, the webhook secret is not exposed externally
+    // Parse the event - only reached if signature verification succeeded
     let event;
     try {
       event = JSON.parse(payload.toString('utf8'));
@@ -34,7 +38,6 @@ export class WebhookHandlers {
       return;
     }
 
-    // Log event details for debugging
     log(`Webhook received: ${event.type} (${event.id}) livemode=${event.livemode}`, 'stripe');
 
     // Handle checkout.session.completed for wallet top-ups
@@ -52,8 +55,27 @@ export class WebhookHandlers {
       // Check if this is a wallet top-up
       if (session.metadata?.type === 'wallet_topup') {
         const auth0UserId = session.metadata.auth0UserId;
-        const amountCents = parseInt(session.metadata.amountCents, 10);
-        const metadataCurrency = session.metadata.currency?.toLowerCase();
+        const sessionCustomerId = session.customer;
+        
+        // SECURITY: Verify the Stripe customer matches the wallet
+        // This prevents crediting the wrong account if metadata was somehow manipulated
+        const wallet = await dbStorage.getWallet(auth0UserId);
+        if (!wallet) {
+          log(`SECURITY: No wallet found for auth0UserId=${auth0UserId}`, 'stripe');
+          return;
+        }
+        
+        if (!wallet.stripeCustomerId) {
+          log(`SECURITY: Wallet has no Stripe customer ID linked for user=${auth0UserId}`, 'stripe');
+          return;
+        }
+        
+        if (wallet.stripeCustomerId !== sessionCustomerId) {
+          log(`SECURITY: Customer ID mismatch! wallet.stripeCustomerId=${wallet.stripeCustomerId}, session.customer=${sessionCustomerId}. Rejecting credit.`, 'stripe');
+          return;
+        }
+        
+        log(`Customer verification passed: ${sessionCustomerId} matches wallet`, 'stripe');
         
         // Validate currency matches expected (AUD)
         if (session.currency?.toLowerCase() !== 'aud') {
@@ -61,38 +83,34 @@ export class WebhookHandlers {
           return;
         }
         
-        // Validate metadata currency if present
-        if (metadataCurrency && metadataCurrency !== 'aud') {
-          log(`Metadata currency mismatch: expected=aud, received=${metadataCurrency}`, 'stripe');
+        // Use session.amount_total as the authoritative source (from Stripe, not metadata)
+        const creditAmount = session.amount_total;
+        
+        if (!creditAmount || creditAmount <= 0) {
+          log(`Invalid credit amount: ${creditAmount}`, 'stripe');
           return;
         }
         
-        // Validate amount matches session amount_total
-        if (session.amount_total && session.amount_total !== amountCents) {
-          log(`Amount mismatch: metadata=${amountCents}, session=${session.amount_total}`, 'stripe');
-          // Use the session amount_total as it's the authoritative source
+        // Validate amount is within acceptable range (500-50000 cents = $5-$500)
+        if (creditAmount < 500 || creditAmount > 50000) {
+          log(`SECURITY: Amount outside valid range: ${creditAmount} cents`, 'stripe');
+          return;
         }
         
-        const creditAmount = session.amount_total || amountCents;
+        log(`Processing wallet top-up: user=${auth0UserId}, amount=${creditAmount} cents, event=${event.id}`, 'stripe');
         
-        if (auth0UserId && creditAmount > 0) {
-          log(`Processing wallet top-up: user=${auth0UserId}, amount=${creditAmount} cents, event=${event.id}`, 'stripe');
+        try {
+          const updatedWallet = await dbStorage.creditWallet(auth0UserId, creditAmount, {
+            type: 'credit',
+            stripeEventId: event.id,
+            stripePaymentIntentId: session.payment_intent,
+            stripeSessionId: session.id,
+          });
           
-          try {
-            const wallet = await dbStorage.creditWallet(auth0UserId, creditAmount, {
-              type: 'credit',
-              stripeEventId: event.id,
-              stripePaymentIntentId: session.payment_intent,
-              stripeSessionId: session.id,
-            });
-            
-            log(`Wallet credited: user=${auth0UserId}, new_balance=${wallet.balanceCents} cents`, 'stripe');
-          } catch (error: any) {
-            log(`Failed to credit wallet: ${error.message}`, 'stripe');
-            throw error;
-          }
-        } else {
-          log(`Invalid top-up data: auth0UserId=${auth0UserId}, creditAmount=${creditAmount}`, 'stripe');
+          log(`Wallet credited: user=${auth0UserId}, new_balance=${updatedWallet.balanceCents} cents`, 'stripe');
+        } catch (error: any) {
+          log(`Failed to credit wallet: ${error.message}`, 'stripe');
+          throw error;
         }
       } else {
         log(`Non-topup checkout completed: type=${session.metadata?.type}`, 'stripe');
