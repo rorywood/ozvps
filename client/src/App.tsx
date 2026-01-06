@@ -11,6 +11,7 @@ import ServerDetail from "@/pages/server-detail";
 import ServerConsole from "@/pages/server-console";
 import Account from "@/pages/account";
 import Order from "@/pages/order";
+import Pricing from "@/pages/pricing";
 import Login from "@/pages/login";
 import SystemError from "@/pages/system-error";
 import { api } from "@/lib/api";
@@ -87,6 +88,9 @@ function Router() {
     <Switch>
       <Route path="/login">
         {auth ? <Redirect to="/dashboard" /> : <Login />}
+      </Route>
+      <Route path="/pricing">
+        <Pricing />
       </Route>
       <Route path="/">
         <AuthGuard>

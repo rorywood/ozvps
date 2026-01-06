@@ -24,6 +24,7 @@ export const VERSION_HISTORY = [
       "Replaced favicon with OzVPS logo",
       "Removed third-party branding from codebase",
       "Added Order page (Coming Soon) to sidebar",
+      "Added public Pricing page for new users (/pricing)",
     ],
   },
   {
