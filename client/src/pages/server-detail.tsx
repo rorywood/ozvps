@@ -38,7 +38,7 @@ import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { OsTemplateRow } from "@/components/os-template-row";
-import { getOsCategory, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
+import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
 import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
 import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
@@ -523,7 +523,12 @@ export default function ServerDetail() {
                 <span className="text-white/80">{server.location.name}</span>
               </div>
               <div className="flex items-center gap-2">
-                <AlignLeft className="h-3.5 w-3.5" />
+                <img 
+                  src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
+                  alt={server.image.name}
+                  className="h-4 w-4 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                />
                 <span className="text-white/80">{server.image.name}</span>
               </div>
             </div>
