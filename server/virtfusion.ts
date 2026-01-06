@@ -838,12 +838,14 @@ export class VirtFusionClient {
       const server = serverData.data;
       
       // VirtFusion may indicate rescue support via flags
-      // Default to true for x86 servers, false for ARM or unsupported types
-      const arch = server.architecture || server.arch || server.settings?.architecture || 'x86_64';
-      const isX86 = arch.toLowerCase().includes('x86') || 
-                    arch.toLowerCase().includes('amd64') || 
-                    arch.toLowerCase() === 'i686' ||
-                    arch.toLowerCase() === 'i386';
+      // Default to true for x86 servers - most VirtFusion servers are x86
+      const rawArch = server.architecture || server.arch || server.settings?.architecture;
+      const arch = (typeof rawArch === 'string' ? rawArch : 'x86_64').toLowerCase();
+      
+      const isX86 = arch.includes('x86') || 
+                    arch.includes('amd64') || 
+                    arch === 'i686' ||
+                    arch === 'i386';
       
       // Check if rescue is explicitly disabled
       const rescueDisabled = server.rescueDisabled === true || 
