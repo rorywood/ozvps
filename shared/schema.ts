@@ -64,9 +64,39 @@ export const reinstallSchema = z.object({
   hostname: hostnameSchema,
 });
 
+// SSH Key schema for validation
+export const sshKeySchema = z.object({
+  name: z.string().min(1, 'Key name is required').max(100, 'Key name must be 100 characters or less'),
+  publicKey: z.string()
+    .min(1, 'Public key is required')
+    .refine(val => {
+      // Validate SSH public key format
+      const keyTypes = ['ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'ssh-dss'];
+      return keyTypes.some(type => val.startsWith(type + ' '));
+    }, 'Invalid SSH public key format. Key must start with ssh-rsa, ssh-ed25519, or ecdsa-sha2-*'),
+});
+
+// SSH Key type for frontend/backend
+export interface SshKey {
+  id: number;
+  name: string;
+  publicKey: string;
+  fingerprint?: string;
+  createdAt?: string;
+}
+
+// Reinstall schema with optional SSH keys
+export const reinstallWithSshSchema = z.object({
+  osId: z.union([z.string(), z.number()]).refine(val => val !== '' && val !== null, 'OS template is required'),
+  hostname: hostnameSchema,
+  sshKeyIds: z.array(z.number()).optional(),
+});
+
 export type User = typeof users.$inferSelect;
 export type UserMapping = typeof userMappings.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ServerNameInput = z.infer<typeof serverNameSchema>;
+export type SshKeyInput = z.infer<typeof sshKeySchema>;
+export type ReinstallWithSshInput = z.infer<typeof reinstallWithSshSchema>;
