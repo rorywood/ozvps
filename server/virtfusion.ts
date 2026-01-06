@@ -671,11 +671,23 @@ export class VirtFusionClient {
       const server = serverResponse.data;
       const serverName = server.name || `Server ${serverId}`;
       
+      // Generate a secure random password (VirtFusion requires password for reinstall)
+      const generatePassword = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 16; i++) {
+          password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+      };
+      const password = generatePassword();
+      
       // Build the request body with all required parameters
-      // VirtFusion API requires: osId (not operatingSystemId)
-      // Optional: hostname, sshKeys, password
+      // VirtFusion API requires: name, operatingSystemId, password
       const body: any = { 
-        osId: osId,
+        name: serverName,
+        operatingSystemId: osId,
+        password: password,
       };
       
       if (hostname) {
@@ -683,13 +695,14 @@ export class VirtFusionClient {
       }
       
       log(`Reinstalling server ${serverId} with OS template ${osId}, hostname: ${hostname || 'not set'}, name: ${serverName}`, 'virtfusion');
-      log(`Reinstall request body: ${JSON.stringify(body)}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      return data.data;
+      
+      // Return the response with the generated password so the UI can show it
+      return { ...data.data, generatedPassword: password };
     } catch (error) {
       log(`Failed to reinstall server ${serverId}: ${error}`, 'virtfusion');
       throw error;
