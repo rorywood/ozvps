@@ -84,6 +84,7 @@ Preferred communication style: Simple, everyday language.
   - **Strict single-session**: Users cannot login if already logged in elsewhere
   - **15-minute idle timeout**: Sessions auto-expire after 15 minutes of inactivity
   - **Session activity tracking**: lastActivityAt updated on each authenticated request
+  - **Auth0 user existence validation**: On each authenticated request, verifies user still exists in Auth0 (5-minute cache TTL). Deleted users have all sessions immediately revoked.
 - **VNC Console Access**: Embedded noVNC viewer using WebSocket connection
   - **Step 1**: Backend enables VNC via POST `/servers/{id}/vnc` with `{ action: 'enable' }`
   - **Step 2**: Backend retrieves WebSocket URL and password from VirtFusion VNC response
