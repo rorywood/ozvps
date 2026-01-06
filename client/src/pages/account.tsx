@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type SshKey } from "@/lib/api";
+import { api } from "@/lib/api";
 import { 
   User, 
   Shield, 
@@ -16,12 +16,7 @@ import {
   Eye,
   EyeOff,
   Mail,
-  Clock,
-  Plus,
-  Trash2,
-  KeyRound,
-  Copy,
-  Check
+  Clock
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -55,22 +50,9 @@ export default function Account() {
   const [showPassword, setShowPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  // SSH Key state
-  const [isAddKeyDialogOpen, setIsAddKeyDialogOpen] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState<SshKey | null>(null);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyPublic, setNewKeyPublic] = useState("");
-  const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
-
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['userProfile'],
     queryFn: () => api.getUserProfile(),
-  });
-  
-  // SSH Keys query
-  const { data: sshKeys, isLoading: isLoadingSshKeys } = useQuery({
-    queryKey: ['sshKeys'],
-    queryFn: () => api.listSshKeys(),
   });
 
   useEffect(() => {
@@ -120,48 +102,6 @@ export default function Account() {
     }
   });
   
-  // SSH Key mutations
-  const createSshKeyMutation = useMutation({
-    mutationFn: ({ name, publicKey }: { name: string; publicKey: string }) => 
-      api.createSshKey(name, publicKey),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sshKeys'] });
-      toast({
-        title: "SSH Key Added",
-        description: "Your SSH key has been added successfully.",
-      });
-      setIsAddKeyDialogOpen(false);
-      setNewKeyName("");
-      setNewKeyPublic("");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to Add SSH Key",
-        description: error.message || "Failed to add SSH key.",
-        variant: "destructive",
-      });
-    }
-  });
-  
-  const deleteSshKeyMutation = useMutation({
-    mutationFn: (keyId: number) => api.deleteSshKey(keyId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sshKeys'] });
-      toast({
-        title: "SSH Key Deleted",
-        description: "Your SSH key has been removed.",
-      });
-      setKeyToDelete(null);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to Delete SSH Key",
-        description: error.message || "Failed to delete SSH key.",
-        variant: "destructive",
-      });
-    }
-  });
-
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, email, timezone });
   };
@@ -184,48 +124,6 @@ export default function Account() {
       return;
     }
     changePasswordMutation.mutate(newPassword);
-  };
-  
-  const handleAddSshKey = () => {
-    if (!newKeyName.trim()) {
-      toast({
-        title: "Name Required",
-        description: "Please enter a name for your SSH key.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!newKeyPublic.trim()) {
-      toast({
-        title: "Public Key Required",
-        description: "Please paste your SSH public key.",
-        variant: "destructive",
-      });
-      return;
-    }
-    // Validate SSH key format
-    const keyTypes = ['ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'ssh-dss'];
-    const isValidFormat = keyTypes.some(type => newKeyPublic.trim().startsWith(type + ' '));
-    if (!isValidFormat) {
-      toast({
-        title: "Invalid SSH Key",
-        description: "SSH key must start with ssh-rsa, ssh-ed25519, or ecdsa-sha2-*",
-        variant: "destructive",
-      });
-      return;
-    }
-    createSshKeyMutation.mutate({ name: newKeyName.trim(), publicKey: newKeyPublic.trim() });
-  };
-  
-  const copyToClipboard = (text: string, keyId: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKeyId(keyId);
-    setTimeout(() => setCopiedKeyId(null), 2000);
-  };
-  
-  const truncateKey = (key: string) => {
-    if (key.length <= 50) return key;
-    return key.substring(0, 30) + '...' + key.substring(key.length - 20);
   };
 
   return (
@@ -436,191 +334,6 @@ export default function Account() {
             </GlassCard>
           </div>
         )}
-        
-        {/* SSH Key Manager Section */}
-        {!isLoading && !error && (
-          <GlassCard className="p-6" data-testid="ssh-keys-section">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">SSH Keys</h3>
-                  <p className="text-sm text-muted-foreground">Manage SSH keys for secure server access</p>
-                </div>
-              </div>
-              
-              <Dialog open={isAddKeyDialogOpen} onOpenChange={setIsAddKeyDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button 
-                    className="bg-purple-600 hover:bg-purple-700"
-                    data-testid="button-add-ssh-key"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Key
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10">
-                  <DialogHeader>
-                    <DialogTitle className="text-white">Add SSH Key</DialogTitle>
-                    <DialogDescription>
-                      Add a public SSH key to use when reinstalling your servers. 
-                      The key will be added to the authorized_keys file.
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="keyName" className="text-muted-foreground">Key Name</Label>
-                      <Input
-                        id="keyName"
-                        value={newKeyName}
-                        onChange={(e) => setNewKeyName(e.target.value)}
-                        placeholder="e.g., My Laptop, Work Computer"
-                        className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50"
-                        data-testid="input-ssh-key-name"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="publicKey" className="text-muted-foreground">Public Key</Label>
-                      <Textarea
-                        id="publicKey"
-                        value={newKeyPublic}
-                        onChange={(e) => setNewKeyPublic(e.target.value)}
-                        placeholder="ssh-rsa AAAA... or ssh-ed25519 AAAA..."
-                        className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50 font-mono text-xs min-h-[100px]"
-                        data-testid="input-ssh-public-key"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Paste your public key (usually found in ~/.ssh/id_rsa.pub or ~/.ssh/id_ed25519.pub)
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsAddKeyDialogOpen(false);
-                        setNewKeyName("");
-                        setNewKeyPublic("");
-                      }}
-                      className="border-white/10 hover:bg-white/5"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleAddSshKey}
-                      disabled={createSshKeyMutation.isPending}
-                      className="bg-purple-600 hover:bg-purple-700"
-                      data-testid="button-submit-ssh-key"
-                    >
-                      {createSshKeyMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4 mr-2" />
-                      )}
-                      Add Key
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            {isLoadingSshKeys ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 text-primary animate-spin" />
-              </div>
-            ) : sshKeys && sshKeys.length > 0 ? (
-              <div className="space-y-3">
-                {sshKeys.map((key) => (
-                  <div 
-                    key={key.id}
-                    className="flex items-center justify-between p-4 bg-black/20 rounded-lg border border-white/10"
-                    data-testid={`ssh-key-${key.id}`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/20 shrink-0">
-                        <Key className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-white truncate" data-testid={`ssh-key-name-${key.id}`}>
-                          {key.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground font-mono truncate">
-                          {truncateKey(key.publicKey)}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 shrink-0 ml-4">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-white/5"
-                        onClick={() => copyToClipboard(key.publicKey, key.id)}
-                        data-testid={`button-copy-key-${key.id}`}
-                      >
-                        {copiedKeyId === key.id ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-red-500/10 text-red-400 hover:text-red-300"
-                        onClick={() => setKeyToDelete(key)}
-                        data-testid={`button-delete-key-${key.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <KeyRound className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="mb-2">No SSH keys added yet</p>
-                <p className="text-sm">Add an SSH key to use when reinstalling your servers</p>
-              </div>
-            )}
-          </GlassCard>
-        )}
-        
-        {/* Delete SSH Key Confirmation */}
-        <AlertDialog open={!!keyToDelete} onOpenChange={(open) => !open && setKeyToDelete(null)}>
-          <AlertDialogContent className="bg-card/95 backdrop-blur-xl border-white/10">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-white">Delete SSH Key</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete the SSH key "{keyToDelete?.name}"? 
-                This action cannot be undone. Servers that use this key will no longer accept connections using it.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="border-white/10 hover:bg-white/5">
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => keyToDelete && deleteSshKeyMutation.mutate(keyToDelete.id)}
-                className="bg-red-600 hover:bg-red-700"
-                disabled={deleteSshKeyMutation.isPending}
-              >
-                {deleteSshKeyMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
-                )}
-                Delete Key
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         {profile && (
           <div className="flex justify-center gap-6 text-xs text-muted-foreground mt-8">

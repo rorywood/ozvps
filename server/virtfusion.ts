@@ -664,7 +664,7 @@ export class VirtFusionClient {
     }
   }
 
-  async reinstallServer(serverId: string, osId: number, hostname?: string, sshKeyIds?: number[]) {
+  async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
       const body: any = { 
         operatingSystemId: osId,
@@ -675,12 +675,7 @@ export class VirtFusionClient {
         body.name = hostname;
       }
       
-      // Include SSH key IDs if provided
-      if (sshKeyIds && sshKeyIds.length > 0) {
-        body.sshKeys = sshKeyIds;
-      }
-      
-      log(`Reinstalling server ${serverId} with OS template ${osId}${hostname ? `, hostname: ${hostname}` : ''}${sshKeyIds?.length ? `, SSH keys: ${sshKeyIds.join(',')}` : ''}`, 'virtfusion');
+      log(`Reinstalling server ${serverId} with OS template ${osId}${hostname ? `, hostname: ${hostname}` : ''}`, 'virtfusion');
       
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
@@ -1045,61 +1040,6 @@ export class VirtFusionClient {
     }
   }
 
-  // SSH Key Management
-  async listUserSshKeys(userId: number): Promise<Array<{ id: number; name: string; publicKey: string; fingerprint?: string; createdAt?: string }>> {
-    try {
-      const data = await this.request<{ data: Array<{ id: number; name: string; public_key?: string; publicKey?: string; fingerprint?: string; created?: string; created_at?: string }> }>(`/ssh-keys/user/${userId}`);
-      return (data.data || []).map(key => ({
-        id: key.id,
-        name: key.name,
-        publicKey: key.public_key || key.publicKey || '',
-        fingerprint: key.fingerprint,
-        createdAt: key.created || key.created_at,
-      }));
-    } catch (error) {
-      log(`Failed to list SSH keys for user ${userId}: ${error}`, 'virtfusion');
-      return [];
-    }
-  }
-
-  async createSshKey(userId: number, name: string, publicKey: string): Promise<{ id: number; name: string; publicKey: string; fingerprint?: string } | null> {
-    try {
-      log(`Creating SSH key "${name}" for user ${userId}`, 'virtfusion');
-      const data = await this.request<{ data: { id: number; name: string; public_key?: string; publicKey?: string; fingerprint?: string } }>('/ssh-keys', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          public_key: publicKey,
-          userId,
-        }),
-      });
-      const key = data.data;
-      log(`Successfully created SSH key ${key.id} for user ${userId}`, 'virtfusion');
-      return {
-        id: key.id,
-        name: key.name,
-        publicKey: key.public_key || key.publicKey || publicKey,
-        fingerprint: key.fingerprint,
-      };
-    } catch (error) {
-      log(`Failed to create SSH key for user ${userId}: ${error}`, 'virtfusion');
-      throw error;
-    }
-  }
-
-  async deleteSshKey(keyId: number): Promise<boolean> {
-    try {
-      log(`Deleting SSH key ${keyId}`, 'virtfusion');
-      await this.request(`/ssh-keys/${keyId}`, {
-        method: 'DELETE',
-      });
-      log(`Successfully deleted SSH key ${keyId}`, 'virtfusion');
-      return true;
-    } catch (error) {
-      log(`Failed to delete SSH key ${keyId}: ${error}`, 'virtfusion');
-      throw error;
-    }
-  }
 }
 
 export const virtfusionClient = new VirtFusionClient();
