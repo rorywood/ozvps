@@ -50,7 +50,7 @@ export default function AdminPage() {
   const [adjustReason, setAdjustReason] = useState("");
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [virtfusionUserId, setVirtfusionUserId] = useState("");
+  const [oldExtRelationId, setOldExtRelationId] = useState("");
 
   const { data: userData, isLoading } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -100,7 +100,7 @@ export default function AdminPage() {
   });
 
   const linkMutation = useMutation({
-    mutationFn: async (data: { auth0UserId: string; virtfusionUserId: number }) => {
+    mutationFn: async (data: { auth0UserId: string; oldExtRelationId: string }) => {
       const response = await fetch('/api/admin/link-virtfusion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,7 +114,7 @@ export default function AdminPage() {
     },
     onSuccess: (data) => {
       setLinkDialogOpen(false);
-      setVirtfusionUserId("");
+      setOldExtRelationId("");
       toast.success(data.message || 'VirtFusion account linked successfully');
       if (searchEmail) {
         searchMutation.mutate(searchEmail);
@@ -161,12 +161,10 @@ export default function AdminPage() {
   };
 
   const handleLinkSubmit = () => {
-    if (!selectedUser || !virtfusionUserId) return;
-    const vfId = parseInt(virtfusionUserId, 10);
-    if (isNaN(vfId) || vfId <= 0) return;
+    if (!selectedUser || !oldExtRelationId.trim()) return;
     linkMutation.mutate({
       auth0UserId: selectedUser.auth0UserId,
-      virtfusionUserId: vfId,
+      oldExtRelationId: oldExtRelationId.trim(),
     });
   };
 
@@ -457,8 +455,8 @@ export default function AdminPage() {
               Link VirtFusion Account
             </DialogTitle>
             <DialogDescription>
-              Manually link an existing VirtFusion user to this account. 
-              This will update the user's extRelationId in VirtFusion and store the link in Auth0.
+              Link an existing VirtFusion user to this account by providing their current extRelationId 
+              from the VirtFusion admin panel.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -467,18 +465,17 @@ export default function AdminPage() {
               <p className="text-sm text-white">{selectedUser?.email}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="virtfusionId">VirtFusion User ID</Label>
+              <Label htmlFor="extRelationId">Current extRelationId</Label>
               <Input
-                data-testid="input-virtfusion-id"
-                id="virtfusionId"
-                type="number"
-                min="1"
-                placeholder="Enter VirtFusion user ID..."
-                value={virtfusionUserId}
-                onChange={(e) => setVirtfusionUserId(e.target.value)}
+                data-testid="input-ext-relation-id"
+                id="extRelationId"
+                type="text"
+                placeholder="Enter VirtFusion extRelationId..."
+                value={oldExtRelationId}
+                onChange={(e) => setOldExtRelationId(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Find this in the VirtFusion admin panel under Users.
+                Find this in VirtFusion admin → Users → click the user → look for "Ext Relation ID" field.
               </p>
             </div>
           </div>
@@ -489,7 +486,7 @@ export default function AdminPage() {
             <Button
               data-testid="button-confirm-link"
               onClick={handleLinkSubmit}
-              disabled={!virtfusionUserId || linkMutation.isPending}
+              disabled={!oldExtRelationId.trim() || linkMutation.isPending}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {linkMutation.isPending ? (

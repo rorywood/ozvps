@@ -1105,9 +1105,10 @@ export async function registerRoutes(
   });
 
   // Admin: Link VirtFusion user manually
+  // Note: VirtFusion API only supports lookup by extRelationId, not by user ID
   const linkVirtfusionSchema = z.object({
     auth0UserId: z.string().min(1, 'Auth0 user ID is required'),
-    virtfusionUserId: z.number().int().positive('VirtFusion user ID must be a positive integer'),
+    oldExtRelationId: z.string().min(1, 'Old extRelationId is required'),
   });
 
   app.post('/api/admin/link-virtfusion', authMiddleware, async (req, res) => {
@@ -1122,8 +1123,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: errorMessages });
       }
 
-      const { auth0UserId, virtfusionUserId } = result.data;
-      log(`Admin ${req.userSession.email} linking VirtFusion user ${virtfusionUserId} to Auth0 user ${auth0UserId}`, 'admin');
+      const { auth0UserId, oldExtRelationId } = result.data;
+      log(`Admin ${req.userSession.email} linking VirtFusion user (extRelationId: ${oldExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
 
       // Verify Auth0 user exists
       const auth0User = await auth0Client.getUserById(auth0UserId);
@@ -1131,20 +1132,20 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Auth0 user not found' });
       }
 
-      // Verify VirtFusion user exists and get their data
-      const vfUser = await virtfusionClient.getUserById(virtfusionUserId);
+      // Verify VirtFusion user exists by their old extRelationId
+      const vfUser = await virtfusionClient.getUserByExtRelationId(oldExtRelationId);
       if (!vfUser) {
-        return res.status(404).json({ error: 'VirtFusion user not found' });
+        return res.status(404).json({ error: `VirtFusion user not found with extRelationId: ${oldExtRelationId}` });
       }
 
       // Generate the numeric extRelationId we use for this email
       const normalizedEmail = auth0User.email.toLowerCase().trim();
-      const expectedExtRelationId = virtfusionClient.generateNumericId(normalizedEmail);
+      const newExtRelationId = virtfusionClient.generateNumericId(normalizedEmail);
 
       // Update the VirtFusion user's extRelationId to match our expected format
-      const updatedVfUser = await virtfusionClient.updateUserById(virtfusionUserId, {
-        extRelationId: expectedExtRelationId,
-      });
+      const updatedVfUser = await virtfusionClient.updateUser(oldExtRelationId, {
+        extRelationId: newExtRelationId,
+      } as any);
 
       if (!updatedVfUser) {
         return res.status(500).json({ error: 'Failed to update VirtFusion user extRelationId' });
@@ -1152,15 +1153,16 @@ export async function registerRoutes(
 
       // Store the VirtFusion user ID in Auth0 metadata
       await auth0Client.updateUserMetadata(auth0UserId, {
-        virtfusion_user_id: virtfusionUserId,
+        virtfusion_user_id: vfUser.id,
       });
 
-      log(`Successfully linked VirtFusion user ${virtfusionUserId} (extRelationId: ${expectedExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
+      log(`Successfully linked VirtFusion user ${vfUser.id} (old extRelationId: ${oldExtRelationId}, new: ${newExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
 
       res.json({
         success: true,
-        message: `VirtFusion user ${virtfusionUserId} linked to ${auth0User.email}`,
-        extRelationId: expectedExtRelationId,
+        message: `VirtFusion user ${vfUser.id} linked to ${auth0User.email}`,
+        virtfusionUserId: vfUser.id,
+        newExtRelationId,
       });
     } catch (error: any) {
       log(`Error linking VirtFusion user: ${error.message}`, 'admin');
