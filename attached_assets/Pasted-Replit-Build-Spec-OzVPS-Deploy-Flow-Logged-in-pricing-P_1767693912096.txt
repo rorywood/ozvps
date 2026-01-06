@@ -1,0 +1,348 @@
+Replit Build Spec: OzVPS “Deploy” Flow (Logged-in) + /pricing (Public) + Stripe + Account Balance + Zero-touch Auto-Install (DB included)
+0) Goal
+
+Replace “Order” with a modern “Deploy” experience, visually inspired by Vultr but simplified:
+
+Only 1 location: Brisbane
+
+Only 1 product type: Shared CPU
+
+Plans: your existing plan list (Nano/Starter/Dev/Lite/etc)
+
+Payments: Stripe only
+
+Billing model (MVP): logged-in users maintain an account balance; deploy deducts from balance. Users can top up via Stripe.
+
+Zero-touch deployment: an auto-update/installer script provisions everything (Node deps + DB server + DB + migrations + seeds + service restarts). No manual steps.
+
+1) UX: Logged-in Deploy Page (/deploy)
+
+Single-page layout, 3 blocks (simple version of the screenshot):
+
+A) Left: “Choose Type”
+
+Hard-set to Shared CPU (no other tiles)
+
+Show as selected, non-clickable
+
+B) Middle: “Location + Plan”
+
+Location selector exists but only shows Brisbane and is preselected.
+
+Plan list is a table:
+
+Name
+
+vCPU
+
+RAM
+
+NVMe
+
+Transfer
+
+Price (monthly)
+
+Clicking a plan selects it (entire row clickable)
+
+C) Right: “Deploy Summary”
+
+Location: Brisbane
+
+Type: Shared CPU
+
+Plan: selected plan
+
+Quantity: fixed 1 (for now)
+
+Price: monthly cost
+
+Balance: current user balance
+
+Due now: first month amount (MVP: flat month)
+
+Primary button: Deploy
+
+Disabled until plan selected
+
+If balance >= dueNow: deploy immediately and deduct
+
+If balance < dueNow: show Top up & Deploy that creates a Stripe checkout for the shortfall (or a fixed top-up amount selector)
+
+Modern/minimal: no extra tiles, tags, or multi-region complexity.
+
+2) Public Pricing Page (/pricing)
+
+Read-only plan list + Brisbane only
+
+CTA:
+
+Logged out: sign-in link
+
+Logged in: deep-link to /deploy with selected plan
+
+3) Data Model (DB required)
+
+Current app is no-DB; wallet requires a DB.
+
+Tables
+
+users
+
+id (UUID)
+
+auth0_sub (unique)
+
+email
+
+created_at
+
+plans
+
+id
+
+code (nano/starter/etc)
+
+name
+
+vcpu
+
+ram_mb
+
+storage_gb
+
+transfer_gb
+
+price_monthly_cents
+
+active (bool)
+
+wallets
+
+user_id (unique)
+
+balance_cents (int, default 0)
+
+wallet_transactions
+
+id
+
+user_id
+
+type: topup|debit|refund|adjustment
+
+amount_cents (signed)
+
+stripe_event_id (nullable unique)
+
+stripe_payment_intent_id (nullable)
+
+metadata_json
+
+created_at
+
+deploy_orders
+
+id
+
+user_id
+
+plan_id
+
+location_code (BNE)
+
+price_cents
+
+status: pending_payment|paid|provisioning|active|failed|cancelled
+
+virtfusion_server_id (nullable)
+
+created_at
+
+Use PostgreSQL.
+
+4) Stripe Integration (Top-up wallet)
+
+Stripe is used only for wallet funding.
+
+Flow
+
+User hits “Top up & Deploy”
+
+Backend creates Stripe Checkout Session for the amount required
+
+Stripe webhook credits wallet (idempotent using stripe_event_id)
+
+UI refreshes wallet and enables Deploy
+
+Required
+
+Webhook signature verification
+
+Idempotent wallet crediting
+
+5) Deploy Provisioning (VirtFusion)
+
+Deploy only after wallet has sufficient funds.
+
+Backend POST /api/deploy
+
+Verify user owns account
+
+Verify plan active
+
+Verify Brisbane only
+
+Verify wallet.balance_cents >= plan.price_monthly_cents
+
+Create deploy_orders + debit wallet in one DB transaction
+
+Call VirtFusion provision API
+
+Save virtfusion_server_id
+
+Set order to provisioning
+
+Polling endpoint GET /api/deploy/:orderId
+
+Failure handling:
+
+If VirtFusion create fails, auto-refund debit back to wallet and mark order failed.
+
+6) API Endpoints
+
+Plans
+
+GET /api/plans (public active plans)
+
+Wallet
+
+GET /api/wallet
+
+POST /api/wallet/topup → returns Stripe checkout URL
+
+POST /api/stripe/webhook
+
+Deploy
+
+POST /api/deploy
+
+GET /api/deploy/:orderId
+
+7) UI Components (React)
+
+DeployPage
+
+PlanTable
+
+DeploySummaryCard
+
+optional TopUpModal (otherwise redirect to Stripe checkout)
+
+PricingPage
+
+8) Zero-touch Auto-Update / Auto-Install Script (MANDATORY)
+
+Replit must update the existing automation script so a fresh VPS can run one command and the entire stack becomes operational: OS packages, Node deps, PostgreSQL, DB creation, app config, migrations, seeds, and service restarts. No manual DB steps.
+
+A) What the script must do (end-to-end)
+
+Install required OS packages (curl, git, build tools as needed)
+
+Install Node.js 18+ if missing (or fail hard with clear log)
+
+Pull/update the application repo to the target directory
+
+Install app dependencies (npm ci or equivalent)
+
+Install PostgreSQL server + client
+
+Enable + start PostgreSQL service
+
+Create database + user + password automatically
+
+DB: ozvps_panel
+
+User: ozvps_panel_user
+
+Password: generate strong random value
+
+Ensure safe reruns: do not recreate if exists, do not wipe
+
+Write/update .env automatically
+
+Set DATABASE_URL=postgresql://ozvps_panel_user:<password>@127.0.0.1:5432/ozvps_panel
+
+Also ensure existing required env vars remain:
+
+AUTH0_DOMAIN
+
+AUTH0_CLIENT_ID
+
+AUTH0_CLIENT_SECRET
+
+VIRTFUSION_PANEL_URL
+
+VIRTFUSION_API_TOKEN
+
+STRIPE_SECRET_KEY
+
+STRIPE_WEBHOOK_SECRET
+
+PUBLIC_BASE_URL (for webhook return URLs)
+
+Run DB migrations automatically
+
+Seed plans automatically (upsert by plans.code)
+
+Build frontend if required by deployment model
+
+Restart the application services (systemd/pm2/docker — whichever is used)
+
+Perform a health check (local HTTP request) and exit non-zero if failed
+
+B) Distro support
+
+Script must handle at least:
+
+Debian/Ubuntu (apt)
+
+Alma/RHEL (dnf/yum)
+
+C) Security constraints
+
+Postgres listens on localhost only
+
+Do not print DB password to stdout logs
+
+Webhook endpoint must be reachable via PUBLIC_BASE_URL and use Stripe signature verification
+
+D) Idempotency rules
+
+Rerunning the script must:
+
+Update code
+
+Apply new migrations
+
+Keep existing DB and wallet balances intact
+
+Keep Stripe idempotency guarantees (unique event IDs in DB)
+
+9) MVP Acceptance Criteria
+
+Logged-in user can:
+
+View plans
+
+See wallet balance
+
+Top up via Stripe
+
+Deploy a server in Brisbane Shared CPU and have wallet debited
+
+Webhooks credit wallet correctly and only once
+
+/pricing shows plans and routes logged-in users to /deploy
+
+One command on a fresh VPS results in a working system with PostgreSQL installed, DB created, migrations + seeds applied, and app running (zero manual steps).
