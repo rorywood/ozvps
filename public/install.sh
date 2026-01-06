@@ -418,8 +418,48 @@ EOF
         # Stop existing instance if running
         pm2 delete "$SERVICE_NAME" 2>/dev/null || true
 
-        # Start application
-        pm2 start npm --name "$SERVICE_NAME" -- start
+        # Create PM2 ecosystem config that loads .env file
+        cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'EOFCONFIG'
+const fs = require('fs');
+const path = require('path');
+
+// Load .env file manually
+const envPath = path.join(__dirname, '.env');
+const envVars = {};
+
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    line = line.trim();
+    if (line && !line.startsWith('#')) {
+      const [key, ...valueParts] = line.split('=');
+      if (key) {
+        envVars[key.trim()] = valueParts.join('=').trim();
+      }
+    }
+  });
+}
+
+module.exports = {
+  apps: [{
+    name: 'ozvps-panel',
+    script: 'npm',
+    args: 'start',
+    cwd: __dirname,
+    env: {
+      NODE_ENV: 'production',
+      ...envVars
+    },
+    watch: false,
+    autorestart: true,
+    max_restarts: 10,
+    restart_delay: 5000
+  }]
+};
+EOFCONFIG
+
+        # Start with ecosystem config
+        pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
 
         # Save PM2 configuration
         pm2 save
