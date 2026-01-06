@@ -1,0 +1,160 @@
+Replit Change Request: Stripe Key Prompting + Fully Automated Install/Update Script (DB included)
+1) Stripe: add an explicit “keys not configured” prompt in the app
+
+Current problem: Stripe top-ups exist in UI/logic but nobody is told to provide keys, so it silently can’t work.
+
+Required behaviour
+
+If any Stripe env var is missing, the app must:
+
+Show a persistent banner on all authenticated pages (header area, near Balance):
+
+Text: Stripe billing not configured
+
+Subtext: Top-ups disabled until keys are set
+
+No crashing, no hidden failure.
+
+Disable any UI paths that depend on Stripe:
+
+Hide or disable Top up / Top up & Deploy
+
+Keep Deploy working only if balance already covers cost.
+
+Provide a single “Setup instructions” panel (read-only) under Account Settings:
+
+Section title: Billing (Stripe)
+
+Show exact variables required and whether each is present:
+
+STRIPE_SECRET_KEY (missing/present)
+
+STRIPE_PUBLISHABLE_KEY (missing/present)
+
+STRIPE_WEBHOOK_SECRET (missing/present)
+
+PUBLIC_BASE_URL (missing/present)
+
+Show the exact webhook URL the user must configure:
+
+${PUBLIC_BASE_URL}/api/stripe/webhook
+
+Do not store Stripe secrets in the database. Env only.
+
+What you (user) do for testing (must be shown verbatim in that panel)
+
+Set these env vars:
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+PUBLIC_BASE_URL=https://panel.ozvps.com.au
+
+
+In Stripe Dashboard (Test mode), create webhook endpoint:
+
+URL: https://panel.ozvps.com.au/api/stripe/webhook
+
+Events enabled:
+
+checkout.session.completed
+
+payment_intent.succeeded
+
+Implementation detail
+
+Add backend endpoint:
+
+GET /api/billing/stripe/status
+
+returns booleans for presence of each env var and computed webhook URL
+Frontend uses it to render the banner + instructions.
+
+2) Auto install / auto update script: must install DB and fully bootstrap everything
+
+Current problem: DB requirements were added but not fully integrated into the one-command installer/updater.
+
+Mandatory outcome
+
+One command on a fresh VPS results in:
+
+PostgreSQL installed + running
+
+Database and user created
+
+.env fully generated/updated (including DATABASE_URL)
+
+Migrations run
+
+Plans seeded (upsert)
+
+App started/restarted
+
+Health check passes
+
+Script behaviour (fully automated)
+
+Install dependencies (OS packages)
+
+Install Node 18+ if missing
+
+Install PostgreSQL server + client
+
+Start/enable PostgreSQL
+
+Create DB + user if missing (do not wipe if exists):
+
+DB: ozvps_panel
+
+User: ozvps_panel_user
+
+Password: auto-generate strong random and store in .env only
+
+Write/update .env idempotently:
+
+Must include:
+
+DATABASE_URL=postgresql://ozvps_panel_user:<generated>@127.0.0.1:5432/ozvps_panel
+
+
+Must preserve existing required vars (Auth0/VirtFusion/etc)
+
+Run migrations
+
+Seed plans (upsert by code)
+
+Restart services
+
+Health check HTTP endpoint
+
+Exit non-zero on failure
+
+Stripe in the installer (no manual steps beyond providing secrets once)
+
+Stripe keys cannot be auto-created. The installer must handle this cleanly:
+
+If Stripe vars are missing:
+
+Continue installation (DB + app still works)
+
+Top-up features remain disabled
+
+Banner + instructions (section 1) will guide the user
+
+“So I don’t have to do anything” constraint (practical version)
+
+Implement a single optional config drop-in:
+
+If file exists: /opt/ozvps-panel/config.env
+
+script imports it and merges into .env
+
+this is where you paste Stripe keys once
+
+If file does not exist:
+
+script proceeds without Stripe
+
+app prompts inside UI until keys are present
+
+No interactive prompts during install. No pausing for input.

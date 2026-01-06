@@ -888,7 +888,7 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
-  // Get available locations (Brisbane only for now)
+  // Get available locations
   app.get('/api/locations', async (req, res) => {
     res.json({
       locations: [
@@ -897,7 +897,14 @@ export async function registerRoutes(
           name: 'Brisbane',
           country: 'Australia',
           countryCode: 'AU',
-          flag: '🇦🇺',
+          enabled: true,
+        },
+        {
+          code: 'SYD',
+          name: 'Sydney',
+          country: 'Australia',
+          countryCode: 'AU',
+          enabled: false,
         },
       ],
     });

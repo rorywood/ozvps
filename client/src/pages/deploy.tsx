@@ -21,6 +21,7 @@ import {
   MapPin
 } from "lucide-react";
 import { api } from "@/lib/api";
+import flagAU from "@/assets/flag-au.png";
 
 interface Plan {
   id: number;
@@ -39,7 +40,7 @@ interface Location {
   name: string;
   country: string;
   countryCode: string;
-  flag: string;
+  enabled: boolean;
 }
 
 interface Wallet {
@@ -211,23 +212,38 @@ export default function DeployPage() {
                 {locations.map((location) => (
                   <GlassCard
                     key={location.code}
-                    className={`p-4 cursor-pointer transition-all ${
-                      selectedLocationCode === location.code 
-                        ? 'ring-2 ring-primary border-primary' 
-                        : 'hover:border-primary/50'
+                    className={`p-4 transition-all ${
+                      !location.enabled 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : selectedLocationCode === location.code 
+                          ? 'ring-2 ring-primary border-primary cursor-pointer' 
+                          : 'hover:border-primary/50 cursor-pointer'
                     }`}
-                    onClick={() => setSelectedLocationCode(location.code)}
+                    onClick={() => location.enabled && setSelectedLocationCode(location.code)}
                     data-testid={`card-location-${location.code.toLowerCase()}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">{location.flag}</span>
+                        <img 
+                          src={flagAU} 
+                          alt={location.countryCode} 
+                          className="h-6 w-8 object-cover rounded-sm shadow-sm"
+                        />
                         <div>
-                          <p className="font-medium text-white">{location.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`font-medium ${location.enabled ? 'text-white' : 'text-muted-foreground'}`}>
+                              {location.name}
+                            </p>
+                            {!location.enabled && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
+                                Coming soon
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">{location.code}</p>
                         </div>
                       </div>
-                      {selectedLocationCode === location.code && (
+                      {location.enabled && selectedLocationCode === location.code && (
                         <div className="bg-primary rounded-full p-1">
                           <Check className="h-3 w-3 text-primary-foreground" />
                         </div>
@@ -314,7 +330,10 @@ export default function DeployPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Location</span>
                     <span className="text-white flex items-center gap-1.5">
-                      {selectedLocation?.flag} {selectedLocation?.name || 'Select location'}
+                      {selectedLocation && (
+                        <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
+                      )}
+                      {selectedLocation?.name || 'Select location'}
                     </span>
                   </div>
                   <div className="flex justify-between">
