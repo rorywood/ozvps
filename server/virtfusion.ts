@@ -1113,27 +1113,49 @@ export class VirtFusionClient {
     hostname: string;
     extRelationId: string;
     osId: number;
-    hypervisorGroupId?: number;
+    hypervisorId?: number;
   }): Promise<{ serverId: number; name: string }> {
-    const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId = 1 } = params;
+    const { userId, packageId, hostname, extRelationId, osId, hypervisorId } = params;
     
-    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}, hypervisorGroup ${hypervisorGroupId}`, 'virtfusion');
+    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}, hypervisorId ${hypervisorId}`, 'virtfusion');
     
     try {
+      // Step 1: Create the server
+      const createPayload: Record<string, any> = {
+        userId,
+        packageId,
+        name: hostname,
+        extRelationId,
+      };
+      
+      // Only include hypervisorId if provided (VirtFusion may auto-select)
+      if (hypervisorId) {
+        createPayload.hypervisorId = hypervisorId;
+      }
+      
       const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
         method: 'POST',
-        body: JSON.stringify({
-          userId,
-          packageId,
-          name: hostname,
-          extRelationId,
-          hypervisorGroupId,
-          operatingSystemId: osId,
-        }),
+        body: JSON.stringify(createPayload),
       });
-
+      
       const server = response.data;
-      log(`Server provisioned: ID=${server.id}, name=${server.name}`, 'virtfusion');
+      log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
+      
+      // Step 2: Build/install the OS on the server
+      try {
+        log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
+        await this.request(`/servers/${server.id}/build`, {
+          method: 'POST',
+          body: JSON.stringify({
+            osid: osId,
+            hostname: hostname,
+          }),
+        });
+        log(`Server ${server.id} build initiated`, 'virtfusion');
+      } catch (buildError: any) {
+        log(`Server build failed: ${buildError.message}`, 'virtfusion');
+        // Don't throw - server is created, build may be queued
+      }
       
       return {
         serverId: server.id,

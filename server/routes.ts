@@ -1195,11 +1195,12 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
-  // Location to hypervisor group mapping
-  // NOTE: Update these IDs to match your VirtFusion hypervisor groups
-  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 3, enabled: false },
+  // Location to hypervisor mapping
+  // NOTE: Update these IDs to match your VirtFusion hypervisors
+  // Set hypervisorId to undefined to let VirtFusion auto-select
+  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorId?: number; enabled: boolean }> = {
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorId: undefined, enabled: true },
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorId: undefined, enabled: false },
   };
 
   // Get available locations
@@ -1641,12 +1642,12 @@ export async function registerRoutes(
 
       const { planId, osId, hostname, locationCode } = result.data;
 
-      // Get hypervisor group from location (default to Brisbane)
+      // Get hypervisor from location (default to Brisbane)
       const location = LOCATION_CONFIG[locationCode || 'BNE'];
       if (!location || !location.enabled) {
         return res.status(400).json({ error: 'Invalid or unavailable location' });
       }
-      const hypervisorGroupId = location.hypervisorGroupId;
+      const hypervisorId = location.hypervisorId;
 
       // Get plan details
       const plan = await dbStorage.getPlanById(planId);
@@ -1701,7 +1702,7 @@ export async function registerRoutes(
           hostname: hostname,
           extRelationId,
           osId,
-          hypervisorGroupId,
+          hypervisorId,
         });
 
         // Update order with server ID
