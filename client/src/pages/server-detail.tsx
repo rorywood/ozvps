@@ -807,92 +807,69 @@ export default function ServerDetail() {
                 const periodEnd = current?.periodEnd ? new Date(current.periodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
                 
                 return (
-                  <div className="space-y-3">
-                    {/* Main Usage Display - Absolute Values */}
-                    <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                      {/* Used / Total */}
-                      <div className="text-center mb-3">
-                        <div className="text-3xl font-bold text-white" data-testid="text-bandwidth-used">
-                          {usedGB} <span className="text-lg text-muted-foreground">GB</span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          of {limitGB > 0 ? `${limitGB} GB` : 'Unlimited'}
-                        </div>
+                  <div className="space-y-2">
+                    {/* Compact Usage Display */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-lg font-bold text-white" data-testid="text-bandwidth-used">{usedGB}</span>
+                        <span className="text-xs text-muted-foreground">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
                       </div>
-                      
-                      {/* Progress Bar */}
-                      <div className="w-full bg-white/10 rounded-full h-3 mb-3">
-                        <div 
-                          className={cn(
-                            "h-3 rounded-full transition-all duration-500",
-                            usagePercent > 90 ? "bg-red-500" :
-                            usagePercent > 70 ? "bg-yellow-500" :
-                            "bg-blue-500"
-                          )}
-                          style={{ width: `${Math.max(usagePercent, 1)}%` }}
-                          data-testid="progress-bandwidth"
-                        />
-                      </div>
-                      
-                      {/* Remaining - Prominent Display */}
                       {remainingGB !== null ? (
-                        <div className="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-                          <div className="text-2xl font-bold text-green-400" data-testid="text-bandwidth-remaining">
-                            {remainingGB} <span className="text-base">GB</span>
-                          </div>
-                          <div className="text-xs text-green-400/70">Remaining</div>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-green-400" data-testid="text-bandwidth-remaining">{remainingGB} GB</span>
+                          <span className="text-[10px] text-muted-foreground ml-1">left</span>
                         </div>
                       ) : (
-                        <div className="text-center text-sm text-muted-foreground">Unlimited bandwidth</div>
-                      )}
-                      
-                      {/* Period */}
-                      {periodStart && periodEnd && (
-                        <div className="text-center text-xs text-muted-foreground mt-2">
-                          Billing period: {periodStart} - {periodEnd}
-                        </div>
+                        <span className="text-xs text-muted-foreground">Unlimited</span>
                       )}
                     </div>
-
-                    {/* Detailed Stats Row */}
-                    <div className="grid grid-cols-4 gap-2">
-                      <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
-                        <div className="flex items-center justify-center gap-1 mb-0.5">
-                          <ArrowDownToLine className="h-3 w-3 text-green-400" />
-                          <span className="text-[10px] text-muted-foreground">IN</span>
+                    
+                    {/* Progress Bar */}
+                    <div className="w-full bg-white/10 rounded-full h-2">
+                      <div 
+                        className={cn(
+                          "h-2 rounded-full transition-all duration-500",
+                          usagePercent > 90 ? "bg-red-500" :
+                          usagePercent > 70 ? "bg-yellow-500" :
+                          "bg-blue-500"
+                        )}
+                        style={{ width: `${Math.max(usagePercent, 1)}%` }}
+                        data-testid="progress-bandwidth"
+                      />
+                    </div>
+                    
+                    {/* Compact Stats Row */}
+                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <ArrowDownToLine className="h-2.5 w-2.5 text-green-400" />IN
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-rx">{rxGB}</div>
-                        <div className="text-[9px] text-muted-foreground">GB</div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-rx">{rxGB}</div>
                       </div>
-                      
-                      <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
-                        <div className="flex items-center justify-center gap-1 mb-0.5">
-                          <ArrowUpFromLine className="h-3 w-3 text-blue-400" />
-                          <span className="text-[10px] text-muted-foreground">OUT</span>
+                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <ArrowUpFromLine className="h-2.5 w-2.5 text-blue-400" />OUT
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-tx">{txGB}</div>
-                        <div className="text-[9px] text-muted-foreground">GB</div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-tx">{txGB}</div>
                       </div>
-                      
-                      <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
-                        <div className="flex items-center justify-center gap-1 mb-0.5">
-                          <Gauge className="h-3 w-3 text-purple-400" />
-                          <span className="text-[10px] text-muted-foreground">PORT</span>
+                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Gauge className="h-2.5 w-2.5 text-purple-400" />PORT
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-port-speed">{network?.portSpeed || 500}</div>
-                        <div className="text-[9px] text-muted-foreground">Mbps</div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
                       </div>
-                      
-                      <div className="p-2 bg-white/5 rounded border border-white/10 text-center">
-                        <div className="flex items-center justify-center gap-1 mb-0.5">
-                          <Network className="h-3 w-3 text-cyan-400" />
-                          <span className="text-[10px] text-muted-foreground">USED</span>
+                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Network className="h-2.5 w-2.5 text-cyan-400" />%
                         </div>
-                        <div className="text-sm font-semibold text-white" data-testid="text-bandwidth-percent">
-                          {usagePercent.toFixed(1)}%
-                        </div>
+                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
                       </div>
                     </div>
+                    
+                    {/* Period - inline */}
+                    {periodStart && periodEnd && (
+                      <div className="text-[10px] text-muted-foreground text-center">{periodStart} - {periodEnd}</div>
+                    )}
                   </div>
                 );
               })()}
