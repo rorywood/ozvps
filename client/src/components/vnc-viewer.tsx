@@ -14,8 +14,32 @@ import {
   Keyboard,
   Clipboard,
   Send,
-  Copy
+  Copy,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
+
+const ZOOM_PRESETS = [1.0, 1.15, 1.30] as const;
+const ZOOM_STORAGE_KEY = 'consoleScale';
+
+function getStoredZoom(): number {
+  try {
+    const stored = localStorage.getItem(ZOOM_STORAGE_KEY);
+    if (stored) {
+      const value = parseFloat(stored);
+      if (ZOOM_PRESETS.includes(value as any)) {
+        return value;
+      }
+    }
+  } catch (e) {}
+  return 1.15; // Default to 115%
+}
+
+function setStoredZoom(value: number): void {
+  try {
+    localStorage.setItem(ZOOM_STORAGE_KEY, value.toString());
+  } catch (e) {}
+}
 
 interface VncViewerProps {
   wsUrl: string;
@@ -32,6 +56,20 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   const [key, setKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [clipboardText, setClipboardText] = useState("");
+  const [zoom, setZoom] = useState(getStoredZoom);
+
+  const handleZoomChange = (direction: 'in' | 'out') => {
+    const currentIndex = ZOOM_PRESETS.indexOf(zoom as any);
+    let newIndex = currentIndex;
+    if (direction === 'in' && currentIndex < ZOOM_PRESETS.length - 1) {
+      newIndex = currentIndex + 1;
+    } else if (direction === 'out' && currentIndex > 0) {
+      newIndex = currentIndex - 1;
+    }
+    const newZoom = ZOOM_PRESETS[newIndex];
+    setZoom(newZoom);
+    setStoredZoom(newZoom);
+  };
 
   const handleConnect = () => {
     setStatus('connected');
@@ -348,6 +386,35 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-md border border-white/10 px-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleZoomChange('out')}
+                className="text-muted-foreground hover:text-white h-7 w-7"
+                disabled={zoom === ZOOM_PRESETS[0]}
+                data-testid="button-zoom-out"
+                title="Zoom out"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs text-muted-foreground font-mono min-w-[40px] text-center">
+                {Math.round(zoom * 100)}%
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleZoomChange('in')}
+                className="text-muted-foreground hover:text-white h-7 w-7"
+                disabled={zoom === ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
+                data-testid="button-zoom-in"
+                title="Zoom in"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            
             {(status === 'disconnected' || status === 'error') && (
               <Button
                 variant="ghost"
@@ -408,27 +475,37 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             </div>
           )}
           
-          <VncScreen
-            key={key}
-            url={wsUrl}
-            scaleViewport
-            background="#000000"
+          <div 
+            className="w-full h-full overflow-auto"
             style={{ 
-              width: '100%', 
-              height: '100%', 
-              minHeight: '400px'
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top left',
+              width: `${100 / zoom}%`,
+              height: `${100 / zoom}%`,
             }}
-            ref={vncRef}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onSecurityFailure={handleSecurityFailure}
-            rfbOptions={{
-              credentials: { password },
-              showDotCursor: true,
-              localCursor: true
-            }}
-            data-testid="vnc-container"
-          />
+          >
+            <VncScreen
+              key={key}
+              url={wsUrl}
+              scaleViewport
+              background="#000000"
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                minHeight: '400px'
+              }}
+              ref={vncRef}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              onSecurityFailure={handleSecurityFailure}
+              rfbOptions={{
+                credentials: { password },
+                showDotCursor: true,
+                localCursor: true
+              }}
+              data-testid="vnc-container"
+            />
+          </div>
         </div>
       </div>
     </div>

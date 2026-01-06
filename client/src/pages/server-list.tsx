@@ -17,6 +17,7 @@ import {
   Square,
   MonitorCog
 } from "lucide-react";
+import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,7 +169,16 @@ export default function ServerList() {
                     </div>
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Image</div>
-                      <div className="text-white font-medium truncate">{server.image.name}</div>
+                      <div className="text-white font-medium flex items-center gap-2">
+                        <img 
+                          src={getOsLogoUrlFromServer(server.image)} 
+                          alt="" 
+                          className="h-5 w-5 object-contain"
+                          loading="lazy"
+                          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                        />
+                        <span className="truncate max-w-[100px]">{server.image.name}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -188,7 +198,12 @@ export default function ServerList() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        window.location.href = `/servers/${server.id}/console`;
+                        // Open console in a pop-out window
+                        window.open(
+                          `/servers/${server.id}/console?popout=true`,
+                          `console-${server.id}`,
+                          'width=1200,height=800,resizable=yes,scrollbars=yes'
+                        );
                       }}
                       data-testid={`button-console-${server.id}`}
                     >

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import flagAU from "@/assets/flag-au.png";
+import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
 
 export default function Dashboard() {
   const { data: servers = [], isLoading, error } = useQuery<Server[]>({
@@ -165,7 +166,14 @@ export default function Dashboard() {
                           <img src={flagAU} alt="AU" className="h-3 w-4 object-cover rounded-sm" />
                           <span>{server.location?.name || 'Unknown'}</span>
                           <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                          <span className="truncate max-w-[120px]" title={server.image?.name}>{server.image?.name || 'Unknown OS'}</span>
+                          <img 
+                            src={getOsLogoUrlFromServer(server.image)} 
+                            alt="" 
+                            className="h-4 w-4 object-contain"
+                            loading="lazy"
+                            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                          />
+                          <span className="truncate max-w-[100px]" title={server.image?.name}>{server.image?.name || 'Unknown'}</span>
                         </div>
                       </div>
                     </div>

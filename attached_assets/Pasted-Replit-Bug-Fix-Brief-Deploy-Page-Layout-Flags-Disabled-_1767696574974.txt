@@ -1,0 +1,159 @@
+Replit Bug Fix Brief: Deploy Page Layout, Flags, Disabled Sydney, Dynamic Plans via API (Auto-updating)
+1) Deploy page layout cleanup (buttons consistent)
+Problems to fix
+
+Buttons different sizes
+
+Buttons misaligned / inconsistent spacing
+
+Required changes
+
+Standardise all primary/secondary buttons using one shared component:
+
+Fixed height (e.g. 44px)
+
+Consistent padding
+
+Same border radius
+
+Same font size/weight
+
+Same icon spacing
+
+Deploy page must use a strict 3-column grid:
+
+Left: Type (Shared CPU)
+
+Middle: Location + Plans
+
+Right: Summary + action button
+
+Only one primary action visible at a time:
+
+If balance sufficient → Deploy
+
+If insufficient → Top up & Deploy
+
+The action button must be full-width inside the summary card and never change size between states.
+
+Acceptance:
+
+No button jumps, no mixed sizes, no uneven alignment.
+
+2) Location selector: fix Brisbane flag + add Sydney as disabled
+Brisbane flag (mandatory)
+
+Brisbane location must show the Australian flag icon next to the label everywhere:
+
+Location selector list
+
+Selected location display
+
+Summary card “Location”
+
+Use existing AU flag asset already in the codebase.
+
+Add Sydney (disabled)
+
+Add a second location entry:
+
+🇦🇺 Sydney (SYD)
+
+It must be visible but not selectable:
+
+Disabled styling: darker/greyed out, reduced opacity
+
+Cursor: not-allowed
+
+No click action
+
+Add small “Coming soon” tag (text only)
+
+Backend must still only accept BNE for deploy (hard validation).
+
+API:
+
+GET /api/locations must return:
+
+{ code: "BNE", name: "Brisbane", country: "AU", enabled: true }
+
+{ code: "SYD", name: "Sydney", country: "AU", enabled: false }
+
+Frontend rules:
+
+If enabled=false, render disabled option and prevent selection.
+
+3) Plans must be pulled dynamically via API and auto-update when plans change
+Requirement
+
+Deploy page and /pricing must not have hardcoded plans. They must always reflect the current plan/package list as it stands.
+
+Implementation (authoritative source)
+
+Backend must provide:
+
+GET /api/plans
+
+Returns active plans/packages with all required fields:
+
+code, name, vcpu, ram_mb, storage_gb, transfer_gb, price_monthly_cents, active
+
+Auto-update behaviour
+
+Frontend loads plans from API on page load.
+
+Frontend must re-fetch plans:
+
+On deploy page open
+
+On pricing page open
+
+On a background interval (e.g. every 5 minutes) OR on visibility change (tab refocus)
+
+Sorting:
+
+Sort by price_monthly_cents ascending unless API provides an explicit sort_order.
+
+Backend must auto-sync plans (no manual edits)
+
+Pick one method and implement it fully:
+
+Option A (preferred if plans live in VirtFusion packages):
+
+Backend reads packages from VirtFusion API and exposes them via /api/plans.
+
+Cache into DB table plans with upsert by code or VirtFusion package ID.
+
+Sync strategy:
+
+On server start: sync once
+
+Scheduled sync: every 10 minutes
+
+Manual sync endpoint (admin-only): POST /api/admin/plans/sync
+
+Any newly added/updated package becomes visible in UI without code changes.
+
+Option B (if you maintain plans locally):
+
+Plans are the DB source of truth.
+
+You update via admin tooling later.
+
+Still no frontend hardcoding.
+
+Enforcement:
+
+Deploy must validate selected planId exists and active=true at time of deploy.
+
+Acceptance:
+
+Adding or editing a plan/package in the source list automatically appears on /deploy and /pricing without redeploying frontend code.
+
+Acceptance Criteria
+
+Deploy page buttons are uniform size and aligned; no visual inconsistency.
+
+Brisbane shows AU flag; Sydney appears disabled and cannot be selected.
+
+Plans are loaded from API and reflect updates/additions automatically.

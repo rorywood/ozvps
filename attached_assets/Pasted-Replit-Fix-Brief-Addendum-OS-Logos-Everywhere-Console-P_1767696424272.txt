@@ -1,0 +1,93 @@
+Replit Fix Brief Addendum: OS Logos Everywhere + Console Popout from List + Bigger Console Font
+1) Show actual OS logo on Dashboard + Servers list (MANDATORY)
+Requirement
+
+Both Dashboard and Servers list must display the actual OS logo icon (Alma/CentOS/Debian/Fedora/Ubuntu/openSUSE/Oracle/Other), not just text.
+
+Implementation
+
+Reuse the existing getOsLogoUrl(serverOrTemplate) mapping used in reinstall.
+
+Add logo rendering in two places:
+
+Servers list row/card: place OS logo next to the OS text (or replace text-only indicator).
+
+Dashboard server widgets/list: same OS logo next to OS name.
+
+Image rules:
+
+Size: 18–22px height (consistent)
+
+loading="lazy"
+
+onError fallback → linux_logo.png
+
+If OS unknown:
+
+show linux_logo.png + “Unknown”
+
+2) Servers list “Console” button must open as pop-out window
+Requirement
+
+On the Servers list (not inside server detail), the Console action must open a new pop-out window directly.
+
+Behaviour
+
+Clicking Console opens a new window:
+
+route: /servers/:id/console?popup=1
+
+window features: reasonable size (e.g. 1200x800), resizable, scrollbars
+
+Popout must still respect the 15-second console lock:
+
+If locked: popout shows the lock screen + countdown until ready, then auto-connect.
+
+Implementation details
+
+Use window.open() from the list view.
+
+Ensure popout route uses a minimal chrome layout:
+
+no sidebar
+
+no heavy header
+
+just console + connection status + clipboard controls
+
+3) Increase console font size (readability)
+Requirement
+
+Console text is currently too small. Increase it.
+
+Implementation (noVNC)
+
+noVNC typically renders via canvas; “font size” is effectively controlled by:
+
+scaling / CSS zoom on the canvas container
+
+viewport scaling settings
+
+Implement:
+
+Default scale increased (e.g. 110–125%) for both embedded and popout console
+
+Add a simple control: A- / A+ (or “Zoom - / Zoom +”) with 3 presets: 100%, 115%, 130%
+
+Persist per-user in localStorage:
+
+consoleScale=1.15 etc
+
+Rules:
+
+Must not break keyboard input mapping.
+
+Must not blur excessively; choose scale that keeps text crisp.
+
+Acceptance Criteria
+
+Dashboard and Servers list both show the correct OS logo for each server.
+
+Servers list Console opens a working pop-out console window.
+
+Console text is visibly larger by default, with simple zoom presets that persist.

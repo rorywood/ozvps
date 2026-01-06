@@ -75,4 +75,17 @@ export function getOsCategory(template: OsTemplate): string {
   return 'Other';
 }
 
+// Helper for server objects that have image.name
+export interface ServerImage {
+  name?: string;
+}
+
+export function getOsLogoUrlFromServer(image?: ServerImage | null): string {
+  if (!image?.name) {
+    return FALLBACK_LOGO;
+  }
+  // Create a template-like object from the server's image name
+  return getOsLogoUrl({ id: 0, name: image.name });
+}
+
 export { FALLBACK_LOGO };
