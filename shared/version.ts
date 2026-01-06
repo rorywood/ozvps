@@ -1,4 +1,4 @@
-export const VERSION = "1.7.9";
+export const VERSION = "1.8.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.8.0",
+    date: "2026-01-06",
+    changes: [
+      "Removed Stripe configuration banner",
+      "Simplified credits CLI authentication",
+    ],
+  },
   {
     version: "1.7.8",
     date: "2026-01-06",

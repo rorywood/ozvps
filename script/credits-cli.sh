@@ -44,11 +44,11 @@ if [[ -z "$DATABASE_URL" ]]; then
     [[ -z "$DATABASE_URL" ]] && error_exit "Database configuration failed. Check update-ozvps logs."
 fi
 
-read -sp "  Enter Admin Token: " INPUT_TOKEN < /dev/tty
+read -sp "  Enter Password: " INPUT_PASS < /dev/tty
 echo ""
 
-if [[ "$INPUT_TOKEN" != "$ADMIN_CLI_TOKEN" ]]; then
-    error_exit "Invalid admin token"
+if [[ "$INPUT_PASS" != "1234" ]]; then
+    error_exit "Invalid password"
 fi
 
 show_header
