@@ -1,4 +1,4 @@
-export const VERSION = "1.8.0";
+export const VERSION = "1.8.1";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,16 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.8.1",
+    date: "2026-01-06",
+    changes: [
+      "Feature: Install script now prompts for Stripe API keys",
+      "Feature: Update script checks for missing Stripe configuration",
+      "Feature: Update script forces plan resync to fix $0 pricing",
+      "Fix: Added /api/admin/resync-plans endpoint (localhost only)",
+    ],
+  },
   {
     version: "1.8.0",
     date: "2026-01-06",

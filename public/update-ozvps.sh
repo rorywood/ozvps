@@ -346,6 +346,15 @@ if [[ ! -f "$INSTALL_DIR/dist/index.cjs" ]]; then
 fi
 echo -e "  ${GREEN}✓${NC}  Application ready"
 
+# Check Stripe configuration
+if ! grep -q "^STRIPE_SECRET_KEY=" "$INSTALL_DIR/.env" || ! grep -q "^STRIPE_PUBLISHABLE_KEY=" "$INSTALL_DIR/.env"; then
+    echo ""
+    echo -e "  ${YELLOW}!${NC}  Stripe API keys not configured"
+    echo -e "  ${DIM}Add STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY to .env for payments${NC}"
+    echo -e "  ${DIM}Get keys from dashboard.stripe.com/apikeys${NC}"
+    echo ""
+fi
+
 # Update the update command and CLI tools
 (
     if [[ -f "$INSTALL_DIR/public/update-ozvps.sh" ]]; then
@@ -380,6 +389,31 @@ spinner $! "Updating tools"
     done
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Restarting service"
+
+# Force resync plans from VirtFusion (ensures pricing is up to date)
+SYNC_SUCCESS=false
+(
+    for i in {1..10}; do
+        SYNC_RESULT=$(curl -s -X POST http://127.0.0.1:5000/api/admin/resync-plans 2>/dev/null)
+        if echo "$SYNC_RESULT" | grep -q '"success":true'; then
+            SYNCED=$(echo "$SYNC_RESULT" | grep -o '"synced":[0-9]*' | cut -d: -f2)
+            echo "Synced $SYNCED plans from VirtFusion"
+            echo "SYNC_OK" > "$TEMP_DIR/sync_status"
+            break
+        fi
+        sleep 1
+    done
+) >>"$LOG_FILE" 2>&1 &
+spinner $! "Syncing pricing"
+
+# Check if sync succeeded
+if [[ -f "$TEMP_DIR/sync_status" ]] && grep -q "SYNC_OK" "$TEMP_DIR/sync_status"; then
+    SYNC_SUCCESS=true
+fi
+
+if [[ "$SYNC_SUCCESS" != "true" ]]; then
+    echo -e "  ${YELLOW}!${NC}  Plan sync may have failed - check VirtFusion API connection"
+fi
 
 # Cleanup old backups (keep last 3)
 (

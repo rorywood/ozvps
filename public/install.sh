@@ -133,13 +133,10 @@ main() {
     fi
     echo ""
 
-    echo -e "  ${CYAN}Admin CLI Token${NC} ${DIM}(for server-side credit management)${NC}"
-    echo -e "  ${DIM}Leave blank to auto-generate secure token${NC}"
-    input_field "Admin Token" ADMIN_CLI_TOKEN yes
-    if [[ -z "$ADMIN_CLI_TOKEN" ]]; then
-        ADMIN_CLI_TOKEN=$(openssl rand -hex 32)
-        echo -e "  ${DIM}Generated secure admin token${NC}"
-    fi
+    echo -e "  ${CYAN}Stripe Payments${NC} ${DIM}(for wallet top-ups)${NC}"
+    echo -e "  ${DIM}Get keys from dashboard.stripe.com/apikeys${NC}"
+    input_field "Publishable Key (pk_...)" STRIPE_PUBLISHABLE_KEY
+    input_field "Secret Key (sk_...)" STRIPE_SECRET_KEY yes
     echo ""
 
     echo -e "  ${CYAN}SSL Certificate${NC}"
@@ -291,7 +288,8 @@ AUTH0_CLIENT_SECRET=$AUTH0_CLIENT_SECRET
 VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
 VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
 DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
-ADMIN_CLI_TOKEN=$ADMIN_CLI_TOKEN
+STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY
+STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
 NODE_ENV=production
 PORT=5000
 EOF

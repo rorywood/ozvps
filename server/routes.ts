@@ -216,6 +216,32 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Force resync plans from VirtFusion (localhost only, for update script)
+  // Registered BEFORE CSRF to allow curl from update script
+  app.post('/api/admin/resync-plans', async (req, res) => {
+    // Only allow from localhost for security
+    const ip = req.ip || req.socket.remoteAddress || '';
+    const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    if (!isLocalhost) {
+      log(`Plan resync rejected from non-local IP: ${ip}`, 'api');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+      const packages = await virtfusionClient.getPackages();
+      if (packages.length > 0) {
+        const result = await dbStorage.syncPlansFromVirtFusion(packages);
+        log(`Plans resynced: ${result.synced} synced, ${result.errors.length} errors`, 'api');
+        res.json({ success: true, synced: result.synced, errors: result.errors });
+      } else {
+        res.json({ success: false, error: 'No packages found from VirtFusion' });
+      }
+    } catch (error: any) {
+      log(`Plan resync failed: ${error.message}`, 'api');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
