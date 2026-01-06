@@ -1,4 +1,4 @@
-export const VERSION = "1.7.1";
+export const VERSION = "1.7.2";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.2",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Update script database migration handling",
+      "Fix: Preserve manually-disabled plans during VirtFusion sync",
+    ],
+  },
   {
     version: "1.7.1",
     date: "2026-01-06",
