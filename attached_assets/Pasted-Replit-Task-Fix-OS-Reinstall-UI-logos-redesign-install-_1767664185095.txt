@@ -1,0 +1,189 @@
+Replit Task: Fix OS Reinstall UI (logos + redesign) + install progress bar + console lock after boot
+Scope
+
+Only touch the OS Reinstall flow and the Console access gating related to power-on/reinstall. Keep existing backend integration with VirtFusion; improve mapping, UI, and state handling.
+
+1) OS Template List: Correct logos + consistent row design
+Logo assets (use these exact URLs)
+
+AlmaLinux: https://panel.ozvps.com.au/img/logo/almalinux_logo.png
+
+CentOS: https://panel.ozvps.com.au/img/logo/centos_logo.png
+
+Debian: https://panel.ozvps.com.au/img/logo/debian_logo.png
+
+Fedora: https://panel.ozvps.com.au/img/logo/fedora_logo.png
+
+Ubuntu: https://panel.ozvps.com.au/img/logo/ubuntu_logo.png
+
+openSUSE: https://panel.ozvps.com.au/img/logo/opensuse_logo.png
+
+Oracle Linux: https://panel.ozvps.com.au/img/logo/oracle_linux_logo.png
+
+Other/Unknown: https://panel.ozvps.com.au/img/logo/linux_logo.png
+
+Requirements
+
+Every OS option row must show an icon on the left (fixed size, eg 24–28px square), then OS name + version/template name, then a select button / radio.
+
+Deterministic OS-to-logo mapping:
+
+Use template metadata (name, distro field, slug) from VirtFusion templates list.
+
+Normalise strings: lowercase, trim, replace spaces/underscores/hyphens.
+
+Match by contains rules:
+
+almalinux, alma
+
+centos
+
+debian
+
+fedora
+
+ubuntu
+
+opensuse, suse
+
+oracle, oraclelinux
+
+fallback → linux_logo.png
+
+Do not rely on user-visible names only if VirtFusion provides a distro/identifier field; prefer stable IDs.
+
+Image loading:
+
+Use loading="lazy".
+
+Add onError fallback to linux_logo.png.
+
+UI design (reinstall page):
+
+Replace accordion-with-random spacing with a clean template picker:
+
+Search box (client-side filter) for templates.
+
+Category chips/tabs (optional): Debian-based, RHEL-based, SUSE, Other.
+
+Each row is clickable (entire row selects).
+
+Selected row has a clear highlight and check indicator.
+
+Keep hostname input and validation near the “Reinstall” action.
+
+Add a strong warning block: reinstall wipes disk; confirm required.
+
+Deliverable: a single reusable OsTemplateRow component and a getOsLogoUrl(template) util.
+
+2) Proper reinstall progress bar (real state + polling, not fake)
+Goal
+
+When reinstall starts, show a real progress section with:
+
+A progress bar (0–100) driven by VirtFusion task status if available, otherwise a stepped progress indicator with “current stage”.
+
+A status timeline with timestamps (queued, provisioning, installing, configuring, completed/failed).
+
+A clear finished state: success or error, with last message.
+
+Implementation requirements
+
+When user confirms reinstall:
+
+Disable template selection + hostname input.
+
+Fire the reinstall API call.
+
+Store reinstallTaskId (or equivalent job identifier) in UI state.
+
+Poll task status:
+
+Poll every 2 seconds for the first 30 seconds, then every 5 seconds until completion/failure.
+
+Stop polling on completion/failure/unmount.
+
+Map statuses to UI:
+
+If VirtFusion provides percent → use it.
+
+If not, map known states to percent:
+
+queued: 5
+
+provisioning: 20
+
+imaging/downloading: 40
+
+installing: 65
+
+configuring: 85
+
+rebooting: 95
+
+complete: 100
+
+failed: keep last percent and show error state
+
+Handle refresh:
+
+If page reloads, recover active task by querying server “current task” / “last task” if VirtFusion supports it; otherwise persist task id in sessionStorage keyed by serverId.
+
+Completion:
+
+On success: show “Install complete” + enable Console button after console lock rules (below).
+
+On failure: show “Install failed” + error message; re-enable reinstall controls.
+
+Deliverable: useReinstallTask(serverId) hook handling polling, plus UI component ReinstallProgressPanel.
+
+3) Console lock: block console for 15 seconds after server starts
+Rule
+
+After a server is started (power on or reboot initiated from panel), the embedded console access must be disabled for 15 seconds to prevent noVNC connecting while the VM is still initialising.
+
+Requirements
+
+Trigger conditions:
+
+User clicks Start.
+
+User clicks Restart.
+
+Reinstall flow reaches “rebooting/complete” and the VM powers on (treat as start event).
+
+Behaviour:
+
+Immediately disable/open-console button and embedded console route access.
+
+Show countdown text: “Console available in 15s” decreasing each second.
+
+After 15s, enable console.
+
+Enforcement:
+
+UI-level lock is mandatory.
+
+Also add route guard: if user navigates directly to /server/:id/console during lock window, show locked screen and auto-redirect/auto-enable when time expires.
+
+State storage:
+
+Store lock expiry timestamp in memory + sessionStorage (consoleLockUntil:<serverId> = epoch_ms) so it persists across refresh.
+
+If a start call fails, clear the lock.
+
+Edge cases:
+
+If server becomes “running” before 15 seconds, still keep lock until expiry.
+
+If server becomes “stopped/suspended” during lock, clear lock.
+
+Deliverable: useConsoleLock(serverId) hook + a ConsoleLockedOverlay component + route guard.
+
+Acceptance Criteria
+
+OS template list shows correct icons for every template with clean consistent layout; unknown templates show the “Other” linux logo.
+
+Reinstall triggers a real progress view that updates until completion/failure, survives refresh, and never shows fake progress unrelated to VirtFusion state.
+
+Console is inaccessible for 15 seconds after any start/restart/reinstall-boot event, with visible countdown and route-level enforcement.
