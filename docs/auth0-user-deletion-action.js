@@ -1,98 +1,78 @@
 /**
- * Auth0 Post User Deletion Action
+ * Auth0 Event Streams - User Deletion Webhook Setup
  * 
- * This action fires when a user is deleted from Auth0 and notifies the OzVPS panel
- * to clean up the corresponding VirtFusion user and their servers.
+ * This webhook is triggered when a user is deleted from Auth0 via Event Streams.
+ * It automatically cleans up the corresponding VirtFusion user and their servers.
  * 
  * SETUP INSTRUCTIONS:
  * 
- * 1. In Auth0 Dashboard, go to: Actions > Library > Build Custom
- * 2. Name: "OzVPS User Deletion Sync"
- * 3. Trigger: "Post User Registration" (Note: Auth0 doesn't have a direct "Post User Deletion" 
- *    trigger in Actions, so you'll need to use Log Streams or a custom solution - see notes below)
- * 4. Paste this code
- * 5. Add Secret: OZVPS_WEBHOOK_SECRET (same value as AUTH0_WEBHOOK_SECRET in OzVPS panel)
- * 6. Add Secret: OZVPS_PANEL_URL (your panel URL, e.g., https://your-panel.com)
- * 7. Deploy the action
+ * 1. In Auth0 Dashboard, go to: Monitoring > Event Streams
+ * 2. Click "Create Event Stream" > "Webhook"
+ * 3. Configure:
+ *    - Stream Name: OzVPS User Deletion
+ *    - Endpoint: https://your-panel.com/api/hooks/auth0-user-deleted
+ *    - Authentication method: Bearer
+ *    - Authorization Token: (generate a secure random token, e.g., openssl rand -hex 32)
  * 
- * IMPORTANT: Auth0 Actions doesn't have a native "Post User Deletion" trigger.
- * For user deletion sync, you have two options:
+ * 4. Under "Select Events", expand "User" section and check:
+ *    - user.deleted
  * 
- * OPTION A: Use Auth0 Log Streams (Recommended)
- * 1. Go to Monitoring > Streams > Create Stream
- * 2. Choose "Custom Webhook"
- * 3. Set Webhook URL to: https://your-panel.com/api/hooks/auth0-user-deleted
- * 4. Filter for event types: "sdu" (successful user deletion)
- * 5. Add authorization header if needed
+ * 5. Save the Event Stream
  * 
- * OPTION B: Use this code with a Management API Extension/Hook
- * - Create a custom extension that calls this when users are deleted via the Management API
+ * 6. In your OzVPS panel, add the Authorization Token as:
+ *    Secret Name: AUTH0_WEBHOOK_SECRET
+ *    Value: (the same token you entered in Auth0)
  * 
- * The code below shows the webhook payload format your panel expects:
- */
-
-const crypto = require('crypto');
-
-exports.onExecutePostUserRegistration = async (event, api) => {
-  // This is a template - actual deletion would use Log Streams
-  // This code demonstrates the payload format for the OzVPS webhook
-};
-
-/**
- * For Log Streams, the OzVPS panel expects this payload format at:
- * POST /api/hooks/auth0-user-deleted
+ * HOW IT WORKS:
  * 
- * Headers:
- *   Content-Type: application/json
- *   X-Auth0-Signature: <HMAC-SHA256 hex signature of body using webhook secret>
+ * When a user is deleted from Auth0:
+ * 1. Auth0 sends a webhook with the user's data (including app_metadata)
+ * 2. The webhook verifies the Bearer token
+ * 3. It deletes any active sessions for that user
+ * 4. If app_metadata contains virtfusion_user_id:
+ *    - Lists all VirtFusion servers owned by that user
+ *    - Deletes each server
+ *    - Deletes the VirtFusion user account
  * 
- * Body:
+ * PAYLOAD FORMAT (Auth0 Event Streams):
+ * 
  * {
- *   "auth0UserId": "auth0|abc123",
- *   "virtFusionUserId": 12345,  // From user's app_metadata.virtfusion_user_id
- *   "email": "user@example.com"
+ *   "id": "evt_abc123",
+ *   "type": "user.deleted",
+ *   "source": "urn:auth0:your-tenant:users",
+ *   "specversion": "1.0",
+ *   "time": "2025-01-06T12:00:00.000Z",
+ *   "data": {
+ *     "object": {
+ *       "user_id": "auth0|abc123",
+ *       "email": "user@example.com",
+ *       "name": "John Doe",
+ *       "app_metadata": {
+ *         "virtfusion_user_id": 12345
+ *       }
+ *     }
+ *   }
  * }
  * 
- * The signature is computed as:
- *   HMAC-SHA256(requestBody, webhookSecret).toString('hex')
- */
-
-// Example function to call the OzVPS webhook (for reference/testing)
-async function notifyOzVPSUserDeleted(auth0UserId, virtFusionUserId, email, webhookSecret, panelUrl) {
-  const payload = JSON.stringify({
-    auth0UserId,
-    virtFusionUserId,
-    email
-  });
-  
-  const signature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(payload)
-    .digest('hex');
-  
-  const response = await fetch(`${panelUrl}/api/hooks/auth0-user-deleted`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Auth0-Signature': signature
-    },
-    body: payload
-  });
-  
-  return response.json();
-}
-
-/**
- * QUICK SETUP - Log Stream Configuration:
+ * TESTING:
  * 
- * Since Auth0 Log Streams send raw event data, you may need a small intermediary 
- * (like a Cloudflare Worker or AWS Lambda) to:
- * 1. Receive the Auth0 log event
- * 2. Extract user_id from the event
- * 3. Look up app_metadata.virtfusion_user_id via Auth0 Management API
- * 4. Forward to OzVPS webhook with proper signature
+ * You can test the webhook with curl:
  * 
- * Alternatively, the OzVPS panel could be enhanced to:
- * 1. Accept Auth0 log stream events directly
- * 2. Look up the VirtFusion user ID from stored session data or by querying Auth0
+ * curl -X POST https://your-panel.com/api/hooks/auth0-user-deleted \
+ *   -H "Authorization: Bearer YOUR_TOKEN" \
+ *   -H "Content-Type: application/json" \
+ *   -d '{
+ *     "type": "user.deleted",
+ *     "data": {
+ *       "object": {
+ *         "user_id": "auth0|test123",
+ *         "email": "test@example.com",
+ *         "app_metadata": {
+ *           "virtfusion_user_id": null
+ *         }
+ *       }
+ *     }
+ *   }'
+ * 
+ * Expected response: 204 No Content (success)
  */

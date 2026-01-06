@@ -785,39 +785,35 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'Webhook not configured' });
       }
 
-      const signature = req.headers['x-auth0-signature'] as string;
-      if (!signature) {
-        log('Missing webhook signature header', 'webhook');
-        return res.status(401).json({ error: 'Missing signature' });
+      const authHeader = req.headers['authorization'] as string;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        log('Missing or invalid Authorization header', 'webhook');
+        return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const rawBody = (req as any).rawBody;
-      if (!rawBody) {
-        log('Missing raw body for signature verification', 'webhook');
-        return res.status(400).json({ error: 'Invalid request body' });
+      const token = authHeader.substring(7);
+      if (token !== webhookSecret) {
+        log('Invalid webhook token', 'webhook');
+        return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const expectedSignature = createHmac('sha256', webhookSecret)
-        .update(rawBody)
-        .digest('hex');
-      
-      const signatureBuffer = Buffer.from(signature, 'hex');
-      const expectedBuffer = Buffer.from(expectedSignature, 'hex');
-      
-      if (signatureBuffer.length !== expectedBuffer.length || 
-          !timingSafeEqual(signatureBuffer, expectedBuffer)) {
-        log('Invalid webhook signature', 'webhook');
-        return res.status(401).json({ error: 'Invalid signature' });
+      const eventType = req.body.type;
+      if (eventType !== 'user.deleted') {
+        log(`Ignoring non-deletion event: ${eventType}`, 'webhook');
+        return res.status(204).send();
       }
 
-      const { auth0UserId, virtFusionUserId, email } = req.body;
-      
-      if (!auth0UserId) {
-        log('Missing auth0UserId in webhook payload', 'webhook');
-        return res.status(400).json({ error: 'Missing auth0UserId' });
+      const userData = req.body.data?.object;
+      if (!userData) {
+        log('Missing user data in webhook payload', 'webhook');
+        return res.status(400).json({ error: 'Missing user data' });
       }
 
-      log(`Processing user deletion webhook for Auth0 user: ${auth0UserId}, email: ${email}`, 'webhook');
+      const auth0UserId = userData.user_id;
+      const email = userData.email;
+      const virtFusionUserId = userData.app_metadata?.virtfusion_user_id;
+
+      log(`Processing user deletion for Auth0 user: ${auth0UserId}, email: ${email}`, 'webhook');
 
       await storage.deleteSessionsByAuth0UserId(auth0UserId);
       log(`Deleted sessions for Auth0 user ${auth0UserId}`, 'webhook');
@@ -827,25 +823,14 @@ export async function registerRoutes(
         
         if (result.success) {
           log(`Successfully cleaned up VirtFusion user ${virtFusionUserId}: ${result.serversDeleted} servers deleted`, 'webhook');
-          return res.json({ 
-            success: true, 
-            message: `User and ${result.serversDeleted} servers deleted from VirtFusion` 
-          });
+          return res.status(204).send();
         } else {
           log(`Partial cleanup for VirtFusion user ${virtFusionUserId}: ${result.errors.join(', ')}`, 'webhook');
-          return res.status(207).json({ 
-            success: false, 
-            message: 'Partial cleanup completed',
-            serversDeleted: result.serversDeleted,
-            errors: result.errors 
-          });
+          return res.status(500).json({ error: 'Partial cleanup', errors: result.errors });
         }
       } else {
-        log(`No VirtFusion user ID provided for Auth0 user ${auth0UserId}, skipping VirtFusion cleanup`, 'webhook');
-        return res.json({ 
-          success: true, 
-          message: 'No VirtFusion user linked, sessions cleared only' 
-        });
+        log(`No VirtFusion user ID in app_metadata for ${auth0UserId}, skipping VirtFusion cleanup`, 'webhook');
+        return res.status(204).send();
       }
     } catch (error: any) {
       log(`Webhook error: ${error.message}`, 'webhook');
