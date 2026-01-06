@@ -307,6 +307,86 @@ main() {
         tar -xzf /tmp/ozvps-panel.tar.gz -C "$INSTALL_DIR"
         rm -f /tmp/ozvps-panel.tar.gz
 
+        # Fix: Remove broken bad-words package and apply content filter fix
+        log_info "Applying compatibility fixes..."
+        
+        # Remove bad-words package (it has ESM/CJS compatibility issues)
+        # Use npm uninstall to properly remove from both package.json and package-lock.json
+        if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
+            cd "$INSTALL_DIR"
+            npm uninstall bad-words 2>/dev/null || true
+            log_info "Removed incompatible bad-words package"
+        fi
+        
+        # Create fixed content-filter.ts
+        cat > "$INSTALL_DIR/server/content-filter.ts" << 'CONTENTFILTER'
+const badWords = [
+  'fuck', 'shit', 'ass', 'asshole', 'bitch', 'damn', 'crap', 'bastard', 'cunt',
+  'dick', 'cock', 'pussy', 'whore', 'slut', 'fag', 'faggot', 'nigger',
+  'nigga', 'retard', 'porn', 'porno', 'xxx', 'nsfw', 'hentai', 'nude',
+  'nudes', 'naked', 'sex', 'sexy', 'onlyfans', 'fansly', 'chaturbate',
+  'pornhub', 'xvideos', 'xhamster', 'redtube', 'youporn', 'brazzers',
+  'shithead', 'dickhead', 'asshat', 'dumbass', 'jackass', 'motherfucker',
+  'fucker', 'fucking', 'fucked', 'shitting', 'shitted', 'bitchy',
+  'asses', 'dicks', 'cocks', 'pussies', 'sluts', 'whores', 'cunts'
+];
+
+export function containsProfanity(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  
+  for (const word of badWords) {
+    if (lowerText.includes(word)) {
+      return true;
+    }
+  }
+  
+  const normalized = lowerText.replace(/[\-_.\s]/g, '');
+  for (const word of badWords) {
+    if (normalized.includes(word)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+export function cleanText(text: string): string {
+  let result = text;
+  for (const word of badWords) {
+    const regex = new RegExp(word, 'gi');
+    result = result.replace(regex, '*'.repeat(word.length));
+  }
+  return result;
+}
+
+export function validateServerName(name: string): { valid: boolean; error?: string } {
+  const trimmed = name.trim();
+  
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Server name cannot be empty' };
+  }
+  
+  if (trimmed.length > 48) {
+    return { valid: false, error: 'Server name must be 48 characters or less' };
+  }
+  
+  if (trimmed.length < 2) {
+    return { valid: false, error: 'Server name must be at least 2 characters' };
+  }
+  
+  if (containsProfanity(trimmed)) {
+    return { valid: false, error: 'Server name contains inappropriate content' };
+  }
+  
+  const validPattern = /^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/;
+  if (!validPattern.test(trimmed)) {
+    return { valid: false, error: 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods' };
+  }
+  
+  return { valid: true };
+}
+CONTENTFILTER
+
         log_info "Installing npm dependencies..."
         npm install
 

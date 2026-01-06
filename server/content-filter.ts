@@ -9,8 +9,6 @@ const badWords = [
   'asses', 'dicks', 'cocks', 'pussies', 'sluts', 'whores', 'cunts'
 ];
 
-const badWordsSet = new Set(badWords.map(w => w.toLowerCase()));
-
 export function containsProfanity(text: string): boolean {
   const lowerText = text.toLowerCase();
   

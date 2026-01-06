@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
+import { registerInstallAssets } from "./install-assets";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -137,6 +138,8 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
+
+  registerInstallAssets(app);
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
