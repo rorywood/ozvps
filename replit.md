@@ -36,16 +36,26 @@ Preferred communication style: Simple, everyday language.
 ### Billing & Wallet System
 - **Prepaid Wallet**: Users add funds via Stripe, then deploy servers instantly
 - **Database Tables**:
-  - `plans`: VPS plans with pricing (synced from VirtFusion packages)
+  - `plans`: VPS plans with pricing (auto-synced from VirtFusion packages on startup)
   - `wallets`: User balances stored in cents (integer precision), with `stripe_customer_id` for Stripe linking
   - `wallet_transactions`: Transaction history (credits from Stripe, debits from deployments)
   - `deploy_orders`: Server provisioning orders with status tracking
+- **VirtFusion Plans Sync**: On startup, fetches all packages from VirtFusion and syncs to plans table
+  - Uses `virtfusionClient.getPackages()` to fetch available packages
+  - `dbStorage.syncPlansFromVirtFusion()` upserts plans by `virtfusion_package_id`
+  - Non-blocking: sync runs async so server boot isn't delayed
 - **Stripe Integration**: Using Replit Stripe connector with stripe-replit-sync
-  - **Stripe Customer Linking**: Auto-creates Stripe customers on first top-up, linked via `stripe_customer_id` in wallets table
+  - **Stripe Customer on Registration**: Automatically creates Stripe customer when user registers (similar to VirtFusion user creation)
+  - **Stripe Customer Linking**: Stripe customer ID stored in `wallets.stripe_customer_id`
   - Checkout sessions for wallet top-ups (using customer ID for returning users)
   - Webhook for automatic balance crediting (idempotent via stripeEventId)
   - **Webhook Validation**: Validates payment_status=paid, currency=aud, and uses session.amount_total as authoritative source
-  - **Stripe Customer Portal**: Users can manage payment methods and view billing history via `/api/billing/portal`
+  - **Enhanced Webhook Logging**: Logs payload size, livemode flag, and handles stripe-replit-sync errors non-fatally
+- **In-App Billing UI** (no external Stripe portal redirects):
+  - `GET /api/billing/payment-methods` - List saved payment methods
+  - `POST /api/billing/setup-intent` - Create SetupIntent for adding new cards
+  - `DELETE /api/billing/payment-methods/:id` - Remove a payment method
+  - `GET /api/billing/transactions` - Wallet transaction history
 - **Deploy Flow**: 
   1. User selects plan, verifies sufficient balance
   2. Atomic debit from wallet + order creation
