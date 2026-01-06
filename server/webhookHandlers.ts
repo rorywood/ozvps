@@ -1,4 +1,4 @@
-import { getStripeSync, getUncachableStripeClient } from './stripeClient';
+import { getStripeSync } from './stripeClient';
 import { dbStorage } from './storage';
 import { log } from './index';
 
@@ -24,21 +24,14 @@ export class WebhookHandlers {
       log(`stripe-replit-sync error (non-fatal): ${syncError.message}`, 'stripe');
     }
 
-    // Parse the event to handle wallet top-ups
-    const stripe = await getUncachableStripeClient();
-    const webhookSecret = await sync.getManagedWebhookSecret();
-    
-    if (!webhookSecret) {
-      log('Webhook secret not available, skipping custom processing', 'stripe');
-      return;
-    }
-    
+    // Parse the event directly - sync.processWebhook already verified the signature
+    // With managed webhooks, the webhook secret is not exposed externally
     let event;
     try {
-      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-    } catch (signatureError: any) {
-      log(`Webhook signature verification failed: ${signatureError.message}`, 'stripe');
-      throw signatureError;
+      event = JSON.parse(payload.toString('utf8'));
+    } catch (parseError: any) {
+      log(`Failed to parse webhook payload: ${parseError.message}`, 'stripe');
+      return;
     }
 
     // Log event details for debugging

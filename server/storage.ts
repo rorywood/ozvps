@@ -211,11 +211,41 @@ export const dbStorage = {
   },
 
   async upsertPlan(plan: InsertPlan): Promise<Plan> {
+    // Use virtfusionPackageId as the primary lookup for synced plans
+    if (plan.virtfusionPackageId) {
+      const [existingByVfId] = await db
+        .select()
+        .from(plans)
+        .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId));
+      
+      if (existingByVfId) {
+        // Preserve existing price if the new price is 0 (VirtFusion doesn't provide pricing)
+        const updateData = { ...plan };
+        if (plan.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
+          updateData.priceMonthly = existingByVfId.priceMonthly;
+        }
+        
+        const [updated] = await db
+          .update(plans)
+          .set(updateData)
+          .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId))
+          .returning();
+        return updated;
+      }
+    }
+    
+    // Fallback to code lookup for manually created plans
     const existing = await this.getPlanByCode(plan.code);
     if (existing) {
+      // Preserve existing price if the new price is 0
+      const updateData = { ...plan };
+      if (plan.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
+        updateData.priceMonthly = existing.priceMonthly;
+      }
+      
       const [updated] = await db
         .update(plans)
-        .set(plan)
+        .set(updateData)
         .where(eq(plans.code, plan.code))
         .returning();
       return updated;
