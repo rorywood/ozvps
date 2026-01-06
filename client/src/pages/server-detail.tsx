@@ -26,13 +26,46 @@ import {
   Calendar,
   TrendingUp,
   Pencil,
-  Check
+  Check,
+  Settings
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
+// Distro logos
+import almaLinuxLogo from "@assets/stock_images/almalinux_logo_icon_0e841815.jpg";
+import centosLogo from "@assets/stock_images/centos_linux_logo_ic_12121183.jpg";
+import debianLogo from "@assets/stock_images/debian_linux_logo_ic_fcef002b.jpg";
+import fedoraLogo from "@assets/stock_images/fedora_linux_logo_ic_dae186fe.jpg";
+import ubuntuLogo from "@assets/stock_images/ubuntu_linux_logo_ic_9938217b.jpg";
+import opensuseLogo from "@assets/stock_images/opensuse_linux_logo_38c4f468.jpg";
+import oracleLogo from "@assets/stock_images/oracle_linux_logo_895a7022.jpg";
+
+// Map distro names to logos
+const distroLogos: Record<string, string> = {
+  "AlmaLinux": almaLinuxLogo,
+  "CentOS": centosLogo,
+  "Debian": debianLogo,
+  "Fedora": fedoraLogo,
+  "Ubuntu": ubuntuLogo,
+  "openSUSE": opensuseLogo,
+  "Oracle Linux": oracleLogo,
+  "Other": debianLogo, // fallback
+};
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +94,8 @@ export default function ServerDetail() {
   const [reinstallInProgress, setReinstallInProgress] = useState(false);
   const [reinstallStatus, setReinstallStatus] = useState<string>('');
   const [selectedOs, setSelectedOs] = useState<string>("");
+  const [hostname, setHostname] = useState<string>("");
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isRenamingServer, setIsRenamingServer] = useState(false);
@@ -163,8 +198,8 @@ export default function ServerDetail() {
   };
 
   const reinstallMutation = useMutation({
-    mutationFn: ({ id, osId }: { id: string, osId: number }) => 
-      api.reinstallServer(id, osId),
+    mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname?: string }) => 
+      api.reinstallServer(id, osId, hostname),
     onSuccess: () => {
       setReinstallDialogOpen(false);
       setReinstallInProgress(true);
@@ -298,7 +333,11 @@ export default function ServerDetail() {
 
   const handleReinstall = () => {
     if (!serverId || !selectedOs) return;
-    reinstallMutation.mutate({ id: serverId, osId: parseInt(selectedOs) });
+    reinstallMutation.mutate({ 
+      id: serverId, 
+      osId: parseInt(selectedOs),
+      hostname: hostname.trim() || undefined
+    });
   };
 
   const copyToClipboard = (text: string) => {
@@ -1035,86 +1074,153 @@ export default function ServerDetail() {
         </Tabs>
       </div>
 
-      {/* Reinstall Dialog */}
-      <Dialog open={reinstallDialogOpen} onOpenChange={setReinstallDialogOpen}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Reinstall Server</DialogTitle>
+      {/* Reinstall Dialog - Accordion Style */}
+      <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
+        setReinstallDialogOpen(open);
+        if (!open) {
+          setSelectedOs("");
+          setHostname("");
+          setShowAdvancedOptions(false);
+        }
+      }}>
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="p-6 pb-4 border-b border-white/10">
+            <DialogTitle className="text-xl">Reinstall Server</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Select an operating system to install on your server. This will erase all existing data.
+              The server requires a valid operating system. Select the operating system from the list below that you would like to be automatically installed on the server.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto">
             {osGroups.length > 0 ? (
-              osGroups.map((group) => (
-                <div key={group.name} className="space-y-2">
-                  <div className="flex items-center gap-2 px-1">
-                    <span className="text-sm font-semibold text-white">{group.name}</span>
-                    <span className="text-xs text-muted-foreground">({group.templates.length} options)</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {group.templates.map((template) => (
-                      <button
-                        key={template.uuid}
-                        onClick={() => setSelectedOs(template.id)}
-                        className={cn(
-                          "p-3 rounded-lg border text-left transition-all",
-                          selectedOs === template.id
-                            ? "bg-primary/20 border-primary text-white"
-                            : "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20"
+              <Accordion type="single" collapsible className="w-full">
+                {osGroups.map((group) => {
+                  const logoSrc = distroLogos[group.name] || distroLogos["Other"];
+                  const groupDescription = osTemplates?.find((g: any) => g.name === group.name)?.description || "";
+                  
+                  return (
+                    <AccordionItem 
+                      key={group.name} 
+                      value={group.name}
+                      className="border-b border-white/10"
+                    >
+                      <AccordionTrigger className="px-6 py-4 hover:bg-white/5 hover:no-underline [&[data-state=open]]:bg-primary/20">
+                        <div className="flex items-center gap-4">
+                          <img 
+                            src={logoSrc} 
+                            alt={group.name} 
+                            className="w-10 h-10 rounded-lg object-cover"
+                          />
+                          <span className="font-semibold text-white text-base">{group.name}</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-6 pb-4 pt-2 bg-white/5">
+                        {groupDescription && (
+                          <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                            {groupDescription}
+                          </p>
                         )}
-                        data-testid={`button-os-${template.id}`}
-                      >
-                        <div className="font-medium text-sm">{template.version || template.name}</div>
-                        {template.variant && (
-                          <div className="text-xs text-muted-foreground mt-0.5">{template.variant}</div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
+                        <div className="space-y-2">
+                          {group.templates.map((template) => (
+                            <button
+                              key={template.uuid}
+                              onClick={() => setSelectedOs(template.id)}
+                              className={cn(
+                                "w-full p-4 rounded-lg border text-left transition-all flex items-start gap-4",
+                                selectedOs === template.id
+                                  ? "bg-primary/20 border-primary"
+                                  : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                              )}
+                              data-testid={`button-os-${template.id}`}
+                            >
+                              <img 
+                                src={logoSrc} 
+                                alt={template.name} 
+                                className="w-8 h-8 rounded-md object-cover flex-shrink-0 mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-white">
+                                  {template.name} {template.version} {template.variant && `(${template.variant})`}
+                                </div>
+                                {template.description && (
+                                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {template.description}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-12 text-muted-foreground">
                 <p>No operating systems available for this server.</p>
-              </div>
-            )}
-            
-            {selectedOs && (
-              <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                <div className="text-xs text-muted-foreground mb-1">Selected</div>
-                <div className="text-white font-medium">
-                  {osOptions.find(os => os.id === selectedOs)?.group} - {osOptions.find(os => os.id === selectedOs)?.displayName}
-                </div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="border-t border-white/10 pt-4">
+          {/* Footer with Advanced Options */}
+          <div className="border-t border-white/10 p-6 space-y-4">
+            {/* Advanced Options */}
+            <Collapsible open={showAdvancedOptions} onOpenChange={setShowAdvancedOptions}>
+              <div className="flex justify-end">
+                <CollapsibleTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="border-white/10 text-muted-foreground hover:text-white"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Advanced Options
+                    <ChevronDown className={cn(
+                      "h-4 w-4 ml-2 transition-transform",
+                      showAdvancedOptions && "rotate-180"
+                    )} />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="mt-4 space-y-4">
+                <div className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-white block mb-2">
+                      Hostname
+                    </label>
+                    <Input
+                      value={hostname}
+                      onChange={(e) => setHostname(e.target.value)}
+                      placeholder="e.g., myserver.example.com"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                      data-testid="input-hostname"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Set the hostname for your server (optional)
+                    </p>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Install Button */}
             <Button 
-              variant="outline" 
-              onClick={() => setReinstallDialogOpen(false)}
-              className="border-white/10"
-            >
-              Cancel
-            </Button>
-            <Button 
-              className="bg-red-600 hover:bg-red-700"
+              className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold"
               onClick={handleReinstall}
               disabled={!selectedOs || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
             >
               {reinstallMutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Reinstalling...
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Installing...
                 </>
               ) : (
-                'Confirm Reinstall'
+                'Install'
               )}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
