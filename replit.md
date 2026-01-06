@@ -96,6 +96,14 @@ Preferred communication style: Simple, everyday language.
   - **Progress tracking**: Real polling of VirtFusion build status with sessionStorage persistence
   - **Console lock**: 15-second lock after reinstall starts to prevent console access during boot
   - **Credentials display**: After successful reinstall, shows server IP, username (root), and password with copy/reveal
+- **Power Action Status Tracking**:
+  - **Cross-page persistence**: Power action states (rebooting, starting, stopping) tracked via sessionStorage
+  - **Hook**: `usePowerActions` provides `markPending`, `clearPending`, `getDisplayStatus` functions
+  - **Sync hook**: `useSyncPowerActions` auto-clears pending state when server reaches expected status
+  - **Global context**: PowerActionContext provider in App.tsx ensures state shared across pages
+  - **Transitional states**: Dashboard, server list, and server detail all display transitional statuses
+  - **5-minute timeout**: Pending actions auto-expire after 5 minutes to handle edge cases
+  - **Reboot special handling**: 10-second delay before clearing reboot state (allows for restart cycle)
 - **VirtFusion API**: Bearer token authentication for backend communication
   - Environment variables: `VIRTFUSION_PANEL_URL`, `VIRTFUSION_API_TOKEN`
 - **Auth0 User Deletion Sync**: When users are deleted from Auth0, automatically cleanup VirtFusion
