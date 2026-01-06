@@ -1,0 +1,51 @@
+[INFO] Dependencies installed successfully
+[STEP] Setting up OzVPS Panel...
+[INFO] Downloading OzVPS Panel...
+[INFO] Extracting application...
+[INFO] Installing npm dependencies...
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+
+added 465 packages, and audited 466 packages in 25s
+
+44 packages are looking for funding
+  run `npm fund` for details
+
+4 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[INFO] Application setup complete
+[STEP] Writing environment configuration...
+[INFO] Environment configured successfully
+[STEP] Building application...
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/opt/ozvps-panel/script/build.ts' imported from /opt/ozvps-panel/
+    at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    at moduleResolve (node:internal/modules/esm/resolve:952:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at nextResolve (node:internal/modules/esm/hooks:864:28)
+    at resolveBase (file:///opt/ozvps-panel/node_modules/tsx/dist/esm/index.mjs?1767675595225:2:3744)
+    at resolveDirectory (file:///opt/ozvps-panel/node_modules/tsx/dist/esm/index.mjs?1767675595225:2:4243)
+    at resolveTsPaths (file:///opt/ozvps-panel/node_modules/tsx/dist/esm/index.mjs?1767675595225:2:4984)
+    at resolve (file:///opt/ozvps-panel/node_modules/tsx/dist/esm/index.mjs?1767675595225:2:5361)
+    at nextResolve (node:internal/modules/esm/hooks:864:28)
+    at Hooks.resolve (node:internal/modules/esm/hooks:306:30) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///opt/ozvps-panel/script/build.ts'
+}
+
+Node.js v20.19.6
+[ERROR] Installation failed!
+[INFO] Check the error messages above for details.
+[INFO] You can re-run this script after fixing any issues.
+root@celebrated-let:~#
