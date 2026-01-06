@@ -26,9 +26,29 @@ Preferred communication style: Simple, everyday language.
 - **Development**: tsx for hot reloading, Vite middleware for frontend
 
 ### Data Layer
-- **Storage**: In-memory only (no database required)
-- **Session Storage**: MemoryStorage class using JavaScript Map
-- **Data Sources**: All user data stored in Auth0 (credentials) and VirtFusion (servers, settings)
+- **Database**: PostgreSQL with Drizzle ORM for billing/wallet data
+- **Session Storage**: MemoryStorage class using JavaScript Map (in-memory)
+- **Data Sources**: 
+  - Auth0: User credentials and authentication
+  - VirtFusion: Server management, packages, and locations
+  - PostgreSQL: Plans, wallets, wallet transactions, and deploy orders
+
+### Billing & Wallet System
+- **Prepaid Wallet**: Users add funds via Stripe, then deploy servers instantly
+- **Database Tables**:
+  - `plans`: VPS plans with pricing (synced from VirtFusion packages)
+  - `wallets`: User balances stored in cents (integer precision)
+  - `wallet_transactions`: Transaction history (credits from Stripe, debits from deployments)
+  - `deploy_orders`: Server provisioning orders with status tracking
+- **Stripe Integration**: Using Replit Stripe connector with stripe-replit-sync
+  - Checkout sessions for wallet top-ups
+  - Webhook for automatic balance crediting (idempotent via stripeEventId)
+- **Deploy Flow**: 
+  1. User selects plan, verifies sufficient balance
+  2. Atomic debit from wallet + order creation
+  3. VirtFusion server provisioning
+  4. On failure: automatic wallet refund
+- **Order Status**: pending_payment → paid → provisioning → active/failed
 
 ### Authentication Flow
 - **User Authentication**: Auth0 (Resource Owner Password Grant)
@@ -122,9 +142,9 @@ shared/           # Shared code between client/server
 - Endpoints consumed: servers, power actions, metrics, packages, locations
 
 ### Storage
-- No database required - all data stored externally in Auth0 and VirtFusion
+- PostgreSQL database with Drizzle ORM for billing data (plans, wallets, orders)
 - Sessions stored in-memory (cleared on server restart, users re-login via Auth0)
-- PostgreSQL available but not used
+- Auth and server data stored externally in Auth0 and VirtFusion
 
 ### Third-Party Services
 - **Fonts**: Google Fonts (Inter, Outfit, JetBrains Mono)
