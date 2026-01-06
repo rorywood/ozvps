@@ -199,6 +199,14 @@ echo "$REMOTE_VERSION" > "$VERSION_FILE"
 ) >>"$LOG_FILE" 2>&1 &
 spinner $! "Installing dependencies"
 
+# Ensure PostgreSQL is running
+(
+    if ! systemctl is-active postgresql &>/dev/null; then
+        systemctl start postgresql 2>/dev/null || true
+    fi
+) >>"$LOG_FILE" 2>&1 &
+spinner $! "Checking PostgreSQL"
+
 # Database migrations (if DATABASE_URL is configured)
 (
     cd "$INSTALL_DIR"
@@ -216,9 +224,9 @@ spinner $! "Installing dependencies"
         DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
         DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
         
-        # Wait for database to be ready
+        # Wait for database to be ready (increased timeout)
         DB_READY=false
-        for i in {1..10}; do
+        for i in {1..30}; do
             if PGPASSWORD="$DB_PASS" psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
                 DB_READY=true
                 break
@@ -229,7 +237,8 @@ spinner $! "Installing dependencies"
         if [[ "$DB_READY" == "true" ]]; then
             npx drizzle-kit push --force
         else
-            echo "WARNING: Could not connect to database, skipping migrations"
+            echo "WARNING: Could not connect to database after 30s, skipping migrations"
+            echo "You may need to run: cd $INSTALL_DIR && npx drizzle-kit push --force"
         fi
     else
         echo "DATABASE_URL not configured, skipping migrations"

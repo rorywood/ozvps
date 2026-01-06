@@ -1,4 +1,4 @@
-export const VERSION = "1.7.2";
+export const VERSION = "1.7.3";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,14 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.7.3",
+    date: "2026-01-06",
+    changes: [
+      "Fix: Update script now ensures PostgreSQL is running before migrations",
+      "Fix: Increased database connection timeout from 10s to 30s",
+    ],
+  },
   {
     version: "1.7.2",
     date: "2026-01-06",
