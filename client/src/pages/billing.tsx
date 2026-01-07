@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
-import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -19,8 +18,8 @@ import {
   Copy,
   ArrowUpRight,
   ArrowDownLeft,
-  RefreshCw,
-  Zap
+  Zap,
+  ChevronRight
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -82,7 +81,6 @@ function formatDate(dateString: string): string {
 
 const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000];
 
-// Card element styling for dark theme
 const cardElementOptions = {
   hidePostalCode: true,
   style: {
@@ -102,7 +100,6 @@ const cardElementOptions = {
   },
 };
 
-// Add Card Form Component (used inside Stripe Elements)
 function AddCardFormInner({ 
   onSuccess, 
   onCancel 
@@ -127,7 +124,6 @@ function AddCardFormInner({
     setError(null);
 
     try {
-      // Get SetupIntent client secret from backend
       const { clientSecret } = await api.createSetupIntent();
       
       const cardElement = elements.getElement(CardElement);
@@ -135,7 +131,6 @@ function AddCardFormInner({
         throw new Error('Card element not found');
       }
 
-      // Confirm card setup
       const { error: stripeError, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
         payment_method: {
           card: cardElement,
@@ -291,14 +286,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
   const selectedPm = paymentMethods.find(pm => pm.id === autoTopupData?.paymentMethodId);
 
   return (
-    <GlassCard className="p-6" data-testid="auto-topup-section">
-      <div className="flex items-center justify-between mb-6">
+    <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5" data-testid="auto-topup-section">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
             <Zap className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="font-semibold text-white">Auto Top-Up</h3>
+            <h3 className="font-medium text-white">Auto Top-Up</h3>
             <p className="text-sm text-muted-foreground">Automatically add funds</p>
           </div>
         </div>
@@ -311,10 +306,10 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
       </div>
 
       {autoTopupData?.enabled && (
-        <div className="space-y-4 pt-4 border-t border-white/10">
+        <div className="space-y-4 pt-4 mt-4 border-t border-white/5">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">When balance drops below</Label>
+              <Label className="text-xs text-muted-foreground">When balance drops below</Label>
               <Select
                 value={String((autoTopupData?.thresholdCents || 500) / 100)}
                 onValueChange={handleThresholdChange}
@@ -334,7 +329,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Top-up amount</Label>
+              <Label className="text-xs text-muted-foreground">Top-up amount</Label>
               <Select
                 value={String((autoTopupData?.amountCents || 2000) / 100)}
                 onValueChange={handleAmountChange}
@@ -355,7 +350,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Payment method</Label>
+            <Label className="text-xs text-muted-foreground">Payment method</Label>
             {paymentMethods.length === 0 ? (
               <p className="text-sm text-yellow-500">No payment methods available</p>
             ) : (
@@ -381,7 +376,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
           </div>
         </div>
       )}
-    </GlassCard>
+    </div>
   );
 }
 
@@ -398,10 +393,8 @@ export default function BillingPage() {
   const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
 
-  // Load Stripe when dialog opens
   useEffect(() => {
     if (addCardDialogOpen && !stripePromise) {
-      // Fetch publishable key and load Stripe using API client
       api.getStripePublishableKey()
         .then(data => {
           if (data.publishableKey) {
@@ -512,10 +505,12 @@ export default function BillingPage() {
   const formatTransactionType = (type: string, metadata?: any) => {
     if (type === 'credit') {
       if (metadata?.source === 'admin') return 'Admin Credit';
+      if (metadata?.source === 'auto_topup') return 'Auto Top-Up';
       return 'Top-up';
     }
     if (type === 'debit') {
       if (metadata?.deployOrderId) return 'Server Deployment';
+      if (metadata?.serverBilling) return 'Server Billing';
       return 'Payment';
     }
     if (type === 'refund') return 'Refund';
@@ -569,9 +564,7 @@ export default function BillingPage() {
   };
 
   const handleCustomAmountChange = (value: string) => {
-    // Only allow valid numeric input
     const sanitized = value.replace(/[^0-9.]/g, '');
-    // Prevent multiple decimal points
     const parts = sanitized.split('.');
     const formatted = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : sanitized;
     setCustomAmount(formatted);
@@ -584,20 +577,18 @@ export default function BillingPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
-              Billing
-            </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Manage your wallet and payment methods
-            </p>
-          </div>
+      <div className="space-y-6 max-w-4xl">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-white" data-testid="text-page-title">
+            Billing
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your wallet and payment methods
+          </p>
         </div>
 
         {!stripeConfigured ? (
-          <GlassCard className="p-8 text-center">
+          <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/5 p-12 text-center">
             <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mx-auto mb-4">
               <CreditCard className="h-8 w-8 text-yellow-400" />
             </div>
@@ -605,325 +596,320 @@ export default function BillingPage() {
             <p className="text-muted-foreground max-w-md mx-auto">
               The payment system is being configured. Please contact support if you need to add funds to your account.
             </p>
-          </GlassCard>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <GlassCard className="p-6" data-testid="wallet-section">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                      <Wallet className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">Wallet Balance</h3>
-                      <p className="text-sm text-muted-foreground">Available for deployments</p>
-                    </div>
+          <div className="space-y-6">
+            {/* Wallet Balance - Hero Card */}
+            <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-14 w-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
+                    <Wallet className="h-7 w-7" />
                   </div>
-                  <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="gap-2" data-testid="button-topup">
-                        <Plus className="h-4 w-4" />
-                        Add Funds
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>Add Funds to Wallet</DialogTitle>
-                        <DialogDescription>
-                          Choose an amount to add to your wallet balance. Funds are used for server deployments.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          {TOPUP_AMOUNTS.map((amount) => (
-                            <Button
-                              key={amount}
-                              variant={selectedAmount === amount ? "default" : "outline"}
-                              className={selectedAmount === amount ? "" : "border-white/10"}
-                              onClick={() => handlePresetSelect(amount)}
-                              data-testid={`button-amount-${amount}`}
-                            >
-                              {formatCurrency(amount)}
-                            </Button>
-                          ))}
-                        </div>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Custom amount"
-                            value={customAmount}
-                            onChange={(e) => handleCustomAmountChange(e.target.value)}
-                            className="pl-8 bg-black/20 border-white/10"
-                            data-testid="input-custom-amount"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Minimum $5.00, maximum $500.00 AUD
-                        </p>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
+                    {loadingWallet ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    ) : (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold text-white font-display" data-testid="text-balance">
+                          {formatCurrency(wallet?.balanceCents || 0)}
+                        </span>
+                        <span className="text-muted-foreground">AUD</span>
                       </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => setTopupDialogOpen(false)}
-                          className="border-white/10"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handleTopup}
-                          disabled={topupMutation.isPending || getValidAmount() === null}
-                          data-testid="button-confirm-topup"
-                        >
-                          {topupMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : null}
-                          Continue to Payment
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                    )}
+                  </div>
                 </div>
+                
+                <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="lg" className="gap-2 shadow-lg" data-testid="button-topup">
+                      <Plus className="h-5 w-5" />
+                      Add Funds
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Add Funds to Wallet</DialogTitle>
+                      <DialogDescription>
+                        Choose an amount to add to your wallet balance.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        {TOPUP_AMOUNTS.map((amount) => (
+                          <Button
+                            key={amount}
+                            variant={selectedAmount === amount ? "default" : "outline"}
+                            className={selectedAmount === amount ? "" : "border-white/10"}
+                            onClick={() => handlePresetSelect(amount)}
+                            data-testid={`button-amount-${amount}`}
+                          >
+                            {formatCurrency(amount)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Custom amount"
+                          value={customAmount}
+                          onChange={(e) => handleCustomAmountChange(e.target.value)}
+                          className="pl-8 bg-black/20 border-white/10"
+                          data-testid="input-custom-amount"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Minimum $5.00, maximum $500.00 AUD
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setTopupDialogOpen(false)}
+                        className="border-white/10"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleTopup}
+                        disabled={topupMutation.isPending || getValidAmount() === null}
+                        data-testid="button-confirm-topup"
+                      >
+                        {topupMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        Continue to Payment
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
 
-                <div className="flex items-baseline gap-2 mb-4">
-                  {loadingWallet ? (
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  ) : (
-                    <>
-                      <span className="text-4xl font-bold text-white font-mono" data-testid="text-balance">
-                        {formatCurrency(wallet?.balanceCents || 0)}
-                      </span>
-                      <span className="text-muted-foreground">AUD</span>
-                    </>
-                  )}
-                </div>
-
-                {wallet?.stripeCustomerId && (
-                  <div className="pt-4 border-t border-white/10">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
-                      <div className="flex items-center gap-2">
-                        <code 
-                          className="text-xs font-mono text-white/70 bg-black/30 px-2 py-1 rounded"
-                          data-testid="text-stripe-customer-id"
-                        >
-                          {showStripeId 
-                            ? wallet.stripeCustomerId 
-                            : '••••••••••••••••••••'}
-                        </code>
+              {wallet?.stripeCustomerId && (
+                <div className="pt-4 mt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
+                    <div className="flex items-center gap-2">
+                      <code 
+                        className="text-xs font-mono text-white/70 bg-black/30 px-2 py-1 rounded"
+                        data-testid="text-stripe-customer-id"
+                      >
+                        {showStripeId 
+                          ? wallet.stripeCustomerId 
+                          : '••••••••••••••••••••'}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                        onClick={() => setShowStripeId(!showStripeId)}
+                        data-testid="button-toggle-stripe-id"
+                      >
+                        {showStripeId ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </Button>
+                      {showStripeId && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
-                          onClick={() => setShowStripeId(!showStripeId)}
-                          data-testid="button-toggle-stripe-id"
+                          onClick={() => {
+                            navigator.clipboard.writeText(wallet.stripeCustomerId!);
+                            toast({
+                              title: "Copied",
+                              description: "Stripe Customer ID copied to clipboard",
+                            });
+                          }}
+                          data-testid="button-copy-stripe-id"
                         >
-                          {showStripeId ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          <Copy className="h-3.5 w-3.5" />
                         </Button>
-                        {showStripeId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
-                            onClick={() => {
-                              navigator.clipboard.writeText(wallet.stripeCustomerId!);
-                              toast({
-                                title: "Copied",
-                                description: "Stripe Customer ID copied to clipboard",
-                              });
-                            }}
-                            data-testid="button-copy-stripe-id"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </GlassCard>
-
-              <GlassCard className="p-6" data-testid="transactions-section">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
-                    <History className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Transaction History</h3>
-                    <p className="text-sm text-muted-foreground">Your wallet activity</p>
                   </div>
                 </div>
-
-                {loadingTransactions ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : transactions.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="h-12 w-12 rounded-full bg-muted/10 flex items-center justify-center mx-auto mb-3">
-                      <History className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <p className="text-muted-foreground">No transactions yet</p>
-                    <p className="text-sm text-muted-foreground/70">Add funds to get started</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {transactions.slice(0, 10).map((tx) => (
-                      <div 
-                        key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/5"
-                        data-testid={`transaction-${tx.id}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                            tx.amountCents >= 0 
-                              ? 'bg-green-500/10 text-green-500' 
-                              : 'bg-red-500/10 text-red-500'
-                          }`}>
-                            {tx.amountCents >= 0 
-                              ? <ArrowDownLeft className="h-4 w-4" />
-                              : <ArrowUpRight className="h-4 w-4" />
-                            }
-                          </div>
-                          <div>
-                            <div className="text-sm font-medium text-white">
-                              {formatTransactionType(tx.type, tx.metadata)}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {formatDate(tx.createdAt)}
-                            </div>
-                          </div>
-                        </div>
-                        <span className={`font-mono font-medium ${
-                          tx.amountCents >= 0 ? 'text-green-500' : 'text-red-400'
-                        }`}>
-                          {formatTransactionAmount(tx.amountCents)}
-                        </span>
-                      </div>
-                    ))}
-                    {transactions.length > 10 && (
-                      <p className="text-center text-sm text-muted-foreground pt-2">
-                        Showing most recent 10 of {transactions.length} transactions
-                      </p>
-                    )}
-                  </div>
-                )}
-              </GlassCard>
+              )}
             </div>
 
-            <div className="space-y-6">
-              <GlassCard className="p-6" data-testid="payment-methods-section">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
-                      <CreditCard className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white">Payment Methods</h3>
-                      <p className="text-sm text-muted-foreground">Saved cards</p>
-                    </div>
+            {/* Payment Methods - Horizontal scroll */}
+            <div data-testid="payment-methods-section">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                    <CreditCard className="h-5 w-5" />
                   </div>
-                  <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button 
-                        size="sm" 
-                        className="gap-1"
-                        data-testid="button-add-card"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Card
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md bg-zinc-900 border-white/10">
-                      <DialogHeader>
-                        <DialogTitle className="text-white">Add Payment Method</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                          Add a new card to your account for faster top-ups.
-                        </DialogDescription>
-                      </DialogHeader>
-                      {stripePromise ? (
-                        <Elements stripe={stripePromise}>
-                          <AddCardFormInner
-                            onSuccess={() => {
-                              setAddCardDialogOpen(false);
-                              queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
-                            }}
-                            onCancel={() => setAddCardDialogOpen(false)}
-                          />
-                        </Elements>
-                      ) : (
-                        <div className="flex items-center justify-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
+                  <div>
+                    <h2 className="font-semibold text-white">Payment Methods</h2>
+                    <p className="text-sm text-muted-foreground">Saved cards for top-ups</p>
+                  </div>
                 </div>
+                <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 border-white/10" data-testid="button-add-card">
+                      <Plus className="h-4 w-4" />
+                      Add Card
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md bg-zinc-900 border-white/10">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">Add Payment Method</DialogTitle>
+                      <DialogDescription className="text-muted-foreground">
+                        Add a new card to your account for faster top-ups.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {stripePromise ? (
+                      <Elements stripe={stripePromise}>
+                        <AddCardFormInner
+                          onSuccess={() => {
+                            setAddCardDialogOpen(false);
+                            queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
+                          }}
+                          onCancel={() => setAddCardDialogOpen(false)}
+                        />
+                      </Elements>
+                    ) : (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              </div>
 
-                {loadingPaymentMethods ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : paymentMethods.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground">No saved payment methods</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">
-                      Click "Add Card" to save a payment method
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {paymentMethods.map((pm) => (
-                      <div 
-                        key={pm.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/5"
-                        data-testid={`payment-method-${pm.id}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <CreditCard className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <div className="text-sm font-medium text-white">
-                              {formatCardBrand(pm.brand)} •••• {pm.last4}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Expires {pm.expMonth}/{pm.expYear}
-                            </div>
-                          </div>
-                        </div>
+              {loadingPaymentMethods ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : paymentMethods.length === 0 ? (
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                  <p className="text-muted-foreground">No saved payment methods</p>
+                  <p className="text-sm text-muted-foreground/70 mt-1">Add a card for faster top-ups</p>
+                </div>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+                  {paymentMethods.map((pm) => (
+                    <div 
+                      key={pm.id}
+                      className="flex-shrink-0 rounded-xl bg-white/[0.03] ring-1 ring-white/5 p-4 min-w-[200px]"
+                      data-testid={`payment-method-${pm.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <CreditCard className="h-5 w-5 text-muted-foreground" />
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
                           onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
                           disabled={deletePaymentMethodMutation.isPending}
                           data-testid={`delete-payment-method-${pm.id}`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                    ))}
+                      <div className="text-lg font-medium text-white mb-1">
+                        •••• {pm.last4}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatCardBrand(pm.brand)} · Exp {pm.expMonth}/{pm.expYear}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Auto Top-Up */}
+            <AutoTopupSection paymentMethods={paymentMethods} />
+
+            {/* Transaction History */}
+            <div data-testid="transactions-section">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                  <History className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-white">Transaction History</h2>
+                  <p className="text-sm text-muted-foreground">Your wallet activity</p>
+                </div>
+              </div>
+
+              {loadingTransactions ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted/10 flex items-center justify-center mx-auto mb-3">
+                    <History className="h-6 w-6 text-muted-foreground" />
                   </div>
-                )}
-              </GlassCard>
+                  <p className="text-muted-foreground">No transactions yet</p>
+                  <p className="text-sm text-muted-foreground/70">Add funds to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transactions.slice(0, 10).map((tx) => (
+                    <div 
+                      key={tx.id}
+                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5 hover:bg-white/[0.04] transition-colors"
+                      data-testid={`transaction-${tx.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                          tx.amountCents >= 0 
+                            ? 'bg-green-500/10 text-green-500' 
+                            : 'bg-red-500/10 text-red-500'
+                        }`}>
+                          {tx.amountCents >= 0 
+                            ? <ArrowDownLeft className="h-5 w-5" />
+                            : <ArrowUpRight className="h-5 w-5" />
+                          }
+                        </div>
+                        <div>
+                          <div className="font-medium text-white">
+                            {formatTransactionType(tx.type, tx.metadata)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatDate(tx.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`font-mono text-lg font-medium ${
+                        tx.amountCents >= 0 ? 'text-green-500' : 'text-red-400'
+                      }`}>
+                        {formatTransactionAmount(tx.amountCents)}
+                      </span>
+                    </div>
+                  ))}
+                  {transactions.length > 10 && (
+                    <p className="text-center text-sm text-muted-foreground pt-2">
+                      Showing most recent 10 of {transactions.length} transactions
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
-              <AutoTopupSection paymentMethods={paymentMethods} />
-
-              <GlassCard className="p-6">
-                <h4 className="font-medium text-white mb-3">Need Help?</h4>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Having issues with payments or your wallet balance? Our support team is here to help.
-                </p>
+            {/* Support */}
+            <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-white">Need Help?</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Having issues with payments or your wallet balance?
+                  </p>
+                </div>
                 <Button
-                  variant="outline"
-                  className="w-full border-white/10 hover:bg-white/5"
+                  variant="ghost"
+                  className="text-primary hover:text-primary/80"
                   onClick={() => window.open('mailto:support@ozvps.au', '_blank')}
                   data-testid="button-contact-support"
                 >
                   Contact Support
+                  <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
-              </GlassCard>
+              </div>
             </div>
           </div>
         )}

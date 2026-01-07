@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/sidebar";
-import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User, Link, Shield, Eye, EyeOff, Save } from "lucide-react";
+import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User, Link, Shield, Eye, EyeOff, Save, ChevronRight, Wallet } from "lucide-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -245,24 +245,36 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gradient-dark">
       <Sidebar />
       <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
-          <div className="mb-8">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl space-y-8">
+          {/* Header */}
+          <div>
             <div className="flex items-center gap-3 mb-2">
-              <ShieldCheck className="h-8 w-8 text-amber-400" />
-              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
-                Admin Panel
-              </h1>
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
+                  Admin Panel
+                </h1>
+                <p className="text-muted-foreground text-sm">
+                  Manage users, wallets, and system settings
+                </p>
+              </div>
             </div>
-            <p className="text-muted-foreground">
-              Manage users, wallets, and system settings.
-            </p>
           </div>
 
-          <div className="glass-panel rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <Search className="h-5 w-5 text-amber-400" />
-              User Lookup
-            </h2>
+          {/* User Lookup */}
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Search className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-white">User Lookup</h2>
+                <p className="text-sm text-muted-foreground">Find users by email</p>
+              </div>
+            </div>
+            
             <form onSubmit={handleSearch} className="flex gap-3">
               <Input
                 data-testid="input-admin-search"
@@ -270,13 +282,12 @@ export default function AdminPage() {
                 placeholder="Enter user email address..."
                 value={searchEmail}
                 onChange={(e) => setSearchEmail(e.target.value)}
-                className="flex-1"
+                className="flex-1 bg-black/20 border-white/10"
               />
               <Button
                 data-testid="button-admin-search"
                 type="submit"
                 disabled={searchEmail.length < 3 || searchMutation.isPending}
-                className="bg-amber-500 hover:bg-amber-600 text-black"
               >
                 {searchMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -287,85 +298,93 @@ export default function AdminPage() {
             </form>
           </div>
 
+          {/* Selected User Card */}
           {selectedUser && (
-            <div className="glass-panel rounded-xl p-6 mb-6 border border-amber-500/20">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <User className="h-5 w-5 text-amber-400" />
+            <div className="rounded-xl bg-white/[0.02] ring-1 ring-amber-500/20 overflow-hidden">
+              <div className="p-5 border-b border-white/5">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                      <User className="h-6 w-6 text-amber-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white" data-testid="text-user-email">
+                        {selectedUser.email}
+                      </h3>
+                      {selectedUser.name && (
+                        <p className="text-sm text-muted-foreground">{selectedUser.name}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white" data-testid="text-user-email">
-                      {selectedUser.email}
-                    </h3>
-                    {selectedUser.name && (
-                      <p className="text-sm text-muted-foreground">{selectedUser.name}</p>
-                    )}
+                  <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-green-500/10">
+                    <Wallet className="h-4 w-4 text-green-500" />
+                    <span className="text-lg font-bold text-green-400" data-testid="text-user-balance">
+                      ${((selectedUser.wallet?.balanceCents || 0) / 100).toFixed(2)}
+                    </span>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-white" data-testid="text-user-balance">
-                    ${((selectedUser.wallet?.balanceCents || 0) / 100).toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Wallet Balance</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+              <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Auth0 ID</p>
+                  <p className="text-muted-foreground text-xs mb-1">Auth0 ID</p>
                   <p className="font-mono text-xs text-white/80 truncate">{selectedUser.auth0UserId}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">VirtFusion ID</p>
+                  <p className="text-muted-foreground text-xs mb-1">VirtFusion ID</p>
                   <p className="font-mono text-white/80">
-                    {selectedUser.virtFusionUserId || "Not linked"}
+                    {selectedUser.virtFusionUserId || <span className="text-yellow-500">Not linked</span>}
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Email Verified</p>
+                  <p className="text-muted-foreground text-xs mb-1">Email Verified</p>
                   <p className="text-white/80">{selectedUser.emailVerified ? "Yes" : "No"}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Stripe Customer</p>
+                  <p className="text-muted-foreground text-xs mb-1">Stripe Customer</p>
                   <p className="font-mono text-xs text-white/80 truncate">
                     {selectedUser.wallet?.stripeCustomerId || "None"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="p-5 border-t border-white/5 flex flex-wrap gap-2">
                 <Button
                   data-testid="button-add-credits"
                   onClick={() => handleOpenAdjust("add")}
+                  size="sm"
                   className="bg-green-600 hover:bg-green-700"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="h-4 w-4 mr-1" />
                   Add Credits
                 </Button>
                 <Button
                   data-testid="button-remove-credits"
                   onClick={() => handleOpenAdjust("remove")}
                   variant="destructive"
+                  size="sm"
                 >
-                  <Minus className="h-4 w-4 mr-2" />
+                  <Minus className="h-4 w-4 mr-1" />
                   Remove Credits
                 </Button>
                 <Button
                   data-testid="button-view-transactions"
                   onClick={() => setTransactionsDialogOpen(true)}
                   variant="outline"
+                  size="sm"
+                  className="border-white/10"
                 >
-                  <History className="h-4 w-4 mr-2" />
-                  View Transactions
+                  <History className="h-4 w-4 mr-1" />
+                  Transactions
                 </Button>
                 {!selectedUser.virtFusionUserId && (
                   <Button
                     data-testid="button-link-virtfusion"
                     onClick={() => setLinkDialogOpen(true)}
+                    size="sm"
                     className="bg-blue-600 hover:bg-blue-700"
                   >
-                    <Link className="h-4 w-4 mr-2" />
+                    <Link className="h-4 w-4 mr-1" />
                     Link VirtFusion
                   </Button>
                 )}
@@ -374,94 +393,95 @@ export default function AdminPage() {
           )}
 
           {searchMutation.isSuccess && !selectedUser && (
-            <div className="glass-panel rounded-xl p-6 border border-yellow-500/20 bg-yellow-500/5">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                <p className="text-yellow-400">No user found with that email address.</p>
-              </div>
+            <div className="rounded-xl bg-yellow-500/5 ring-1 ring-yellow-500/20 p-5 flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+              <p className="text-yellow-400">No user found with that email address.</p>
             </div>
           )}
 
-          {/* Security Settings Section */}
-          <div className="mt-12">
+          {/* Security Settings */}
+          <div className="pt-6">
             <div className="flex items-center gap-3 mb-6">
-              <Shield className="h-6 w-6 text-primary" />
-              <h2 className="text-xl font-semibold text-white">Security Settings</h2>
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-white">Security Settings</h2>
+                <p className="text-sm text-muted-foreground">Configure login protection</p>
+              </div>
             </div>
 
-            <div className="space-y-6">
-              {/* reCAPTCHA Settings */}
-              <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-medium text-white">reCAPTCHA Protection</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Protect login forms from bots with Google reCAPTCHA v2
-                    </p>
-                  </div>
-                  <Switch
-                    data-testid="switch-recaptcha-enabled"
-                    checked={recaptchaEnabled}
-                    onCheckedChange={setRecaptchaEnabled}
-                    disabled={recaptchaLoading}
+            {/* reCAPTCHA Settings */}
+            <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="font-medium text-white">reCAPTCHA Protection</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Protect login forms from bots with Google reCAPTCHA v2
+                  </p>
+                </div>
+                <Switch
+                  data-testid="switch-recaptcha-enabled"
+                  checked={recaptchaEnabled}
+                  onCheckedChange={setRecaptchaEnabled}
+                  disabled={recaptchaLoading}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recaptcha-site-key" className="text-sm">Site Key</Label>
+                  <Input
+                    data-testid="input-recaptcha-site-key"
+                    id="recaptcha-site-key"
+                    placeholder="6Lc..."
+                    value={recaptchaSiteKey}
+                    onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                    className="font-mono text-sm bg-black/20 border-white/10"
                   />
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="recaptcha-site-key">Site Key</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="recaptcha-secret-key" className="text-sm">Secret Key</Label>
+                  <div className="relative">
                     <Input
-                      data-testid="input-recaptcha-site-key"
-                      id="recaptcha-site-key"
-                      placeholder="6Lc..."
-                      value={recaptchaSiteKey}
-                      onChange={(e) => setRecaptchaSiteKey(e.target.value)}
-                      className="font-mono text-sm"
+                      data-testid="input-recaptcha-secret-key"
+                      id="recaptcha-secret-key"
+                      type={showSecretKey ? "text" : "password"}
+                      placeholder={recaptchaData?.hasSecretKey ? "••••••••••••••••" : "Enter secret key"}
+                      value={recaptchaSecretKey}
+                      onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                      className="font-mono text-sm pr-10 bg-black/20 border-white/10"
                     />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="recaptcha-secret-key">Secret Key</Label>
-                    <div className="relative">
-                      <Input
-                        data-testid="input-recaptcha-secret-key"
-                        id="recaptcha-secret-key"
-                        type={showSecretKey ? "text" : "password"}
-                        placeholder={recaptchaData?.hasSecretKey ? "••••••••••••••••" : "Enter secret key"}
-                        value={recaptchaSecretKey}
-                        onChange={(e) => setRecaptchaSecretKey(e.target.value)}
-                        className="font-mono text-sm pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowSecretKey(!showSecretKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
-                      >
-                        {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {recaptchaData?.hasSecretKey && !recaptchaSecretKey && (
-                      <p className="text-xs text-muted-foreground">
-                        Secret key is already configured. Enter a new key only if you want to change it.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      data-testid="button-save-recaptcha"
-                      onClick={handleSaveRecaptcha}
-                      disabled={recaptchaMutation.isPending || (recaptchaEnabled && !recaptchaSiteKey)}
-                      className="gap-2"
+                    <button
+                      type="button"
+                      onClick={() => setShowSecretKey(!showSecretKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
                     >
-                      {recaptchaMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                      Save Settings
-                    </Button>
+                      {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
+                  {recaptchaData?.hasSecretKey && !recaptchaSecretKey && (
+                    <p className="text-xs text-muted-foreground">
+                      Secret key is already configured. Enter a new key only if you want to change it.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button
+                    data-testid="button-save-recaptcha"
+                    onClick={handleSaveRecaptcha}
+                    disabled={recaptchaMutation.isPending || (recaptchaEnabled && !recaptchaSiteKey)}
+                    className="gap-2"
+                  >
+                    {recaptchaMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Save Settings
+                  </Button>
                 </div>
               </div>
             </div>
@@ -469,8 +489,9 @@ export default function AdminPage() {
         </div>
       </main>
 
+      {/* Adjust Dialog */}
       <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
-        <DialogContent className="bg-[#1a1a2e] border-white/10">
+        <DialogContent className="bg-zinc-900 border-white/10">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <DollarSign className="h-5 w-5 text-amber-400" />
@@ -498,6 +519,7 @@ export default function AdminPage() {
                 placeholder="0.00"
                 value={adjustAmount}
                 onChange={(e) => setAdjustAmount(e.target.value)}
+                className="bg-black/20 border-white/10"
               />
             </div>
             <div className="space-y-2">
@@ -508,11 +530,12 @@ export default function AdminPage() {
                 placeholder="Enter reason for adjustment..."
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
+                className="bg-black/20 border-white/10"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setAdjustDialogOpen(false)} className="border-white/10">
               Cancel
             </Button>
             <Button
@@ -536,8 +559,9 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Transactions Dialog */}
       <Dialog open={transactionsDialogOpen} onOpenChange={setTransactionsDialogOpen}>
-        <DialogContent className="bg-[#1a1a2e] border-white/10 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-zinc-900 border-white/10 max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <History className="h-5 w-5 text-amber-400" />
@@ -559,7 +583,7 @@ export default function AdminPage() {
                 {(transactionsData?.transactions || []).map((tx: Transaction) => (
                   <div
                     key={tx.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5"
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] ring-1 ring-white/5"
                   >
                     <div>
                       <p className="text-sm font-medium text-white capitalize">
@@ -585,8 +609,9 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Link VirtFusion Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="bg-[#1a1a2e] border-white/10">
+        <DialogContent className="bg-zinc-900 border-white/10">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <Link className="h-5 w-5 text-blue-400" />
@@ -611,6 +636,7 @@ export default function AdminPage() {
                 placeholder="Enter VirtFusion extRelationId..."
                 value={oldExtRelationId}
                 onChange={(e) => setOldExtRelationId(e.target.value)}
+                className="bg-black/20 border-white/10"
               />
               <p className="text-xs text-muted-foreground">
                 Find this in VirtFusion admin → Users → click the user → look for "Ext Relation ID" field.
@@ -618,7 +644,7 @@ export default function AdminPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)} className="border-white/10">
               Cancel
             </Button>
             <Button
