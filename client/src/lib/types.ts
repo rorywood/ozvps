@@ -4,6 +4,7 @@ export interface Server {
   uuid: string;
   status: 'running' | 'stopped' | 'provisioning' | 'error';
   suspended: boolean;
+  needsSetup?: boolean;
   primaryIp: string;
   location: {
     id: string;
@@ -20,10 +21,12 @@ export interface Server {
       traffic?: number; // in GB, monthly allowance
     };
   };
-  image: {
+  image?: {
     id: string;
     name: string;
-    distro: 'linux' | 'windows';
+    distro?: 'linux' | 'windows';
+    version?: string;
+    variant?: string;
   };
   stats: {
     cpu_usage: number;

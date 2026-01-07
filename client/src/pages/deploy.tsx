@@ -125,14 +125,14 @@ export default function DeployPage() {
 
   return (
     <AppShell>
-      <div className="min-h-[calc(100vh-12rem)] flex flex-col">
+      <div className="min-h-[calc(100vh-12rem)] flex flex-col overflow-x-hidden">
         {/* Hero Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center flex-shrink-0">
               <Zap className="h-5 w-5 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
                 Deploy a Server
               </h1>
@@ -143,10 +143,10 @@ export default function DeployPage() {
           </div>
         </div>
 
-        {/* Main Content - Flows naturally */}
-        <div className="flex-1 space-y-8 pb-32">
+        {/* Main Content */}
+        <div className="flex-1 space-y-8 pb-32 overflow-x-hidden">
           
-          {/* Location Selection - Compact inline pills */}
+          {/* Location Selection */}
           <section>
             <div className="flex items-center gap-2 mb-4">
               <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -184,7 +184,7 @@ export default function DeployPage() {
             </div>
           </section>
 
-          {/* Plan Selection - Horizontal scrollable cards */}
+          {/* Plan Selection - Responsive Grid */}
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Cpu className="h-4 w-4 text-muted-foreground" />
@@ -198,64 +198,62 @@ export default function DeployPage() {
                 <Loader2 className="h-6 w-6 text-primary animate-spin" />
               </div>
             ) : (
-              <div className="overflow-x-auto -mx-4 px-4 pb-2">
-                <div className="flex gap-3 min-w-min">
-                  {plans.map((plan) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => setSelectedPlanId(plan.id)}
-                      className={`relative flex-shrink-0 w-56 p-5 rounded-2xl transition-all duration-200 text-left ${
-                        selectedPlanId === plan.id
-                          ? 'bg-gradient-to-br from-primary/15 to-primary/5 ring-2 ring-primary shadow-xl shadow-primary/10'
-                          : 'bg-white/[0.03] hover:bg-white/[0.06] ring-1 ring-white/10 hover:ring-white/20'
-                      }`}
-                      data-testid={`card-plan-${plan.code}`}
-                    >
-                      {selectedPlanId === plan.id && (
-                        <div className="absolute top-3 right-3 bg-primary rounded-full p-1">
-                          <Check className="h-3 w-3 text-primary-foreground" />
-                        </div>
-                      )}
-                      
-                      <div className="mb-4">
-                        <h3 className="font-semibold text-white text-lg">{plan.name}</h3>
-                        <div className="flex items-baseline gap-1 mt-1">
-                          <span className="text-2xl font-bold text-primary font-mono">
-                            {formatCurrency(plan.priceMonthly)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">/mo</span>
-                        </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {plans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    className={`relative p-5 rounded-2xl transition-all duration-200 text-left ${
+                      selectedPlanId === plan.id
+                        ? 'bg-gradient-to-br from-primary/15 to-primary/5 ring-2 ring-primary shadow-xl shadow-primary/10'
+                        : 'bg-white/[0.03] hover:bg-white/[0.06] ring-1 ring-white/10 hover:ring-white/20'
+                    }`}
+                    data-testid={`card-plan-${plan.code}`}
+                  >
+                    {selectedPlanId === plan.id && (
+                      <div className="absolute top-3 right-3 bg-primary rounded-full p-1">
+                        <Check className="h-3 w-3 text-primary-foreground" />
                       </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Cpu className="h-3.5 w-3.5" />
-                          <span>{plan.vcpu} vCPU</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MemoryStick className="h-3.5 w-3.5" />
-                          <span>{formatRAM(plan.ramMb)} RAM</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <HardDrive className="h-3.5 w-3.5" />
-                          <span>{plan.storageGb} GB NVMe</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <ArrowUpDown className="h-3.5 w-3.5" />
-                          <span>{formatTransfer(plan.transferGb)} Transfer</span>
-                        </div>
+                    )}
+                    
+                    <div className="mb-4">
+                      <h3 className="font-semibold text-white text-lg">{plan.name}</h3>
+                      <div className="flex items-baseline gap-1 mt-1">
+                        <span className="text-2xl font-bold text-primary font-mono">
+                          {formatCurrency(plan.priceMonthly)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">/mo</span>
                       </div>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Cpu className="h-3.5 w-3.5" />
+                        <span>{plan.vcpu} vCPU</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MemoryStick className="h-3.5 w-3.5" />
+                        <span>{formatRAM(plan.ramMb)} RAM</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <HardDrive className="h-3.5 w-3.5" />
+                        <span>{plan.storageGb} GB NVMe</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                        <span>{formatTransfer(plan.transferGb)} Transfer</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
           </section>
         </div>
 
-        {/* Sticky Bottom Summary Bar */}
-        <div className="fixed bottom-0 left-0 right-0 z-40">
+        {/* Sticky Bottom Summary Bar - With proper spacing */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:pl-64">
           <div className="bg-gradient-to-t from-background via-background to-transparent h-8 pointer-events-none" />
           <div className="bg-background/80 backdrop-blur-xl border-t border-white/10">
             <div className="max-w-5xl mx-auto px-4 py-4">

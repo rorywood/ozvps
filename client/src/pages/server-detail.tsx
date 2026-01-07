@@ -492,7 +492,7 @@ export default function ServerDetail() {
     return setupAllTemplates.filter(t => {
       const matchesSearch = !setupOsSearchQuery || 
         t.name.toLowerCase().includes(setupOsSearchQuery.toLowerCase()) ||
-        t.distro.toLowerCase().includes(setupOsSearchQuery.toLowerCase());
+        (t.distro || '').toLowerCase().includes(setupOsSearchQuery.toLowerCase());
       const matchesCategory = setupSelectedCategory === 'All' || getOsCategory(t) === setupSelectedCategory;
       return matchesSearch && matchesCategory;
     });
@@ -582,8 +582,8 @@ export default function ServerDetail() {
     return allTemplates.filter(t => {
       const matchesSearch = osSearchQuery === '' || 
         t.name.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
-        t.version.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
-        t.variant.toLowerCase().includes(osSearchQuery.toLowerCase()) ||
+        (t.version || '').toLowerCase().includes(osSearchQuery.toLowerCase()) ||
+        (t.variant || '').toLowerCase().includes(osSearchQuery.toLowerCase()) ||
         (t.group || '').toLowerCase().includes(osSearchQuery.toLowerCase());
       
       const matchesCategory = selectedCategory === 'All' || 
@@ -739,33 +739,36 @@ export default function ServerDetail() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                    {setupFilteredTemplates.map(template => (
-                      <button
-                        key={template.id}
-                        onClick={() => setSetupSelectedOs(template.id)}
-                        className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
-                          setupSelectedOs === template.id
-                            ? "bg-primary/20 border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)]"
-                            : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
-                        )}
-                        data-testid={`button-setup-os-${template.id}`}
-                      >
-                        <img
-                          src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                          alt={template.name}
-                          className="h-8 w-8 object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-white truncate">{template.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{template.group}</p>
-                        </div>
-                        {setupSelectedOs === template.id && (
-                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        )}
-                      </button>
-                    ))}
+                    {setupFilteredTemplates.map(template => {
+                      const templateId = String(template.id);
+                      return (
+                        <button
+                          key={templateId}
+                          onClick={() => setSetupSelectedOs(templateId)}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                            setupSelectedOs === templateId
+                              ? "bg-primary/20 border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)]"
+                              : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                          )}
+                          data-testid={`button-setup-os-${templateId}`}
+                        >
+                          <img
+                            src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
+                            alt={template.name}
+                            className="h-8 w-8 object-contain"
+                            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-white truncate">{template.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{template.group}</p>
+                          </div>
+                          {setupSelectedOs === templateId && (
+                            <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
                     {setupFilteredTemplates.length === 0 && (
                       <p className="col-span-2 text-center py-4 text-muted-foreground">No templates found</p>
                     )}

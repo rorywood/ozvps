@@ -11,8 +11,7 @@ import {
   ChevronUp,
   Zap,
   Wallet,
-  ShieldCheck,
-  Cpu
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -39,8 +38,7 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: "/admin", icon: ShieldCheck, label: "Admin Panel" },
-  { href: "/admin/infrastructure", icon: Cpu, label: "Infrastructure" },
+  { href: "/admin", icon: ShieldCheck, label: "Admin Center" },
 ];
 
 function VersionFooter() {

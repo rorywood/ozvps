@@ -18,7 +18,6 @@ import DeployConfigure from "@/pages/deploy-configure";
 import Login from "@/pages/login";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
-import AdminInfrastructure from "@/pages/admin-infrastructure";
 import Billing from "@/pages/billing";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
@@ -140,11 +139,6 @@ function Router() {
       <Route path="/admin">
         <AuthGuard>
           <Admin />
-        </AuthGuard>
-      </Route>
-      <Route path="/admin/infrastructure">
-        <AuthGuard>
-          <AdminInfrastructure />
         </AuthGuard>
       </Route>
       <Route path="/order">

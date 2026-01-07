@@ -161,6 +161,7 @@ export default function Dashboard() {
                         <div className={cn(
                           "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
                           server.suspended ? "bg-yellow-500/10 text-yellow-500" :
+                          server.needsSetup ? "bg-blue-500/10 text-blue-500" :
                           displayStatus === 'running' ? "bg-green-500/10 text-green-500" : 
                           displayStatus === 'stopped' ? "bg-red-500/10 text-red-500" :
                           "bg-yellow-500/10 text-yellow-500"
@@ -176,8 +177,18 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <h3 className="font-medium text-white group-hover:text-primary transition-colors truncate">
-                              {server.name}
+                              {server.name || 'New Server'}
                             </h3>
+                            
+                            {/* Needs Setup badge */}
+                            {server.needsSetup && (
+                              <span 
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1"
+                                data-testid={`badge-needs-setup-${server.id}`}
+                              >
+                                NEEDS SETUP
+                              </span>
+                            )}
                             
                             {/* Status badges */}
                             {billingStatus?.status === 'overdue' && (
@@ -221,7 +232,7 @@ export default function Dashboard() {
 
                           {/* Server details row */}
                           <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                            <span className="font-mono">{server.primaryIp}</span>
+                            <span className="font-mono">{server.primaryIp || 'IP pending'}</span>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <div className="flex items-center gap-1">
                               <img src={flagAU} alt="AU" className="h-3 w-4 object-cover rounded-sm" />
@@ -229,16 +240,22 @@ export default function Dashboard() {
                             </div>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <div className="flex items-center gap-1">
-                              <img 
-                                src={getOsLogoUrlFromServer(server.image)} 
-                                alt="" 
-                                className="h-3.5 w-3.5 object-contain"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                              />
-                              <span className="truncate max-w-[80px]" title={server.image?.name}>
-                                {server.image?.name || 'Unknown'}
-                              </span>
+                              {server.needsSetup ? (
+                                <span className="text-blue-400 italic">No OS installed</span>
+                              ) : (
+                                <>
+                                  <img 
+                                    src={getOsLogoUrlFromServer(server.image)} 
+                                    alt="" 
+                                    className="h-3.5 w-3.5 object-contain"
+                                    loading="lazy"
+                                    onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                                  />
+                                  <span className="truncate max-w-[80px]" title={server.image?.name}>
+                                    {server.image?.name || 'Unknown'}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -270,17 +287,19 @@ export default function Dashboard() {
                           <div className={cn(
                             "px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5",
                             server.suspended ? "bg-yellow-500/10 text-yellow-400" :
+                            server.needsSetup ? "bg-blue-500/10 text-blue-400" :
                             displayStatus === 'running' ? "bg-green-500/10 text-green-400" : 
                             displayStatus === 'stopped' ? "bg-red-500/10 text-red-400" :
                             "bg-yellow-500/10 text-yellow-400"
                           )}>
                             <div className={cn("w-1.5 h-1.5 rounded-full", 
                               server.suspended ? "bg-yellow-400" :
+                              server.needsSetup ? "bg-blue-400 animate-pulse" :
                               displayStatus === 'running' ? "bg-green-400" : 
                               displayStatus === 'stopped' ? "bg-red-400" : 
                               "bg-yellow-400 animate-pulse"
                             )} />
-                            {server.suspended ? 'Suspended' : displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+                            {server.suspended ? 'Suspended' : server.needsSetup ? 'Awaiting Setup' : displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
                           </div>
                           <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                         </div>
