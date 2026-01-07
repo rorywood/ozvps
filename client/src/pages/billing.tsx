@@ -483,12 +483,13 @@ export default function BillingPage() {
   });
 
   const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Array<{
-    id: number;
+    id: string;
     invoiceNumber: string;
     amountCents: number;
     description: string;
     status: string;
     createdAt: string;
+    pdfUrl: string | null;
   }> }>({
     queryKey: ['invoices'],
     queryFn: () => api.getInvoices(),
@@ -1118,25 +1119,18 @@ export default function BillingPage() {
                           variant="ghost"
                           size="sm"
                           className="text-primary hover:text-primary/80"
-                          onClick={async () => {
-                            try {
-                              const blob = await api.downloadInvoice(invoice.id);
-                              const url = window.URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = `${invoice.invoiceNumber}.pdf`;
-                              document.body.appendChild(a);
-                              a.click();
-                              window.URL.revokeObjectURL(url);
-                              document.body.removeChild(a);
-                            } catch (error) {
+                          onClick={() => {
+                            if (invoice.pdfUrl) {
+                              window.open(invoice.pdfUrl, '_blank');
+                            } else {
                               toast({
                                 title: "Error",
-                                description: "Failed to download invoice",
+                                description: "Invoice PDF not available",
                                 variant: "destructive",
                               });
                             }
                           }}
+                          disabled={!invoice.pdfUrl}
                           data-testid={`download-invoice-${invoice.id}`}
                         >
                           <Download className="h-4 w-4 mr-1" />
