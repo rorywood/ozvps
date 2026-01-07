@@ -49,6 +49,7 @@ import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -85,7 +86,7 @@ export default function ServerDetail() {
   const [setupHostname, setSetupHostname] = useState<string>("");
   const [setupHostnameError, setSetupHostnameError] = useState<string>("");
   const [setupOsSearchQuery, setSetupOsSearchQuery] = useState("");
-  const [setupSelectedCategory, setSetupSelectedCategory] = useState<string>("All");
+  const [setupExpandedGroups, setSetupExpandedGroups] = useState<string[]>([]);
   
   // Cancellation state
   const [cancellationReason, setCancellationReason] = useState<string>("");
@@ -254,7 +255,7 @@ export default function ServerDetail() {
       setSetupHostname("");
       setSetupHostnameError("");
       setSetupOsSearchQuery("");
-      setSetupSelectedCategory("All");
+      setSetupExpandedGroups([]);
       
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
@@ -480,23 +481,50 @@ export default function ServerDetail() {
     return templates;
   }, [setupTemplates]);
   
-  // Get unique setup categories
-  const setupCategories = useMemo(() => {
-    const cats = new Set<string>();
-    setupAllTemplates.forEach(t => cats.add(getOsCategory(t)));
-    return ['All', ...Array.from(cats)];
-  }, [setupAllTemplates]);
-  
-  // Filter setup templates
-  const setupFilteredTemplates = useMemo(() => {
-    return setupAllTemplates.filter(t => {
+  // Group templates by category for accordion display
+  const setupGroupedTemplates = useMemo(() => {
+    const groups: Record<string, OsTemplateType[]> = {};
+    
+    setupAllTemplates.forEach(t => {
+      // Filter by search query
       const matchesSearch = !setupOsSearchQuery || 
         t.name.toLowerCase().includes(setupOsSearchQuery.toLowerCase()) ||
-        (t.distro || '').toLowerCase().includes(setupOsSearchQuery.toLowerCase());
-      const matchesCategory = setupSelectedCategory === 'All' || getOsCategory(t) === setupSelectedCategory;
-      return matchesSearch && matchesCategory;
+        (t.distro || '').toLowerCase().includes(setupOsSearchQuery.toLowerCase()) ||
+        (t.version || '').toLowerCase().includes(setupOsSearchQuery.toLowerCase());
+      
+      if (!matchesSearch) return;
+      
+      const category = getOsCategory(t);
+      if (!groups[category]) {
+        groups[category] = [];
+      }
+      groups[category].push(t);
     });
-  }, [setupAllTemplates, setupOsSearchQuery, setupSelectedCategory]);
+    
+    // Sort categories and templates within each category
+    const sortedGroups: { category: string; templates: OsTemplateType[] }[] = [];
+    const categoryOrder = ['Debian-based', 'RHEL-based', 'SUSE', 'Other'];
+    const addedCategories = new Set<string>();
+    
+    // Add categories in preferred order first
+    categoryOrder.forEach(cat => {
+      if (groups[cat] && groups[cat].length > 0) {
+        groups[cat].sort((a, b) => a.name.localeCompare(b.name));
+        sortedGroups.push({ category: cat, templates: groups[cat] });
+        addedCategories.add(cat);
+      }
+    });
+    
+    // Add any remaining categories not in the preferred order
+    Object.keys(groups).forEach(cat => {
+      if (!addedCategories.has(cat) && groups[cat].length > 0) {
+        groups[cat].sort((a, b) => a.name.localeCompare(b.name));
+        sortedGroups.push({ category: cat, templates: groups[cat] });
+      }
+    });
+    
+    return sortedGroups;
+  }, [setupAllTemplates, setupOsSearchQuery]);
   
   const handleSetup = () => {
     if (!serverId || !setupSelectedOs) return;
@@ -696,7 +724,7 @@ export default function ServerDetail() {
               </div>
               
               {/* OS Selection */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium text-white">Operating System</Label>
                   <div className="relative w-48">
@@ -711,94 +739,96 @@ export default function ServerDetail() {
                   </div>
                 </div>
                 
-                {/* Category Filter */}
-                <div className="flex gap-2 flex-wrap">
-                  {setupCategories.map(cat => (
-                    <Button
-                      key={cat}
-                      variant={setupSelectedCategory === cat ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSetupSelectedCategory(cat)}
-                      className={cn(
-                        "h-7 text-xs",
-                        setupSelectedCategory === cat 
-                          ? "bg-primary text-white" 
-                          : "border-white/20 text-muted-foreground hover:text-white hover:bg-white/10"
-                      )}
-                      data-testid={`button-setup-category-${cat.toLowerCase()}`}
-                    >
-                      {cat}
-                    </Button>
-                  ))}
-                </div>
-                
-                {/* OS Grid */}
+                {/* OS Accordion */}
                 {loadingSetupTemplates ? (
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
+                ) : setupGroupedTemplates.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No operating systems found
+                  </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
-                    {setupFilteredTemplates.map(template => {
-                      const templateId = String(template.id);
-                      const isSelected = setupSelectedOs === templateId;
-                      // Combine name with version if available and different
-                      const displayName = template.version && !template.name.includes(template.version)
-                        ? `${template.name} ${template.version}`
-                        : template.name;
-                      const displayVariant = template.variant || template.description || '';
-                      
-                      return (
-                        <button
-                          key={templateId}
-                          onClick={() => setSetupSelectedOs(templateId)}
-                          className={cn(
-                            "relative flex flex-col items-center p-4 rounded-xl border-2 transition-all text-center group",
-                            isSelected
-                              ? "bg-primary/15 border-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)] scale-[1.02]"
-                              : "bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-white/20 hover:scale-[1.01]"
-                          )}
-                          data-testid={`button-setup-os-${templateId}`}
+                  <div className="max-h-80 overflow-y-auto pr-1">
+                    <Accordion 
+                      type="multiple" 
+                      value={setupExpandedGroups}
+                      onValueChange={setSetupExpandedGroups}
+                      className="space-y-2"
+                    >
+                      {setupGroupedTemplates.map(({ category, templates }) => (
+                        <AccordionItem 
+                          key={category} 
+                          value={category}
+                          className="border border-white/10 rounded-lg bg-white/[0.02] overflow-hidden"
                         >
-                          {/* Selection indicator */}
-                          {isSelected && (
-                            <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                              <Check className="h-3 w-3 text-white" />
+                          <AccordionTrigger 
+                            className="px-4 py-3 hover:bg-white/5 hover:no-underline [&[data-state=open]]:bg-white/5"
+                            data-testid={`accordion-${category.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-medium text-white">{category}</span>
+                              <span className="text-xs text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
+                                {templates.length}
+                              </span>
                             </div>
-                          )}
-                          
-                          {/* OS Logo */}
-                          <div className={cn(
-                            "h-14 w-14 rounded-xl flex items-center justify-center mb-3 transition-all",
-                            isSelected ? "bg-primary/20" : "bg-white/5 group-hover:bg-white/10"
-                          )}>
-                            <img
-                              src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                              alt={template.name}
-                              className="h-9 w-9 object-contain"
-                              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                            />
-                          </div>
-                          
-                          {/* OS Name & Version */}
-                          <p className="text-sm font-semibold text-white mb-0.5 leading-tight">
-                            {displayName}
-                          </p>
-                          
-                          {/* Variant/Description */}
-                          {displayVariant && (
-                            <p className="text-[11px] text-muted-foreground truncate max-w-full">
-                              {displayVariant}
-                            </p>
-                          )}
-                        </button>
-                      );
-                    })}
-                    {setupFilteredTemplates.length === 0 && (
-                      <p className="col-span-full text-center py-8 text-muted-foreground">
-                        No operating systems found matching your criteria
-                      </p>
-                    )}
+                          </AccordionTrigger>
+                          <AccordionContent className="px-2 pb-2">
+                            <div className="space-y-1">
+                              {templates.map(template => {
+                                const templateId = String(template.id);
+                                const isSelected = setupSelectedOs === templateId;
+                                const displayName = template.version && !template.name.includes(template.version)
+                                  ? `${template.name} ${template.version}`
+                                  : template.name;
+                                const displayVariant = template.variant || '';
+                                
+                                return (
+                                  <button
+                                    key={templateId}
+                                    onClick={() => setSetupSelectedOs(templateId)}
+                                    className={cn(
+                                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left",
+                                      isSelected
+                                        ? "bg-primary/20 ring-1 ring-primary"
+                                        : "hover:bg-white/5"
+                                    )}
+                                    data-testid={`button-setup-os-${templateId}`}
+                                  >
+                                    <img
+                                      src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
+                                      alt={template.name}
+                                      className="h-7 w-7 object-contain flex-shrink-0"
+                                      onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-white">
+                                          {displayName}
+                                        </span>
+                                        {displayVariant && (
+                                          <span className="text-xs text-muted-foreground truncate">
+                                            {displayVariant}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className={cn(
+                                      "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                                      isSelected 
+                                        ? "border-primary bg-primary" 
+                                        : "border-white/30"
+                                    )}>
+                                      {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
                   </div>
                 )}
               </div>
