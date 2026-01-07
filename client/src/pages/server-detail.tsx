@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { OsTemplateRow } from "@/components/os-template-row";
 import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
 import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
+import { SetupProgressChecklist } from "@/components/setup-progress-checklist";
 import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
@@ -87,6 +88,31 @@ export default function ServerDetail() {
   const [setupHostnameError, setSetupHostnameError] = useState<string>("");
   const [setupOsSearchQuery, setSetupOsSearchQuery] = useState("");
   const [setupExpandedGroups, setSetupExpandedGroups] = useState<string[]>([]);
+  
+  // Track if current task is initial setup vs reinstall
+  // Persist to sessionStorage to survive page reloads during the process
+  const [isSetupMode, setIsSetupMode] = useState<boolean>(() => {
+    try {
+      const stored = sessionStorage.getItem(`setupMode:${serverId}`);
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+  
+  // Persist setup mode to sessionStorage when it changes
+  const updateSetupMode = (value: boolean) => {
+    setIsSetupMode(value);
+    try {
+      if (value) {
+        sessionStorage.setItem(`setupMode:${serverId}`, 'true');
+      } else {
+        sessionStorage.removeItem(`setupMode:${serverId}`);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  };
   
   // Cancellation state
   const [cancellationReason, setCancellationReason] = useState<string>("");
@@ -224,6 +250,9 @@ export default function ServerDetail() {
       setSelectedCategory("All");
       setReinstallDialogOpen(false);
       
+      // Mark as reinstall mode (not initial setup)
+      updateSetupMode(false);
+      
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
@@ -256,6 +285,9 @@ export default function ServerDetail() {
       setSetupHostnameError("");
       setSetupOsSearchQuery("");
       setSetupExpandedGroups([]);
+      
+      // Mark as setup mode (initial setup, not reinstall)
+      updateSetupMode(true);
       
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
@@ -2018,52 +2050,75 @@ export default function ServerDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Reinstall Progress Dialog */}
+      {/* Setup/Reinstall Progress Dialog */}
       <Dialog open={reinstallTask.isActive} onOpenChange={() => {}}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-md" hideCloseButton>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {reinstallTask.status === 'complete' ? (
-                <>
-                  <Check className="h-5 w-5 text-green-500" />
-                  Reinstall Complete
-                </>
-              ) : reinstallTask.status === 'failed' ? (
-                <>
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                  Reinstall Failed
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                  Reinstalling Server
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {reinstallTask.status === 'complete' 
-                ? 'Your server has been reinstalled successfully.'
-                : reinstallTask.status === 'failed'
-                ? 'There was a problem reinstalling your server.'
-                : 'Please wait while your server is being reinstalled. This may take several minutes.'}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <ReinstallProgressPanel 
-              state={reinstallTask} 
+        <DialogContent 
+          className={cn(
+            "bg-[#0a0a0a] border-white/10 text-white",
+            isSetupMode ? "max-w-lg" : "max-w-md"
+          )} 
+          hideCloseButton
+        >
+          {isSetupMode ? (
+            /* New Setup Progress Checklist */
+            <SetupProgressChecklist 
+              state={reinstallTask}
+              serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
               onDismiss={() => {
                 reinstallTask.reset();
+                updateSetupMode(false);
                 queryClient.invalidateQueries({ queryKey: ['server', serverId] });
                 queryClient.invalidateQueries({ queryKey: ['servers'] });
               }}
             />
-          </div>
-          
-          {reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed' && (
-            <div className="text-xs text-muted-foreground text-center">
-              Do not close this window. Your server will be available shortly.
-            </div>
+          ) : (
+            /* Reinstall Progress Panel (original) */
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {reinstallTask.status === 'complete' ? (
+                    <>
+                      <Check className="h-5 w-5 text-green-500" />
+                      Reinstall Complete
+                    </>
+                  ) : reinstallTask.status === 'failed' ? (
+                    <>
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                      Reinstall Failed
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                      Reinstalling Server
+                    </>
+                  )}
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  {reinstallTask.status === 'complete' 
+                    ? 'Your server has been reinstalled successfully.'
+                    : reinstallTask.status === 'failed'
+                    ? 'There was a problem reinstalling your server.'
+                    : 'Please wait while your server is being reinstalled. This may take several minutes.'}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="py-4">
+                <ReinstallProgressPanel 
+                  state={reinstallTask} 
+                  onDismiss={() => {
+                    reinstallTask.reset();
+                    queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                    queryClient.invalidateQueries({ queryKey: ['servers'] });
+                  }}
+                />
+              </div>
+              
+              {reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed' && (
+                <div className="text-xs text-muted-foreground text-center">
+                  Do not close this window. Your server will be available shortly.
+                </div>
+              )}
+            </>
           )}
         </DialogContent>
       </Dialog>

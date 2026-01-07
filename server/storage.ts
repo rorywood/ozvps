@@ -343,6 +343,11 @@ export const dbStorage = {
     return wallet;
   },
 
+  async getWalletByVirtFusionUserId(virtFusionUserId: number): Promise<Wallet | undefined> {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.virtFusionUserId, virtFusionUserId));
+    return wallet;
+  },
+
   async softDeleteWallet(auth0UserId: string): Promise<Wallet | undefined> {
     const [updated] = await db
       .update(wallets)
