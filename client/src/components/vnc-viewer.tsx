@@ -19,7 +19,7 @@ import {
   ZoomOut
 } from "lucide-react";
 
-const ZOOM_PRESETS = [1.0, 1.15, 1.30] as const;
+const ZOOM_PRESETS = [1.0, 1.25, 1.5, 1.75, 2.0] as const;
 const ZOOM_STORAGE_KEY = 'consoleScale';
 
 function getStoredZoom(): number {
@@ -32,7 +32,7 @@ function getStoredZoom(): number {
       }
     }
   } catch (e) {}
-  return 1.15; // Default to 115%
+  return 1.5; // Default to 150%
 }
 
 function setStoredZoom(value: number): void {
