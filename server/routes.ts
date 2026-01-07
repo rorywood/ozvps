@@ -10,6 +10,7 @@ import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature } from "./security";
+import { generateInvoicePDF, saveInvoicePDF } from "./invoice-generator";
 
 declare global {
   namespace Express {
@@ -2169,6 +2170,57 @@ export async function registerRoutes(
     }
   });
 
+  // Get user's invoices (authenticated)
+  app.get('/api/billing/invoices', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const invoices = await dbStorage.getInvoicesByUser(auth0UserId);
+      res.json({ invoices });
+    } catch (error: any) {
+      log(`Error fetching invoices: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch invoices' });
+    }
+  });
+
+  // Download invoice PDF (authenticated)
+  app.get('/api/billing/invoices/:id/download', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const invoiceId = parseInt(req.params.id, 10);
+      if (isNaN(invoiceId)) {
+        return res.status(400).json({ error: 'Invalid invoice ID' });
+      }
+
+      const invoice = await dbStorage.getInvoiceById(invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Verify the invoice belongs to this user
+      if (invoice.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Generate PDF on-the-fly (or use cached version if available)
+      const pdfBuffer = await generateInvoicePDF(invoice);
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      log(`Error downloading invoice: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to download invoice' });
+    }
+  });
+
   // Get auto top-up settings (authenticated)
   app.get('/api/billing/auto-topup', authMiddleware, async (req, res) => {
     try {
@@ -2511,6 +2563,35 @@ export async function registerRoutes(
         });
 
         log(`Direct charge successful for ${auth0UserId}: $${(amountCents / 100).toFixed(2)} AUD`, 'stripe');
+        
+        // Generate invoice for the top-up
+        try {
+          const customer = await stripe.customers.retrieve(wallet.stripeCustomerId);
+          const customerEmail = 'email' in customer ? customer.email : null;
+          const customerName = 'name' in customer ? customer.name : null;
+          
+          const invoiceNumber = await dbStorage.generateInvoiceNumber();
+          const invoice = await dbStorage.createInvoice({
+            auth0UserId,
+            invoiceNumber,
+            amountCents,
+            description: 'Wallet Top-up',
+            stripePaymentIntentId: paymentIntent.id,
+            status: 'paid',
+            customerEmail: customerEmail || req.session?.email || 'unknown@example.com',
+            customerName,
+          });
+          
+          // Generate and save PDF
+          const pdfBuffer = await generateInvoicePDF(invoice);
+          const pdfPath = await saveInvoicePDF(invoice, pdfBuffer);
+          await dbStorage.updateInvoicePdfPath(invoice.id, pdfPath);
+          
+          log(`Invoice generated: ${invoiceNumber} for user=${auth0UserId}`, 'billing');
+        } catch (invoiceError: any) {
+          // Log but don't fail - wallet credit was successful
+          log(`Failed to generate invoice: ${invoiceError.message}`, 'billing');
+        }
         
         res.json({ 
           success: true, 

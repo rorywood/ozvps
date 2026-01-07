@@ -541,6 +541,25 @@ class ApiClient {
     return response.json();
   }
 
+  async getInvoices(): Promise<{ invoices: Array<{
+    id: number;
+    invoiceNumber: string;
+    amountCents: number;
+    description: string;
+    status: string;
+    createdAt: string;
+  }> }> {
+    const response = await fetch(`${this.baseUrl}/billing/invoices`);
+    if (!response.ok) throw new Error('Failed to fetch invoices');
+    return response.json();
+  }
+
+  async downloadInvoice(invoiceId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseUrl}/billing/invoices/${invoiceId}/download`);
+    if (!response.ok) throw new Error('Failed to download invoice');
+    return response.blob();
+  }
+
   async getStripePublishableKey(): Promise<{ publishableKey: string }> {
     const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/stripe/publishable-key`);
     if (!response.ok) throw new Error('Failed to fetch Stripe publishable key');

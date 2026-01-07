@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -1027,5 +1027,59 @@ export const dbStorage = {
       .from(adminAuditLogs)
       .where(eq(adminAuditLogs.id, id));
     return log;
+  },
+
+  // Invoice functions
+  async createInvoice(data: InsertInvoice): Promise<Invoice> {
+    const [invoice] = await db.insert(invoices).values(data).returning();
+    return invoice;
+  },
+
+  async getInvoicesByUser(auth0UserId: string): Promise<Invoice[]> {
+    return db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.auth0UserId, auth0UserId))
+      .orderBy(desc(invoices.createdAt));
+  },
+
+  async getInvoiceById(id: number): Promise<Invoice | undefined> {
+    const [invoice] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, id));
+    return invoice;
+  },
+
+  async getInvoiceByNumber(invoiceNumber: string): Promise<Invoice | undefined> {
+    const [invoice] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.invoiceNumber, invoiceNumber));
+    return invoice;
+  },
+
+  async generateInvoiceNumber(): Promise<string> {
+    // Format: INV-YYYYMM-XXXXX where XXXXX is a sequential number
+    const now = new Date();
+    const prefix = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Get the count of invoices this month to generate sequential number
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(invoices)
+      .where(sql`${invoices.invoiceNumber} LIKE ${prefix + '%'}`);
+    
+    const nextNum = (result?.count || 0) + 1;
+    return `${prefix}-${String(nextNum).padStart(5, '0')}`;
+  },
+
+  async updateInvoicePdfPath(id: number, pdfPath: string): Promise<Invoice | undefined> {
+    const [updated] = await db
+      .update(invoices)
+      .set({ pdfPath })
+      .where(eq(invoices.id, id))
+      .returning();
+    return updated;
   },
 };

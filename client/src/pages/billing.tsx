@@ -19,7 +19,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Zap,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  Download
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -464,6 +466,19 @@ export default function BillingPage() {
   const { data: transactionsData, isLoading: loadingTransactions } = useQuery<{ transactions: Transaction[] }>({
     queryKey: ['transactions'],
     queryFn: () => api.getTransactions(),
+    enabled: stripeConfigured,
+  });
+
+  const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Array<{
+    id: number;
+    invoiceNumber: string;
+    amountCents: number;
+    description: string;
+    status: string;
+    createdAt: string;
+  }> }>({
+    queryKey: ['invoices'],
+    queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
   });
 
@@ -984,6 +999,88 @@ export default function BillingPage() {
                       Showing most recent 10 of {transactions.length} transactions
                     </p>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Invoices */}
+            <div data-testid="invoices-section">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-white">Invoices</h2>
+                  <p className="text-sm text-muted-foreground">Download your payment invoices</p>
+                </div>
+              </div>
+
+              {loadingInvoices ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : !invoicesData?.invoices || invoicesData.invoices.length === 0 ? (
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted/10 flex items-center justify-center mx-auto mb-3">
+                    <FileText className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-muted-foreground">No invoices yet</p>
+                  <p className="text-sm text-muted-foreground/70">Invoices are generated when you add funds</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {invoicesData.invoices.map((invoice) => (
+                    <div 
+                      key={invoice.id}
+                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5 hover:bg-white/[0.04] transition-colors"
+                      data-testid={`invoice-${invoice.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-white">{invoice.invoiceNumber}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatDate(invoice.createdAt)} · {invoice.description}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="font-mono text-lg font-medium text-green-500">
+                          ${(invoice.amountCents / 100).toFixed(2)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary/80"
+                          onClick={async () => {
+                            try {
+                              const blob = await api.downloadInvoice(invoice.id);
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `${invoice.invoiceNumber}.pdf`;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              document.body.removeChild(a);
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to download invoice",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          data-testid={`download-invoice-${invoice.id}`}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

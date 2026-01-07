@@ -31,7 +31,8 @@ Preferred communication style: Simple, everyday language.
 - **VPS Management**: Create, delete, and manage VPS instances.
 - **Two-Phase Deployment**: Servers are created instantly without OS, then users complete setup via wizard on the server detail page. This separates "ordering" from "setup" for better UX.
 - **Setup Wizard**: When a server needs setup (`needsSetup: true`), the server detail page shows a wizard for selecting OS and hostname.
-- **Billing**: Wallet top-up via Stripe, transaction history, and saved payment methods. Includes auto top-up feature that automatically charges a saved card when balance falls below a configurable threshold.
+- **Billing**: Wallet top-up via Stripe, transaction history, and saved payment methods. Includes auto top-up feature that automatically charges a saved card when balance falls below a configurable threshold. Direct charge feature for instant top-ups with saved cards. Duplicate card prevention using Stripe fingerprint validation. Automatic 3DS fallback to Stripe Checkout.
+- **Invoices**: Automatic PDF invoice generation for wallet top-ups. Invoices include OzVPS branding (ABN: 95 663 314 047), customer details, amount breakdown, and payment status. Invoice history viewable and downloadable in the billing section.
 - **Console Access**: Embedded VNC console for server interaction.
 - **Server Reinstall**: Streamlined process for reinstalling server OS.
 - **Admin Tools**: User management, credit adjustment, and account linking for administrators.
