@@ -1748,9 +1748,9 @@ export async function registerRoutes(
           }
           
           // If wallet has a linked VirtFusion user, fetch their server count
-          if (wallet.virtfusionUserId) {
+          if (wallet.virtFusionUserId) {
             try {
-              const servers = await virtfusionClient.listServersByUserId(wallet.virtfusionUserId);
+              const servers = await virtfusionClient.listServersByUserId(wallet.virtFusionUserId);
               serverCount = servers.length;
             } catch (e) {
               // VirtFusion user may have been deleted
@@ -1758,11 +1758,11 @@ export async function registerRoutes(
           }
           
           return {
-            virtfusionId: wallet.virtfusionUserId || null,
+            virtfusionId: wallet.virtFusionUserId || null,
             auth0UserId: wallet.auth0UserId,
             name,
             email,
-            virtfusionLinked: !!wallet.virtfusionUserId,
+            virtfusionLinked: !!wallet.virtFusionUserId,
             status: wallet.deletedAt ? 'deleted' : 'active',
             serverCount,
             balanceCents: wallet.balanceCents,

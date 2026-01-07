@@ -1514,7 +1514,7 @@ export class VirtFusionClient {
     }
   }
 
-  // Get IP allocations (all assigned IPs)
+  // Get IP allocations (derived from servers since VirtFusion doesn't have a direct IP list endpoint)
   async getIpAllocations(): Promise<Array<{
     id: number;
     address: string;
@@ -1525,20 +1525,75 @@ export class VirtFusionClient {
     blockId: number;
   }>> {
     try {
-      const response = await this.request<{ data: any[] }>('/ipAddresses?results=500');
-      const ips = response.data || [];
-      log(`Fetched ${ips.length} IP allocations`, 'virtfusion');
-      return ips.map(ip => ({
-        id: ip.id,
-        address: ip.address || ip.ip || '',
-        type: ip.type === 6 ? 'ipv6' : 'ipv4',
-        serverId: ip.serverId || ip.server?.id || undefined,
-        serverName: ip.server?.name || undefined,
-        userId: ip.userId || ip.user?.id || undefined,
-        blockId: ip.ipAddressBlockId || ip.blockId || 0,
-      }));
+      // Fetch all servers to extract their IPs
+      const servers = await this.listAllServers();
+      const allocations: Array<{
+        id: number;
+        address: string;
+        type: 'ipv4' | 'ipv6';
+        serverId?: number;
+        serverName?: string;
+        userId?: number;
+        blockId: number;
+      }> = [];
+      
+      let ipId = 1;
+      for (const server of servers) {
+        // Add primary IP if exists
+        if (server.primaryIp) {
+          allocations.push({
+            id: ipId++,
+            address: server.primaryIp,
+            type: server.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
+            serverId: server.id,
+            serverName: server.name,
+            userId: server.userId,
+            blockId: 0,
+          });
+        }
+        
+        // Try to get additional IPs from network interfaces
+        try {
+          const network = await this.getServerNetwork(server.id);
+          for (const iface of network) {
+            // Add IPv4 addresses (skip the primary which we already added)
+            for (const ipv4 of iface.ipv4 || []) {
+              if (ipv4.address && ipv4.address !== server.primaryIp) {
+                allocations.push({
+                  id: ipId++,
+                  address: ipv4.address,
+                  type: 'ipv4',
+                  serverId: server.id,
+                  serverName: server.name,
+                  userId: server.userId,
+                  blockId: 0,
+                });
+              }
+            }
+            // Add IPv6 addresses
+            for (const ipv6 of iface.ipv6 || []) {
+              if (ipv6.address) {
+                allocations.push({
+                  id: ipId++,
+                  address: ipv6.address,
+                  type: 'ipv6',
+                  serverId: server.id,
+                  serverName: server.name,
+                  userId: server.userId,
+                  blockId: 0,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          // Skip network fetch errors for individual servers
+        }
+      }
+      
+      log(`Derived ${allocations.length} IP allocations from ${servers.length} servers`, 'virtfusion');
+      return allocations;
     } catch (error) {
-      log(`Failed to fetch IP allocations: ${error}`, 'virtfusion');
+      log(`Failed to derive IP allocations: ${error}`, 'virtfusion');
       return [];
     }
   }
