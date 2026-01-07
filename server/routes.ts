@@ -1723,15 +1723,51 @@ export async function registerRoutes(
     }
   });
 
-  // Get VirtFusion users (admin)
+  // Get users (admin) - builds list from wallets with VirtFusion info
   app.get('/api/admin/vf/users', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const result = await virtfusionClient.getAllUsers(page, limit);
-      res.json(result);
+      // Get all wallets which represent our user accounts
+      const allWallets = await dbStorage.getAllWallets();
+      
+      // Build user list from wallets, enriching with VirtFusion data where available
+      const users = await Promise.all(
+        allWallets.map(async (wallet) => {
+          let serverCount = 0;
+          
+          // If wallet has a linked VirtFusion user, fetch their server count
+          if (wallet.virtfusionUserId) {
+            try {
+              const servers = await virtfusionClient.listServersByUserId(wallet.virtfusionUserId);
+              serverCount = servers.length;
+            } catch (e) {
+              // VirtFusion user may have been deleted
+            }
+          }
+          
+          return {
+            virtfusionId: wallet.virtfusionUserId || null,
+            auth0UserId: wallet.auth0UserId,
+            name: wallet.name || wallet.email,
+            email: wallet.email,
+            virtfusionLinked: !!wallet.virtfusionUserId,
+            status: wallet.deletedAt ? 'deleted' : 'active',
+            serverCount,
+            balanceCents: wallet.balanceCents,
+            stripeCustomerId: wallet.stripeCustomerId,
+            created: wallet.createdAt?.toISOString() || '',
+          };
+        })
+      );
+      
+      log(`Admin: Built user list from ${users.length} wallets`, 'admin');
+      res.json({ 
+        users, 
+        total: users.length,
+        currentPage: 1,
+        lastPage: 1,
+      });
     } catch (error: any) {
-      log(`Admin: Error fetching VF users: ${error.message}`, 'admin');
+      log(`Admin: Error fetching users: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to fetch users' });
     }
   });

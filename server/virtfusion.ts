@@ -1351,33 +1351,91 @@ export class VirtFusionClient {
   async getHypervisors(): Promise<Array<{
     id: number;
     name: string;
+    hostname: string;
     ip: string;
     enabled: boolean;
     maintenance: boolean;
     maxCpu: number;
     maxMemory: number;
     maxServers: number;
+    vmCount: number;
+    maxVms: number;
+    memoryUsage: number | null;
+    diskUsage: number | null;
+    cpuUsage: number | null;
+    ramTotalMb: number | null;
+    ramUsedMb: number | null;
+    diskTotalGb: number | null;
+    diskUsedGb: number | null;
+    lastSeenAt: string | null;
     group?: { id: number; name: string };
     networks?: Array<{ id: number; type: string; bridge: string }>;
     created: string;
   }>> {
     try {
-      const response = await this.request<{ data: any[] }>('/compute/hypervisors?results=200');
+      const response = await this.request<{ data: any[] }>('/compute/hypervisors?with=servers&results=200');
       const hypervisors = response.data || [];
       log(`Fetched ${hypervisors.length} hypervisors`, 'virtfusion');
-      return hypervisors.map(h => ({
-        id: h.id,
-        name: h.name || `Hypervisor ${h.id}`,
-        ip: h.ip || h.ipAlt || 'Unknown',
-        enabled: h.enabled !== false,
-        maintenance: h.maintenance === true,
-        maxCpu: h.maxCpu || 0,
-        maxMemory: h.maxMemory || 0,
-        maxServers: h.maxServers || 0,
-        group: h.group ? { id: h.group.id, name: h.group.name } : undefined,
-        networks: h.networks?.map((n: any) => ({ id: n.id, type: n.type, bridge: n.bridge })) || [],
-        created: h.created || h.created_at || '',
-      }));
+      
+      return hypervisors.map(h => {
+        // Extract resource usage from VirtFusion response
+        const resources = h.resources || {};
+        const stats = h.stats || {};
+        
+        // Helper to get first defined value (including 0) or null
+        const getFirstDefined = (...values: any[]): number | null => {
+          for (const v of values) {
+            if (v !== undefined && v !== null) return v;
+          }
+          return null;
+        };
+        
+        // Memory calculations - return null only if data truly not available
+        const ramTotalMb = getFirstDefined(resources.memoryTotal, resources.memory_total, h.maxMemory);
+        const ramUsedMb = getFirstDefined(resources.memoryUsed, resources.memory_used);
+        const memoryUsage = (ramTotalMb !== null && ramUsedMb !== null && ramTotalMb > 0) 
+          ? Math.round((ramUsedMb / ramTotalMb) * 100) 
+          : null;
+        
+        // Disk calculations - return null only if data truly not available
+        const diskTotalGb = getFirstDefined(resources.diskTotal, resources.disk_total);
+        const diskUsedGb = getFirstDefined(resources.diskUsed, resources.disk_used);
+        const diskUsage = (diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0) 
+          ? Math.round((diskUsedGb / diskTotalGb) * 100) 
+          : null;
+        
+        // VM counts - use servers array length if available
+        const vmCount = getFirstDefined(stats.instances, stats.servers, h.servers?.length) ?? 0;
+        const maxVms = h.maxServers ?? 100;
+        
+        // CPU usage - return null only if data truly not available
+        const cpuUsage = getFirstDefined(resources.cpuUsage, resources.cpu_usage, stats.cpu);
+        
+        return {
+          id: h.id,
+          name: h.name || `Hypervisor ${h.id}`,
+          hostname: h.hostname || h.name || '',
+          ip: h.ip || h.ipAlt || 'Unknown',
+          enabled: h.enabled !== false,
+          maintenance: h.maintenance === true,
+          maxCpu: h.maxCpu || 0,
+          maxMemory: h.maxMemory || 0,
+          maxServers: h.maxServers || 100,
+          vmCount,
+          maxVms,
+          memoryUsage,
+          diskUsage,
+          cpuUsage,
+          ramTotalMb,
+          ramUsedMb,
+          diskTotalGb,
+          diskUsedGb,
+          lastSeenAt: h.lastSeenAt || h.last_seen_at || h.lastSeen || null,
+          group: h.group ? { id: h.group.id, name: h.group.name } : undefined,
+          networks: h.networks?.map((n: any) => ({ id: n.id, type: n.type, bridge: n.bridge })) || [],
+          created: h.created || h.created_at || '',
+        };
+      });
     } catch (error) {
       log(`Failed to fetch hypervisors: ${error}`, 'virtfusion');
       return [];

@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import {
   Server, Cpu, Network, Users, FileText, Loader2, Power, PowerOff, RefreshCw, Trash2,
   AlertTriangle, CheckCircle, Activity, HardDrive, Play, Square, RotateCcw, ArrowRightLeft,
-  ChevronDown, ChevronUp, Eye, Ban, ShieldAlert
+  ChevronDown, ChevronUp, Eye, Ban, ShieldAlert, DollarSign, Link, Unlink
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -41,14 +42,22 @@ interface Hypervisor {
   id: number;
   name: string;
   hostname: string;
+  ip: string;
   enabled: boolean;
   maintenance: boolean;
   vmCount: number;
   maxVms: number;
-  cpuUsage?: number;
-  memoryUsage?: number;
-  diskUsage?: number;
-  lastSeenAt?: string;
+  cpuUsage: number | null;
+  memoryUsage: number | null;
+  diskUsage: number | null;
+  ramTotalMb: number | null;
+  ramUsedMb: number | null;
+  diskTotalGb: number | null;
+  diskUsedGb: number | null;
+  lastSeenAt: string | null;
+  maxCpu: number;
+  maxMemory: number;
+  group?: { id: number; name: string };
 }
 
 interface IpBlock {
@@ -61,12 +70,16 @@ interface IpBlock {
 }
 
 interface VFUser {
-  id: number;
+  virtfusionId: number | null;
+  auth0UserId: string;
   email: string;
-  name?: string;
-  extRelationId?: string;
-  createdAt?: string;
-  serversCount?: number;
+  name: string;
+  virtfusionLinked: boolean;
+  status: 'active' | 'deleted';
+  serverCount: number;
+  balanceCents: number;
+  stripeCustomerId?: string;
+  created: string;
 }
 
 interface AuditLog {
@@ -79,6 +92,49 @@ interface AuditLog {
   reason?: string;
   createdAt: string;
   errorMessage?: string;
+}
+
+function StatCard({ icon, label, value, detail, color }: { 
+  icon: React.ReactNode; 
+  label: string; 
+  value: string | number; 
+  detail?: string;
+  color: 'cyan' | 'purple' | 'amber' | 'green' | 'red';
+}) {
+  const colorClasses = {
+    cyan: 'bg-cyan-500/10 text-cyan-400',
+    purple: 'bg-purple-500/10 text-purple-400',
+    amber: 'bg-amber-500/10 text-amber-400',
+    green: 'bg-green-500/10 text-green-400',
+    red: 'bg-red-500/10 text-red-400',
+  };
+  
+  return (
+    <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
+          {icon}
+        </div>
+        <span className="text-muted-foreground text-sm">{label}</span>
+      </div>
+      <p className="text-3xl font-bold text-white">{value}</p>
+      {detail && <p className="text-xs text-muted-foreground mt-1">{detail}</p>}
+    </div>
+  );
+}
+
+function SectionHeader({ icon, title, children }: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+          {icon}
+        </div>
+        <h2 className="text-xl font-semibold text-white">{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 export default function AdminInfrastructurePage() {
@@ -120,7 +176,7 @@ export default function AdminInfrastructurePage() {
     enabled: isAdmin && activeTab === 'servers',
   });
 
-  const { data: hypervisorsData, isLoading: hypervisorsLoading } = useQuery({
+  const { data: hypervisorsData, isLoading: hypervisorsLoading, refetch: refetchHypervisors } = useQuery({
     queryKey: ['admin', 'vf', 'hypervisors'],
     queryFn: async () => {
       const res = await fetch('/api/admin/vf/hypervisors');
@@ -140,7 +196,7 @@ export default function AdminInfrastructurePage() {
     enabled: isAdmin && activeTab === 'networking',
   });
 
-  const { data: vfUsersData, isLoading: vfUsersLoading } = useQuery({
+  const { data: vfUsersData, isLoading: vfUsersLoading, refetch: refetchUsers } = useQuery({
     queryKey: ['admin', 'vf', 'users'],
     queryFn: async () => {
       const res = await fetch('/api/admin/vf/users');
@@ -150,7 +206,7 @@ export default function AdminInfrastructurePage() {
     enabled: isAdmin && activeTab === 'users',
   });
 
-  const { data: auditLogsData, isLoading: auditLogsLoading } = useQuery({
+  const { data: auditLogsData, isLoading: auditLogsLoading, refetch: refetchAuditLogs } = useQuery({
     queryKey: ['admin', 'audit-logs'],
     queryFn: async () => {
       const res = await fetch('/api/admin/audit-logs?limit=50');
@@ -263,10 +319,10 @@ export default function AdminInfrastructurePage() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
-                Infrastructure
+                Infrastructure Dashboard
               </h1>
               <p className="text-muted-foreground text-sm">
-                Manage VirtFusion servers, hypervisors, and networking
+                Complete VirtFusion management overview
               </p>
             </div>
           </div>
@@ -291,7 +347,7 @@ export default function AdminInfrastructurePage() {
               </TabsTrigger>
               <TabsTrigger value="users" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-users">
                 <Users className="h-4 w-4" />
-                VF Users
+                Users
               </TabsTrigger>
               <TabsTrigger value="audit" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-audit">
                 <FileText className="h-4 w-4" />
@@ -299,6 +355,7 @@ export default function AdminInfrastructurePage() {
               </TabsTrigger>
             </TabsList>
 
+            {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
               {statsLoading ? (
                 <div className="flex justify-center py-12">
@@ -330,7 +387,7 @@ export default function AdminInfrastructurePage() {
                     />
                     <StatCard
                       icon={<Users className="h-5 w-5" />}
-                      label="Total Wallets"
+                      label="Total Users"
                       value={stats.billing.totalWallets}
                       detail={`$${(stats.billing.totalBalance / 100).toFixed(2)} total balance`}
                       color="green"
@@ -338,37 +395,65 @@ export default function AdminInfrastructurePage() {
                   </div>
 
                   <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
-                    <h3 className="text-lg font-semibold text-white mb-4">Hypervisor Status</h3>
-                    <div className="space-y-3">
-                      {hypervisorsLoading ? (
-                        <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
-                      ) : hypervisors.length === 0 ? (
-                        <p className="text-muted-foreground text-center py-4">No hypervisors found</p>
-                      ) : (
-                        hypervisors.map((hv) => (
+                    <SectionHeader icon={<HardDrive className="h-4 w-4" />} title="Hypervisor Status">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => refetchHypervisors()}
+                        className="text-muted-foreground hover:text-white"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </SectionHeader>
+                    
+                    {hypervisorsLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    ) : hypervisors.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-8">No hypervisors found</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {hypervisors.map((hv) => (
                           <div key={hv.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] ring-1 ring-white/5">
                             <div className="flex items-center gap-3">
                               <div className={`h-3 w-3 rounded-full ${hv.enabled && !hv.maintenance ? 'bg-green-500' : hv.maintenance ? 'bg-yellow-500' : 'bg-red-500'}`} />
                               <div>
                                 <p className="font-medium text-white">{hv.name}</p>
-                                <p className="text-xs text-muted-foreground">{hv.hostname}</p>
+                                <p className="text-xs text-muted-foreground">{hv.hostname || hv.ip}</p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm text-white">{hv.vmCount}/{hv.maxVms} VMs</p>
-                              <p className="text-xs text-muted-foreground">
+                            <div className="flex items-center gap-6 text-sm">
+                              <div className="text-center">
+                                <p className="text-white font-medium">{hv.vmCount}/{hv.maxVms}</p>
+                                <p className="text-xs text-muted-foreground">VMs</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-white font-medium">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
+                                <p className="text-xs text-muted-foreground">RAM</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-white font-medium">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
+                                <p className="text-xs text-muted-foreground">Disk</p>
+                              </div>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                hv.maintenance ? 'bg-yellow-500/20 text-yellow-400' : 
+                                hv.enabled ? 'bg-green-500/20 text-green-400' : 
+                                'bg-red-500/20 text-red-400'
+                              }`}>
                                 {hv.maintenance ? 'Maintenance' : hv.enabled ? 'Active' : 'Disabled'}
-                              </p>
+                              </span>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
             </TabsContent>
 
+            {/* Servers Tab */}
             <TabsContent value="servers" className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-muted-foreground text-sm">
@@ -395,113 +480,118 @@ export default function AdminInfrastructurePage() {
                   No servers found
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {servers.map((server) => (
-                    <div
-                      key={server.id}
-                      className="rounded-lg bg-white/[0.02] ring-1 ring-white/5 p-4 hover:bg-white/[0.04] transition-colors"
-                      data-testid={`server-row-${server.id}`}
-                    >
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4">
-                          <div className={`h-3 w-3 rounded-full flex-shrink-0 ${
-                            server.suspended ? 'bg-red-500' :
-                            server.status === 'running' ? 'bg-green-500' :
-                            server.status === 'stopped' ? 'bg-gray-500' :
-                            'bg-yellow-500'
-                          }`} />
-                          <div>
-                            <p className="font-medium text-white">{server.name || server.hostname}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {server.primaryIp || 'No IP'} • {server.package?.name || 'Unknown plan'}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Owner: {server.owner?.email || 'Unknown'} (ID: {server.owner?.id || 'N/A'})
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            server.suspended ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' :
-                            server.status === 'running' ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/30' :
-                            'bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/30'
-                          }`}>
-                            {server.suspended ? 'SUSPENDED' : server.status?.toUpperCase()}
-                          </span>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, 'start')}
-                              disabled={server.status === 'running'}
-                              title="Start"
-                              data-testid={`button-start-${server.id}`}
-                            >
-                              <Play className="h-4 w-4 text-green-400" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, 'stop')}
-                              disabled={server.status !== 'running'}
-                              title="Stop"
-                              data-testid={`button-stop-${server.id}`}
-                            >
-                              <Square className="h-4 w-4 text-yellow-400" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, 'restart')}
-                              disabled={server.status !== 'running'}
-                              title="Restart"
-                              data-testid={`button-restart-${server.id}`}
-                            >
-                              <RotateCcw className="h-4 w-4 text-blue-400" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, server.suspended ? 'unsuspend' : 'suspend')}
-                              title={server.suspended ? 'Unsuspend' : 'Suspend'}
-                              data-testid={`button-suspend-${server.id}`}
-                            >
-                              <Ban className="h-4 w-4 text-orange-400" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, 'transfer')}
-                              title="Transfer"
-                              data-testid={`button-transfer-${server.id}`}
-                            >
-                              <ArrowRightLeft className="h-4 w-4 text-purple-400" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => openActionDialog(server, 'delete')}
-                              title="Delete"
-                              data-testid={`button-delete-${server.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-400" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-left bg-white/[0.02]">
+                        <th className="p-4 text-muted-foreground font-medium">Server</th>
+                        <th className="p-4 text-muted-foreground font-medium">Owner</th>
+                        <th className="p-4 text-muted-foreground font-medium">Status</th>
+                        <th className="p-4 text-muted-foreground font-medium">IP</th>
+                        <th className="p-4 text-muted-foreground font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {servers.map((server) => (
+                        <tr key={server.id} className="border-b border-white/5 hover:bg-white/[0.02]" data-testid={`server-row-${server.id}`}>
+                          <td className="p-4">
+                            <p className="font-medium text-white">{server.name}</p>
+                            <p className="text-xs text-muted-foreground">{server.hostname}</p>
+                          </td>
+                          <td className="p-4">
+                            <p className="text-white">{server.owner?.email || 'Unknown'}</p>
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
+                              server.suspended ? 'bg-red-500/20 text-red-400' :
+                              server.status === 'running' ? 'bg-green-500/20 text-green-400' :
+                              'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {server.suspended ? <Ban className="h-3 w-3" /> : server.status === 'running' ? <CheckCircle className="h-3 w-3" /> : <Square className="h-3 w-3" />}
+                              {server.suspended ? 'Suspended' : server.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-muted-foreground">
+                            {server.primaryIp || '-'}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-end gap-1">
+                              {!server.suspended && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => openActionDialog(server, server.status === 'running' ? 'stop' : 'start')}
+                                    title={server.status === 'running' ? 'Stop' : 'Start'}
+                                  >
+                                    {server.status === 'running' ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => openActionDialog(server, 'restart')}
+                                    title="Restart"
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openActionDialog(server, server.suspended ? 'unsuspend' : 'suspend')}
+                                title={server.suspended ? 'Unsuspend' : 'Suspend'}
+                              >
+                                {server.suspended ? <CheckCircle className="h-3.5 w-3.5 text-green-400" /> : <Ban className="h-3.5 w-3.5 text-yellow-400" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openActionDialog(server, 'transfer')}
+                                title="Transfer"
+                              >
+                                <ArrowRightLeft className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-red-400 hover:text-red-300"
+                                onClick={() => openActionDialog(server, 'delete')}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </TabsContent>
 
+            {/* Hypervisors Tab */}
             <TabsContent value="hypervisors" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">
+                  {hypervisors.length} hypervisors
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchHypervisors()}
+                  className="border-white/10 gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+
               {hypervisorsLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -511,73 +601,88 @@ export default function AdminInfrastructurePage() {
                   No hypervisors found
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {hypervisors.map((hv) => (
                     <div
                       key={hv.id}
-                      className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 overflow-hidden"
+                      className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5 cursor-pointer hover:bg-white/[0.04] transition-colors"
+                      onClick={() => setExpandedHypervisor(expandedHypervisor === hv.id ? null : hv.id)}
                       data-testid={`hypervisor-card-${hv.id}`}
                     >
-                      <button
-                        className="w-full p-5 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
-                        onClick={() => setExpandedHypervisor(expandedHypervisor === hv.id ? null : hv.id)}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${
-                            hv.enabled && !hv.maintenance ? 'bg-green-500/10' : 
-                            hv.maintenance ? 'bg-yellow-500/10' : 'bg-red-500/10'
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-3 w-3 rounded-full ${hv.enabled && !hv.maintenance ? 'bg-green-500' : hv.maintenance ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                          <div>
+                            <p className="font-medium text-white">{hv.name}</p>
+                            <p className="text-xs text-muted-foreground">{hv.hostname || hv.ip}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            hv.maintenance ? 'bg-yellow-500/20 text-yellow-400' : 
+                            hv.enabled ? 'bg-green-500/20 text-green-400' : 
+                            'bg-red-500/20 text-red-400'
                           }`}>
-                            <HardDrive className={`h-6 w-6 ${
-                              hv.enabled && !hv.maintenance ? 'text-green-400' :
-                              hv.maintenance ? 'text-yellow-400' : 'text-red-400'
-                            }`} />
-                          </div>
-                          <div className="text-left">
-                            <p className="font-semibold text-white">{hv.name}</p>
-                            <p className="text-sm text-muted-foreground">{hv.hostname}</p>
-                          </div>
+                            {hv.maintenance ? 'Maintenance' : hv.enabled ? 'Active' : 'Disabled'}
+                          </span>
+                          {expandedHypervisor === hv.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                         </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <p className="text-lg font-semibold text-white">{hv.vmCount}/{hv.maxVms}</p>
-                            <p className="text-xs text-muted-foreground">Virtual Machines</p>
-                          </div>
-                          {expandedHypervisor === hv.id ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                          )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 mb-3">
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">VMs</p>
+                          <p className="text-lg font-semibold text-white">{hv.vmCount}/{hv.maxVms}</p>
                         </div>
-                      </button>
-                      
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">RAM</p>
+                          <p className="text-lg font-semibold text-white">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Disk</p>
+                          <p className="text-lg font-semibold text-white">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
+                        </div>
+                      </div>
+
                       {expandedHypervisor === hv.id && (
-                        <div className="px-5 pb-5 border-t border-white/5 pt-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Status</p>
-                              <p className={`font-medium ${
-                                hv.maintenance ? 'text-yellow-400' :
-                                hv.enabled ? 'text-green-400' : 'text-red-400'
-                              }`}>
-                                {hv.maintenance ? 'Maintenance' : hv.enabled ? 'Active' : 'Disabled'}
-                              </p>
+                        <div className="border-t border-white/10 pt-4 mt-4 space-y-4">
+                          <div>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">Memory Usage</span>
+                              <span className="text-white">
+                                {hv.ramUsedMb !== null && hv.ramTotalMb !== null 
+                                  ? `${hv.ramUsedMb} / ${hv.ramTotalMb} MB`
+                                  : 'Not available'}
+                              </span>
                             </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">CPU Usage</p>
-                              <p className="font-medium text-white">{hv.cpuUsage ?? 'N/A'}%</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Memory Usage</p>
-                              <p className="font-medium text-white">{hv.memoryUsage ?? 'N/A'}%</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Disk Usage</p>
-                              <p className="font-medium text-white">{hv.diskUsage ?? 'N/A'}%</p>
-                            </div>
+                            <Progress value={hv.memoryUsage ?? 0} className="h-2" />
                           </div>
+                          <div>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">Disk Usage</span>
+                              <span className="text-white">
+                                {hv.diskUsedGb !== null && hv.diskTotalGb !== null 
+                                  ? `${hv.diskUsedGb} / ${hv.diskTotalGb} GB`
+                                  : 'Not available'}
+                              </span>
+                            </div>
+                            <Progress value={hv.diskUsage ?? 0} className="h-2" />
+                          </div>
+                          <div>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">CPU Usage</span>
+                              <span className="text-white">{hv.cpuUsage !== null ? `${hv.cpuUsage}%` : 'Not available'}</span>
+                            </div>
+                            <Progress value={hv.cpuUsage ?? 0} className="h-2" />
+                          </div>
+                          {hv.group && (
+                            <p className="text-xs text-muted-foreground">
+                              Group: {hv.group.name}
+                            </p>
+                          )}
                           {hv.lastSeenAt && (
-                            <p className="text-xs text-muted-foreground mt-4">
-                              Last seen: {format(new Date(hv.lastSeenAt), 'PPp')}
+                            <p className="text-xs text-muted-foreground">
+                              Last seen: {format(new Date(hv.lastSeenAt), 'MMM d, yyyy HH:mm')}
                             </p>
                           )}
                         </div>
@@ -588,7 +693,10 @@ export default function AdminInfrastructurePage() {
               )}
             </TabsContent>
 
+            {/* Networking Tab */}
             <TabsContent value="networking" className="space-y-4">
+              <SectionHeader icon={<Network className="h-4 w-4" />} title="IP Blocks" />
+              
               {ipBlocksLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -598,43 +706,29 @@ export default function AdminInfrastructurePage() {
                   No IP blocks found
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {ipBlocks.map((block) => {
-                    const utilization = block.totalAddresses > 0
-                      ? Math.round((block.usedAddresses / block.totalAddresses) * 100)
+                    const usagePercent = block.totalAddresses > 0 
+                      ? Math.round((block.usedAddresses / block.totalAddresses) * 100) 
                       : 0;
                     return (
-                      <div
-                        key={block.id}
-                        className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5"
-                        data-testid={`ip-block-${block.id}`}
-                      >
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <p className="font-semibold text-white font-mono">{block.cidr}</p>
-                            <p className="text-sm text-muted-foreground">Gateway: {block.gateway}</p>
-                          </div>
-                          <span className={`px-3 py-1 text-xs rounded-full ${
-                            block.type === 'ipv4' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'
+                      <div key={block.id} className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5" data-testid={`ip-block-${block.id}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="font-medium text-white">{block.cidr}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            block.type === 'ipv4' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-purple-500/20 text-purple-400'
                           }`}>
                             {block.type.toUpperCase()}
                           </span>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Utilization</span>
-                            <span className="text-white">{block.usedAddresses}/{block.totalAddresses} ({utilization}%)</span>
+                        <div className="mb-3">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">Usage</span>
+                            <span className="text-white">{block.usedAddresses}/{block.totalAddresses} ({usagePercent}%)</span>
                           </div>
-                          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                utilization > 90 ? 'bg-red-500' :
-                                utilization > 70 ? 'bg-yellow-500' : 'bg-green-500'
-                              }`}
-                              style={{ width: `${utilization}%` }}
-                            />
-                          </div>
+                          <Progress value={usagePercent} className="h-2" />
                         </div>
+                        <p className="text-xs text-muted-foreground">Gateway: {block.gateway}</p>
                       </div>
                     );
                   })}
@@ -642,52 +736,103 @@ export default function AdminInfrastructurePage() {
               )}
             </TabsContent>
 
+            {/* Users Tab */}
             <TabsContent value="users" className="space-y-4">
-              <p className="text-muted-foreground text-sm">
-                VirtFusion users (linked to OzVPS accounts via extRelationId)
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">
+                  {vfUsers.length} users
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchUsers()}
+                  className="border-white/10 gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+
               {vfUsersLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : vfUsers.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  No VirtFusion users found
+                  No users found
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {vfUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="rounded-lg bg-white/[0.02] ring-1 ring-white/5 p-4"
-                      data-testid={`vf-user-${user.id}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">{user.email}</p>
-                          <p className="text-sm text-muted-foreground">
-                            ID: {user.id} • extRelationId: {user.extRelationId || 'None'}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-white">{user.serversCount || 0} servers</p>
-                          {user.createdAt && (
-                            <p className="text-xs text-muted-foreground">
-                              Created {format(new Date(user.createdAt), 'PP')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-left bg-white/[0.02]">
+                        <th className="p-4 text-muted-foreground font-medium">User</th>
+                        <th className="p-4 text-muted-foreground font-medium">VirtFusion</th>
+                        <th className="p-4 text-muted-foreground font-medium">Servers</th>
+                        <th className="p-4 text-muted-foreground font-medium">Balance</th>
+                        <th className="p-4 text-muted-foreground font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vfUsers.map((user, idx) => (
+                        <tr key={user.auth0UserId || idx} className="border-b border-white/5 hover:bg-white/[0.02]" data-testid={`user-row-${idx}`}>
+                          <td className="p-4">
+                            <p className="font-medium text-white">{user.name}</p>
+                            <p className="text-xs text-muted-foreground">{user.email}</p>
+                          </td>
+                          <td className="p-4">
+                            {user.virtfusionLinked ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                                <Link className="h-3 w-3" />
+                                ID: {user.virtfusionId}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                <Unlink className="h-3 w-3" />
+                                Not linked
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-white">
+                            {user.serverCount}
+                          </td>
+                          <td className="p-4">
+                            <span className={`font-medium ${user.balanceCents >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              ${(user.balanceCents / 100).toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              user.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {user.status === 'active' ? 'Active' : 'Deleted'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </TabsContent>
 
+            {/* Audit Log Tab */}
             <TabsContent value="audit" className="space-y-4">
-              <p className="text-muted-foreground text-sm">
-                Recent admin actions on infrastructure
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">
+                  Recent admin actions
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchAuditLogs()}
+                  className="border-white/10 gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+
               {auditLogsLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -701,43 +846,42 @@ export default function AdminInfrastructurePage() {
                   {auditLogs.map((log) => (
                     <div
                       key={log.id}
-                      className="rounded-lg bg-white/[0.02] ring-1 ring-white/5 p-4"
+                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5"
                       data-testid={`audit-log-${log.id}`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            log.status === 'success' ? 'bg-green-500/10' : 'bg-red-500/10'
-                          }`}>
-                            {log.status === 'success' ? (
-                              <CheckCircle className="h-4 w-4 text-green-400" />
-                            ) : (
-                              <AlertTriangle className="h-4 w-4 text-red-400" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium text-white">{log.action}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {log.targetType} {log.targetId && `#${log.targetId}`}
-                            </p>
-                            {log.reason && (
-                              <p className="text-sm text-amber-400/70 mt-1">
-                                Reason: {log.reason}
-                              </p>
-                            )}
-                            {log.errorMessage && (
-                              <p className="text-sm text-red-400 mt-1">
-                                Error: {log.errorMessage}
-                              </p>
-                            )}
-                          </div>
+                      <div className="flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                          log.status === 'success' ? 'bg-green-500/20' : 'bg-red-500/20'
+                        }`}>
+                          {log.status === 'success' ? (
+                            <CheckCircle className="h-5 w-5 text-green-400" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5 text-red-400" />
+                          )}
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-sm text-white">{log.adminEmail}</p>
+                        <div>
+                          <p className="text-sm text-white">
+                            <span className="font-medium">{log.action}</span>
+                            {log.targetId && (
+                              <span className="text-muted-foreground"> on {log.targetType} #{log.targetId}</span>
+                            )}
+                          </p>
                           <p className="text-xs text-muted-foreground">
-                            {format(new Date(log.createdAt), 'PPp')}
+                            by {log.adminEmail} · {format(new Date(log.createdAt), 'MMM d, yyyy HH:mm')}
                           </p>
                         </div>
+                      </div>
+                      <div className="text-right">
+                        {log.reason && (
+                          <p className="text-xs text-muted-foreground max-w-xs truncate" title={log.reason}>
+                            Reason: {log.reason}
+                          </p>
+                        )}
+                        {log.errorMessage && (
+                          <p className="text-xs text-red-400 max-w-xs truncate" title={log.errorMessage}>
+                            Error: {log.errorMessage}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -748,104 +892,86 @@ export default function AdminInfrastructurePage() {
         </div>
       </main>
 
+      {/* Action Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-white/10">
+        <DialogContent className="bg-gray-900 border-white/10">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
-              <ShieldAlert className="h-5 w-5 text-amber-400" />
-              Confirm Action: {actionType}
+            <DialogTitle className="text-white flex items-center gap-2">
+              {actionType === 'delete' && <Trash2 className="h-5 w-5 text-red-400" />}
+              {actionType === 'suspend' && <Ban className="h-5 w-5 text-yellow-400" />}
+              {actionType === 'unsuspend' && <CheckCircle className="h-5 w-5 text-green-400" />}
+              {actionType === 'transfer' && <ArrowRightLeft className="h-5 w-5 text-blue-400" />}
+              {['start', 'stop', 'restart', 'poweroff'].includes(actionType) && <Power className="h-5 w-5 text-cyan-400" />}
+              {actionType.charAt(0).toUpperCase() + actionType.slice(1)} Server
             </DialogTitle>
             <DialogDescription>
-              Server: {selectedServer?.name || selectedServer?.hostname} (ID: {selectedServer?.id})
+              {selectedServer && (
+                <span>
+                  Performing <strong>{actionType}</strong> on server <strong>{selectedServer.name}</strong>
+                  {selectedServer.owner && ` owned by ${selectedServer.owner.email}`}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-4">
             {actionType === 'transfer' && (
               <div className="space-y-2">
                 <Label htmlFor="newOwnerId">New Owner VirtFusion ID</Label>
                 <Input
                   id="newOwnerId"
-                  type="number"
-                  placeholder="Enter VirtFusion user ID..."
                   value={transferUserId}
                   onChange={(e) => setTransferUserId(e.target.value)}
-                  className="bg-black/20 border-white/10"
-                  data-testid="input-transfer-user-id"
+                  placeholder="Enter VirtFusion user ID"
+                  className="bg-white/5 border-white/10"
                 />
               </div>
             )}
+
             {['delete', 'suspend', 'transfer'].includes(actionType) && (
               <div className="space-y-2">
-                <Label htmlFor="reason">Reason (Required)</Label>
+                <Label htmlFor="reason">
+                  Reason <span className="text-red-400">*</span>
+                </Label>
                 <Textarea
                   id="reason"
-                  placeholder="Enter reason for this action..."
                   value={actionReason}
                   onChange={(e) => setActionReason(e.target.value)}
-                  className="bg-black/20 border-white/10"
-                  data-testid="input-action-reason"
+                  placeholder="Provide a reason for this action (required for audit)"
+                  className="bg-white/5 border-white/10 min-h-[80px]"
                 />
               </div>
             )}
+
             {actionType === 'delete' && (
-              <div className="rounded-lg bg-red-500/10 ring-1 ring-red-500/30 p-3 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
-                <p className="text-sm text-red-400">
-                  This action is irreversible. The server and all its data will be permanently deleted.
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-sm text-red-400 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  This action is irreversible. The server will be permanently deleted.
                 </p>
               </div>
             )}
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setActionDialogOpen(false)} className="border-white/10">
+            <Button
+              variant="outline"
+              onClick={() => setActionDialogOpen(false)}
+              className="border-white/10"
+            >
               Cancel
             </Button>
             <Button
               onClick={handleActionSubmit}
               disabled={serverActionMutation.isPending}
-              variant={actionType === 'delete' ? 'destructive' : 'default'}
-              data-testid="button-confirm-action"
+              className={actionType === 'delete' ? 'bg-red-600 hover:bg-red-700' : ''}
             >
               {serverActionMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Confirm {actionType}
+              Confirm {actionType.charAt(0).toUpperCase() + actionType.slice(1)}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  detail,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  detail: string;
-  color: 'cyan' | 'purple' | 'amber' | 'green';
-}) {
-  const colorClasses = {
-    cyan: 'bg-cyan-500/10 text-cyan-400',
-    purple: 'bg-purple-500/10 text-purple-400',
-    amber: 'bg-amber-500/10 text-amber-400',
-    green: 'bg-green-500/10 text-green-400',
-  };
-
-  return (
-    <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${colorClasses[color]}`}>
-          {icon}
-        </div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
-      <p className="text-xs text-muted-foreground mt-1">{detail}</p>
     </div>
   );
 }
