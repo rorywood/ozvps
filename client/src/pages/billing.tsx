@@ -142,6 +142,18 @@ function AddCardFormInner({
       }
 
       if (setupIntent?.status === 'succeeded') {
+        // Validate the card to check for duplicates
+        const paymentMethodId = setupIntent.payment_method as string;
+        if (paymentMethodId) {
+          const validation = await api.validatePaymentMethod(paymentMethodId);
+          if (!validation.valid) {
+            if (validation.duplicate) {
+              throw new Error(`This card is already saved (${validation.existingCard?.brand} ending in ${validation.existingCard?.last4})`);
+            }
+            throw new Error(validation.error || 'Card validation failed');
+          }
+        }
+        
         toast({
           title: "Card added",
           description: "Your payment method has been saved.",
@@ -471,6 +483,54 @@ export default function BillingPage() {
     },
   });
 
+  const directChargeMutation = useMutation({
+    mutationFn: ({ amountCents, paymentMethodId }: { amountCents: number; paymentMethodId: string }) => 
+      api.directTopup(amountCents, paymentMethodId),
+    onSuccess: (data, variables) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['wallet'] });
+        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        toast({
+          title: "Payment Successful",
+          description: `$${((data.chargedAmountCents || 0) / 100).toFixed(2)} has been added to your wallet.`,
+        });
+        setTopupDialogOpen(false);
+        setSelectedAmount(null);
+        setCustomAmount("");
+      } else if (data.requiresAction) {
+        // Card requires 3DS - fall back to Stripe Checkout which handles authentication
+        // First, close the dialog and reset state to prevent duplicate submissions
+        setTopupDialogOpen(false);
+        setSelectedAmount(null);
+        setCustomAmount("");
+        setSelectedPaymentMethodId(null);
+        
+        toast({
+          title: "Redirecting to Secure Payment",
+          description: "Your card requires additional verification.",
+        });
+        // Fall back to checkout session (redirect happens in onSuccess)
+        topupMutation.mutate(variables.amountCents);
+      } else {
+        toast({
+          title: "Payment Failed",
+          description: data.error || "Failed to process payment",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process payment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // State for selected payment method in topup dialog
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
+
   const deletePaymentMethodMutation = useMutation({
     mutationFn: (id: string) => api.deletePaymentMethod(id),
     onSuccess: () => {
@@ -554,8 +614,18 @@ export default function BillingPage() {
       });
       return;
     }
-    topupMutation.mutate(amount);
-    setTopupDialogOpen(false);
+    
+    // Check if a saved card is available and selected for direct charge
+    const pmToUse = selectedPaymentMethodId || (paymentMethods.length > 0 ? paymentMethods[0].id : null);
+    
+    if (pmToUse) {
+      // Use direct charge with saved card
+      directChargeMutation.mutate({ amountCents: amount, paymentMethodId: pmToUse });
+    } else {
+      // Fallback to Stripe checkout if no saved card
+      topupMutation.mutate(amount);
+      setTopupDialogOpen(false);
+    }
   };
 
   const handlePresetSelect = (amount: number) => {
@@ -664,6 +734,33 @@ export default function BillingPage() {
                       <p className="text-xs text-muted-foreground">
                         Minimum $5.00, maximum $500.00 AUD
                       </p>
+                      
+                      {/* Payment Method Selection */}
+                      {paymentMethods.length > 0 && (
+                        <div className="pt-4 border-t border-white/10">
+                          <label className="text-sm font-medium text-white mb-2 block">
+                            Pay with saved card
+                          </label>
+                          <Select
+                            value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
+                            onValueChange={(value) => setSelectedPaymentMethodId(value)}
+                          >
+                            <SelectTrigger className="w-full bg-black/20 border-white/10" data-testid="select-payment-method">
+                              <SelectValue placeholder="Select a card" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paymentMethods.map((pm) => (
+                                <SelectItem key={pm.id} value={pm.id} data-testid={`option-card-${pm.id}`}>
+                                  {formatCardBrand(pm.brand)} •••• {pm.last4} (exp {pm.expMonth}/{pm.expYear})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Your card will be charged instantly
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <DialogFooter>
                       <Button
@@ -675,13 +772,13 @@ export default function BillingPage() {
                       </Button>
                       <Button
                         onClick={handleTopup}
-                        disabled={topupMutation.isPending || getValidAmount() === null}
+                        disabled={topupMutation.isPending || directChargeMutation.isPending || getValidAmount() === null}
                         data-testid="button-confirm-topup"
                       >
-                        {topupMutation.isPending ? (
+                        {(topupMutation.isPending || directChargeMutation.isPending) ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : null}
-                        Continue to Payment
+                        {paymentMethods.length > 0 ? 'Pay Now' : 'Continue to Payment'}
                       </Button>
                     </DialogFooter>
                   </DialogContent>

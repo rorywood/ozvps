@@ -459,10 +459,50 @@ class ApiClient {
     last4: string;
     expMonth: number;
     expYear: number;
+    fingerprint?: string;
   }> }> {
     const response = await fetch(`${this.baseUrl}/billing/payment-methods`);
     if (!response.ok) throw new Error('Failed to fetch payment methods');
     return response.json();
+  }
+
+  async validatePaymentMethod(paymentMethodId: string): Promise<{ 
+    valid: boolean;
+    error?: string;
+    duplicate?: boolean;
+    existingCard?: { brand: string; last4: string };
+  }> {
+    const response = await fetch(`${this.baseUrl}/billing/payment-methods/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentMethodId }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { valid: false, ...data };
+    }
+    return data;
+  }
+
+  async directTopup(amountCents: number, paymentMethodId: string): Promise<{ 
+    success: boolean;
+    newBalanceCents?: number;
+    chargedAmountCents?: number;
+    error?: string;
+    requiresAction?: boolean;
+    clientSecret?: string;
+    paymentIntentId?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/wallet/topup/direct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountCents, paymentMethodId }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, ...data };
+    }
+    return data;
   }
 
   async createSetupIntent(): Promise<{ clientSecret: string }> {

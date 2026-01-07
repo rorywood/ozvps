@@ -2007,11 +2007,73 @@ export async function registerRoutes(
           last4: pm.card?.last4 || '****',
           expMonth: pm.card?.exp_month,
           expYear: pm.card?.exp_year,
+          fingerprint: pm.card?.fingerprint,
         })),
       });
     } catch (error: any) {
       log(`Error listing payment methods: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to list payment methods' });
+    }
+  });
+
+  // Validate and finalize a new payment method (check for duplicates)
+  app.post('/api/billing/payment-methods/validate', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      const { paymentMethodId } = req.body;
+      
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+      if (!paymentMethodId) {
+        return res.status(400).json({ error: 'Payment method ID is required' });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      
+      if (!wallet?.stripeCustomerId) {
+        return res.status(400).json({ error: 'No Stripe customer found' });
+      }
+
+      // Get the new payment method
+      const newPaymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      const newFingerprint = newPaymentMethod.card?.fingerprint;
+      
+      if (!newFingerprint) {
+        return res.status(400).json({ error: 'Invalid card' });
+      }
+
+      // Get existing payment methods for this customer
+      const existingPaymentMethods = await stripe.paymentMethods.list({
+        customer: wallet.stripeCustomerId,
+        type: 'card',
+      });
+
+      // Check if any existing card has the same fingerprint
+      const duplicateCard = existingPaymentMethods.data.find(
+        pm => pm.id !== paymentMethodId && pm.card?.fingerprint === newFingerprint
+      );
+
+      if (duplicateCard) {
+        // Detach the duplicate payment method
+        await stripe.paymentMethods.detach(paymentMethodId);
+        log(`Rejected duplicate card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+        return res.status(409).json({ 
+          error: 'This card is already saved to your account',
+          duplicate: true,
+          existingCard: {
+            brand: duplicateCard.card?.brand,
+            last4: duplicateCard.card?.last4,
+          }
+        });
+      }
+
+      log(`Validated new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+      res.json({ valid: true });
+    } catch (error: any) {
+      log(`Error validating payment method: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to validate payment method' });
     }
   });
 
@@ -2380,6 +2442,117 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error creating checkout session: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // Direct charge with saved card for instant top-up (authenticated)
+  const directChargeSchema = z.object({
+    amountCents: z.number().min(500).max(50000), // $5 to $500 AUD
+    paymentMethodId: z.string().min(1),
+  });
+
+  app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const result = directChargeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: 'Invalid request. Amount must be between $5 and $500, and a payment method is required.' });
+      }
+
+      const { amountCents, paymentMethodId } = result.data;
+      const stripe = await getUncachableStripeClient();
+
+      // Get wallet and verify it has the Stripe customer
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      if (!wallet?.stripeCustomerId) {
+        return res.status(400).json({ error: 'No payment account found. Please add a card first.' });
+      }
+
+      // Verify the payment method belongs to this customer
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== wallet.stripeCustomerId) {
+        return res.status(403).json({ error: 'Invalid payment method' });
+      }
+
+      // Check if card is valid (not expired)
+      const now = new Date();
+      const expYear = paymentMethod.card?.exp_year || 0;
+      const expMonth = paymentMethod.card?.exp_month || 0;
+      if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+        return res.status(400).json({ error: 'This card has expired. Please use a different card.' });
+      }
+
+      // Create a payment intent and confirm it immediately
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountCents,
+        currency: 'aud',
+        customer: wallet.stripeCustomerId,
+        payment_method: paymentMethodId,
+        off_session: true,
+        confirm: true,
+        description: 'Wallet top-up',
+        metadata: {
+          auth0_user_id: auth0UserId,
+          type: 'wallet_topup',
+          source: 'direct_charge',
+        },
+      });
+
+      if (paymentIntent.status === 'succeeded') {
+        // Add credits to wallet
+        await dbStorage.addWalletBalance(auth0UserId, amountCents);
+
+        // Record the transaction
+        await dbStorage.createWalletTransaction({
+          auth0UserId,
+          type: 'credit',
+          amountCents,
+          stripePaymentIntentId: paymentIntent.id,
+          metadata: { source: 'direct_charge' },
+        });
+
+        log(`Direct charge successful for ${auth0UserId}: $${(amountCents / 100).toFixed(2)} AUD`, 'stripe');
+        
+        // Get updated wallet balance
+        const updatedWallet = await dbStorage.getWallet(auth0UserId);
+        
+        res.json({ 
+          success: true, 
+          newBalanceCents: updatedWallet?.balanceCents || 0,
+          chargedAmountCents: amountCents,
+        });
+      } else if (paymentIntent.status === 'requires_action') {
+        // Card requires 3D Secure or additional authentication
+        // Return client_secret so frontend can either handle on-session or fallback
+        log(`Direct charge requires action for ${auth0UserId}`, 'stripe');
+        res.status(402).json({ 
+          error: 'This card requires additional authentication.',
+          requiresAction: true,
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+        });
+      } else {
+        log(`Direct charge failed for ${auth0UserId}: status ${paymentIntent.status}`, 'stripe');
+        res.status(400).json({ error: 'Payment failed. Please try again or use a different card.' });
+      }
+    } catch (error: any) {
+      // Handle specific Stripe errors
+      if (error.type === 'StripeCardError') {
+        log(`Card error for direct charge: ${error.message}`, 'stripe');
+        res.status(400).json({ error: error.message || 'Your card was declined. Please try a different card.' });
+      } else if (error.code === 'authentication_required') {
+        res.status(402).json({ 
+          error: 'This card requires additional authentication. Please use the standard top-up flow.',
+          requiresAction: true,
+        });
+      } else {
+        log(`Error processing direct charge: ${error.message}`, 'api');
+        res.status(500).json({ error: 'Failed to process payment. Please try again.' });
+      }
     }
   });
 
