@@ -65,59 +65,47 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Overview of your infrastructure</p>
         </div>
 
-        {/* Stats - Horizontal scrollable chips */}
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
-          <div className="flex-shrink-0 px-4 py-3 rounded-full bg-white/[0.03] ring-1 ring-white/10 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <ServerIcon className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-white font-display" data-testid="text-active-servers">{stats.active_servers}/{stats.total_servers}</div>
-              <div className="text-xs text-muted-foreground">Active</div>
-            </div>
-          </div>
-
-          <div className="flex-shrink-0 px-4 py-3 rounded-full bg-white/[0.03] ring-1 ring-white/10 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-              <Cpu className="h-4 w-4 text-purple-500" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-white font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>
-              <div className="text-xs text-muted-foreground">CPU Cores</div>
-            </div>
-          </div>
-
-          <div className="flex-shrink-0 px-4 py-3 rounded-full bg-white/[0.03] ring-1 ring-white/10 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
-              <HardDrive className="h-4 w-4 text-cyan-500" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-white font-display" data-testid="text-ram-gb">{stats.total_ram_gb} GB</div>
-              <div className="text-xs text-muted-foreground">Memory</div>
-            </div>
-          </div>
-
-          <div className="flex-shrink-0 px-4 py-3 rounded-full bg-white/[0.03] ring-1 ring-white/10 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-green-500/20 flex items-center justify-center">
-              <HardDrive className="h-4 w-4 text-green-500" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-white font-display" data-testid="text-disk-gb">{stats.total_disk_gb} GB</div>
-              <div className="text-xs text-muted-foreground">Storage</div>
-            </div>
-          </div>
-
-          {stats.total_servers > 0 && (
-            <div className="flex-shrink-0 px-4 py-3 rounded-full bg-white/[0.03] ring-1 ring-white/10 flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Activity className="h-4 w-4 text-emerald-500" />
-              </div>
-              <div>
-                <div className="text-lg font-bold text-white font-display">{stats.avg_disk_usage}%</div>
-                <div className="text-xs text-muted-foreground">Avg Disk</div>
+        {/* Stats - Grid of cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                <ServerIcon className="h-5 w-5 text-primary" />
               </div>
             </div>
-          )}
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-active-servers">{stats.active_servers}/{stats.total_servers}</div>
+            <div className="text-sm text-muted-foreground">Active Servers</div>
+          </div>
+
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Cpu className="h-5 w-5 text-purple-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>
+            <div className="text-sm text-muted-foreground">CPU Cores</div>
+          </div>
+
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <HardDrive className="h-5 w-5 text-cyan-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-ram-gb">{stats.total_ram_gb} GB</div>
+            <div className="text-sm text-muted-foreground">Memory</div>
+          </div>
+
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <HardDrive className="h-5 w-5 text-green-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-disk-gb">{stats.total_disk_gb} GB</div>
+            <div className="text-sm text-muted-foreground">Storage</div>
+          </div>
         </div>
 
         {/* Servers Section */}
