@@ -1121,16 +1121,18 @@ export class VirtFusionClient {
     
     try {
       // Step 1: Create the server
+      // IMPORTANT: VirtFusion API expects "hypervisorId" (which is the hypervisor GROUP ID)
+      // and "ipv4: 1" to allocate an IPv4 address
       const createPayload: Record<string, any> = {
         userId,
         packageId,
         name: hostname,
-        extRelationId,
+        ipv4: 1, // Allocate one IPv4 address
       };
       
-      // Only include hypervisorGroupId if provided (VirtFusion may auto-select)
+      // VirtFusion uses "hypervisorId" for hypervisor group selection
       if (hypervisorGroupId) {
-        createPayload.hypervisorGroupId = hypervisorGroupId;
+        createPayload.hypervisorId = hypervisorGroupId;
       }
       
       const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
@@ -1178,11 +1180,12 @@ export class VirtFusionClient {
       log(`Found ${servers.length} servers for user ${virtFusionUserId}`, 'virtfusion');
 
       for (const server of servers) {
-        const deleted = await this.deleteServer(server.id);
+        const serverId = parseInt(server.id, 10);
+        const deleted = await this.deleteServer(serverId);
         if (deleted) {
           serversDeleted++;
         } else {
-          errors.push(`Failed to delete server ${server.id}`);
+          errors.push(`Failed to delete server ${serverId}`);
         }
       }
 
