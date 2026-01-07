@@ -1395,6 +1395,63 @@ export async function registerRoutes(
     }
   });
 
+  // Get reCAPTCHA settings (admin only)
+  app.get('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const settings = await dbStorage.getRecaptchaSettings();
+      res.json({
+        enabled: settings.enabled,
+        siteKey: settings.siteKey || '',
+        hasSecretKey: !!settings.secretKey,
+      });
+    } catch (error: any) {
+      log(`Error fetching reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch reCAPTCHA settings' });
+    }
+  });
+
+  // Update reCAPTCHA settings (admin only)
+  app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { siteKey, secretKey, enabled } = req.body;
+      
+      if (enabled && (!siteKey || !secretKey)) {
+        return res.status(400).json({ error: 'Site key and secret key are required to enable reCAPTCHA' });
+      }
+      
+      await dbStorage.updateRecaptchaSettings(
+        siteKey || null,
+        secretKey || null,
+        !!enabled
+      );
+      
+      log(`Admin updated reCAPTCHA settings: enabled=${enabled}`, 'admin');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to update reCAPTCHA settings' });
+    }
+  });
+
+  // Get public reCAPTCHA config (for login page - only returns site key if enabled)
+  app.get('/api/security/recaptcha-config', async (req, res) => {
+    try {
+      const settings = await dbStorage.getRecaptchaSettings();
+      res.json({
+        enabled: settings.enabled,
+        siteKey: settings.enabled ? settings.siteKey : null,
+      });
+    } catch (error: any) {
+      res.json({ enabled: false, siteKey: null });
+    }
+  });
+
   // ================== Wallet & Deploy Routes ==================
 
   // Location to hypervisor GROUP mapping

@@ -122,6 +122,15 @@ export const serverBilling = pgTable("server_billing", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Security settings - admin-configurable security options including reCAPTCHA
+export const securitySettings = pgTable("security_settings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  key: text("key").notNull().unique(),
+  value: text("value"),
+  enabled: boolean("enabled").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Server cancellation requests - grace period (30 days) or immediate (5 mins) before deletion
 export const serverCancellations = pgTable("server_cancellations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -164,6 +173,7 @@ export const insertWalletTransactionSchema = createInsertSchema(walletTransactio
 export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
+export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -178,6 +188,8 @@ export type ServerBilling = typeof serverBilling.$inferSelect;
 export type InsertServerBilling = z.infer<typeof insertServerBillingSchema>;
 export type ServerCancellation = typeof serverCancellations.$inferSelect;
 export type InsertServerCancellation = z.infer<typeof insertServerCancellationSchema>;
+export type SecuritySetting = typeof securitySettings.$inferSelect;
+export type InsertSecuritySetting = z.infer<typeof insertSecuritySettingSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),

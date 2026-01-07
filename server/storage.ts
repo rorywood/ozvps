@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -888,5 +888,59 @@ export const dbStorage = {
     await db
       .delete(serverBilling)
       .where(eq(serverBilling.virtfusionServerId, virtfusionServerId));
+  },
+
+  // Security settings
+  async getSecuritySetting(key: string): Promise<SecuritySetting | undefined> {
+    const [setting] = await db
+      .select()
+      .from(securitySettings)
+      .where(eq(securitySettings.key, key));
+    return setting;
+  },
+
+  async getAllSecuritySettings(): Promise<SecuritySetting[]> {
+    return db.select().from(securitySettings);
+  },
+
+  async upsertSecuritySetting(key: string, value: string | null, enabled: boolean): Promise<SecuritySetting> {
+    const [existing] = await db
+      .select()
+      .from(securitySettings)
+      .where(eq(securitySettings.key, key));
+
+    if (existing) {
+      const [updated] = await db
+        .update(securitySettings)
+        .set({ value, enabled, updatedAt: new Date() })
+        .where(eq(securitySettings.key, key))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(securitySettings)
+        .values({ key, value, enabled })
+        .returning();
+      return created;
+    }
+  },
+
+  async getRecaptchaSettings(): Promise<{ enabled: boolean; siteKey: string | null; secretKey: string | null }> {
+    const settings = await db.select().from(securitySettings);
+    const siteKey = settings.find(s => s.key === 'recaptcha_site_key');
+    const secretKey = settings.find(s => s.key === 'recaptcha_secret_key');
+    const enabled = settings.find(s => s.key === 'recaptcha_enabled');
+    
+    return {
+      enabled: enabled?.enabled ?? false,
+      siteKey: siteKey?.value ?? null,
+      secretKey: secretKey?.value ?? null,
+    };
+  },
+
+  async updateRecaptchaSettings(siteKey: string | null, secretKey: string | null, enabled: boolean): Promise<void> {
+    await this.upsertSecuritySetting('recaptcha_site_key', siteKey, true);
+    await this.upsertSecuritySetting('recaptcha_secret_key', secretKey, true);
+    await this.upsertSecuritySetting('recaptcha_enabled', null, enabled);
   },
 };
