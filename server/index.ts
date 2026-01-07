@@ -9,6 +9,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import { startCancellationProcessor } from "./cancellation-processor";
 
 const app = express();
 const httpServer = createServer(app);
@@ -251,6 +252,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start background job for processing server cancellations
+      startCancellationProcessor();
     },
   );
 })();

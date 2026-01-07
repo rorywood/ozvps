@@ -592,4 +592,13 @@ export const dbStorage = {
       .where(eq(serverCancellations.auth0UserId, auth0UserId))
       .orderBy(desc(serverCancellations.requestedAt));
   },
+  
+  async markCancellationFailed(id: number, errorMessage: string): Promise<ServerCancellation | undefined> {
+    const [updated] = await db
+      .update(serverCancellations)
+      .set({ status: 'failed', errorMessage })
+      .where(eq(serverCancellations.id, id))
+      .returning();
+    return updated;
+  },
 };
