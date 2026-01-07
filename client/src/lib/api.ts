@@ -221,6 +221,7 @@ class ApiClient {
       serverName: string | null;
       reason: string | null;
       status: string;
+      mode: 'grace' | 'immediate';
       requestedAt: string;
       scheduledDeletionAt: string;
       revokedAt: string | null;
@@ -232,11 +233,11 @@ class ApiClient {
     return response.json();
   }
 
-  async requestCancellation(id: string, reason?: string): Promise<{ success: boolean; cancellation: any }> {
+  async requestCancellation(id: string, reason?: string, mode: 'grace' | 'immediate' = 'grace'): Promise<{ success: boolean; cancellation: any }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason, mode })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
