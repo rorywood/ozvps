@@ -1110,6 +1110,19 @@ export class VirtFusionClient {
     }
   }
 
+  async checkServerExists(serverId: number): Promise<boolean> {
+    try {
+      await this.request(`/servers/${serverId}`);
+      return true;
+    } catch (error: any) {
+      if (error.message?.includes('404')) {
+        return false;
+      }
+      // For other errors, assume server might still exist
+      return true;
+    }
+  }
+
   async deleteUserById(userId: number): Promise<boolean> {
     try {
       log(`Deleting VirtFusion user ${userId}`, 'virtfusion');

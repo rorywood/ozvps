@@ -173,7 +173,7 @@ export default function ServerList() {
                                 </span>
                               )}
                               {pendingCancellations[server.id] && (
-                                pendingCancellations[server.id].mode === 'immediate' ? (
+                                (pendingCancellations[server.id].mode === 'immediate' || pendingCancellations[server.id].status === 'processing') ? (
                                   <span 
                                     className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400 flex items-center gap-1"
                                     data-testid={`badge-deleting-${server.id}`}

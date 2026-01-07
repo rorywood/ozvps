@@ -813,16 +813,17 @@ export async function registerRoutes(
       const session = req.userSession!;
       const cancellations = await dbStorage.getUserCancellations(session.auth0UserId!);
       
-      // Filter to only return pending cancellations
-      const pending = cancellations.filter(c => c.status === 'pending');
+      // Filter to return pending and processing cancellations (active deletions)
+      const active = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
       
       // Return as a map of serverId -> cancellation for easy lookup
-      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string }> = {};
-      for (const c of pending) {
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
+      for (const c of active) {
         cancellationMap[c.virtfusionServerId] = {
           scheduledDeletionAt: c.scheduledDeletionAt,
           reason: c.reason,
           mode: c.mode || 'grace',
+          status: c.status,
         };
       }
       

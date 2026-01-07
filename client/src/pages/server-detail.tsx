@@ -805,9 +805,13 @@ export default function ServerDetail() {
     );
   }
 
-  // If server has pending cancellation with immediate mode, show locked deletion state
-  if (cancellationData?.cancellation && cancellationData.cancellation.mode === 'immediate') {
-    const scheduledAt = new Date(cancellationData.cancellation.scheduledDeletionAt);
+  // If server has immediate mode cancellation OR is in processing status (VirtFusion deleting), show locked deletion state
+  const activeCancellation = cancellationData?.cancellation;
+  const isBeingDeleted = activeCancellation && 
+    (activeCancellation.mode === 'immediate' || activeCancellation.status === 'processing');
+  
+  if (isBeingDeleted && activeCancellation) {
+    const scheduledAt = new Date(activeCancellation.scheduledDeletionAt);
     const now = new Date();
     const timeRemaining = Math.max(0, scheduledAt.getTime() - now.getTime());
     const minutesRemaining = Math.ceil(timeRemaining / (1000 * 60));

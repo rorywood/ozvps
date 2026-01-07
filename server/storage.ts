@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
 export interface Session {
   id: string;
@@ -553,7 +553,7 @@ export const dbStorage = {
         and(
           eq(serverCancellations.virtfusionServerId, virtfusionServerId),
           eq(serverCancellations.auth0UserId, auth0UserId),
-          eq(serverCancellations.status, 'pending')
+          inArray(serverCancellations.status, ['pending', 'processing'])
         )
       );
     return cancellation;
@@ -574,6 +574,23 @@ export const dbStorage = {
       .from(serverCancellations)
       .where(eq(serverCancellations.status, 'pending'))
       .orderBy(serverCancellations.scheduledDeletionAt);
+  },
+
+  async getProcessingCancellations(): Promise<ServerCancellation[]> {
+    return db
+      .select()
+      .from(serverCancellations)
+      .where(eq(serverCancellations.status, 'processing'))
+      .orderBy(serverCancellations.scheduledDeletionAt);
+  },
+
+  async markCancellationProcessing(id: number): Promise<ServerCancellation | undefined> {
+    const [updated] = await db
+      .update(serverCancellations)
+      .set({ status: 'processing' })
+      .where(eq(serverCancellations.id, id))
+      .returning();
+    return updated;
   },
 
   async completeCancellation(id: number): Promise<ServerCancellation | undefined> {
