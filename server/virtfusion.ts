@@ -1525,8 +1525,10 @@ export class VirtFusionClient {
     blockId: number;
   }>> {
     try {
-      // Fetch all servers to extract their IPs
-      const servers = await this.listAllServers();
+      // Fetch all servers to extract their primary IPs
+      // Note: We only use primary IPs to avoid making sequential API calls per server
+      // which would be slow and risk rate limiting
+      const servers = await this.listServers();
       const allocations: Array<{
         id: number;
         address: string;
@@ -1539,54 +1541,17 @@ export class VirtFusionClient {
       
       let ipId = 1;
       for (const server of servers) {
-        // Add primary IP if exists
-        if (server.primaryIp) {
+        // Add primary IP if exists and is not 'N/A'
+        if (server.primaryIp && server.primaryIp !== 'N/A') {
           allocations.push({
             id: ipId++,
             address: server.primaryIp,
             type: server.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
-            serverId: server.id,
+            serverId: parseInt(server.id) || undefined,
             serverName: server.name,
             userId: server.userId,
             blockId: 0,
           });
-        }
-        
-        // Try to get additional IPs from network interfaces
-        try {
-          const network = await this.getServerNetwork(server.id);
-          for (const iface of network) {
-            // Add IPv4 addresses (skip the primary which we already added)
-            for (const ipv4 of iface.ipv4 || []) {
-              if (ipv4.address && ipv4.address !== server.primaryIp) {
-                allocations.push({
-                  id: ipId++,
-                  address: ipv4.address,
-                  type: 'ipv4',
-                  serverId: server.id,
-                  serverName: server.name,
-                  userId: server.userId,
-                  blockId: 0,
-                });
-              }
-            }
-            // Add IPv6 addresses
-            for (const ipv6 of iface.ipv6 || []) {
-              if (ipv6.address) {
-                allocations.push({
-                  id: ipId++,
-                  address: ipv6.address,
-                  type: 'ipv6',
-                  serverId: server.id,
-                  serverName: server.name,
-                  userId: server.userId,
-                  blockId: 0,
-                });
-              }
-            }
-          }
-        } catch (e) {
-          // Skip network fetch errors for individual servers
         }
       }
       
