@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/sidebar";
-import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User, Link } from "lucide-react";
+import { ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, User, Link, Shield, Eye, EyeOff, Save } from "lucide-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 interface UserMeResponse {
@@ -51,6 +52,10 @@ export default function AdminPage() {
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [oldExtRelationId, setOldExtRelationId] = useState("");
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState("");
+  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
+  const [recaptchaEnabled, setRecaptchaEnabled] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
 
   const { data: userData, isLoading } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -59,6 +64,54 @@ export default function AdminPage() {
   });
 
   const isAdmin = userData?.user?.isAdmin ?? false;
+
+  const { data: recaptchaData, isLoading: recaptchaLoading } = useQuery({
+    queryKey: ['admin', 'recaptcha'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/security/recaptcha');
+      if (!response.ok) throw new Error('Failed to fetch reCAPTCHA settings');
+      return response.json();
+    },
+    enabled: isAdmin,
+  });
+
+  useEffect(() => {
+    if (recaptchaData) {
+      setRecaptchaSiteKey(recaptchaData.siteKey || '');
+      setRecaptchaEnabled(recaptchaData.enabled || false);
+    }
+  }, [recaptchaData]);
+
+  const recaptchaMutation = useMutation({
+    mutationFn: async (data: { siteKey: string; secretKey: string; enabled: boolean }) => {
+      const response = await fetch('/api/admin/security/recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save reCAPTCHA settings');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('reCAPTCHA settings saved');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'recaptcha'] });
+      setRecaptchaSecretKey('');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleSaveRecaptcha = () => {
+    recaptchaMutation.mutate({
+      siteKey: recaptchaSiteKey,
+      secretKey: recaptchaSecretKey,
+      enabled: recaptchaEnabled,
+    });
+  };
 
   const searchMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -328,6 +381,91 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+
+          {/* Security Settings Section */}
+          <div className="mt-12">
+            <div className="flex items-center gap-3 mb-6">
+              <Shield className="h-6 w-6 text-primary" />
+              <h2 className="text-xl font-semibold text-white">Security Settings</h2>
+            </div>
+
+            <div className="space-y-6">
+              {/* reCAPTCHA Settings */}
+              <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-medium text-white">reCAPTCHA Protection</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Protect login forms from bots with Google reCAPTCHA v2
+                    </p>
+                  </div>
+                  <Switch
+                    data-testid="switch-recaptcha-enabled"
+                    checked={recaptchaEnabled}
+                    onCheckedChange={setRecaptchaEnabled}
+                    disabled={recaptchaLoading}
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="recaptcha-site-key">Site Key</Label>
+                    <Input
+                      data-testid="input-recaptcha-site-key"
+                      id="recaptcha-site-key"
+                      placeholder="6Lc..."
+                      value={recaptchaSiteKey}
+                      onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="recaptcha-secret-key">Secret Key</Label>
+                    <div className="relative">
+                      <Input
+                        data-testid="input-recaptcha-secret-key"
+                        id="recaptcha-secret-key"
+                        type={showSecretKey ? "text" : "password"}
+                        placeholder={recaptchaData?.hasSecretKey ? "••••••••••••••••" : "Enter secret key"}
+                        value={recaptchaSecretKey}
+                        onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                        className="font-mono text-sm pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSecretKey(!showSecretKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                      >
+                        {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {recaptchaData?.hasSecretKey && !recaptchaSecretKey && (
+                      <p className="text-xs text-muted-foreground">
+                        Secret key is already configured. Enter a new key only if you want to change it.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      data-testid="button-save-recaptcha"
+                      onClick={handleSaveRecaptcha}
+                      disabled={recaptchaMutation.isPending || (recaptchaEnabled && !recaptchaSiteKey)}
+                      className="gap-2"
+                    >
+                      {recaptchaMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Save Settings
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
 
