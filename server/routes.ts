@@ -1495,6 +1495,417 @@ export async function registerRoutes(
     }
   });
 
+  // ================== Admin VirtFusion Management Routes ==================
+  
+  // Helper to create audit log entries
+  async function auditLog(
+    req: any,
+    action: string,
+    targetType: string,
+    targetId: string | null,
+    targetLabel: string | null,
+    payload: any,
+    status: 'success' | 'failure' = 'success',
+    errorMessage?: string,
+    reason?: string
+  ) {
+    try {
+      await dbStorage.createAuditLog({
+        adminAuth0UserId: req.userSession?.auth0UserId || 'unknown',
+        adminEmail: req.userSession?.email || 'unknown',
+        action,
+        targetType,
+        targetId,
+        targetLabel,
+        payload,
+        result: null,
+        status,
+        errorMessage: errorMessage || null,
+        ipAddress: req.ip || req.connection?.remoteAddress || null,
+        userAgent: req.headers['user-agent'] || null,
+        reason: reason || null,
+      });
+    } catch (err) {
+      log(`Failed to create audit log: ${err}`, 'admin');
+    }
+  }
+
+  // Get all servers with owner info (admin)
+  app.get('/api/admin/vf/servers', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const servers = await virtfusionClient.getAllServersWithOwners();
+      res.json({ servers, total: servers.length });
+    } catch (error: any) {
+      log(`Admin: Error fetching all servers: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch servers' });
+    }
+  });
+
+  // Get server details (admin)
+  app.get('/api/admin/vf/servers/:serverId', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId } = req.params;
+      const server = await virtfusionClient.getServer(serverId);
+      if (!server) {
+        return res.status(404).json({ error: 'Server not found' });
+      }
+      res.json({ server });
+    } catch (error: any) {
+      log(`Admin: Error fetching server ${req.params.serverId}: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch server' });
+    }
+  });
+
+  // Admin power action on server
+  app.post('/api/admin/vf/servers/:serverId/power/:action', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId, action } = req.params;
+      const { reason } = req.body;
+      
+      if (!['start', 'stop', 'restart', 'poweroff'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid power action' });
+      }
+      
+      await virtfusionClient.powerAction(serverId, action as any);
+      await auditLog(req, `server.power.${action}`, 'server', serverId, null, { action }, 'success', undefined, reason);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditLog(req, `server.power.${req.params.action}`, 'server', req.params.serverId, null, { action: req.params.action }, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to execute power action' });
+    }
+  });
+
+  // Suspend server (admin)
+  app.post('/api/admin/vf/servers/:serverId/suspend', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId } = req.params;
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ error: 'Reason is required for suspend action' });
+      }
+      
+      const success = await virtfusionClient.suspendServer(parseInt(serverId));
+      if (!success) {
+        throw new Error('Suspend operation failed');
+      }
+      
+      await auditLog(req, 'server.suspend', 'server', serverId, null, {}, 'success', undefined, reason);
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditLog(req, 'server.suspend', 'server', req.params.serverId, null, {}, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to suspend server' });
+    }
+  });
+
+  // Unsuspend server (admin)
+  app.post('/api/admin/vf/servers/:serverId/unsuspend', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId } = req.params;
+      const { reason } = req.body;
+      
+      const success = await virtfusionClient.unsuspendServer(parseInt(serverId));
+      if (!success) {
+        throw new Error('Unsuspend operation failed');
+      }
+      
+      await auditLog(req, 'server.unsuspend', 'server', serverId, null, {}, 'success', undefined, reason);
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditLog(req, 'server.unsuspend', 'server', req.params.serverId, null, {}, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to unsuspend server' });
+    }
+  });
+
+  // Delete server (admin) - requires reason
+  app.delete('/api/admin/vf/servers/:serverId', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId } = req.params;
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ error: 'Reason is required for delete action' });
+      }
+      
+      const success = await virtfusionClient.deleteServer(parseInt(serverId));
+      if (!success) {
+        throw new Error('Delete operation failed');
+      }
+      
+      await auditLog(req, 'server.delete', 'server', serverId, null, {}, 'success', undefined, reason);
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditLog(req, 'server.delete', 'server', req.params.serverId, null, {}, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to delete server' });
+    }
+  });
+
+  // Transfer server ownership (admin)
+  app.post('/api/admin/vf/servers/:serverId/transfer', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { serverId } = req.params;
+      const { newOwnerId, reason } = req.body;
+      
+      if (!newOwnerId) {
+        return res.status(400).json({ error: 'New owner ID is required' });
+      }
+      if (!reason) {
+        return res.status(400).json({ error: 'Reason is required for transfer action' });
+      }
+      
+      const success = await virtfusionClient.transferServerOwnership(parseInt(serverId), newOwnerId);
+      if (!success) {
+        throw new Error('Transfer operation failed');
+      }
+      
+      await auditLog(req, 'server.transfer', 'server', serverId, null, { newOwnerId }, 'success', undefined, reason);
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditLog(req, 'server.transfer', 'server', req.params.serverId, null, { newOwnerId: req.body.newOwnerId }, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to transfer server' });
+    }
+  });
+
+  // Get all hypervisors (admin)
+  app.get('/api/admin/vf/hypervisors', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const hypervisors = await virtfusionClient.getHypervisors();
+      res.json({ hypervisors, total: hypervisors.length });
+    } catch (error: any) {
+      log(`Admin: Error fetching hypervisors: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch hypervisors' });
+    }
+  });
+
+  // Get single hypervisor details (admin)
+  app.get('/api/admin/vf/hypervisors/:hypervisorId', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { hypervisorId } = req.params;
+      const hypervisor = await virtfusionClient.getHypervisor(parseInt(hypervisorId));
+      if (!hypervisor) {
+        return res.status(404).json({ error: 'Hypervisor not found' });
+      }
+      res.json({ hypervisor });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch hypervisor' });
+    }
+  });
+
+  // Get IP blocks (admin)
+  app.get('/api/admin/vf/ip-blocks', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const ipBlocks = await virtfusionClient.getIpBlocks();
+      res.json({ ipBlocks, total: ipBlocks.length });
+    } catch (error: any) {
+      log(`Admin: Error fetching IP blocks: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch IP blocks' });
+    }
+  });
+
+  // Get IP allocations (admin)
+  app.get('/api/admin/vf/ip-allocations', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const allocations = await virtfusionClient.getIpAllocations();
+      res.json({ allocations, total: allocations.length });
+    } catch (error: any) {
+      log(`Admin: Error fetching IP allocations: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch IP allocations' });
+    }
+  });
+
+  // Get VirtFusion users (admin)
+  app.get('/api/admin/vf/users', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const result = await virtfusionClient.getAllUsers(page, limit);
+      res.json(result);
+    } catch (error: any) {
+      log(`Admin: Error fetching VF users: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  // Get VirtFusion user by ID (admin)
+  app.get('/api/admin/vf/users/:userId', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { userId } = req.params;
+      const user = await virtfusionClient.getUserById(parseInt(userId));
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const servers = await virtfusionClient.listServersByUserId(parseInt(userId));
+      res.json({ user, servers });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch user' });
+    }
+  });
+
+  // Delete VirtFusion user (admin) - requires reason
+  app.delete('/api/admin/vf/users/:userId', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { userId } = req.params;
+      const { reason, deleteServers } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ error: 'Reason is required for delete action' });
+      }
+      
+      if (deleteServers) {
+        const result = await virtfusionClient.cleanupUserAndServers(parseInt(userId));
+        await auditLog(req, 'user.delete_with_servers', 'user', userId, null, { deleteServers: true, serversDeleted: result.serversDeleted }, result.success ? 'success' : 'failure', result.errors.join(', '), reason);
+        res.json({ success: result.success, serversDeleted: result.serversDeleted, errors: result.errors });
+      } else {
+        const success = await virtfusionClient.deleteUserById(parseInt(userId));
+        await auditLog(req, 'user.delete', 'user', userId, null, {}, success ? 'success' : 'failure', undefined, reason);
+        res.json({ success });
+      }
+    } catch (error: any) {
+      await auditLog(req, 'user.delete', 'user', req.params.userId, null, {}, 'failure', error.message);
+      res.status(500).json({ error: 'Failed to delete user' });
+    }
+  });
+
+  // Get packages from VirtFusion (admin)
+  app.get('/api/admin/vf/packages', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const packages = await virtfusionClient.getPackages();
+      res.json({ packages, total: packages.length });
+    } catch (error: any) {
+      log(`Admin: Error fetching packages: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch packages' });
+    }
+  });
+
+  // Get OS templates for package (admin)
+  app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const { packageId } = req.params;
+      const templates = await virtfusionClient.getOsTemplatesForPackage(parseInt(packageId));
+      res.json({ templates });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch templates' });
+    }
+  });
+
+  // Get admin audit logs
+  app.get('/api/admin/audit-logs', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const action = req.query.action as string | undefined;
+      const targetType = req.query.targetType as string | undefined;
+      const status = req.query.status as string | undefined;
+      
+      const result = await dbStorage.getAuditLogs({ limit, offset, action, targetType, status });
+      res.json(result);
+    } catch (error: any) {
+      log(`Error fetching audit logs: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+  });
+
+  // Admin dashboard stats
+  app.get('/api/admin/vf/stats', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const [servers, hypervisors, ipBlocks, wallets] = await Promise.all([
+        virtfusionClient.getAllServersWithOwners(),
+        virtfusionClient.getHypervisors(),
+        virtfusionClient.getIpBlocks(),
+        dbStorage.getAllWallets(),
+      ]);
+      
+      const runningServers = servers.filter(s => s.status === 'running').length;
+      const stoppedServers = servers.filter(s => s.status === 'stopped').length;
+      const totalIps = ipBlocks.reduce((sum, b) => sum + b.totalAddresses, 0);
+      const usedIps = ipBlocks.reduce((sum, b) => sum + b.usedAddresses, 0);
+      const totalRevenue = wallets.reduce((sum, w) => sum + (w.balanceCents || 0), 0);
+      
+      res.json({
+        servers: {
+          total: servers.length,
+          running: runningServers,
+          stopped: stoppedServers,
+        },
+        hypervisors: {
+          total: hypervisors.length,
+          enabled: hypervisors.filter(h => h.enabled).length,
+          maintenance: hypervisors.filter(h => h.maintenance).length,
+        },
+        networking: {
+          totalIps,
+          usedIps,
+          availableIps: totalIps - usedIps,
+          utilization: totalIps > 0 ? Math.round((usedIps / totalIps) * 100) : 0,
+        },
+        billing: {
+          totalWallets: wallets.length,
+          totalBalance: totalRevenue,
+        },
+      });
+    } catch (error: any) {
+      log(`Admin: Error fetching stats: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
   // ================== Wallet & Deploy Routes ==================
 
   // Location to hypervisor GROUP mapping

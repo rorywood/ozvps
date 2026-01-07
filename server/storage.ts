@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -952,5 +952,75 @@ export const dbStorage = {
     await this.upsertSecuritySetting('recaptcha_site_key', siteKey, true);
     await this.upsertSecuritySetting('recaptcha_secret_key', secretKey, true);
     await this.upsertSecuritySetting('recaptcha_enabled', null, enabled);
+  },
+
+  // ========== ADMIN AUDIT LOGGING ==========
+  async createAuditLog(data: InsertAdminAuditLog): Promise<AdminAuditLog> {
+    const [log] = await db
+      .insert(adminAuditLogs)
+      .values(data)
+      .returning();
+    return log;
+  },
+
+  async getAuditLogs(options: {
+    limit?: number;
+    offset?: number;
+    adminAuth0UserId?: string;
+    action?: string;
+    targetType?: string;
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+  } = {}): Promise<{ logs: AdminAuditLog[]; total: number }> {
+    const { limit = 50, offset = 0, adminAuth0UserId, action, targetType, status, startDate, endDate } = options;
+    
+    const conditions: any[] = [];
+    
+    if (adminAuth0UserId) {
+      conditions.push(eq(adminAuditLogs.adminAuth0UserId, adminAuth0UserId));
+    }
+    if (action) {
+      conditions.push(eq(adminAuditLogs.action, action));
+    }
+    if (targetType) {
+      conditions.push(eq(adminAuditLogs.targetType, targetType));
+    }
+    if (status) {
+      conditions.push(eq(adminAuditLogs.status, status));
+    }
+    if (startDate) {
+      conditions.push(sql`${adminAuditLogs.createdAt} >= ${startDate}`);
+    }
+    if (endDate) {
+      conditions.push(sql`${adminAuditLogs.createdAt} <= ${endDate}`);
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const [logs, countResult] = await Promise.all([
+      db.select()
+        .from(adminAuditLogs)
+        .where(whereClause)
+        .orderBy(desc(adminAuditLogs.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(adminAuditLogs)
+        .where(whereClause),
+    ]);
+    
+    return {
+      logs,
+      total: countResult[0]?.count || 0,
+    };
+  },
+
+  async getAuditLogById(id: number): Promise<AdminAuditLog | undefined> {
+    const [log] = await db
+      .select()
+      .from(adminAuditLogs)
+      .where(eq(adminAuditLogs.id, id));
+    return log;
   },
 };
