@@ -739,7 +739,7 @@ export default function ServerDetail() {
                   </div>
                 </div>
                 
-                {/* OS Accordion */}
+                {/* OS Grid */}
                 {loadingSetupTemplates ? (
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -749,85 +749,56 @@ export default function ServerDetail() {
                     No operating systems found
                   </div>
                 ) : (
-                  <Accordion 
-                    type="multiple" 
-                    value={setupExpandedGroups}
-                    onValueChange={setSetupExpandedGroups}
-                    className="space-y-3"
-                  >
-                      {setupGroupedTemplates.map(({ category, templates }) => (
-                        <AccordionItem 
-                          key={category} 
-                          value={category}
-                          className="border border-white/10 rounded-lg bg-white/[0.02] overflow-hidden"
-                        >
-                          <AccordionTrigger 
-                            className="px-4 py-3 hover:bg-white/5 hover:no-underline [&[data-state=open]]:bg-white/5"
-                            data-testid={`accordion-${category.toLowerCase().replace(/[^a-z]/g, '-')}`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-medium text-white">{category}</span>
-                              <span className="text-xs text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
-                                {templates.length}
-                              </span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-2 pb-2">
-                            <div className="space-y-1">
-                              {templates.map(template => {
-                                const templateId = String(template.id);
-                                const isSelected = setupSelectedOs === templateId;
-                                const displayName = template.version && !template.name.includes(template.version)
-                                  ? `${template.name} ${template.version}`
-                                  : template.name;
-                                const displayVariant = template.variant || '';
-                                
-                                return (
-                                  <button
-                                    key={templateId}
-                                    onClick={() => setSetupSelectedOs(templateId)}
-                                    className={cn(
-                                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left",
-                                      isSelected
-                                        ? "bg-primary/20 ring-1 ring-primary"
-                                        : "hover:bg-white/5"
-                                    )}
-                                    data-testid={`button-setup-os-${templateId}`}
-                                  >
-                                    <img
-                                      src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                                      alt={template.name}
-                                      className="h-7 w-7 object-contain flex-shrink-0"
-                                      onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-white">
-                                          {displayName}
-                                        </span>
-                                        {displayVariant && (
-                                          <span className="text-xs text-muted-foreground truncate">
-                                            {displayVariant}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className={cn(
-                                      "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                                      isSelected 
-                                        ? "border-primary bg-primary" 
-                                        : "border-white/30"
-                                    )}>
-                                      {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                  </Accordion>
+                  <div className="space-y-6">
+                    {setupGroupedTemplates.map(({ category, templates }) => (
+                      <div key={category}>
+                        <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                          {category}
+                          <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full">
+                            {templates.length}
+                          </span>
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                          {templates.map(template => {
+                            const templateId = String(template.id);
+                            const isSelected = setupSelectedOs === templateId;
+                            const displayName = template.version && !template.name.includes(template.version)
+                              ? `${template.name} ${template.version}`
+                              : template.name;
+                            
+                            return (
+                              <button
+                                key={templateId}
+                                onClick={() => setSetupSelectedOs(templateId)}
+                                className={cn(
+                                  "flex flex-col items-center p-4 rounded-xl border transition-all text-center",
+                                  isSelected
+                                    ? "bg-primary/15 border-primary ring-1 ring-primary/50"
+                                    : "bg-white/[0.02] border-white/10 hover:bg-white/[0.05] hover:border-white/20"
+                                )}
+                                data-testid={`button-setup-os-${templateId}`}
+                              >
+                                <img
+                                  src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
+                                  alt={template.name}
+                                  className="h-10 w-10 object-contain mb-2"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                                />
+                                <span className="text-sm font-medium text-white leading-tight">
+                                  {displayName}
+                                </span>
+                                {isSelected && (
+                                  <div className="mt-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                    <Check className="h-3 w-3 text-white" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
               

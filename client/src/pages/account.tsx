@@ -34,6 +34,13 @@ export default function Account() {
     queryKey: ['userProfile'],
     queryFn: () => api.getUserProfile(),
   });
+  
+  const { data: userData } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: () => api.getCurrentUser(),
+  });
+  
+  const isAdmin = userData?.user?.isAdmin ?? false;
 
   useEffect(() => {
     if (profile) {
@@ -315,7 +322,7 @@ export default function Account() {
           </div>
         )}
 
-        {profile && (
+        {profile && isAdmin && (
           <div className="flex justify-center gap-6 text-xs text-muted-foreground mt-8">
             <div>
               <span>VIRTID: </span>
