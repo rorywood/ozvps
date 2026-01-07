@@ -45,6 +45,7 @@ export interface IStorage {
   hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean>;
   revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
   updateSessionActivity(sessionId: string): Promise<void>;
+  updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin'>>): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
 }
@@ -172,6 +173,15 @@ export class MemoryStorage implements IStorage {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.lastActivityAt = new Date();
+    }
+  }
+
+  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin'>>): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      if (updates.isAdmin !== undefined) {
+        session.isAdmin = updates.isAdmin;
+      }
     }
   }
 

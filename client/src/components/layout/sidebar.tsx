@@ -160,7 +160,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
     queryFn: () => api.getCurrentUser(),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 30, // Refresh every 30 seconds to detect metadata changes
+    refetchInterval: 1000 * 30, // Poll every 30 seconds for admin status changes
     retry: false,
   });
 

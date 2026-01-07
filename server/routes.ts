@@ -577,6 +577,23 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Session expired' });
       }
 
+      // Check Auth0 for updated admin status (refreshes every call)
+      let isAdmin = session.isAdmin ?? false;
+      if (session.auth0UserId) {
+        try {
+          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
+          if (currentAdminStatus !== isAdmin) {
+            log(`Admin status changed for ${session.email}: ${isAdmin} -> ${currentAdminStatus}`, 'auth');
+            isAdmin = currentAdminStatus;
+            // Update session with new admin status
+            await storage.updateSession(sessionId, { isAdmin: currentAdminStatus });
+          }
+        } catch (err: any) {
+          // If Auth0 check fails, use cached session value
+          log(`Failed to refresh admin status from Auth0: ${err.message}`, 'auth');
+        }
+      }
+
       res.json({
         user: {
           id: session.userId,
@@ -584,7 +601,7 @@ export async function registerRoutes(
           name: session.name,
           virtFusionUserId: session.virtFusionUserId,
           extRelationId: session.extRelationId,
-          isAdmin: session.isAdmin ?? false,
+          isAdmin,
         },
       });
     } catch (error: any) {
