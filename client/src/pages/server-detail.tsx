@@ -738,39 +738,66 @@ export default function ServerDetail() {
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
                     {setupFilteredTemplates.map(template => {
                       const templateId = String(template.id);
+                      const isSelected = setupSelectedOs === templateId;
+                      // Combine name with version if available and different
+                      const displayName = template.version && !template.name.includes(template.version)
+                        ? `${template.name} ${template.version}`
+                        : template.name;
+                      const displayVariant = template.variant || template.description || '';
+                      
                       return (
                         <button
                           key={templateId}
                           onClick={() => setSetupSelectedOs(templateId)}
                           className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
-                            setupSelectedOs === templateId
-                              ? "bg-primary/20 border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)]"
-                              : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                            "relative flex flex-col items-center p-4 rounded-xl border-2 transition-all text-center group",
+                            isSelected
+                              ? "bg-primary/15 border-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)] scale-[1.02]"
+                              : "bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-white/20 hover:scale-[1.01]"
                           )}
                           data-testid={`button-setup-os-${templateId}`}
                         >
-                          <img
-                            src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                            alt={template.name}
-                            className="h-8 w-8 object-contain"
-                            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-white truncate">{template.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{template.group}</p>
+                          {/* Selection indicator */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                          
+                          {/* OS Logo */}
+                          <div className={cn(
+                            "h-14 w-14 rounded-xl flex items-center justify-center mb-3 transition-all",
+                            isSelected ? "bg-primary/20" : "bg-white/5 group-hover:bg-white/10"
+                          )}>
+                            <img
+                              src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
+                              alt={template.name}
+                              className="h-9 w-9 object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                            />
                           </div>
-                          {setupSelectedOs === templateId && (
-                            <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                          
+                          {/* OS Name & Version */}
+                          <p className="text-sm font-semibold text-white mb-0.5 leading-tight">
+                            {displayName}
+                          </p>
+                          
+                          {/* Variant/Description */}
+                          {displayVariant && (
+                            <p className="text-[11px] text-muted-foreground truncate max-w-full">
+                              {displayVariant}
+                            </p>
                           )}
                         </button>
                       );
                     })}
                     {setupFilteredTemplates.length === 0 && (
-                      <p className="col-span-2 text-center py-4 text-muted-foreground">No templates found</p>
+                      <p className="col-span-full text-center py-8 text-muted-foreground">
+                        No operating systems found matching your criteria
+                      </p>
                     )}
                   </div>
                 )}
@@ -1009,15 +1036,17 @@ export default function ServerDetail() {
                 <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
                 <span className="text-white/80">{server.location.name}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <img 
-                  src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
-                  alt={server.image.name}
-                  className="h-4 w-4 object-contain"
-                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                />
-                <span className="text-white/80">{server.image.name}</span>
-              </div>
+              {server.image && (
+                <div className="flex items-center gap-2">
+                  <img 
+                    src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
+                    alt={server.image.name}
+                    className="h-4 w-4 object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                  />
+                  <span className="text-white/80">{server.image.name}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1508,7 +1537,7 @@ export default function ServerDetail() {
                   <div>
                     <label className="text-sm font-medium text-white mb-2 block">Current Operating System</label>
                     <div className="p-3 bg-white/5 rounded-md border border-white/10">
-                      <span className="text-white">{server.image.name}</span>
+                      <span className="text-white">{server.image?.name || 'Unknown'}</span>
                     </div>
                   </div>
 
