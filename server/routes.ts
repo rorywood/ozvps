@@ -2503,22 +2503,14 @@ export async function registerRoutes(
       });
 
       if (paymentIntent.status === 'succeeded') {
-        // Add credits to wallet
-        await dbStorage.addWalletBalance(auth0UserId, amountCents);
-
-        // Record the transaction
-        await dbStorage.createWalletTransaction({
-          auth0UserId,
+        // Add credits to wallet and record transaction in one call
+        const updatedWallet = await dbStorage.creditWallet(auth0UserId, amountCents, {
           type: 'credit',
-          amountCents,
           stripePaymentIntentId: paymentIntent.id,
           metadata: { source: 'direct_charge' },
         });
 
         log(`Direct charge successful for ${auth0UserId}: $${(amountCents / 100).toFixed(2)} AUD`, 'stripe');
-        
-        // Get updated wallet balance
-        const updatedWallet = await dbStorage.getWallet(auth0UserId);
         
         res.json({ 
           success: true, 

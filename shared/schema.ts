@@ -166,6 +166,23 @@ export const serverCancellations = pgTable("server_cancellations", {
   errorMessage: text("error_message"), // stores error if deletion fails
 });
 
+// Invoices - generated for wallet top-ups
+export const invoices = pgTable("invoices", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  amountCents: integer("amount_cents").notNull(),
+  description: text("description").notNull(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeSessionId: text("stripe_session_id"),
+  walletTransactionId: integer("wallet_transaction_id"),
+  status: text("status").notNull().default("paid"), // paid, pending, void
+  customerEmail: text("customer_email").notNull(),
+  customerName: text("customer_name"),
+  pdfPath: text("pdf_path"), // path to generated PDF
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const walletsRelations = relations(wallets, ({ many }) => ({
   transactions: many(walletTransactions),
@@ -194,6 +211,7 @@ export const insertServerBillingSchema = createInsertSchema(serverBilling).omit(
 export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
 export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
 export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -212,6 +230,8 @@ export type SecuritySetting = typeof securitySettings.$inferSelect;
 export type InsertSecuritySetting = z.infer<typeof insertSecuritySettingSchema>;
 export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
