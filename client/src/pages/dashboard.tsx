@@ -9,7 +9,8 @@ import {
   HardDrive, 
   Server as ServerIcon, 
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,15 @@ export default function Dashboard() {
     queryFn: () => api.listServers(),
     refetchInterval: 10000,
   });
+  
+  // Fetch pending cancellations for all servers
+  const { data: cancellationsData } = useQuery({
+    queryKey: ['cancellations'],
+    queryFn: () => api.getAllCancellations(),
+    refetchInterval: 30000,
+  });
+  
+  const pendingCancellations = cancellationsData?.cancellations || {};
 
   useSyncPowerActions(servers);
 
@@ -170,7 +180,18 @@ export default function Dashboard() {
                         )}
                       </div>
                       <div>
-                        <h3 className="font-medium text-white group-hover:text-primary transition-colors">{server.name}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-medium text-white group-hover:text-primary transition-colors">{server.name}</h3>
+                          {pendingCancellations[server.id] && (
+                            <span 
+                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1"
+                              data-testid={`badge-pending-cancellation-${server.id}`}
+                            >
+                              <Clock className="h-3 w-3" />
+                              PENDING CANCELLATION
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                           <span>{server.primaryIp}</span>
                           <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />

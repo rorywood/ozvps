@@ -33,6 +33,7 @@ import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import flagAU from "@/assets/flag-au.png";
+import { Clock } from "lucide-react";
 
 export default function ServerList() {
   const { toast } = useToast();
@@ -44,6 +45,15 @@ export default function ServerList() {
     queryFn: () => api.listServers(),
     refetchInterval: 10000,
   });
+  
+  // Fetch pending cancellations for all servers
+  const { data: cancellationsData } = useQuery({
+    queryKey: ['cancellations'],
+    queryFn: () => api.getAllCancellations(),
+    refetchInterval: 30000,
+  });
+  
+  const pendingCancellations = cancellationsData?.cancellations || {};
 
   useSyncPowerActions(servers);
 
@@ -146,7 +156,7 @@ export default function ServerList() {
                             )}
                           </div>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
                               {server.suspended ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
@@ -160,6 +170,15 @@ export default function ServerList() {
                                   "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
                                 )}>
                                   {displayStatus}
+                                </span>
+                              )}
+                              {pendingCancellations[server.id] && (
+                                <span 
+                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1"
+                                  data-testid={`badge-pending-cancellation-${server.id}`}
+                                >
+                                  <Clock className="h-3 w-3" />
+                                  PENDING CANCELLATION
                                 </span>
                               )}
                             </div>

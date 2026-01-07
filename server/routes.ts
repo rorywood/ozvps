@@ -800,6 +800,32 @@ export async function registerRoutes(
   });
 
   // Server Cancellation endpoints
+  
+  // Get all pending cancellations for current user (for displaying badges on server list)
+  app.get('/api/cancellations', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const cancellations = await dbStorage.getUserCancellations(session.auth0UserId!);
+      
+      // Filter to only return pending cancellations
+      const pending = cancellations.filter(c => c.status === 'pending');
+      
+      // Return as a map of serverId -> cancellation for easy lookup
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null }> = {};
+      for (const c of pending) {
+        cancellationMap[c.virtfusionServerId] = {
+          scheduledDeletionAt: c.scheduledDeletionAt,
+          reason: c.reason,
+        };
+      }
+      
+      res.json({ cancellations: cancellationMap });
+    } catch (error: any) {
+      log(`Error fetching user cancellations: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch cancellations' });
+    }
+  });
+  
   app.get('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;

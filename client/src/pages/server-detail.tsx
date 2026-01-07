@@ -863,6 +863,12 @@ export default function ServerDetail() {
               ) : (
                 <div className="flex items-center gap-2 group">
                   <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
+                  {cancellationData?.cancellation && (
+                    <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1" data-testid="badge-pending-cancellation">
+                      <Calendar className="h-3 w-3" />
+                      PENDING CANCELLATION
+                    </span>
+                  )}
                   {!isSuspended && (
                     <button
                       onClick={handleStartEditName}
