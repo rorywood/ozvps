@@ -9,6 +9,7 @@ import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature } from "./security";
 
 declare global {
   namespace Express {
@@ -362,11 +363,32 @@ export async function registerRoutes(
 
       const { email, password } = parsed.data;
 
+      // Check if account is locked due to too many failed attempts
+      const lockStatus = isAccountLocked(email);
+      if (lockStatus.locked) {
+        const remainingMins = Math.ceil((lockStatus.remainingMs || 0) / 60000);
+        log(`Blocked login attempt for locked account: ${email}`, 'security');
+        return res.status(429).json({ 
+          error: `Account temporarily locked due to too many failed attempts. Try again in ${remainingMins} minutes.`,
+          code: 'ACCOUNT_LOCKED'
+        });
+      }
+
+      // Apply progressive delay based on failed attempts
+      const delay = getProgressiveDelay(email);
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
+        recordFailedLogin(email);
         return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
+      
+      // Clear failed login attempts on successful auth
+      clearFailedLogins(email);
 
       // Check if user is blocked
       const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
@@ -1958,15 +1980,40 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'Webhook not configured' });
       }
 
+      // Verify using either Bearer token OR HMAC signature
       const authHeader = req.headers['authorization'] as string;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        log('Missing or invalid Authorization header', 'webhook');
-        return res.status(401).json({ error: 'Unauthorized' });
+      const signatureHeader = req.headers['x-auth0-signature'] as string;
+      
+      let isAuthorized = false;
+      
+      // Method 1: Bearer token verification (simpler, for basic Auth0 Actions)
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        if (token === webhookSecret) {
+          isAuthorized = true;
+          log('Auth0 webhook verified via Bearer token', 'webhook');
+        }
       }
-
-      const token = authHeader.substring(7);
-      if (token !== webhookSecret) {
-        log('Invalid webhook token', 'webhook');
+      
+      // Method 2: HMAC signature verification (more secure, for Auth0 Event Streams)
+      // Uses raw request body to ensure signature matches exactly
+      if (!isAuthorized && signatureHeader) {
+        const rawBody = req.rawBody;
+        if (rawBody) {
+          const payload = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody);
+          if (verifyHmacSignature(payload, signatureHeader, webhookSecret)) {
+            isAuthorized = true;
+            log('Auth0 webhook verified via HMAC signature', 'webhook');
+          } else {
+            log('Auth0 webhook HMAC signature verification failed', 'webhook');
+          }
+        } else {
+          log('Auth0 webhook has signature header but missing raw body', 'webhook');
+        }
+      }
+      
+      if (!isAuthorized) {
+        log('Auth0 webhook authentication failed - no valid token or signature', 'webhook');
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
