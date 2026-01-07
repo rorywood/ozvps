@@ -1344,6 +1344,346 @@ export class VirtFusionClient {
     }
   }
 
+// ========== ADMIN-ONLY METHODS ==========
+  // These methods are for the admin panel and should only be called by authenticated admins
+
+  // Get all hypervisors with detailed metrics
+  async getHypervisors(): Promise<Array<{
+    id: number;
+    name: string;
+    ip: string;
+    enabled: boolean;
+    maintenance: boolean;
+    maxCpu: number;
+    maxMemory: number;
+    maxServers: number;
+    group?: { id: number; name: string };
+    networks?: Array<{ id: number; type: string; bridge: string }>;
+    created: string;
+  }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/compute/hypervisors?results=200');
+      const hypervisors = response.data || [];
+      log(`Fetched ${hypervisors.length} hypervisors`, 'virtfusion');
+      return hypervisors.map(h => ({
+        id: h.id,
+        name: h.name || `Hypervisor ${h.id}`,
+        ip: h.ip || h.ipAlt || 'Unknown',
+        enabled: h.enabled !== false,
+        maintenance: h.maintenance === true,
+        maxCpu: h.maxCpu || 0,
+        maxMemory: h.maxMemory || 0,
+        maxServers: h.maxServers || 0,
+        group: h.group ? { id: h.group.id, name: h.group.name } : undefined,
+        networks: h.networks?.map((n: any) => ({ id: n.id, type: n.type, bridge: n.bridge })) || [],
+        created: h.created || h.created_at || '',
+      }));
+    } catch (error) {
+      log(`Failed to fetch hypervisors: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
+  // Get single hypervisor with full details
+  async getHypervisor(hypervisorId: number): Promise<{
+    id: number;
+    name: string;
+    ip: string;
+    enabled: boolean;
+    maintenance: boolean;
+    maxCpu: number;
+    maxMemory: number;
+    commissioned: number;
+    networks: Array<{ id: number; type: string; bridge: string; primary: boolean }>;
+    storage: any[];
+    group?: { id: number; name: string };
+  } | null> {
+    try {
+      const response = await this.request<{ data: any }>(`/compute/hypervisors/${hypervisorId}`);
+      const h = response.data;
+      return {
+        id: h.id,
+        name: h.name,
+        ip: h.ip || h.ipAlt || 'Unknown',
+        enabled: h.enabled !== false,
+        maintenance: h.maintenance === true,
+        maxCpu: h.maxCpu || 0,
+        maxMemory: h.maxMemory || 0,
+        commissioned: h.commissioned || 0,
+        networks: h.networks?.map((n: any) => ({ 
+          id: n.id, 
+          type: n.type, 
+          bridge: n.bridge,
+          primary: n.primary === true,
+        })) || [],
+        storage: h.storage || [],
+        group: h.group ? { id: h.group.id, name: h.group.name } : undefined,
+      };
+    } catch (error) {
+      log(`Failed to fetch hypervisor ${hypervisorId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
+  // Get IP blocks
+  async getIpBlocks(): Promise<Array<{
+    id: number;
+    name: string;
+    type: 'ipv4' | 'ipv6';
+    subnet: string;
+    gateway?: string;
+    totalAddresses: number;
+    usedAddresses: number;
+    available: number;
+  }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/ipAddressBlocks?results=200');
+      const blocks = response.data || [];
+      log(`Fetched ${blocks.length} IP blocks`, 'virtfusion');
+      return blocks.map(b => ({
+        id: b.id,
+        name: b.name || b.subnet || `Block ${b.id}`,
+        type: b.type === 6 ? 'ipv6' : 'ipv4',
+        subnet: b.subnet || '',
+        gateway: b.gateway || undefined,
+        totalAddresses: b.totalAddresses || b.size || 0,
+        usedAddresses: b.usedAddresses || b.used || 0,
+        available: (b.totalAddresses || b.size || 0) - (b.usedAddresses || b.used || 0),
+      }));
+    } catch (error) {
+      log(`Failed to fetch IP blocks: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
+  // Get IP allocations (all assigned IPs)
+  async getIpAllocations(): Promise<Array<{
+    id: number;
+    address: string;
+    type: 'ipv4' | 'ipv6';
+    serverId?: number;
+    serverName?: string;
+    userId?: number;
+    blockId: number;
+  }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/ipAddresses?results=500');
+      const ips = response.data || [];
+      log(`Fetched ${ips.length} IP allocations`, 'virtfusion');
+      return ips.map(ip => ({
+        id: ip.id,
+        address: ip.address || ip.ip || '',
+        type: ip.type === 6 ? 'ipv6' : 'ipv4',
+        serverId: ip.serverId || ip.server?.id || undefined,
+        serverName: ip.server?.name || undefined,
+        userId: ip.userId || ip.user?.id || undefined,
+        blockId: ip.ipAddressBlockId || ip.blockId || 0,
+      }));
+    } catch (error) {
+      log(`Failed to fetch IP allocations: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
+  // Transfer server to new owner
+  async transferServerOwnership(serverId: number, newOwnerId: number): Promise<boolean> {
+    try {
+      log(`Transferring server ${serverId} to user ${newOwnerId}`, 'virtfusion');
+      await this.request(`/servers/${serverId}/owner/${newOwnerId}`, {
+        method: 'PUT',
+      });
+      log(`Successfully transferred server ${serverId} to user ${newOwnerId}`, 'virtfusion');
+      return true;
+    } catch (error) {
+      log(`Failed to transfer server ${serverId} ownership: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  // Modify server resources (CPU, RAM)
+  async modifyServerResources(serverId: number, resources: {
+    cpuCores?: number;
+    memory?: number; // MB
+  }): Promise<boolean> {
+    try {
+      const updates: Record<string, any> = {};
+      if (resources.cpuCores !== undefined) {
+        updates.cpuCores = resources.cpuCores;
+      }
+      if (resources.memory !== undefined) {
+        updates.memory = resources.memory;
+      }
+      
+      log(`Modifying server ${serverId} resources: ${JSON.stringify(updates)}`, 'virtfusion');
+      await this.request(`/servers/${serverId}/resources`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      log(`Successfully modified server ${serverId} resources`, 'virtfusion');
+      return true;
+    } catch (error) {
+      log(`Failed to modify server ${serverId} resources: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  // Throttle server CPU
+  async throttleServerCpu(serverId: number, throttlePercent: number): Promise<boolean> {
+    try {
+      log(`Throttling server ${serverId} CPU to ${throttlePercent}%`, 'virtfusion');
+      await this.request(`/servers/${serverId}/throttleCpu`, {
+        method: 'POST',
+        body: JSON.stringify({ throttle: throttlePercent }),
+      });
+      log(`Successfully throttled server ${serverId} CPU`, 'virtfusion');
+      return true;
+    } catch (error) {
+      log(`Failed to throttle server ${serverId} CPU: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  // Suspend server
+  async suspendServer(serverId: number): Promise<boolean> {
+    try {
+      log(`Suspending server ${serverId}`, 'virtfusion');
+      await this.request(`/servers/${serverId}/suspend`, {
+        method: 'POST',
+      });
+      log(`Successfully suspended server ${serverId}`, 'virtfusion');
+      return true;
+    } catch (error) {
+      log(`Failed to suspend server ${serverId}: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  // Unsuspend server
+  async unsuspendServer(serverId: number): Promise<boolean> {
+    try {
+      log(`Unsuspending server ${serverId}`, 'virtfusion');
+      await this.request(`/servers/${serverId}/unsuspend`, {
+        method: 'POST',
+      });
+      log(`Successfully unsuspended server ${serverId}`, 'virtfusion');
+      return true;
+    } catch (error) {
+      log(`Failed to unsuspend server ${serverId}: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  // Get all users (paginated) - Admin only
+  async getAllUsers(page: number = 1, limit: number = 50): Promise<{
+    users: Array<{
+      id: number;
+      name: string;
+      email: string;
+      extRelationId: string | null;
+      enabled: boolean;
+      created: string;
+    }>;
+    total: number;
+    currentPage: number;
+    lastPage: number;
+  }> {
+    try {
+      // VirtFusion API may not support listing all users directly
+      // This might need adjustment based on actual API capabilities
+      const response = await this.request<{ 
+        data: any[];
+        total?: number;
+        current_page?: number;
+        last_page?: number;
+      }>(`/users?results=${limit}&page=${page}`);
+      
+      const users = (response.data || []).map(u => ({
+        id: u.id,
+        name: u.name || u.email || `User ${u.id}`,
+        email: u.email || '',
+        extRelationId: u.extRelationId || null,
+        enabled: u.enabled !== false,
+        created: u.created || u.created_at || '',
+      }));
+      
+      log(`Fetched ${users.length} users (page ${page})`, 'virtfusion');
+      return {
+        users,
+        total: response.total || users.length,
+        currentPage: response.current_page || page,
+        lastPage: response.last_page || 1,
+      };
+    } catch (error) {
+      log(`Failed to fetch users list: ${error}`, 'virtfusion');
+      return { users: [], total: 0, currentPage: 1, lastPage: 1 };
+    }
+  }
+
+  // Get server count per hypervisor (for capacity display)
+  async getHypervisorServerCounts(): Promise<Map<number, number>> {
+    try {
+      const servers = await this.listServers();
+      const counts = new Map<number, number>();
+      
+      for (const server of servers) {
+        const hypervisorId = (server as any).hypervisorId;
+        if (hypervisorId) {
+          counts.set(hypervisorId, (counts.get(hypervisorId) || 0) + 1);
+        }
+      }
+      
+      return counts;
+    } catch (error) {
+      log(`Failed to get hypervisor server counts: ${error}`, 'virtfusion');
+      return new Map();
+    }
+  }
+
+  // Get all servers with owner info (for admin server list)
+  async getAllServersWithOwners(): Promise<Array<{
+    id: string;
+    name: string;
+    hostname?: string;
+    status: string;
+    ipAddress?: string;
+    owner?: { id: number; name: string; email: string };
+    resources?: { cpu: number; ram: number; storage: number };
+    hypervisor?: { id: number; name: string };
+    created: string;
+  }>> {
+    try {
+      const response = await this.request<{ data: any[] }>('/servers?with=owner&remoteState=true&results=500');
+      const servers = response.data || [];
+      log(`Fetched ${servers.length} servers with owners`, 'virtfusion');
+      
+      return servers.map(s => ({
+        id: String(s.id),
+        name: s.name || `Server ${s.id}`,
+        hostname: s.hostname || undefined,
+        status: this.mapStatus(s.remoteState?.state || s.state || 'unknown', s.suspended, s.buildFailed),
+        ipAddress: s.network?.interfaces?.[0]?.ipv4?.[0]?.address || undefined,
+        owner: s.owner ? {
+          id: s.owner.id,
+          name: s.owner.name || s.owner.email,
+          email: s.owner.email || '',
+        } : undefined,
+        resources: s.resources ? {
+          cpu: s.resources.cpuCores || 0,
+          ram: s.resources.memory || 0,
+          storage: s.resources.storage || 0,
+        } : undefined,
+        hypervisor: s.hypervisor ? {
+          id: s.hypervisor.id,
+          name: s.hypervisor.name,
+        } : undefined,
+        created: s.created || s.created_at || '',
+      }));
+    } catch (error) {
+      log(`Failed to fetch all servers: ${error}`, 'virtfusion');
+      return [];
+    }
+  }
+
 }
 
 export const virtfusionClient = new VirtFusionClient();

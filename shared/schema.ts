@@ -131,6 +131,25 @@ export const securitySettings = pgTable("security_settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Admin audit logs - tracks all admin actions for security and accountability
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  adminAuth0UserId: text("admin_auth0_user_id").notNull(),
+  adminEmail: text("admin_email").notNull(),
+  action: text("action").notNull(), // e.g., server.power.stop, user.credit.adjust, server.delete
+  targetType: text("target_type").notNull(), // server, user, hypervisor, ip_block, etc.
+  targetId: text("target_id"), // ID of the target entity
+  targetLabel: text("target_label"), // Human-readable label (e.g., server name, user email)
+  payload: jsonb("payload"), // Request payload/parameters
+  result: jsonb("result"), // Response or result summary
+  status: text("status").notNull().default("success"), // success, failure, pending
+  errorMessage: text("error_message"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  reason: text("reason"), // Admin-provided reason for the action (required for destructive actions)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Server cancellation requests - grace period (30 days) or immediate (5 mins) before deletion
 export const serverCancellations = pgTable("server_cancellations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -174,6 +193,7 @@ export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ i
 export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
 export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -190,6 +210,8 @@ export type ServerCancellation = typeof serverCancellations.$inferSelect;
 export type InsertServerCancellation = z.infer<typeof insertServerCancellationSchema>;
 export type SecuritySetting = typeof securitySettings.$inferSelect;
 export type InsertSecuritySetting = z.infer<typeof insertSecuritySettingSchema>;
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
