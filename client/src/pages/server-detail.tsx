@@ -815,6 +815,7 @@ export default function ServerDetail() {
     const now = new Date();
     const timeRemaining = Math.max(0, scheduledAt.getTime() - now.getTime());
     const minutesRemaining = Math.ceil(timeRemaining / (1000 * 60));
+    const isProcessing = activeCancellation.status === 'processing';
     
     return (
       <AppShell>
@@ -829,26 +830,42 @@ export default function ServerDetail() {
             </div>
             
             <div className="space-y-2">
-              <h2 className="text-2xl font-display font-bold text-white">Server Deletion In Progress</h2>
+              <h2 className="text-2xl font-display font-bold text-white">
+                {isProcessing ? 'Server Deletion In Progress' : 'Server Queued for Deletion'}
+              </h2>
               <p className="text-muted-foreground">
-                <span className="font-semibold text-white">{server.name}</span> is being permanently deleted.
+                <span className="font-semibold text-white">{server.name}</span> {isProcessing ? 'is being permanently deleted.' : 'will be permanently deleted shortly.'}
               </p>
             </div>
             
-            {/* Countdown */}
+            {/* Status indicator */}
             <div className="glass-card rounded-xl border border-red-500/30 p-6 bg-red-500/10">
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
-                <span className="text-red-400 font-medium">Deletion in progress...</span>
-              </div>
-              {timeRemaining > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Estimated completion in approximately {minutesRemaining} minute{minutesRemaining !== 1 ? 's' : ''}
-                </p>
+              {isProcessing ? (
+                <>
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+                    <span className="text-red-400 font-medium">Actively deleting...</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Your server has been submitted for deletion and is now being removed from our systems.
+                  </p>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Deletion is being finalized. The server will disappear shortly.
-                </p>
+                <>
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <Clock className="h-5 w-5 text-orange-400" />
+                    <span className="text-orange-400 font-medium">Queued for deletion</span>
+                  </div>
+                  {timeRemaining > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Deletion will begin in approximately {minutesRemaining} minute{minutesRemaining !== 1 ? 's' : ''}. Once started, the server will be fully removed within a few minutes.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Deletion is about to begin. The server will be fully removed within a few minutes.
+                    </p>
+                  )}
+                </>
               )}
             </div>
             
