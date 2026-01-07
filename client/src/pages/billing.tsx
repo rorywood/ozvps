@@ -21,7 +21,10 @@ import {
   Zap,
   ChevronRight,
   FileText,
-  Download
+  Download,
+  CheckCircle2,
+  XCircle,
+  X
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -406,6 +409,7 @@ export default function BillingPage() {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  const [paymentFeedback, setPaymentFeedback] = useState<{ type: 'success' | 'error'; message: string; amount?: number } | null>(null);
 
   useEffect(() => {
     if (addCardDialogOpen && !stripePromise) {
@@ -426,6 +430,10 @@ export default function BillingPage() {
 
   useEffect(() => {
     if (topupResult === 'success') {
+      setPaymentFeedback({
+        type: 'success',
+        message: 'Payment Approved - Your wallet has been topped up successfully!'
+      });
       toast({
         title: "Payment successful",
         description: "Your wallet has been topped up.",
@@ -433,8 +441,13 @@ export default function BillingPage() {
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setLocation('/billing', { replace: true });
     } else if (topupResult === 'cancelled') {
+      setPaymentFeedback({
+        type: 'error',
+        message: 'Payment Cancelled - Your payment was not completed.'
+      });
       toast({
         title: "Payment cancelled",
         description: "Your payment was cancelled.",
@@ -503,11 +516,18 @@ export default function BillingPage() {
       api.directTopup(amountCents, paymentMethodId),
     onSuccess: (data, variables) => {
       if (data.success) {
+        const chargedAmount = (data.chargedAmountCents || 0) / 100;
+        setPaymentFeedback({
+          type: 'success',
+          message: `Payment Approved - $${chargedAmount.toFixed(2)} has been added to your wallet!`,
+          amount: data.chargedAmountCents
+        });
         queryClient.invalidateQueries({ queryKey: ['wallet'] });
         queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
         toast({
           title: "Payment Successful",
-          description: `$${((data.chargedAmountCents || 0) / 100).toFixed(2)} has been added to your wallet.`,
+          description: `$${chargedAmount.toFixed(2)} has been added to your wallet.`,
         });
         setTopupDialogOpen(false);
         setSelectedAmount(null);
@@ -527,19 +547,29 @@ export default function BillingPage() {
         // Fall back to checkout session (redirect happens in onSuccess)
         topupMutation.mutate(variables.amountCents);
       } else {
+        setPaymentFeedback({
+          type: 'error',
+          message: data.error || 'Payment Declined - There was an issue processing your card.'
+        });
         toast({
           title: "Payment Failed",
           description: data.error || "Failed to process payment",
           variant: "destructive",
         });
+        setTopupDialogOpen(false);
       }
     },
     onError: (error: any) => {
+      setPaymentFeedback({
+        type: 'error',
+        message: error.message || 'Payment Declined - There was an issue processing your card.'
+      });
       toast({
         title: "Error",
         description: error.message || "Failed to process payment",
         variant: "destructive",
       });
+      setTopupDialogOpen(false);
     },
   });
 
@@ -684,6 +714,40 @@ export default function BillingPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Payment Feedback Message */}
+            {paymentFeedback && (
+              <div 
+                className={`rounded-xl p-4 flex items-center justify-between ${
+                  paymentFeedback.type === 'success' 
+                    ? 'bg-green-500/10 ring-1 ring-green-500/30' 
+                    : 'bg-red-500/10 ring-1 ring-red-500/30'
+                }`}
+                data-testid={`payment-feedback-${paymentFeedback.type}`}
+              >
+                <div className="flex items-center gap-3">
+                  {paymentFeedback.type === 'success' ? (
+                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />
+                  )}
+                  <span className={`font-medium ${
+                    paymentFeedback.type === 'success' ? 'text-green-500' : 'text-red-500'
+                  }`}>
+                    {paymentFeedback.message}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setPaymentFeedback(null)}
+                  data-testid="dismiss-payment-feedback"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             {/* Wallet Balance - Hero Card */}
             <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
