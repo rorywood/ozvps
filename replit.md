@@ -46,6 +46,7 @@ Preferred communication style: Simple, everyday language.
 - **Auth0 User Deletion Sync**: Webhook-driven synchronization to clean up VirtFusion resources upon Auth0 user deletion. Fallback orphan cleanup processor runs hourly to catch cases where webhook wasn't triggered (e.g., Auth0 free tier without Event Streams).
 - **Orphan Cleanup Processor**: Background job (`orphan-cleanup-processor.ts`) runs every hour (first run 5 minutes after startup). Checks all active wallets against Auth0, and for deleted users: (1) Deletes VirtFusion user and servers, (2) Deletes Stripe customer, (3) Soft-deletes wallet, (4) Cancels pending orders. Includes rate limiting (100ms delay) between checks.
 - **Known API Limitations**: Recognition and handling of VirtFusion API limitations, such as lack of SSH key management and user lookup by email, requiring manual workarounds or feature deferral. IP allocations are derived from server primary IPs only (VirtFusion lacks dedicated IP list endpoints `/ipAddresses` and `/ipAddressBlocks`); secondary/IPv6 addresses require fetching individual server network interfaces which would be slow and risk rate limiting.
+- **VirtFusion API Performance**: In-memory caching with 30-second TTL and stale-while-revalidate pattern. Returns cached data immediately while refreshing in background. Falls back to stale data on API errors. Request timeouts set to 10 seconds. Cache invalidated after power actions.
 
 ## External Dependencies
 
