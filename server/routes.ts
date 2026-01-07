@@ -362,6 +362,32 @@ export async function registerRoutes(
       }
 
       const { email, password } = parsed.data;
+      const { recaptchaToken } = req.body;
+
+      // Check reCAPTCHA if enabled
+      const recaptchaSettings = await dbStorage.getRecaptchaSettings();
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+        if (!recaptchaToken) {
+          return res.status(400).json({ error: 'reCAPTCHA verification required' });
+        }
+
+        try {
+          const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
+          });
+          const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
+          
+          if (!verifyResult.success) {
+            log(`reCAPTCHA verification failed: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
+            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+          }
+        } catch (err: any) {
+          log(`reCAPTCHA verification error: ${err.message}`, 'security');
+          return res.status(500).json({ error: 'Failed to verify reCAPTCHA. Please try again.' });
+        }
+      }
 
       // Check if account is locked due to too many failed attempts
       const lockStatus = isAccountLocked(email);

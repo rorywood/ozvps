@@ -321,11 +321,11 @@ class ApiClient {
     return response.json();
   }
 
-  async login(email: string, password: string): Promise<{ user: { id: number; email: string; name: string } }> {
+  async login(email: string, password: string, recaptchaToken?: string): Promise<{ user: { id: number; email: string; name: string } }> {
     const response = await fetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, recaptchaToken })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

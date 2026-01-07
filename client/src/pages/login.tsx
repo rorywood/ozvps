@@ -1,18 +1,22 @@
-import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Calculator, Info } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
 
-function generateMathChallenge() {
-  const num1 = Math.floor(Math.random() * 10) + 1;
-  const num2 = Math.floor(Math.random() * 10) + 1;
-  return { num1, num2, answer: num1 + num2 };
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      render: (container: HTMLElement, options: { sitekey: string; callback: (token: string) => void; theme: string }) => number;
+      reset: (widgetId: number) => void;
+    };
+    onRecaptchaLoad?: () => void;
+  }
 }
 
 export default function LoginPage() {
@@ -22,15 +26,67 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [sessionMessage, setSessionMessage] = useState<{ error: string; code: string } | null>(null);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<number | null>(null);
   
   const [honeypot, setHoneypot] = useState("");
-  const [challenge, setChallenge] = useState(generateMathChallenge);
-  const [captchaAnswer, setCaptchaAnswer] = useState("");
+
+  const { data: recaptchaConfig } = useQuery({
+    queryKey: ['recaptcha-config'],
+    queryFn: async () => {
+      const response = await fetch('/api/security/recaptcha-config');
+      if (!response.ok) return { enabled: false, siteKey: null };
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const recaptchaEnabled = recaptchaConfig?.enabled && recaptchaConfig?.siteKey;
+
+  const initRecaptcha = useCallback(() => {
+    if (recaptchaRef.current && recaptchaConfig?.siteKey && window.grecaptcha && widgetIdRef.current === null) {
+      try {
+        widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
+          sitekey: recaptchaConfig.siteKey,
+          callback: (token: string) => setRecaptchaToken(token),
+          theme: 'dark',
+        });
+        setRecaptchaLoaded(true);
+      } catch (e) {
+        console.error('Failed to render reCAPTCHA:', e);
+      }
+    }
+  }, [recaptchaConfig?.siteKey]);
 
   useEffect(() => {
-    setChallenge(generateMathChallenge());
-    
-    // Check for session error from redirect
+    if (!recaptchaEnabled) return;
+
+    const existingScript = document.querySelector('script[src*="recaptcha"]');
+    if (existingScript) {
+      if (window.grecaptcha) {
+        window.grecaptcha.ready(initRecaptcha);
+      }
+      return;
+    }
+
+    window.onRecaptchaLoad = () => {
+      window.grecaptcha.ready(initRecaptcha);
+    };
+
+    const script = document.createElement('script');
+    script.src = 'https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    return () => {
+      delete window.onRecaptchaLoad;
+    };
+  }, [recaptchaEnabled, initRecaptcha]);
+
+  useEffect(() => {
     const storedError = sessionStorage.getItem('sessionError');
     if (storedError) {
       try {
@@ -42,15 +98,17 @@ export default function LoginPage() {
   }, []);
 
   const loginMutation = useMutation({
-    mutationFn: () => api.login(email, password),
+    mutationFn: () => api.login(email, password, recaptchaToken || undefined),
     onSuccess: () => {
       queryClient.clear();
       setLocation("/");
     },
     onError: (err: any) => {
       setError(err.message || "Invalid email or password");
-      setChallenge(generateMathChallenge());
-      setCaptchaAnswer("");
+      setRecaptchaToken(null);
+      if (widgetIdRef.current !== null && window.grecaptcha) {
+        window.grecaptcha.reset(widgetIdRef.current);
+      }
     },
   });
 
@@ -68,11 +126,8 @@ export default function LoginPage() {
       return;
     }
     
-    const userAnswer = parseInt(captchaAnswer, 10);
-    if (isNaN(userAnswer) || userAnswer !== challenge.answer) {
-      setError("Incorrect answer. Please solve the math problem.");
-      setChallenge(generateMathChallenge());
-      setCaptchaAnswer("");
+    if (recaptchaEnabled && !recaptchaToken) {
+      setError("Please complete the reCAPTCHA verification");
       return;
     }
 
@@ -81,7 +136,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <GlassCard className="w-full max-w-lg p-10 relative overflow-hidden">
+      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-white/10">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl" />
         
@@ -131,26 +186,17 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="captcha">
-                <span className="flex items-center gap-2">
-                  <Calculator className="h-4 w-4" />
-                  What is {challenge.num1} + {challenge.num2}?
-                </span>
-              </Label>
-              <Input 
-                id="captcha" 
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Enter the answer"
-                className="bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
-                value={captchaAnswer}
-                onChange={(e) => setCaptchaAnswer(e.target.value)}
-                autoComplete="off"
-                data-testid="input-captcha"
-              />
-            </div>
+            {recaptchaEnabled && (
+              <div className="flex justify-center" data-testid="recaptcha-container">
+                <div ref={recaptchaRef} />
+                {!recaptchaLoaded && (
+                  <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Loading verification...
+                  </div>
+                )}
+              </div>
+            )}
 
             <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
               <Label htmlFor="website">Website</Label>
@@ -199,7 +245,7 @@ export default function LoginPage() {
             Need help? Contact support@ozvps.com
           </p>
         </div>
-      </GlassCard>
+      </div>
     </div>
   );
 }
