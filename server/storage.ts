@@ -361,29 +361,40 @@ export const dbStorage = {
   },
 
   async debitWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<{ success: boolean; wallet?: Wallet; error?: string }> {
-    const wallet = await this.getOrCreateWallet(auth0UserId);
+    // SECURITY: Use atomic UPDATE with WHERE clause to prevent race conditions
+    // This ensures the balance check and deduction happen atomically
+    // If balance is insufficient, no rows are updated
     
-    if (wallet.balanceCents < amountCents) {
-      return { success: false, error: 'Insufficient balance' };
-    }
-
-    // Insert debit transaction
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'debit',
-      amountCents: -amountCents,
-      metadata: metadata || null,
-    });
-
-    // Update wallet balance
+    await this.getOrCreateWallet(auth0UserId);
+    
+    // Atomic balance check and deduction - prevents race conditions
+    // Only updates if current balance >= amountCents
     const [updated] = await db
       .update(wallets)
       .set({
         balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
         updatedAt: new Date(),
       })
-      .where(eq(wallets.auth0UserId, auth0UserId))
+      .where(
+        and(
+          eq(wallets.auth0UserId, auth0UserId),
+          sql`${wallets.balanceCents} >= ${amountCents}`
+        )
+      )
       .returning();
+    
+    if (!updated) {
+      // No rows updated means insufficient balance
+      return { success: false, error: 'Insufficient balance' };
+    }
+
+    // Insert debit transaction after successful balance update
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'debit',
+      amountCents: -amountCents,
+      metadata: metadata || null,
+    });
 
     return { success: true, wallet: updated };
   },
@@ -439,12 +450,44 @@ export const dbStorage = {
       return { success: false, error: 'Wallet not found' };
     }
 
-    // For negative adjustments, check balance
-    if (amountCents < 0 && wallet.balanceCents + amountCents < 0) {
-      return { success: false, error: 'Adjustment would result in negative balance' };
+    // SECURITY: For negative adjustments, use atomic check in WHERE clause
+    // This prevents race conditions that could result in negative balances
+    let updated: Wallet | undefined;
+    
+    if (amountCents < 0) {
+      // Atomic balance check and deduction for negative adjustments
+      const [result] = await db
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(wallets.auth0UserId, auth0UserId),
+            sql`${wallets.balanceCents} + ${amountCents} >= 0`
+          )
+        )
+        .returning();
+      
+      if (!result) {
+        return { success: false, error: 'Adjustment would result in negative balance' };
+      }
+      updated = result;
+    } else {
+      // For positive adjustments, no balance check needed
+      const [result] = await db
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+      updated = result;
     }
 
-    // Insert adjustment transaction
+    // Insert adjustment transaction after successful balance update
     await db.insert(walletTransactions).values({
       auth0UserId,
       type: 'admin_adjustment',
@@ -455,16 +498,6 @@ export const dbStorage = {
         adjustedAt: new Date().toISOString(),
       },
     });
-
-    // Update wallet balance
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.auth0UserId, auth0UserId))
-      .returning();
 
     return { success: true, wallet: updated };
   },
