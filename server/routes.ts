@@ -1729,10 +1729,23 @@ export async function registerRoutes(
       // Get all wallets which represent our user accounts
       const allWallets = await dbStorage.getAllWallets();
       
-      // Build user list from wallets, enriching with VirtFusion data where available
+      // Build user list from wallets, enriching with Auth0 and VirtFusion data
       const users = await Promise.all(
         allWallets.map(async (wallet) => {
           let serverCount = 0;
+          let email = 'Unknown';
+          let name = 'Unknown User';
+          
+          // Fetch user info from Auth0 to get email and name
+          try {
+            const auth0User = await auth0Client.getUserById(wallet.auth0UserId);
+            if (auth0User) {
+              email = auth0User.email || 'Unknown';
+              name = auth0User.name || auth0User.email || 'Unknown User';
+            }
+          } catch (e) {
+            // Auth0 user may have been deleted
+          }
           
           // If wallet has a linked VirtFusion user, fetch their server count
           if (wallet.virtfusionUserId) {
@@ -1747,8 +1760,8 @@ export async function registerRoutes(
           return {
             virtfusionId: wallet.virtfusionUserId || null,
             auth0UserId: wallet.auth0UserId,
-            name: wallet.name || wallet.email,
-            email: wallet.email,
+            name,
+            email,
             virtfusionLinked: !!wallet.virtfusionUserId,
             status: wallet.deletedAt ? 'deleted' : 'active',
             serverCount,
@@ -2605,18 +2618,12 @@ export async function registerRoutes(
         
         // Create Stripe invoice for the payment (stored in Stripe, not our database)
         try {
-          // Create invoice item
-          await stripe.invoiceItems.create({
-            customer: wallet.stripeCustomerId,
-            amount: amountCents,
-            currency: 'aud',
-            description: `OzVPS Wallet Top-Up - $${(amountCents / 100).toFixed(2)} AUD`,
-          });
-          
-          // Create and finalize invoice (marking as paid)
+          // First create a draft invoice
           const stripeInvoice = await stripe.invoices.create({
             customer: wallet.stripeCustomerId,
             auto_advance: false,
+            collection_method: 'send_invoice',
+            days_until_due: 0,
             description: `OzVPS Wallet Top-Up - $${(amountCents / 100).toFixed(2)} AUD`,
             metadata: {
               auth0UserId,
@@ -2624,6 +2631,15 @@ export async function registerRoutes(
               source: 'direct_charge',
               paymentIntentId: paymentIntent.id,
             },
+          });
+          
+          // Add line item to the invoice with the correct amount
+          await stripe.invoiceItems.create({
+            customer: wallet.stripeCustomerId,
+            invoice: stripeInvoice.id,
+            amount: amountCents,
+            currency: 'aud',
+            description: `OzVPS Wallet Top-Up - $${(amountCents / 100).toFixed(2)} AUD`,
           });
           
           // Finalize the invoice
@@ -2634,7 +2650,7 @@ export async function registerRoutes(
             paid_out_of_band: true,
           });
           
-          log(`Stripe invoice created: ${stripeInvoice.number} for user=${auth0UserId}`, 'billing');
+          log(`Stripe invoice created: ${stripeInvoice.number} for $${(amountCents / 100).toFixed(2)} user=${auth0UserId}`, 'billing');
         } catch (invoiceError: any) {
           // Log but don't fail - wallet credit was successful
           log(`Failed to create Stripe invoice: ${invoiceError.message}`, 'billing');
