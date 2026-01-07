@@ -458,8 +458,8 @@ export async function registerRoutes(
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
-        virtFusionUserId,
-        extRelationId,
+        virtFusionUserId: virtFusionUserId ?? undefined,
+        extRelationId: extRelationId ?? undefined,
         email: email,
         name: auth0Result.user.name,
         auth0UserId: auth0Result.user.user_id,
@@ -1160,9 +1160,7 @@ export async function registerRoutes(
       }
 
       // Store the VirtFusion user ID in Auth0 metadata
-      await auth0Client.updateUserMetadata(auth0UserId, {
-        virtfusion_user_id: vfUser.id,
-      });
+      await auth0Client.setVirtFusionUserId(auth0UserId, vfUser.id);
 
       log(`Successfully linked VirtFusion user ${vfUser.id} (old extRelationId: ${oldExtRelationId}, new: ${newExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
 
