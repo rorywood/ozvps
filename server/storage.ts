@@ -447,6 +447,15 @@ export const dbStorage = {
       .orderBy(desc(wallets.updatedAt));
   },
 
+  // Get active wallets (not deleted) for orphan cleanup
+  async getActiveWallets(): Promise<Wallet[]> {
+    return db
+      .select()
+      .from(wallets)
+      .where(sql`${wallets.deletedAt} IS NULL`)
+      .orderBy(wallets.updatedAt);
+  },
+
   // Admin: Adjust wallet balance (add or remove credits)
   async adjustWalletBalance(
     auth0UserId: string, 

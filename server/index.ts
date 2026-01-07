@@ -10,6 +10,7 @@ import { createServer } from "http";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { startCancellationProcessor } from "./cancellation-processor";
+import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
 
 const app = express();
 const httpServer = createServer(app);
@@ -255,6 +256,9 @@ app.use((req, res, next) => {
       
       // Start background job for processing server cancellations
       startCancellationProcessor();
+      
+      // Start background job for cleaning up orphaned accounts (deleted Auth0 users)
+      startOrphanCleanupProcessor();
     },
   );
 })();
