@@ -31,7 +31,10 @@ class Auth0Client {
   private managementToken: string | null = null;
   private managementTokenExpiry: number = 0;
   private userExistsCache: Map<string, { exists: boolean; checkedAt: number }> = new Map();
-  private readonly USER_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  // SECURITY: Very short cache TTL to ensure deleted users are locked out quickly
+  // Only cache "exists: false" longer since that's a permanent state
+  private readonly USER_EXISTS_CACHE_TTL_MS = 30 * 1000; // 30 seconds for exists: true
+  private readonly USER_NOT_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for exists: false
 
   constructor() {
     if (!AUTH0_DOMAIN) {
@@ -287,10 +290,13 @@ class Auth0Client {
   }
 
   async userExists(auth0UserId: string): Promise<boolean> {
-    // Check cache first
+    // Check cache first with appropriate TTL based on existence state
     const cached = this.userExistsCache.get(auth0UserId);
-    if (cached && Date.now() - cached.checkedAt < this.USER_EXISTS_CACHE_TTL_MS) {
-      return cached.exists;
+    if (cached) {
+      const ttl = cached.exists ? this.USER_EXISTS_CACHE_TTL_MS : this.USER_NOT_EXISTS_CACHE_TTL_MS;
+      if (Date.now() - cached.checkedAt < ttl) {
+        return cached.exists;
+      }
     }
 
     try {
@@ -311,16 +317,18 @@ class Auth0Client {
 
       if (!response.ok) {
         log(`Auth0 user existence check failed: ${response.status}`, 'auth0');
-        // On error, assume user exists to avoid false positives
-        return true;
+        // SECURITY: Fail closed - if we can't verify user exists, deny access
+        // This prevents ghost sessions when Auth0 has issues
+        return false;
       }
 
       this.userExistsCache.set(auth0UserId, { exists: true, checkedAt: Date.now() });
       return true;
     } catch (error: any) {
       log(`Auth0 user existence check error: ${error.message}`, 'auth0');
-      // On network error, assume user exists to avoid false positives
-      return true;
+      // SECURITY: Fail closed - network errors should deny access
+      // This is safer than allowing access to potentially deleted users
+      return false;
     }
   }
 
