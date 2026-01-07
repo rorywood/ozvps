@@ -1970,23 +1970,53 @@ export async function registerRoutes(
 
       log(`Processing user deletion for Auth0 user: ${auth0UserId}, email: ${email}`, 'webhook');
 
+      const cleanupErrors: string[] = [];
+
+      // 1. Delete all sessions for this user
       await storage.deleteSessionsByAuth0UserId(auth0UserId);
       log(`Deleted sessions for Auth0 user ${auth0UserId}`, 'webhook');
 
+      // 2. Delete Stripe customer if exists
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      if (wallet?.stripeCustomerId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          await stripe.customers.del(wallet.stripeCustomerId);
+          log(`Deleted Stripe customer ${wallet.stripeCustomerId} for Auth0 user ${auth0UserId}`, 'webhook');
+        } catch (stripeError: any) {
+          if (stripeError.code === 'resource_missing') {
+            log(`Stripe customer ${wallet.stripeCustomerId} already deleted`, 'webhook');
+          } else {
+            log(`Failed to delete Stripe customer: ${stripeError.message}`, 'webhook');
+            cleanupErrors.push(`Stripe: ${stripeError.message}`);
+          }
+        }
+      }
+
+      // 3. Mark wallet as deleted (soft delete for audit trail)
+      if (wallet) {
+        await dbStorage.softDeleteWallet(auth0UserId);
+        log(`Soft-deleted wallet for Auth0 user ${auth0UserId}`, 'webhook');
+      }
+
+      // 4. Cleanup VirtFusion user and servers
       if (virtFusionUserId) {
         const result = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
         
         if (result.success) {
           log(`Successfully cleaned up VirtFusion user ${virtFusionUserId}: ${result.serversDeleted} servers deleted`, 'webhook');
-          return res.status(204).send();
         } else {
           log(`Partial cleanup for VirtFusion user ${virtFusionUserId}: ${result.errors.join(', ')}`, 'webhook');
-          return res.status(500).json({ error: 'Partial cleanup', errors: result.errors });
+          cleanupErrors.push(...result.errors);
         }
       } else {
         log(`No VirtFusion user ID in app_metadata for ${auth0UserId}, skipping VirtFusion cleanup`, 'webhook');
-        return res.status(204).send();
       }
+
+      if (cleanupErrors.length > 0) {
+        return res.status(500).json({ error: 'Partial cleanup', errors: cleanupErrors });
+      }
+      return res.status(204).send();
     } catch (error: any) {
       log(`Webhook error: ${error.message}`, 'webhook');
       res.status(500).json({ error: 'Webhook processing failed' });

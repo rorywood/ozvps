@@ -324,6 +324,15 @@ export const dbStorage = {
     return wallet;
   },
 
+  async softDeleteWallet(auth0UserId: string): Promise<Wallet | undefined> {
+    const [updated] = await db
+      .update(wallets)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
   async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
     // Check for idempotency using stripeEventId
     if (transaction.stripeEventId) {

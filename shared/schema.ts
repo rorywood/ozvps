@@ -71,6 +71,7 @@ export const wallets = pgTable("wallets", {
   balanceCents: integer("balance_cents").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 // Wallet transactions - credits, debits, refunds
