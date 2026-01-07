@@ -206,7 +206,7 @@ class ApiClient {
   
   // Get all pending cancellations for the current user (for badges on server list)
   async getAllCancellations(): Promise<{
-    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null }>;
+    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: 'grace' | 'immediate' }>;
   }> {
     const response = await fetch(`${this.baseUrl}/cancellations`);
     if (!response.ok) throw new Error('Failed to fetch cancellations');

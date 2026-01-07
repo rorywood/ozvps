@@ -35,6 +35,7 @@ Preferred communication style: Simple, everyday language.
 - **Console Access**: Embedded VNC console for server interaction.
 - **Server Reinstall**: Streamlined process for reinstalling server OS.
 - **Admin Tools**: User management, credit adjustment, and account linking for administrators.
+- **Dual-Mode Server Cancellation**: Two deletion modes: (1) Grace period (30 days) allows revocation, (2) Immediate deletion (5 minutes, non-revocable). Both automated via background job (`cancellation-processor.ts`) that runs every 30 seconds. Immediate mode shows locked "Deletion In Progress" screen on server detail, and "DELETING" badge with spinner on dashboard/server list. Grace mode shows "PENDING CANCELLATION" badge.
 
 ### System Design Choices
 - **VirtFusion Integration**: Backend proxies all requests to VirtFusion, ensuring API key security. VirtFusion `hypervisorId` parameter is used for server creation but requires the hypervisor *group* ID.

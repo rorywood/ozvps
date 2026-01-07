@@ -50,7 +50,7 @@ export default function ServerList() {
   const { data: cancellationsData } = useQuery({
     queryKey: ['cancellations'],
     queryFn: () => api.getAllCancellations(),
-    refetchInterval: 30000,
+    refetchInterval: 10000, // Match servers refetch interval for consistency
   });
   
   const pendingCancellations = cancellationsData?.cancellations || {};
@@ -173,13 +173,23 @@ export default function ServerList() {
                                 </span>
                               )}
                               {pendingCancellations[server.id] && (
-                                <span 
-                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1"
-                                  data-testid={`badge-pending-cancellation-${server.id}`}
-                                >
-                                  <Clock className="h-3 w-3" />
-                                  PENDING CANCELLATION
-                                </span>
+                                pendingCancellations[server.id].mode === 'immediate' ? (
+                                  <span 
+                                    className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400 flex items-center gap-1"
+                                    data-testid={`badge-deleting-${server.id}`}
+                                  >
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    DELETING
+                                  </span>
+                                ) : (
+                                  <span 
+                                    className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1"
+                                    data-testid={`badge-pending-cancellation-${server.id}`}
+                                  >
+                                    <Clock className="h-3 w-3" />
+                                    PENDING CANCELLATION
+                                  </span>
+                                )
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground font-mono mt-0.5">{server.primaryIp}</p>

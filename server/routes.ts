@@ -817,11 +817,12 @@ export async function registerRoutes(
       const pending = cancellations.filter(c => c.status === 'pending');
       
       // Return as a map of serverId -> cancellation for easy lookup
-      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null }> = {};
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string }> = {};
       for (const c of pending) {
         cancellationMap[c.virtfusionServerId] = {
           scheduledDeletionAt: c.scheduledDeletionAt,
           reason: c.reason,
+          mode: c.mode || 'grace',
         };
       }
       
