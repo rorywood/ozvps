@@ -177,7 +177,7 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <h3 className="font-medium text-white group-hover:text-primary transition-colors truncate">
-                              {server.name || 'New Server'}
+                              {server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
                             </h3>
                             
                             {/* Needs Setup badge */}

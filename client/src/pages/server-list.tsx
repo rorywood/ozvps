@@ -13,10 +13,10 @@ import {
   Filter,
   Loader2,
   AlertCircle,
-  ExternalLink,
   Square,
   MonitorCog,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from "lucide-react";
 import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,16 @@ import { useToast } from "@/hooks/use-toast";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import flagAU from "@/assets/flag-au.png";
 import { Clock } from "lucide-react";
+
+// Helper to detect placeholder server names like "Server 123" 
+function getDisplayServerName(name: string | undefined): string {
+  if (!name) return 'New Server';
+  // Check if name matches pattern "Server <number>" 
+  if (/^Server\s+\d+$/i.test(name.trim())) {
+    return 'New Server';
+  }
+  return name;
+}
 
 export default function ServerList() {
   const { toast } = useToast();
@@ -132,10 +142,10 @@ export default function ServerList() {
               You don't have any VPS servers yet. Order a server through your billing portal to get started.
             </p>
             <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-order-server" asChild>
-              <a href="https://ozvps.com.au" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Order a Server
-              </a>
+              <Link href="/deploy">
+                <Zap className="h-4 w-4 mr-2" />
+                Deploy a Server
+              </Link>
             </Button>
           </GlassCard>
         ) : (
@@ -171,7 +181,7 @@ export default function ServerList() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name || 'New Server'}</h3>
+                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{getDisplayServerName(server.name)}</h3>
                               {server.suspended ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
                                   SUSPENDED

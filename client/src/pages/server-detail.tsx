@@ -662,7 +662,7 @@ export default function ServerDetail() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name || 'New Server'}</h1>
+              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}</h1>
               <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
             </div>
           </div>
