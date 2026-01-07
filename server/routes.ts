@@ -2184,6 +2184,7 @@ export async function registerRoutes(
       }
 
       // Fetch invoices directly from Stripe
+      const stripe = await getUncachableStripeClient();
       const stripeInvoices = await stripe.invoices.list({
         customer: wallet.stripeCustomerId,
         limit: 50,
@@ -2228,6 +2229,7 @@ export async function registerRoutes(
       }
 
       // Fetch the invoice from Stripe
+      const stripe = await getUncachableStripeClient();
       const invoice = await stripe.invoices.retrieve(invoiceId);
       
       // Verify the invoice belongs to this customer
