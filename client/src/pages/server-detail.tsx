@@ -805,6 +805,66 @@ export default function ServerDetail() {
     );
   }
 
+  // If server has pending cancellation with immediate mode, show locked deletion state
+  if (cancellationData?.cancellation && cancellationData.cancellation.mode === 'immediate') {
+    const scheduledAt = new Date(cancellationData.cancellation.scheduledDeletionAt);
+    const now = new Date();
+    const timeRemaining = Math.max(0, scheduledAt.getTime() - now.getTime());
+    const minutesRemaining = Math.ceil(timeRemaining / (1000 * 60));
+    
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center py-20 h-[70vh]">
+          <div className="max-w-md mx-auto text-center space-y-6">
+            {/* Animated deletion icon */}
+            <div className="relative mx-auto w-24 h-24">
+              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ animationDuration: '2s' }} />
+              <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-red-500/30 border-2 border-red-500/50">
+                <Trash2 className="h-10 w-10 text-red-400" />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h2 className="text-2xl font-display font-bold text-white">Server Deletion In Progress</h2>
+              <p className="text-muted-foreground">
+                <span className="font-semibold text-white">{server.name}</span> is being permanently deleted.
+              </p>
+            </div>
+            
+            {/* Countdown */}
+            <div className="glass-card rounded-xl border border-red-500/30 p-6 bg-red-500/10">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+                <span className="text-red-400 font-medium">Deletion in progress...</span>
+              </div>
+              {timeRemaining > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Estimated completion in approximately {minutesRemaining} minute{minutesRemaining !== 1 ? 's' : ''}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Deletion is being finalized. The server will disappear shortly.
+                </p>
+              )}
+            </div>
+            
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>This action cannot be stopped or reversed.</p>
+              <p>All data on this server will be permanently destroyed.</p>
+            </div>
+            
+            <Link href="/servers">
+              <Button variant="outline" className="mt-4 border-white/10 text-white hover:bg-white/5">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Return to Fleet
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <div className="space-y-6 pb-20">
@@ -1431,12 +1491,12 @@ export default function ServerDetail() {
                   <Button 
                     className={cn(
                       "text-white",
-                      isSuspended 
+                      (isSuspended || cancellationData?.cancellation)
                         ? "bg-white/10 text-muted-foreground cursor-not-allowed"
                         : "bg-red-600 hover:bg-red-700"
                     )}
                     onClick={() => setReinstallDialogOpen(true)}
-                    disabled={isSuspended}
+                    disabled={isSuspended || !!cancellationData?.cancellation}
                     data-testid="button-reinstall"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
@@ -1445,6 +1505,11 @@ export default function ServerDetail() {
                   {isSuspended && (
                     <p className="text-sm text-yellow-400/80 mt-2">
                       Reinstall is disabled while the server is suspended.
+                    </p>
+                  )}
+                  {cancellationData?.cancellation && !isSuspended && (
+                    <p className="text-sm text-red-400/80 mt-2">
+                      Reinstall is disabled because this server is scheduled for deletion.
                     </p>
                   )}
                 </div>

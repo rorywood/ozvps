@@ -151,7 +151,13 @@ export class VirtFusionClient {
         throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      // Handle empty responses (common for DELETE operations)
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        return {} as T;
+      }
+      
+      return JSON.parse(text);
     } catch (error: any) {
       log(`VirtFusion fetch error: ${error.message} - URL: ${url}`, 'virtfusion');
       throw error;

@@ -748,6 +748,12 @@ export async function registerRoutes(
       if (server.suspended) {
         return res.status(403).json({ error: 'Server is suspended. Reinstall is disabled.' });
       }
+      
+      // Block reinstall if server has a pending cancellation
+      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
+      if (pendingCancellation) {
+        return res.status(403).json({ error: 'Server is scheduled for deletion. Reinstall is disabled.' });
+      }
 
       // Validate request body with Zod schema
       const parseResult = reinstallSchema.safeParse(req.body);

@@ -2,7 +2,7 @@ import { dbStorage } from "./storage";
 import { virtfusionClient } from "./virtfusion";
 import { log } from "./index";
 
-const PROCESSING_INTERVAL_MS = 60 * 1000; // Check every minute
+const PROCESSING_INTERVAL_MS = 30 * 1000; // Check every 30 seconds for faster cleanup
 
 let isRunning = false;
 
@@ -27,22 +27,25 @@ export async function processExpiredCancellations(): Promise<{ processed: number
             throw new Error(`Invalid server ID: ${cancellation.virtfusionServerId}`);
           }
           
-          const deleted = await virtfusionClient.deleteServer(serverIdNum);
+          // Call VirtFusion delete API - this triggers VirtFusion's own 5-min deletion process
+          await virtfusionClient.deleteServer(serverIdNum);
           
-          if (deleted) {
+          // Mark as completed - VirtFusion will handle the actual deletion over ~5 minutes
+          await dbStorage.completeCancellation(cancellation.id);
+          log(`Successfully submitted deletion for server ${cancellation.virtfusionServerId} to VirtFusion`, 'cancellation');
+          processed++;
+        } catch (error: any) {
+          // If VirtFusion says server not found (404), it's already deleted - mark complete
+          if (error.message?.includes('404')) {
             await dbStorage.completeCancellation(cancellation.id);
-            log(`Successfully deleted server ${cancellation.virtfusionServerId} and marked cancellation complete`, 'cancellation');
+            log(`Server ${cancellation.virtfusionServerId} already deleted in VirtFusion, marked complete`, 'cancellation');
             processed++;
           } else {
-            await dbStorage.markCancellationFailed(cancellation.id, 'VirtFusion deletion returned false');
-            log(`Failed to delete server ${cancellation.virtfusionServerId}: VirtFusion returned false`, 'cancellation');
+            const errorMessage = error.message || 'Unknown error';
+            await dbStorage.markCancellationFailed(cancellation.id, errorMessage);
+            log(`Error deleting server ${cancellation.virtfusionServerId}: ${errorMessage}`, 'cancellation');
             errors++;
           }
-        } catch (error: any) {
-          const errorMessage = error.message || 'Unknown error';
-          await dbStorage.markCancellationFailed(cancellation.id, errorMessage);
-          log(`Error deleting server ${cancellation.virtfusionServerId}: ${errorMessage}`, 'cancellation');
-          errors++;
         }
       }
     }
@@ -67,6 +70,9 @@ export function startCancellationProcessor(): void {
     if (!isRunning) return;
     
     try {
+      const pendingCount = (await dbStorage.getPendingCancellations()).length;
+      log(`Cancellation processor running: ${pendingCount} pending cancellations`, 'cancellation');
+      
       const { processed, errors } = await processExpiredCancellations();
       if (processed > 0 || errors > 0) {
         log(`Cancellation processor: ${processed} processed, ${errors} errors`, 'cancellation');
@@ -80,6 +86,7 @@ export function startCancellationProcessor(): void {
     }
   };
   
+  // Run immediately on startup, then every minute
   runProcessor();
 }
 
