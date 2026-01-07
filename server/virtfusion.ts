@@ -408,6 +408,9 @@ export class VirtFusionClient {
       const memory = remoteState.memory || {};
       const cpu = remoteState.cpu || {};
       
+      // Debug log to see actual data structure
+      log(`Server ${serverId} remoteState: ${JSON.stringify({ memory, cpu: remoteState.cpu, running: remoteState.running })}`, 'virtfusion');
+      
       // Calculate RAM usage from memory stats
       let ramUsage = 0;
       if (memory.memtotal && memory.memavailable) {
