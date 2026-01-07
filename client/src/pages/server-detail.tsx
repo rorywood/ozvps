@@ -653,16 +653,16 @@ export default function ServerDetail() {
   if (needsSetup && !reinstallTask.isActive) {
     return (
       <AppShell>
-        <div className="max-w-3xl mx-auto py-8 px-4 space-y-6">
+        <div className="py-6 space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-4">
             <Link href="/servers">
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-white hover:bg-white/5" data-testid="button-back-setup">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name}</h1>
+              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name || 'New Server'}</h1>
               <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
             </div>
           </div>
@@ -749,13 +749,12 @@ export default function ServerDetail() {
                     No operating systems found
                   </div>
                 ) : (
-                  <div className="max-h-80 overflow-y-auto pr-1">
-                    <Accordion 
-                      type="multiple" 
-                      value={setupExpandedGroups}
-                      onValueChange={setSetupExpandedGroups}
-                      className="space-y-2"
-                    >
+                  <Accordion 
+                    type="multiple" 
+                    value={setupExpandedGroups}
+                    onValueChange={setSetupExpandedGroups}
+                    className="space-y-3"
+                  >
                       {setupGroupedTemplates.map(({ category, templates }) => (
                         <AccordionItem 
                           key={category} 
@@ -828,8 +827,7 @@ export default function ServerDetail() {
                           </AccordionContent>
                         </AccordionItem>
                       ))}
-                    </Accordion>
-                  </div>
+                  </Accordion>
                 )}
               </div>
               

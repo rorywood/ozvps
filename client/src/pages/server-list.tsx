@@ -150,27 +150,35 @@ export default function ServerList() {
                     {(() => {
                       const displayStatus = getDisplayStatus(server.id, server.status);
                       const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
+                      const needsSetup = server.needsSetup === true;
                       return (
                         <>
                           <div className={cn(
                             "h-12 w-12 rounded-xl flex items-center justify-center border shadow-[0_0_15px_-3px_rgba(0,0,0,0.5)]",
                             server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 shadow-yellow-500/20" :
+                            needsSetup ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-blue-500/20" :
                             displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-green-500/20" : 
                             displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/20" :
                             "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
                           )}>
                             {isTransitioning ? (
                               <Loader2 className="h-6 w-6 animate-spin" />
+                            ) : needsSetup ? (
+                              <MonitorCog className="h-6 w-6" />
                             ) : (
                               <ServerIcon className="h-6 w-6" />
                             )}
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name}</h3>
+                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{server.name || 'New Server'}</h3>
                               {server.suspended ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
                                   SUSPENDED
+                                </span>
+                              ) : needsSetup ? (
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-blue-500/20 border-blue-500/30 text-blue-400">
+                                  NEEDS SETUP
                                 </span>
                               ) : (
                                 <span className={cn(
@@ -246,14 +254,20 @@ export default function ServerList() {
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Image</div>
                       <div className="text-white font-medium flex items-center gap-2">
-                        <img 
-                          src={getOsLogoUrlFromServer(server.image)} 
-                          alt="" 
-                          className="h-5 w-5 object-contain"
-                          loading="lazy"
-                          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                        />
-                        <span className="truncate max-w-[100px]">{server.image.name}</span>
+                        {server.needsSetup ? (
+                          <span className="text-blue-400 italic text-sm">No OS installed</span>
+                        ) : (
+                          <>
+                            <img 
+                              src={getOsLogoUrlFromServer(server.image)} 
+                              alt="" 
+                              className="h-5 w-5 object-contain"
+                              loading="lazy"
+                              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                            />
+                            <span className="truncate max-w-[100px]">{server.image?.name || 'Unknown'}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
