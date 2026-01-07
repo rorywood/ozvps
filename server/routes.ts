@@ -2192,10 +2192,11 @@ export async function registerRoutes(
       });
 
       // Transform Stripe invoices to our format
+      // Use inv.total for the amount since amount_paid can be 0 for out-of-band payments
       const invoices = stripeInvoices.data.map(inv => ({
         id: inv.id,
         invoiceNumber: inv.number || inv.id,
-        amountCents: inv.amount_paid || 0,
+        amountCents: inv.total || inv.amount_due || inv.amount_paid || 0,
         description: inv.description || 'Wallet Top-up',
         status: inv.status || 'paid',
         createdAt: new Date(inv.created * 1000).toISOString(),
