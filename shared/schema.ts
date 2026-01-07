@@ -101,18 +101,20 @@ export const deployOrders = pgTable("deploy_orders", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Server cancellation requests - 30-day grace period before deletion
+// Server cancellation requests - grace period (30 days) or immediate (5 mins) before deletion
 export const serverCancellations = pgTable("server_cancellations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull(),
   virtfusionServerId: text("virtfusion_server_id").notNull(),
   serverName: text("server_name"),
   reason: text("reason"),
-  status: text("status").notNull().default("pending"), // pending, revoked, completed
+  mode: text("mode").notNull().default("grace"), // grace (30 days), immediate (5 mins)
+  status: text("status").notNull().default("pending"), // pending, revoked, completed, failed
   requestedAt: timestamp("requested_at").defaultNow().notNull(),
   scheduledDeletionAt: timestamp("scheduled_deletion_at").notNull(),
   revokedAt: timestamp("revoked_at"),
   completedAt: timestamp("completed_at"),
+  errorMessage: text("error_message"), // stores error if deletion fails
 });
 
 // Relations
