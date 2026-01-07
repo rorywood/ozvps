@@ -1999,7 +1999,13 @@ export async function registerRoutes(
         log(`Soft-deleted wallet for Auth0 user ${auth0UserId}`, 'webhook');
       }
 
-      // 4. Cleanup VirtFusion user and servers
+      // 4. Cancel all pending orders for this user
+      const cancelledOrders = await dbStorage.cancelAllUserOrders(auth0UserId);
+      if (cancelledOrders > 0) {
+        log(`Cancelled ${cancelledOrders} orders for Auth0 user ${auth0UserId}`, 'webhook');
+      }
+
+      // 5. Cleanup VirtFusion user and servers
       if (virtFusionUserId) {
         const result = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
         

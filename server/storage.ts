@@ -539,6 +539,19 @@ export const dbStorage = {
     return updated;
   },
 
+  async cancelAllUserOrders(auth0UserId: string): Promise<number> {
+    const result = await db
+      .update(deployOrders)
+      .set({ 
+        status: 'cancelled',
+        errorMessage: 'User account deleted',
+        updatedAt: new Date() 
+      })
+      .where(eq(deployOrders.auth0UserId, auth0UserId))
+      .returning();
+    return result.length;
+  },
+
   // Combined: debit wallet + create order in transaction
   async createDeployWithDebit(
     auth0UserId: string,
