@@ -537,13 +537,28 @@ export const dbStorage = {
     priceCents: number,
     hostname?: string
   ): Promise<{ success: boolean; order?: DeployOrder; error?: string }> {
-    const wallet = await this.getOrCreateWallet(auth0UserId);
+    await this.getOrCreateWallet(auth0UserId);
     
-    if (wallet.balanceCents < priceCents) {
+    // SECURITY: Atomic balance check and deduction to prevent race conditions
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} - ${priceCents}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(wallets.auth0UserId, auth0UserId),
+          sql`${wallets.balanceCents} >= ${priceCents}`
+        )
+      )
+      .returning();
+    
+    if (!updated) {
       return { success: false, error: 'Insufficient balance' };
     }
 
-    // Create order first
+    // Create order after successful balance deduction
     const order = await this.createDeployOrder({
       auth0UserId,
       planId,
@@ -553,21 +568,13 @@ export const dbStorage = {
       status: 'paid',
     });
 
-    // Debit wallet
+    // Insert debit transaction
     await db.insert(walletTransactions).values({
       auth0UserId,
       type: 'debit',
       amountCents: -priceCents,
       metadata: { deployOrderId: order.id },
     });
-
-    await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} - ${priceCents}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.auth0UserId, auth0UserId));
 
     return { success: true, order };
   },
