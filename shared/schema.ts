@@ -68,6 +68,7 @@ export const wallets = pgTable("wallets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull().unique(),
   stripeCustomerId: text("stripe_customer_id").unique(),
+  virtFusionUserId: integer("virtfusion_user_id"),
   balanceCents: integer("balance_cents").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

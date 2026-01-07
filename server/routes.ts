@@ -319,9 +319,10 @@ export async function registerRoutes(
           },
         });
         
-        // Create wallet with Stripe customer linked
+        // Create wallet with Stripe customer and VirtFusion user linked
         const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
         await dbStorage.updateWalletStripeCustomerId(auth0UserId, customer.id);
+        await dbStorage.updateWalletVirtFusionUserId(auth0UserId, virtFusionUser.id);
         log(`Created Stripe customer ${customer.id} for new user ${auth0UserId}`, 'stripe');
       } catch (stripeError: any) {
         // Non-fatal: user can still register, Stripe customer will be created on first top-up
@@ -446,6 +447,23 @@ export async function registerRoutes(
       if (!virtFusionUserId || !extRelationId) {
         log(`VirtFusion account not fully linked for ${email} - virtFusionUserId: ${virtFusionUserId}, extRelationId: ${extRelationId}`, 'auth');
         // Continue with login - VirtFusion linking can be done later by admin
+      }
+      
+      // Ensure wallet has VirtFusion user ID for orphan cleanup
+      // Note: wallet uses auth0| prefixed user ID
+      const auth0UserIdPrefixed = auth0Result.user.user_id.startsWith('auth0|') 
+        ? auth0Result.user.user_id 
+        : `auth0|${auth0Result.user.user_id}`;
+      if (virtFusionUserId) {
+        try {
+          const wallet = await dbStorage.getWallet(auth0UserIdPrefixed);
+          if (wallet && !wallet.virtFusionUserId) {
+            await dbStorage.updateWalletVirtFusionUserId(auth0UserIdPrefixed, virtFusionUserId);
+            log(`Updated wallet with VirtFusion user ID ${virtFusionUserId}`, 'auth');
+          }
+        } catch (walletError: any) {
+          log(`Failed to update wallet VirtFusion ID: ${walletError.message}`, 'auth');
+        }
       }
 
       // Check if user is admin (from Auth0 app_metadata)
@@ -1303,6 +1321,14 @@ export async function registerRoutes(
 
       // Store the VirtFusion user ID in Auth0 metadata
       await auth0Client.setVirtFusionUserId(auth0UserId, vfUser.id);
+      
+      // Update wallet with VirtFusion user ID for orphan cleanup
+      try {
+        await dbStorage.updateWalletVirtFusionUserId(auth0UserId, vfUser.id);
+        log(`Updated wallet with VirtFusion user ID ${vfUser.id}`, 'admin');
+      } catch (walletError: any) {
+        log(`Failed to update wallet VirtFusion ID: ${walletError.message}`, 'admin');
+      }
 
       log(`Successfully linked VirtFusion user ${vfUser.id} (old extRelationId: ${oldExtRelationId}, new: ${newExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
 

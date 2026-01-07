@@ -1,16 +1,31 @@
 import { dbStorage } from "./storage";
 import { auth0Client } from "./auth0";
 import { getUncachableStripeClient } from "./stripeClient";
+import { virtfusionClient } from "./virtfusion";
 import { log } from "./index";
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Run every hour
 
 let isRunning = false;
 
-async function cleanupOrphanedUser(auth0UserId: string, stripeCustomerId: string | null): Promise<void> {
+async function cleanupOrphanedUser(auth0UserId: string, stripeCustomerId: string | null, virtFusionUserId: number | null): Promise<void> {
   log(`Cleaning up orphaned user ${auth0UserId}`, 'orphan-cleanup');
   
-  // 1. Delete Stripe customer if exists
+  // 1. Delete VirtFusion user and their servers
+  if (virtFusionUserId) {
+    try {
+      const result = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
+      if (result.success) {
+        log(`Deleted VirtFusion user ${virtFusionUserId} and ${result.serversDeleted} servers`, 'orphan-cleanup');
+      } else {
+        log(`VirtFusion cleanup had errors: ${result.errors.join(', ')}`, 'orphan-cleanup');
+      }
+    } catch (error: any) {
+      log(`Failed to cleanup VirtFusion user ${virtFusionUserId}: ${error.message}`, 'orphan-cleanup');
+    }
+  }
+  
+  // 2. Delete Stripe customer if exists
   if (stripeCustomerId) {
     try {
       const stripe = await getUncachableStripeClient();
@@ -25,11 +40,11 @@ async function cleanupOrphanedUser(auth0UserId: string, stripeCustomerId: string
     }
   }
   
-  // 2. Soft-delete wallet
+  // 3. Soft-delete wallet
   await dbStorage.softDeleteWallet(auth0UserId);
   log(`Soft-deleted wallet for ${auth0UserId}`, 'orphan-cleanup');
   
-  // 3. Cancel all orders
+  // 4. Cancel all orders
   const cancelledOrders = await dbStorage.cancelAllUserOrders(auth0UserId);
   if (cancelledOrders > 0) {
     log(`Cancelled ${cancelledOrders} orders for ${auth0UserId}`, 'orphan-cleanup');
@@ -52,7 +67,7 @@ export async function processOrphanedAccounts(): Promise<{ checked: number; clea
         
         if (!userExists) {
           log(`Found orphaned wallet for Auth0 user ${wallet.auth0UserId}`, 'orphan-cleanup');
-          await cleanupOrphanedUser(wallet.auth0UserId, wallet.stripeCustomerId);
+          await cleanupOrphanedUser(wallet.auth0UserId, wallet.stripeCustomerId, wallet.virtFusionUserId);
           cleaned++;
         }
       } catch (error: any) {
