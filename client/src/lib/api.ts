@@ -206,7 +206,7 @@ class ApiClient {
   
   // Get all pending cancellations for the current user (for badges on server list)
   async getAllCancellations(): Promise<{
-    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: 'grace' | 'immediate' }>;
+    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: 'grace' | 'immediate'; status: string }>;
   }> {
     const response = await fetch(`${this.baseUrl}/cancellations`);
     if (!response.ok) throw new Error('Failed to fetch cancellations');
@@ -504,6 +504,48 @@ class ApiClient {
   async getStripePublishableKey(): Promise<{ publishableKey: string }> {
     const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/stripe/publishable-key`);
     if (!response.ok) throw new Error('Failed to fetch Stripe publishable key');
+    return response.json();
+  }
+
+  async getAutoTopupSettings(): Promise<{
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/billing/auto-topup`);
+    if (!response.ok) throw new Error('Failed to fetch auto top-up settings');
+    return response.json();
+  }
+
+  async updateAutoTopupSettings(settings: {
+    enabled: boolean;
+    thresholdCents?: number;
+    amountCents?: number;
+    paymentMethodId?: string | null;
+  }): Promise<{
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/billing/auto-topup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update auto top-up settings');
+    }
+    return response.json();
+  }
+
+  async getServerBillingStatuses(): Promise<{
+    billing: Record<string, { status: string; overdueSince: Date | null }>;
+  }> {
+    const response = await fetch(`${this.baseUrl}/billing/servers`);
+    if (!response.ok) throw new Error('Failed to fetch server billing statuses');
     return response.json();
   }
 

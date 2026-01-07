@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -448,6 +448,73 @@ export const dbStorage = {
       .limit(limit);
   },
 
+  async deductBalance(
+    auth0UserId: string,
+    amountCents: number,
+    metadata?: Record<string, any>
+  ): Promise<boolean> {
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(wallets.auth0UserId, auth0UserId),
+          sql`${wallets.balanceCents} >= ${amountCents}`,
+          sql`${wallets.deletedAt} IS NULL`
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      return false;
+    }
+
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: metadata?.type || 'debit',
+      amountCents: -amountCents,
+      metadata: metadata || null,
+    });
+
+    return true;
+  },
+
+  async creditBalance(
+    auth0UserId: string,
+    amountCents: number,
+    metadata?: Record<string, any>
+  ): Promise<boolean> {
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(wallets.auth0UserId, auth0UserId),
+          sql`${wallets.deletedAt} IS NULL`
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      return false;
+    }
+
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: metadata?.type || 'credit',
+      amountCents,
+      metadata: metadata || null,
+    });
+
+    return true;
+  },
+
   // Admin: Get all wallets
   async getAllWallets(): Promise<Wallet[]> {
     return db
@@ -697,5 +764,129 @@ export const dbStorage = {
       .where(eq(serverCancellations.id, id))
       .returning();
     return updated;
+  },
+
+  // Auto top-up settings
+  async updateAutoTopupSettings(
+    auth0UserId: string,
+    settings: {
+      enabled: boolean;
+      thresholdCents?: number;
+      amountCents?: number;
+      paymentMethodId?: string | null;
+    }
+  ): Promise<Wallet | undefined> {
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        autoTopupEnabled: settings.enabled,
+        autoTopupThresholdCents: settings.thresholdCents,
+        autoTopupAmountCents: settings.amountCents,
+        autoTopupPaymentMethodId: settings.paymentMethodId,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async getWalletsNeedingTopup(): Promise<Wallet[]> {
+    return db
+      .select()
+      .from(wallets)
+      .where(
+        and(
+          eq(wallets.autoTopupEnabled, true),
+          sql`${wallets.balanceCents} <= ${wallets.autoTopupThresholdCents}`,
+          sql`${wallets.autoTopupPaymentMethodId} IS NOT NULL`,
+          sql`${wallets.deletedAt} IS NULL`
+        )
+      );
+  },
+
+  // Server Billing methods
+  async createServerBilling(data: InsertServerBilling): Promise<ServerBilling> {
+    const [billing] = await db.insert(serverBilling).values(data).returning();
+    return billing;
+  },
+
+  async getServerBilling(virtfusionServerId: string): Promise<ServerBilling | undefined> {
+    const [billing] = await db
+      .select()
+      .from(serverBilling)
+      .where(eq(serverBilling.virtfusionServerId, virtfusionServerId));
+    return billing;
+  },
+
+  async getServerBillingByUser(auth0UserId: string): Promise<ServerBilling[]> {
+    return db
+      .select()
+      .from(serverBilling)
+      .where(eq(serverBilling.auth0UserId, auth0UserId));
+  },
+
+  async getServersDueToBill(): Promise<ServerBilling[]> {
+    return db
+      .select()
+      .from(serverBilling)
+      .where(
+        and(
+          eq(serverBilling.status, 'active'),
+          sql`${serverBilling.nextBillingAt} <= NOW()`
+        )
+      );
+  },
+
+  async getOverdueServers(gracePeriodDays: number = 7): Promise<ServerBilling[]> {
+    return db
+      .select()
+      .from(serverBilling)
+      .where(
+        and(
+          eq(serverBilling.status, 'overdue'),
+          sql`${serverBilling.overdueSince} <= NOW() - INTERVAL '${gracePeriodDays} days'`
+        )
+      );
+  },
+
+  async updateServerBillingStatus(
+    virtfusionServerId: string,
+    status: string,
+    overdueSince?: Date | null
+  ): Promise<ServerBilling | undefined> {
+    const updates: any = { status, updatedAt: new Date() };
+    if (overdueSince !== undefined) {
+      updates.overdueSince = overdueSince;
+    }
+    const [updated] = await db
+      .update(serverBilling)
+      .set(updates)
+      .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
+      .returning();
+    return updated;
+  },
+
+  async markServerBilled(
+    virtfusionServerId: string,
+    nextBillingAt: Date
+  ): Promise<ServerBilling | undefined> {
+    const [updated] = await db
+      .update(serverBilling)
+      .set({
+        lastBilledAt: new Date(),
+        nextBillingAt,
+        status: 'active',
+        overdueSince: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
+      .returning();
+    return updated;
+  },
+
+  async deleteServerBilling(virtfusionServerId: string): Promise<void> {
+    await db
+      .delete(serverBilling)
+      .where(eq(serverBilling.virtfusionServerId, virtfusionServerId));
   },
 };

@@ -11,7 +11,8 @@ import {
   Loader2,
   ExternalLink,
   Clock,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,15 @@ export default function Dashboard() {
   });
   
   const pendingCancellations = cancellationsData?.cancellations || {};
+
+  // Fetch billing statuses for all servers (for overdue badges)
+  const { data: billingData } = useQuery({
+    queryKey: ['server-billing-statuses'],
+    queryFn: () => api.getServerBillingStatuses(),
+    refetchInterval: 30000,
+  });
+  
+  const serverBillingStatuses = billingData?.billing || {};
 
   useSyncPowerActions(servers);
 
@@ -183,6 +193,15 @@ export default function Dashboard() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-medium text-white group-hover:text-primary transition-colors">{server.name}</h3>
+                          {serverBillingStatuses[server.id]?.status === 'overdue' && (
+                            <span 
+                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-amber-500/20 border-amber-500/30 text-amber-400 flex items-center gap-1"
+                              data-testid={`badge-overdue-${server.id}`}
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              PAYMENT OVERDUE
+                            </span>
+                          )}
                           {pendingCancellations[server.id] && (
                             pendingCancellations[server.id].status === 'processing' ? (
                               <span 

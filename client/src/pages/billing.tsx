@@ -19,8 +19,12 @@ import {
   Copy,
   ArrowUpRight,
   ArrowDownLeft,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +84,7 @@ const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000];
 
 // Card element styling for dark theme
 const cardElementOptions = {
+  hidePostalCode: true,
   style: {
     base: {
       fontSize: '16px',
@@ -200,6 +205,183 @@ function AddCardFormInner({
         </DialogFooter>
       </div>
     </form>
+  );
+}
+
+function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: autoTopupData, isLoading } = useQuery({
+    queryKey: ['auto-topup'],
+    queryFn: () => api.getAutoTopupSettings(),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (settings: {
+      enabled: boolean;
+      thresholdCents?: number;
+      amountCents?: number;
+      paymentMethodId?: string | null;
+    }) => api.updateAutoTopupSettings(settings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auto-topup'] });
+      toast({
+        title: "Settings Updated",
+        description: "Your auto top-up settings have been saved.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update settings",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleToggle = (enabled: boolean) => {
+    if (enabled && paymentMethods.length === 0) {
+      toast({
+        title: "Add a Payment Method",
+        description: "Please add a card before enabling auto top-up.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const pmId = enabled ? (autoTopupData?.paymentMethodId || paymentMethods[0]?.id) : null;
+    updateMutation.mutate({
+      enabled,
+      thresholdCents: autoTopupData?.thresholdCents || 500,
+      amountCents: autoTopupData?.amountCents || 2000,
+      paymentMethodId: pmId,
+    });
+  };
+
+  const handleThresholdChange = (value: string) => {
+    const cents = parseInt(value) * 100;
+    updateMutation.mutate({
+      enabled: autoTopupData?.enabled || false,
+      thresholdCents: cents,
+      amountCents: autoTopupData?.amountCents || 2000,
+      paymentMethodId: autoTopupData?.paymentMethodId,
+    });
+  };
+
+  const handleAmountChange = (value: string) => {
+    const cents = parseInt(value) * 100;
+    updateMutation.mutate({
+      enabled: autoTopupData?.enabled || false,
+      thresholdCents: autoTopupData?.thresholdCents || 500,
+      amountCents: cents,
+      paymentMethodId: autoTopupData?.paymentMethodId,
+    });
+  };
+
+  const handlePaymentMethodChange = (pmId: string) => {
+    updateMutation.mutate({
+      enabled: autoTopupData?.enabled || false,
+      thresholdCents: autoTopupData?.thresholdCents || 500,
+      amountCents: autoTopupData?.amountCents || 2000,
+      paymentMethodId: pmId,
+    });
+  };
+
+  const selectedPm = paymentMethods.find(pm => pm.id === autoTopupData?.paymentMethodId);
+
+  return (
+    <GlassCard className="p-6" data-testid="auto-topup-section">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+            <Zap className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">Auto Top-Up</h3>
+            <p className="text-sm text-muted-foreground">Automatically add funds</p>
+          </div>
+        </div>
+        <Switch
+          checked={autoTopupData?.enabled ?? false}
+          onCheckedChange={handleToggle}
+          disabled={isLoading || updateMutation.isPending}
+          data-testid="switch-auto-topup"
+        />
+      </div>
+
+      {autoTopupData?.enabled && (
+        <div className="space-y-4 pt-4 border-t border-white/10">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">When balance drops below</Label>
+              <Select
+                value={String((autoTopupData?.thresholdCents || 500) / 100)}
+                onValueChange={handleThresholdChange}
+                disabled={updateMutation.isPending}
+              >
+                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-threshold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">$5</SelectItem>
+                  <SelectItem value="10">$10</SelectItem>
+                  <SelectItem value="20">$20</SelectItem>
+                  <SelectItem value="50">$50</SelectItem>
+                  <SelectItem value="100">$100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Top-up amount</Label>
+              <Select
+                value={String((autoTopupData?.amountCents || 2000) / 100)}
+                onValueChange={handleAmountChange}
+                disabled={updateMutation.isPending}
+              >
+                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-amount">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">$10</SelectItem>
+                  <SelectItem value="20">$20</SelectItem>
+                  <SelectItem value="50">$50</SelectItem>
+                  <SelectItem value="100">$100</SelectItem>
+                  <SelectItem value="200">$200</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Payment method</Label>
+            {paymentMethods.length === 0 ? (
+              <p className="text-sm text-yellow-500">No payment methods available</p>
+            ) : (
+              <Select
+                value={autoTopupData?.paymentMethodId || paymentMethods[0]?.id}
+                onValueChange={handlePaymentMethodChange}
+                disabled={updateMutation.isPending}
+              >
+                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-payment-method">
+                  <SelectValue>
+                    {selectedPm ? `•••• ${selectedPm.last4}` : 'Select card'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentMethods.map(pm => (
+                    <SelectItem key={pm.id} value={pm.id}>
+                      {pm.brand} •••• {pm.last4}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
+      )}
+    </GlassCard>
   );
 }
 
@@ -724,6 +906,8 @@ export default function BillingPage() {
                   </div>
                 )}
               </GlassCard>
+
+              <AutoTopupSection paymentMethods={paymentMethods} />
 
               <GlassCard className="p-6">
                 <h4 className="font-medium text-white mb-3">Need Help?</h4>

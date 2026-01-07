@@ -70,6 +70,10 @@ export const wallets = pgTable("wallets", {
   stripeCustomerId: text("stripe_customer_id").unique(),
   virtFusionUserId: integer("virtfusion_user_id"),
   balanceCents: integer("balance_cents").notNull().default(0),
+  autoTopupEnabled: boolean("auto_topup_enabled").default(false).notNull(),
+  autoTopupThresholdCents: integer("auto_topup_threshold_cents").default(500),
+  autoTopupAmountCents: integer("auto_topup_amount_cents").default(2000),
+  autoTopupPaymentMethodId: text("auto_topup_payment_method_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -99,6 +103,21 @@ export const deployOrders = pgTable("deploy_orders", {
   status: text("status").notNull().default("pending_payment"), // pending_payment, paid, provisioning, active, failed, cancelled
   virtfusionServerId: integer("virtfusion_server_id"),
   errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Server billing status - tracks billing state for each server
+export const serverBilling = pgTable("server_billing", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  virtfusionServerId: text("virtfusion_server_id").notNull().unique(),
+  planId: integer("plan_id").notNull(),
+  status: text("status").notNull().default("active"), // active, overdue, suspended, cancelled
+  lastBilledAt: timestamp("last_billed_at"),
+  nextBillingAt: timestamp("next_billing_at").notNull(),
+  overdueAt: timestamp("overdue_at"),
+  overdueSince: timestamp("overdue_since"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -143,6 +162,7 @@ export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, creat
 export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
 export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
 
 // Types
@@ -154,6 +174,8 @@ export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
 export type DeployOrder = typeof deployOrders.$inferSelect;
 export type InsertDeployOrder = z.infer<typeof insertDeployOrderSchema>;
+export type ServerBilling = typeof serverBilling.$inferSelect;
+export type InsertServerBilling = z.infer<typeof insertServerBillingSchema>;
 export type ServerCancellation = typeof serverCancellations.$inferSelect;
 export type InsertServerCancellation = z.infer<typeof insertServerCancellationSchema>;
 

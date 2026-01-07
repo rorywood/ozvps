@@ -866,6 +866,28 @@ export async function registerRoutes(
     }
   });
   
+  // Get billing statuses for all user's servers (for showing overdue badges)
+  app.get('/api/billing/servers', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const billingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
+      
+      // Return as a map of serverId -> billing status
+      const billingMap: Record<string, { status: string; overdueSince: Date | null }> = {};
+      for (const b of billingRecords) {
+        billingMap[b.virtfusionServerId] = {
+          status: b.status,
+          overdueSince: b.overdueSince,
+        };
+      }
+      
+      res.json({ billing: billingMap });
+    } catch (error: any) {
+      log(`Error fetching server billing statuses: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch billing statuses' });
+    }
+  });
+  
   app.get('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;
@@ -1582,6 +1604,93 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error fetching transactions: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+  });
+
+  // Get auto top-up settings (authenticated)
+  app.get('/api/billing/auto-topup', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      if (!wallet) {
+        return res.json({
+          enabled: false,
+          thresholdCents: 500,
+          amountCents: 2000,
+          paymentMethodId: null,
+        });
+      }
+
+      res.json({
+        enabled: wallet.autoTopupEnabled,
+        thresholdCents: wallet.autoTopupThresholdCents || 500,
+        amountCents: wallet.autoTopupAmountCents || 2000,
+        paymentMethodId: wallet.autoTopupPaymentMethodId,
+      });
+    } catch (error: any) {
+      log(`Error fetching auto top-up settings: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch auto top-up settings' });
+    }
+  });
+
+  // Update auto top-up settings (authenticated)
+  app.post('/api/billing/auto-topup', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const { enabled, thresholdCents, amountCents, paymentMethodId } = req.body;
+      
+      if (enabled && !paymentMethodId) {
+        return res.status(400).json({ error: 'Payment method is required to enable auto top-up' });
+      }
+
+      if (thresholdCents !== undefined && (thresholdCents < 100 || thresholdCents > 10000)) {
+        return res.status(400).json({ error: 'Threshold must be between $1 and $100' });
+      }
+
+      if (amountCents !== undefined && (amountCents < 500 || amountCents > 50000)) {
+        return res.status(400).json({ error: 'Top-up amount must be between $5 and $500' });
+      }
+
+      if (enabled && paymentMethodId) {
+        const stripe = await getUncachableStripeClient();
+        const wallet = await dbStorage.getWallet(auth0UserId);
+        if (wallet?.stripeCustomerId) {
+          const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+          if (pm.customer !== wallet.stripeCustomerId) {
+            return res.status(403).json({ error: 'Payment method does not belong to this account' });
+          }
+        }
+      }
+
+      const updated = await dbStorage.updateAutoTopupSettings(auth0UserId, {
+        enabled: enabled ?? false,
+        thresholdCents: thresholdCents ?? 500,
+        amountCents: amountCents ?? 2000,
+        paymentMethodId: enabled ? paymentMethodId : null,
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Wallet not found' });
+      }
+
+      log(`Updated auto top-up settings for ${auth0UserId}: enabled=${enabled}`, 'billing');
+      res.json({
+        enabled: updated.autoTopupEnabled,
+        thresholdCents: updated.autoTopupThresholdCents,
+        amountCents: updated.autoTopupAmountCents,
+        paymentMethodId: updated.autoTopupPaymentMethodId,
+      });
+    } catch (error: any) {
+      log(`Error updating auto top-up settings: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update auto top-up settings' });
     }
   });
 

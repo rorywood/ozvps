@@ -15,7 +15,8 @@ import {
   AlertCircle,
   ExternalLink,
   Square,
-  MonitorCog
+  MonitorCog,
+  AlertTriangle
 } from "lucide-react";
 import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,15 @@ export default function ServerList() {
   });
   
   const pendingCancellations = cancellationsData?.cancellations || {};
+
+  // Fetch billing statuses for all servers (for overdue badges)
+  const { data: billingData } = useQuery({
+    queryKey: ['server-billing-statuses'],
+    queryFn: () => api.getServerBillingStatuses(),
+    refetchInterval: 30000,
+  });
+  
+  const serverBillingStatuses = billingData?.billing || {};
 
   useSyncPowerActions(servers);
 
@@ -170,6 +180,15 @@ export default function ServerList() {
                                   "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
                                 )}>
                                   {displayStatus}
+                                </span>
+                              )}
+                              {serverBillingStatuses[server.id]?.status === 'overdue' && (
+                                <span 
+                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-amber-500/20 border-amber-500/30 text-amber-400 flex items-center gap-1"
+                                  data-testid={`badge-overdue-${server.id}`}
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  PAYMENT OVERDUE
                                 </span>
                               )}
                               {pendingCancellations[server.id] && (

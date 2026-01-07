@@ -7,10 +7,11 @@ import { registerRoutes } from "./routes";
 import { registerInstallAssets } from "./install-assets";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { getStripeSync } from "./stripeClient";
+import { getStripeSync, getUncachableStripeClient } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { startCancellationProcessor } from "./cancellation-processor";
 import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
+import { startBillingProcessor } from "./billing-processor";
 
 const app = express();
 const httpServer = createServer(app);
@@ -259,6 +260,11 @@ app.use((req, res, next) => {
       
       // Start background job for cleaning up orphaned accounts (deleted Auth0 users)
       startOrphanCleanupProcessor();
+      
+      // Start background job for server billing and auto top-ups
+      getUncachableStripeClient()
+        .then(stripe => startBillingProcessor(stripe))
+        .catch(() => startBillingProcessor(null));
     },
   );
 })();

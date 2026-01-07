@@ -31,11 +31,12 @@ Preferred communication style: Simple, everyday language.
 - **VPS Management**: Create, delete, and manage VPS instances.
 - **Two-Phase Deployment**: Servers are created instantly without OS, then users complete setup via wizard on the server detail page. This separates "ordering" from "setup" for better UX.
 - **Setup Wizard**: When a server needs setup (`needsSetup: true`), the server detail page shows a wizard for selecting OS and hostname.
-- **Billing**: Wallet top-up via Stripe, transaction history, and saved payment methods.
+- **Billing**: Wallet top-up via Stripe, transaction history, and saved payment methods. Includes auto top-up feature that automatically charges a saved card when balance falls below a configurable threshold.
 - **Console Access**: Embedded VNC console for server interaction.
 - **Server Reinstall**: Streamlined process for reinstalling server OS.
 - **Admin Tools**: User management, credit adjustment, and account linking for administrators.
 - **Dual-Mode Server Cancellation**: Two deletion modes: (1) Grace period (30 days) allows revocation, (2) Immediate deletion (5 minutes, non-revocable). Both automated via background job (`cancellation-processor.ts`) that runs every 30 seconds. Immediate mode shows locked "Deletion In Progress" screen on server detail, and "DELETING" badge with spinner on dashboard/server list. Grace mode shows "PENDING CANCELLATION" badge.
+- **Recurring Server Billing**: Background billing processor (`billing-processor.ts`) runs hourly. Charges servers daily (plan.priceMonthly/30), processes auto top-ups when balance falls below threshold, marks servers overdue after failed billing. Servers overdue for 7+ days are automatically scheduled for immediate deletion. Overdue servers display "PAYMENT OVERDUE" badge on dashboard and server list.
 
 ### System Design Choices
 - **VirtFusion Integration**: Backend proxies all requests to VirtFusion, ensuring API key security. VirtFusion `hypervisorId` parameter is used for server creation but requires the hypervisor *group* ID.
