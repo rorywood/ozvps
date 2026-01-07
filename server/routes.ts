@@ -1497,6 +1497,15 @@ export async function registerRoutes(
 
   // ================== Admin VirtFusion Management Routes ==================
   
+  // Middleware to require admin access - chains with authMiddleware
+  const requireAdmin: RequestHandler = (req, res, next) => {
+    if (!req.userSession?.isAdmin) {
+      log(`Unauthorized admin access attempt by ${req.userSession?.email || 'unknown'}`, 'security');
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+  };
+  
   // Helper to create audit log entries
   async function auditLog(
     req: any,
@@ -1531,11 +1540,8 @@ export async function registerRoutes(
   }
 
   // Get all servers with owner info (admin)
-  app.get('/api/admin/vf/servers', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/servers', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const servers = await virtfusionClient.getAllServersWithOwners();
       res.json({ servers, total: servers.length });
     } catch (error: any) {
@@ -1545,11 +1551,8 @@ export async function registerRoutes(
   });
 
   // Get server details (admin)
-  app.get('/api/admin/vf/servers/:serverId', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/servers/:serverId', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId } = req.params;
       const server = await virtfusionClient.getServer(serverId);
       if (!server) {
@@ -1563,11 +1566,8 @@ export async function registerRoutes(
   });
 
   // Admin power action on server
-  app.post('/api/admin/vf/servers/:serverId/power/:action', authMiddleware, async (req, res) => {
+  app.post('/api/admin/vf/servers/:serverId/power/:action', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId, action } = req.params;
       const { reason } = req.body;
       
@@ -1586,11 +1586,8 @@ export async function registerRoutes(
   });
 
   // Suspend server (admin)
-  app.post('/api/admin/vf/servers/:serverId/suspend', authMiddleware, async (req, res) => {
+  app.post('/api/admin/vf/servers/:serverId/suspend', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId } = req.params;
       const { reason } = req.body;
       
@@ -1612,11 +1609,8 @@ export async function registerRoutes(
   });
 
   // Unsuspend server (admin)
-  app.post('/api/admin/vf/servers/:serverId/unsuspend', authMiddleware, async (req, res) => {
+  app.post('/api/admin/vf/servers/:serverId/unsuspend', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId } = req.params;
       const { reason } = req.body;
       
@@ -1634,11 +1628,8 @@ export async function registerRoutes(
   });
 
   // Delete server (admin) - requires reason
-  app.delete('/api/admin/vf/servers/:serverId', authMiddleware, async (req, res) => {
+  app.delete('/api/admin/vf/servers/:serverId', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId } = req.params;
       const { reason } = req.body;
       
@@ -1660,11 +1651,8 @@ export async function registerRoutes(
   });
 
   // Transfer server ownership (admin)
-  app.post('/api/admin/vf/servers/:serverId/transfer', authMiddleware, async (req, res) => {
+  app.post('/api/admin/vf/servers/:serverId/transfer', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { serverId } = req.params;
       const { newOwnerId, reason } = req.body;
       
@@ -1689,11 +1677,8 @@ export async function registerRoutes(
   });
 
   // Get all hypervisors (admin)
-  app.get('/api/admin/vf/hypervisors', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/hypervisors', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const hypervisors = await virtfusionClient.getHypervisors();
       res.json({ hypervisors, total: hypervisors.length });
     } catch (error: any) {
@@ -1703,11 +1688,8 @@ export async function registerRoutes(
   });
 
   // Get single hypervisor details (admin)
-  app.get('/api/admin/vf/hypervisors/:hypervisorId', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/hypervisors/:hypervisorId', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { hypervisorId } = req.params;
       const hypervisor = await virtfusionClient.getHypervisor(parseInt(hypervisorId));
       if (!hypervisor) {
@@ -1720,11 +1702,8 @@ export async function registerRoutes(
   });
 
   // Get IP blocks (admin)
-  app.get('/api/admin/vf/ip-blocks', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/ip-blocks', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const ipBlocks = await virtfusionClient.getIpBlocks();
       res.json({ ipBlocks, total: ipBlocks.length });
     } catch (error: any) {
@@ -1734,11 +1713,8 @@ export async function registerRoutes(
   });
 
   // Get IP allocations (admin)
-  app.get('/api/admin/vf/ip-allocations', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/ip-allocations', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const allocations = await virtfusionClient.getIpAllocations();
       res.json({ allocations, total: allocations.length });
     } catch (error: any) {
@@ -1748,11 +1724,8 @@ export async function registerRoutes(
   });
 
   // Get VirtFusion users (admin)
-  app.get('/api/admin/vf/users', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/users', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const result = await virtfusionClient.getAllUsers(page, limit);
@@ -1764,11 +1737,8 @@ export async function registerRoutes(
   });
 
   // Get VirtFusion user by ID (admin)
-  app.get('/api/admin/vf/users/:userId', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { userId } = req.params;
       const user = await virtfusionClient.getUserById(parseInt(userId));
       if (!user) {
@@ -1782,11 +1752,8 @@ export async function registerRoutes(
   });
 
   // Delete VirtFusion user (admin) - requires reason
-  app.delete('/api/admin/vf/users/:userId', authMiddleware, async (req, res) => {
+  app.delete('/api/admin/vf/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { userId } = req.params;
       const { reason, deleteServers } = req.body;
       
@@ -1810,11 +1777,8 @@ export async function registerRoutes(
   });
 
   // Get packages from VirtFusion (admin)
-  app.get('/api/admin/vf/packages', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/packages', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const packages = await virtfusionClient.getPackages();
       res.json({ packages, total: packages.length });
     } catch (error: any) {
@@ -1824,11 +1788,8 @@ export async function registerRoutes(
   });
 
   // Get OS templates for package (admin)
-  app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const { packageId } = req.params;
       const templates = await virtfusionClient.getOsTemplatesForPackage(parseInt(packageId));
       res.json({ templates });
@@ -1838,12 +1799,8 @@ export async function registerRoutes(
   });
 
   // Get admin audit logs
-  app.get('/api/admin/audit-logs', authMiddleware, async (req, res) => {
+  app.get('/api/admin/audit-logs', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-      
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       const action = req.query.action as string | undefined;
@@ -1859,12 +1816,8 @@ export async function registerRoutes(
   });
 
   // Admin dashboard stats
-  app.get('/api/admin/vf/stats', authMiddleware, async (req, res) => {
+  app.get('/api/admin/vf/stats', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-      
       const [servers, hypervisors, ipBlocks, wallets] = await Promise.all([
         virtfusionClient.getAllServersWithOwners(),
         virtfusionClient.getHypervisors(),
