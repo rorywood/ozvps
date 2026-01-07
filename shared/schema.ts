@@ -101,6 +101,20 @@ export const deployOrders = pgTable("deploy_orders", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Server cancellation requests - 30-day grace period before deletion
+export const serverCancellations = pgTable("server_cancellations", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  virtfusionServerId: text("virtfusion_server_id").notNull(),
+  serverName: text("server_name"),
+  reason: text("reason"),
+  status: text("status").notNull().default("pending"), // pending, revoked, completed
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  scheduledDeletionAt: timestamp("scheduled_deletion_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  completedAt: timestamp("completed_at"),
+});
+
 // Relations
 export const walletsRelations = relations(wallets, ({ many }) => ({
   transactions: many(walletTransactions),
@@ -125,6 +139,7 @@ export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, creat
 export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
 export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -135,6 +150,8 @@ export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
 export type DeployOrder = typeof deployOrders.$inferSelect;
 export type InsertDeployOrder = z.infer<typeof insertDeployOrderSchema>;
+export type ServerCancellation = typeof serverCancellations.$inferSelect;
+export type InsertServerCancellation = z.infer<typeof insertServerCancellationSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),

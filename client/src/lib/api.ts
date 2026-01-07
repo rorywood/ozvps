@@ -202,6 +202,50 @@ class ApiClient {
     return response.json();
   }
 
+  // Server Cancellation endpoints
+  async getCancellationStatus(id: string): Promise<{
+    cancellation: {
+      id: number;
+      auth0UserId: string;
+      virtfusionServerId: string;
+      serverName: string | null;
+      reason: string | null;
+      status: string;
+      requestedAt: string;
+      scheduledDeletionAt: string;
+      revokedAt: string | null;
+      completedAt: string | null;
+    } | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`);
+    if (!response.ok) throw new Error('Failed to fetch cancellation status');
+    return response.json();
+  }
+
+  async requestCancellation(id: string, reason?: string): Promise<{ success: boolean; cancellation: any }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to request cancellation');
+    }
+    return response.json();
+  }
+
+  async revokeCancellation(id: string): Promise<{ success: boolean; cancellation: any }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to revoke cancellation');
+    }
+    return response.json();
+  }
+
   async getConsoleUrl(id: string): Promise<{ 
     url?: string;
     authUrl?: string;

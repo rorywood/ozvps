@@ -799,6 +799,97 @@ export async function registerRoutes(
     }
   });
 
+  // Server Cancellation endpoints
+  app.get('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const session = req.userSession!;
+      
+      // Verify server ownership
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+      
+      // Get pending cancellation for this server
+      const cancellation = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
+      
+      res.json({ cancellation: cancellation || null });
+    } catch (error: any) {
+      log(`Error fetching cancellation status for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch cancellation status' });
+    }
+  });
+
+  app.post('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const session = req.userSession!;
+      const { reason } = req.body;
+      
+      // Verify server ownership
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+      
+      // Check if server is already cancelled
+      const existing = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
+      if (existing) {
+        return res.status(400).json({ error: 'Server already has a pending cancellation request' });
+      }
+      
+      // Calculate scheduled deletion date (30 days from now)
+      const scheduledDeletionAt = new Date();
+      scheduledDeletionAt.setDate(scheduledDeletionAt.getDate() + 30);
+      
+      const cancellation = await dbStorage.createCancellationRequest({
+        auth0UserId: session.auth0UserId!,
+        virtfusionServerId: serverId,
+        serverName: server.name,
+        reason: reason || null,
+        status: 'pending',
+        scheduledDeletionAt,
+      });
+      
+      log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
+      
+      res.json({ success: true, cancellation });
+    } catch (error: any) {
+      log(`Error requesting cancellation for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to request cancellation' });
+    }
+  });
+
+  app.delete('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const session = req.userSession!;
+      
+      // Verify server ownership
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+      
+      // Get pending cancellation
+      const cancellation = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
+      if (!cancellation) {
+        return res.status(404).json({ error: 'No pending cancellation found' });
+      }
+      
+      // Revoke the cancellation
+      const revoked = await dbStorage.revokeCancellationRequest(cancellation.id);
+      
+      log(`Cancellation revoked for server ${serverId} by user ${session.auth0UserId}`, 'api');
+      
+      res.json({ success: true, cancellation: revoked });
+    } catch (error: any) {
+      log(`Error revoking cancellation for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to revoke cancellation' });
+    }
+  });
+
   app.post('/api/servers/:id/console-url', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;

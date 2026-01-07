@@ -31,7 +31,9 @@ import {
   AlertTriangle,
   Clock,
   Settings,
-  Rocket
+  Rocket,
+  Trash2,
+  XCircle
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -85,6 +87,9 @@ export default function ServerDetail() {
   const [setupOsSearchQuery, setSetupOsSearchQuery] = useState("");
   const [setupSelectedCategory, setSetupSelectedCategory] = useState<string>("All");
   
+  // Cancellation state
+  const [cancellationReason, setCancellationReason] = useState<string>("");
+  
   const reinstallTask = useReinstallTask(serverId || '');
 
   const { data: server, isLoading, isError } = useQuery({
@@ -116,6 +121,13 @@ export default function ServerDetail() {
   const { data: trafficData, isFetching: isTrafficFetching, refetch: refetchTraffic } = useQuery({
     queryKey: ['traffic', serverId],
     queryFn: () => api.getTrafficHistory(serverId || ''),
+    enabled: !!serverId
+  });
+  
+  // Fetch cancellation status
+  const { data: cancellationData, refetch: refetchCancellation } = useQuery({
+    queryKey: ['cancellation', serverId],
+    queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId
   });
 
@@ -258,6 +270,45 @@ export default function ServerDetail() {
       toast({
         title: "Setup Failed",
         description: "Failed to start server setup. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Cancellation mutations
+  const requestCancellationMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string, reason?: string }) =>
+      api.requestCancellation(id, reason),
+    onSuccess: () => {
+      setCancellationReason("");
+      refetchCancellation();
+      toast({
+        title: "Cancellation Requested",
+        description: "Your server will be deleted in 30 days. You can revoke this at any time.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancellation Failed",
+        description: error.message || "Failed to request cancellation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  const revokeCancellationMutation = useMutation({
+    mutationFn: (id: string) => api.revokeCancellation(id),
+    onSuccess: () => {
+      refetchCancellation();
+      toast({
+        title: "Cancellation Revoked",
+        description: "Your server cancellation has been revoked. Your server will remain active.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Revoke Failed",
+        description: error.message || "Failed to revoke cancellation. Please try again.",
         variant: "destructive",
       });
     }
@@ -1008,7 +1059,7 @@ export default function ServerDetail() {
         <Tabs defaultValue="statistics" className="space-y-6">
           <div className="border-b border-white/10">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
-              {["Statistics", "IP Management", "Reinstallation"].map(tab => (
+              {["Statistics", "IP Management", "Reinstallation", "Cancellation"].map(tab => (
                  <TabsTrigger 
                     key={tab} 
                     value={tab.toLowerCase().replace(' ', '-')}
@@ -1385,6 +1436,158 @@ export default function ServerDetail() {
                     </p>
                   )}
                 </div>
+              </div>
+            </GlassCard>
+          </TabsContent>
+
+          {/* Cancellation Tab */}
+          <TabsContent value="cancellation" className="space-y-4 animate-in fade-in duration-300">
+            <GlassCard className="p-6">
+              <div className="space-y-6">
+                {cancellationData?.cancellation ? (
+                  // Show existing cancellation request
+                  <>
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 rounded-lg bg-red-500/20">
+                        <Calendar className="h-6 w-6 text-red-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-1">Cancellation Scheduled</h3>
+                        <p className="text-sm text-muted-foreground">
+                          This server is scheduled for deletion on{' '}
+                          <span className="text-red-400 font-medium">
+                            {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5" />
+                        <div>
+                          <div className="font-medium text-yellow-400">Days Remaining</div>
+                          <div className="text-sm text-yellow-400/80">
+                            {Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days until deletion
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {cancellationData.cancellation.reason && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground block mb-2">Reason for Cancellation</label>
+                        <div className="p-3 bg-white/5 rounded-md border border-white/10">
+                          <span className="text-white text-sm">{cancellationData.cancellation.reason}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="pt-4 border-t border-white/10">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Changed your mind? You can revoke the cancellation request and keep your server.
+                      </p>
+                      <Button 
+                        variant="outline"
+                        className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                        onClick={() => serverId && revokeCancellationMutation.mutate(serverId)}
+                        disabled={revokeCancellationMutation.isPending}
+                        data-testid="button-revoke-cancellation"
+                      >
+                        {revokeCancellationMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Revoking...
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Revoke Cancellation
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  // Show cancellation request form
+                  <>
+                    <div>
+                      <h3 className="text-lg font-bold text-white mb-2">Request Server Cancellation</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Request to cancel this server. After requesting cancellation, your server will remain active
+                        for 30 days before being permanently deleted. You can revoke the cancellation at any time
+                        during this period.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+                        <div>
+                          <div className="font-medium text-red-400">30-Day Grace Period</div>
+                          <div className="text-sm text-red-400/80">
+                            After the grace period ends, all data will be permanently deleted and cannot be recovered.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium text-white mb-2 block">
+                          Reason for Cancellation (Optional)
+                        </Label>
+                        <Input
+                          value={cancellationReason}
+                          onChange={(e) => setCancellationReason(e.target.value)}
+                          placeholder="e.g., No longer needed, switching providers..."
+                          className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                          data-testid="input-cancellation-reason"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Help us improve by sharing why you're cancelling.
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        className={cn(
+                          "text-white",
+                          isSuspended 
+                            ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                            : "bg-red-600 hover:bg-red-700"
+                        )}
+                        onClick={() => serverId && requestCancellationMutation.mutate({ 
+                          id: serverId, 
+                          reason: cancellationReason || undefined 
+                        })}
+                        disabled={isSuspended || requestCancellationMutation.isPending}
+                        data-testid="button-request-cancellation"
+                      >
+                        {requestCancellationMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Requesting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Request Cancellation
+                          </>
+                        )}
+                      </Button>
+                      {isSuspended && (
+                        <p className="text-sm text-yellow-400/80 mt-2">
+                          Contact support to cancel a suspended server.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </GlassCard>
           </TabsContent>

@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -537,5 +537,59 @@ export const dbStorage = {
       .where(eq(wallets.auth0UserId, auth0UserId));
 
     return { success: true, order };
+  },
+
+  // Server Cancellation methods
+  async createCancellationRequest(data: InsertServerCancellation): Promise<ServerCancellation> {
+    const [cancellation] = await db.insert(serverCancellations).values(data).returning();
+    return cancellation;
+  },
+
+  async getCancellationByServerId(virtfusionServerId: string, auth0UserId: string): Promise<ServerCancellation | undefined> {
+    const [cancellation] = await db
+      .select()
+      .from(serverCancellations)
+      .where(
+        and(
+          eq(serverCancellations.virtfusionServerId, virtfusionServerId),
+          eq(serverCancellations.auth0UserId, auth0UserId),
+          eq(serverCancellations.status, 'pending')
+        )
+      );
+    return cancellation;
+  },
+
+  async revokeCancellationRequest(id: number): Promise<ServerCancellation | undefined> {
+    const [updated] = await db
+      .update(serverCancellations)
+      .set({ status: 'revoked', revokedAt: new Date() })
+      .where(eq(serverCancellations.id, id))
+      .returning();
+    return updated;
+  },
+
+  async getPendingCancellations(): Promise<ServerCancellation[]> {
+    return db
+      .select()
+      .from(serverCancellations)
+      .where(eq(serverCancellations.status, 'pending'))
+      .orderBy(serverCancellations.scheduledDeletionAt);
+  },
+
+  async completeCancellation(id: number): Promise<ServerCancellation | undefined> {
+    const [updated] = await db
+      .update(serverCancellations)
+      .set({ status: 'completed', completedAt: new Date() })
+      .where(eq(serverCancellations.id, id))
+      .returning();
+    return updated;
+  },
+
+  async getUserCancellations(auth0UserId: string): Promise<ServerCancellation[]> {
+    return db
+      .select()
+      .from(serverCancellations)
+      .where(eq(serverCancellations.auth0UserId, auth0UserId))
+      .orderBy(desc(serverCancellations.requestedAt));
   },
 };
