@@ -1862,6 +1862,9 @@ export async function registerRoutes(
             quantity: 1,
           },
         ],
+        payment_intent_data: {
+          setup_future_usage: 'off_session',
+        },
         metadata: {
           auth0UserId,
           type: 'wallet_topup',

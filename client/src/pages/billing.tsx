@@ -425,6 +425,7 @@ export default function BillingPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['payment-methods'] });
       setLocation('/billing', { replace: true });
     } else if (topupResult === 'cancelled') {
       toast({
