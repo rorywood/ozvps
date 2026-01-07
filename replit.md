@@ -29,6 +29,8 @@ Preferred communication style: Simple, everyday language.
 
 ### Feature Specifications
 - **VPS Management**: Create, delete, and manage VPS instances.
+- **Two-Phase Deployment**: Servers are created instantly without OS, then users complete setup via wizard on the server detail page. This separates "ordering" from "setup" for better UX.
+- **Setup Wizard**: When a server needs setup (`needsSetup: true`), the server detail page shows a wizard for selecting OS and hostname.
 - **Billing**: Wallet top-up via Stripe, transaction history, and saved payment methods.
 - **Console Access**: Embedded VNC console for server interaction.
 - **Server Reinstall**: Streamlined process for reinstalling server OS.

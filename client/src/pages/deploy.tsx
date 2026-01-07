@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/app-shell";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Check,
   Loader2,
@@ -63,6 +64,8 @@ function formatTransfer(gb: number): string {
 
 export default function DeployPage() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
@@ -82,6 +85,27 @@ export default function DeployPage() {
     queryFn: () => api.getWallet(),
   });
 
+  // Deploy mutation - creates server without OS (awaiting setup)
+  const deployMutation = useMutation({
+    mutationFn: (data: { planId: number; locationCode: string }) => api.deployServer(data),
+    onSuccess: (data: { orderId: number; serverId: number }) => {
+      toast({
+        title: "Server created!",
+        description: "Complete the setup to install your operating system.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      setLocation(`/servers/${data.serverId}`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Deployment failed",
+        description: error.message || "Failed to create server",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Only show active plans (API already filters, but double-check on frontend)
   const plans = (plansData?.plans || []).filter(p => p.active);
@@ -91,9 +115,9 @@ export default function DeployPage() {
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  const handleContinue = () => {
+  const handleDeploy = () => {
     if (!selectedPlanId || !selectedLocationCode) return;
-    setLocation(`/deploy/${selectedPlanId}?location=${selectedLocationCode}`);
+    deployMutation.mutate({ planId: selectedPlanId, locationCode: selectedLocationCode });
   };
 
   const handleAddFunds = () => {
@@ -297,19 +321,25 @@ export default function DeployPage() {
                       <Button 
                         className="w-full h-11" 
                         disabled 
-                        data-testid="button-continue-disabled"
+                        data-testid="button-deploy-disabled"
                       >
                         Select a plan
                       </Button>
                     ) : canAfford ? (
                       <Button 
                         className="w-full h-11 gap-2" 
-                        onClick={handleContinue}
-                        disabled={loadingWallet}
-                        data-testid="button-continue"
+                        onClick={handleDeploy}
+                        disabled={loadingWallet || deployMutation.isPending}
+                        data-testid="button-deploy"
                       >
-                        <Zap className="h-4 w-4" />
-                        Continue
+                        {deployMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4" />
+                            Deploy Server
+                          </>
+                        )}
                       </Button>
                     ) : (
                       <Button 

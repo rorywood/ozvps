@@ -819,8 +819,22 @@ export class VirtFusionClient {
     const qemuAgentOs = (server as any).qemuAgent?.os || {};
     const osTemplateName = settingsOs.templateName || '';
     const osFullName = qemuAgentOs.name || '';
-    const osName = osTemplateName || osFullName || server.os?.name || server.os?.dist || 'Linux';
+    const osName = osTemplateName || osFullName || server.os?.name || server.os?.dist || '';
     const osDistro = qemuAgentOs.dist || server.os?.dist || 'linux';
+    
+    // A server needs setup if:
+    // - No OS template name is set (server created without OS build)
+    // - Server is not in a transitional building state
+    const rawServerData = server as any;
+    const commissioned = rawServerData.commissioned;
+    // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
+    const needsSetup = commissioned === 0 || (
+      !osTemplateName && 
+      !osFullName && 
+      !server.os?.name && 
+      status !== 'error' && 
+      status !== 'provisioning'
+    );
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();
@@ -871,6 +885,7 @@ export class VirtFusionClient {
       name: server.name || `Server ${server.id}`,
       uuid: server.uuid || '',
       status,
+      needsSetup, // True if server was created but OS not installed yet
       suspended: server.suspended === true,
       userId: server.ownerId,
       primaryIp,
@@ -892,7 +907,7 @@ export class VirtFusionClient {
       },
       image: {
         id: server.id.toString(),
-        name: osName,
+        name: osName || 'Not installed',
         distro: osDistro as 'linux' | 'windows',
       },
       stats: {
@@ -1112,12 +1127,12 @@ export class VirtFusionClient {
     packageId: number;
     hostname: string;
     extRelationId: string;
-    osId: number;
+    osId?: number; // Optional - if not provided, server is created without OS (awaiting setup)
     hypervisorGroupId?: number;
   }): Promise<{ serverId: number; name: string }> {
     const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId } = params;
     
-    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
+    log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
     
     try {
       // Step 1: Create the server
@@ -1143,20 +1158,24 @@ export class VirtFusionClient {
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
       
-      // Step 2: Build/install the OS on the server
-      try {
-        log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
-        await this.request(`/servers/${server.id}/build`, {
-          method: 'POST',
-          body: JSON.stringify({
-            osid: osId,
-            hostname: hostname,
-          }),
-        });
-        log(`Server ${server.id} build initiated`, 'virtfusion');
-      } catch (buildError: any) {
-        log(`Server build failed: ${buildError.message}`, 'virtfusion');
-        // Don't throw - server is created, build may be queued
+      // Step 2: Build/install the OS on the server (only if osId is provided)
+      if (osId) {
+        try {
+          log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
+          await this.request(`/servers/${server.id}/build`, {
+            method: 'POST',
+            body: JSON.stringify({
+              osid: osId,
+              hostname: hostname,
+            }),
+          });
+          log(`Server ${server.id} build initiated`, 'virtfusion');
+        } catch (buildError: any) {
+          log(`Server build failed: ${buildError.message}`, 'virtfusion');
+          // Don't throw - server is created, build may be queued
+        }
+      } else {
+        log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
       }
       
       return {

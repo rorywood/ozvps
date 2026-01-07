@@ -1615,10 +1615,11 @@ export async function registerRoutes(
   });
 
   // Deploy a new VPS (authenticated)
+  // osId is optional - if not provided, server is created without OS (awaiting setup)
   const deploySchema = z.object({
     planId: z.number(),
-    osId: z.number().min(1),
-    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i),
+    osId: z.number().min(1).optional(),
+    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i).optional(),
     locationCode: z.string().optional(),
   });
 
@@ -1657,30 +1658,34 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Plan not configured for deployment' });
       }
 
-      // Verify OS template is valid for this plan
-      const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
-      let templateAllowed = false;
-      if (templates && Array.isArray(templates)) {
-        for (const group of templates) {
-          if (group.templates && Array.isArray(group.templates)) {
-            if (group.templates.some((t: any) => t.id === osId)) {
-              templateAllowed = true;
-              break;
+      // Only verify OS template if osId is provided
+      if (osId) {
+        const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+        let templateAllowed = false;
+        if (templates && Array.isArray(templates)) {
+          for (const group of templates) {
+            if (group.templates && Array.isArray(group.templates)) {
+              if (group.templates.some((t: any) => t.id === osId)) {
+                templateAllowed = true;
+                break;
+              }
             }
           }
         }
-      }
 
-      if (!templateAllowed) {
-        return res.status(403).json({ error: 'Selected operating system is not available for this plan' });
+        if (!templateAllowed) {
+          return res.status(403).json({ error: 'Selected operating system is not available for this plan' });
+        }
       }
 
       // Debit wallet and create order atomically
+      // Use provided hostname or generate a default one
+      const serverHostname = hostname || `vps-${Date.now().toString(36)}`;
       const deployResult = await dbStorage.createDeployWithDebit(
         auth0UserId,
         planId,
         plan.priceMonthly,
-        hostname
+        serverHostname
       );
 
       if (!deployResult.success || !deployResult.order) {
@@ -1697,9 +1702,9 @@ export async function registerRoutes(
         const serverResult = await virtfusionClient.provisionServer({
           userId: virtFusionUserId,
           packageId: plan.virtfusionPackageId,
-          hostname: hostname,
+          hostname: serverHostname,
           extRelationId,
-          osId,
+          osId, // Optional - if undefined, server is created without OS (awaiting setup)
           hypervisorGroupId,
         });
 

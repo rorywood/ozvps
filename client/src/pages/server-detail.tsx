@@ -29,10 +29,13 @@ import {
   Check,
   Search,
   AlertTriangle,
-  Clock
+  Clock,
+  Settings,
+  Rocket
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -75,6 +78,13 @@ export default function ServerDetail() {
   const [editedName, setEditedName] = useState("");
   const [isRenamingServer, setIsRenamingServer] = useState(false);
   
+  // Setup wizard state
+  const [setupSelectedOs, setSetupSelectedOs] = useState<string>("");
+  const [setupHostname, setSetupHostname] = useState<string>("");
+  const [setupHostnameError, setSetupHostnameError] = useState<string>("");
+  const [setupOsSearchQuery, setSetupOsSearchQuery] = useState("");
+  const [setupSelectedCategory, setSetupSelectedCategory] = useState<string>("All");
+  
   const reinstallTask = useReinstallTask(serverId || '');
 
   const { data: server, isLoading, isError } = useQuery({
@@ -94,6 +104,13 @@ export default function ServerDetail() {
     queryKey: ['reinstall-templates', serverId],
     queryFn: () => api.getReinstallTemplates(serverId || ''),
     enabled: !!serverId && reinstallDialogOpen
+  });
+  
+  // Fetch OS templates for initial setup (when server needs setup)
+  const { data: setupTemplates, isLoading: loadingSetupTemplates } = useQuery({
+    queryKey: ['setup-templates', serverId],
+    queryFn: () => api.getReinstallTemplates(serverId || ''),
+    enabled: !!serverId && !!server?.needsSetup
   });
   
   const { data: trafficData, isFetching: isTrafficFetching, refetch: refetchTraffic } = useQuery({
@@ -208,6 +225,39 @@ export default function ServerDetail() {
       toast({
         title: "Reinstallation Failed",
         description: "Failed to start reinstallation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Setup mutation for initial OS installation (same endpoint as reinstall)
+  const setupMutation = useMutation({
+    mutationFn: ({ id, osId, hostname }: { id: string, osId: number, hostname: string }) => 
+      api.reinstallServer(id, osId, hostname),
+    onSuccess: (response) => {
+      // Reset setup wizard state
+      setSetupSelectedOs("");
+      setSetupHostname("");
+      setSetupHostnameError("");
+      setSetupOsSearchQuery("");
+      setSetupSelectedCategory("All");
+      
+      // Start the reinstall task polling with the generated password and server IP
+      const password = response.data?.generatedPassword;
+      reinstallTask.startTask(undefined, password, server?.primaryIp);
+      
+      // Refetch server data to update the UI
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      
+      toast({
+        title: "Setup Started",
+        description: "Your server is being configured. This may take a few minutes.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Setup Failed",
+        description: "Failed to start server setup. Please try again.",
         variant: "destructive",
       });
     }
@@ -330,6 +380,96 @@ export default function ServerDetail() {
     });
   };
 
+  // Setup wizard handlers
+  const handleSetupHostnameChange = (value: string) => {
+    setSetupHostname(value);
+    if (value.trim()) {
+      setSetupHostnameError(validateHostname(value));
+    } else {
+      setSetupHostnameError('');
+    }
+  };
+  
+  const isSetupHostnameValid = setupHostname.trim() && !validateHostname(setupHostname);
+  
+  // Parse setup templates into flat list with categories
+  const setupAllTemplates = useMemo(() => {
+    const templates: OsTemplateType[] = [];
+    const seenUuids = new Set<string>();
+    
+    if (setupTemplates && Array.isArray(setupTemplates)) {
+      setupTemplates.forEach((group: any) => {
+        if (group.templates && Array.isArray(group.templates)) {
+          group.templates.forEach((template: any) => {
+            const uuid = template.uuid || template.id?.toString() || '';
+            if (seenUuids.has(uuid)) return;
+            seenUuids.add(uuid);
+            
+            templates.push({
+              id: template.id?.toString() || '',
+              uuid,
+              name: template.name || 'Unknown OS',
+              version: template.version || '',
+              variant: template.variant || '',
+              distro: template.distro || group.name || '',
+              slug: template.slug || '',
+              description: template.description || group.description || '',
+              group: group.name || 'Other',
+            });
+          });
+        }
+      });
+    }
+    return templates;
+  }, [setupTemplates]);
+  
+  // Get unique setup categories
+  const setupCategories = useMemo(() => {
+    const cats = new Set<string>();
+    setupAllTemplates.forEach(t => cats.add(getOsCategory(t)));
+    return ['All', ...Array.from(cats)];
+  }, [setupAllTemplates]);
+  
+  // Filter setup templates
+  const setupFilteredTemplates = useMemo(() => {
+    return setupAllTemplates.filter(t => {
+      const matchesSearch = !setupOsSearchQuery || 
+        t.name.toLowerCase().includes(setupOsSearchQuery.toLowerCase()) ||
+        t.distro.toLowerCase().includes(setupOsSearchQuery.toLowerCase());
+      const matchesCategory = setupSelectedCategory === 'All' || getOsCategory(t) === setupSelectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [setupAllTemplates, setupOsSearchQuery, setupSelectedCategory]);
+  
+  const handleSetup = () => {
+    if (!serverId || !setupSelectedOs) return;
+    
+    // Validate hostname
+    const normalizedHostname = setupHostname.trim().toLowerCase();
+    const hostnameValidation = validateHostname(setupHostname);
+    if (hostnameValidation) {
+      setSetupHostnameError(hostnameValidation);
+      return;
+    }
+    
+    // Verify selected template is in the allowed list
+    const selectedTemplate = setupAllTemplates.find(t => t.id === setupSelectedOs);
+    if (!selectedTemplate) {
+      toast({
+        title: "Invalid Selection",
+        description: "Please select an available OS template.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setupMutation.mutate({ 
+      id: serverId, 
+      osId: parseInt(setupSelectedOs),
+      hostname: normalizedHostname
+    });
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -422,6 +562,191 @@ export default function ServerDetail() {
   }
 
   const isSuspended = server?.suspended === true;
+  const needsSetup = server?.needsSetup === true;
+
+  // If server needs setup, show the setup wizard
+  if (needsSetup && !reinstallTask.isActive) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto py-8 px-4 space-y-6">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-6">
+            <Link href="/servers">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-white hover:bg-white/5" data-testid="button-back-setup">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name}</h1>
+              <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
+            </div>
+          </div>
+          
+          {/* Setup Wizard Card */}
+          <div className="glass-card rounded-xl border border-white/10 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/20 to-purple-500/20 p-6 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-primary/20">
+                  <Settings className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-display font-semibold text-white">Setup Your Server</h2>
+                  <p className="text-sm text-muted-foreground">Choose an operating system and set your hostname</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Server Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Plan</p>
+                  <p className="text-sm font-medium text-white">{server.plan.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
+                  <p className="text-sm font-medium text-white">{server.location.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">IP Address</p>
+                  <p className="text-sm font-mono text-white">{server.primaryIp}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
+                  <p className="text-sm font-medium text-yellow-400">Awaiting Setup</p>
+                </div>
+              </div>
+              
+              {/* Hostname Input */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-white">Hostname</Label>
+                <Input
+                  placeholder="e.g. web-server-1"
+                  value={setupHostname}
+                  onChange={(e) => handleSetupHostnameChange(e.target.value)}
+                  className={cn(
+                    "bg-black/30 border-white/20 text-white placeholder:text-muted-foreground focus:border-primary",
+                    setupHostnameError && "border-red-500 focus:border-red-500"
+                  )}
+                  data-testid="input-setup-hostname"
+                />
+                {setupHostnameError && (
+                  <p className="text-xs text-red-400">{setupHostnameError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Lowercase letters, numbers, and hyphens only. Max 63 characters.
+                </p>
+              </div>
+              
+              {/* OS Selection */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-white">Operating System</Label>
+                  <div className="relative w-48">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search OS..."
+                      value={setupOsSearchQuery}
+                      onChange={(e) => setSetupOsSearchQuery(e.target.value)}
+                      className="pl-9 h-8 bg-black/30 border-white/20 text-white text-sm"
+                      data-testid="input-setup-search"
+                    />
+                  </div>
+                </div>
+                
+                {/* Category Filter */}
+                <div className="flex gap-2 flex-wrap">
+                  {setupCategories.map(cat => (
+                    <Button
+                      key={cat}
+                      variant={setupSelectedCategory === cat ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSetupSelectedCategory(cat)}
+                      className={cn(
+                        "h-7 text-xs",
+                        setupSelectedCategory === cat 
+                          ? "bg-primary text-white" 
+                          : "border-white/20 text-muted-foreground hover:text-white hover:bg-white/10"
+                      )}
+                      data-testid={`button-setup-category-${cat.toLowerCase()}`}
+                    >
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+                
+                {/* OS Grid */}
+                {loadingSetupTemplates ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                    {setupFilteredTemplates.map(template => (
+                      <button
+                        key={template.id}
+                        onClick={() => setSetupSelectedOs(template.id)}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                          setupSelectedOs === template.id
+                            ? "bg-primary/20 border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)]"
+                            : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                        )}
+                        data-testid={`button-setup-os-${template.id}`}
+                      >
+                        <img
+                          src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
+                          alt={template.name}
+                          className="h-8 w-8 object-contain"
+                          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-white truncate">{template.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{template.group}</p>
+                        </div>
+                        {setupSelectedOs === template.id && (
+                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                    {setupFilteredTemplates.length === 0 && (
+                      <p className="col-span-2 text-center py-4 text-muted-foreground">No templates found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Setup Button */}
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 h-12"
+                onClick={handleSetup}
+                disabled={!setupSelectedOs || !isSetupHostnameValid || setupMutation.isPending}
+                data-testid="button-start-setup"
+              >
+                {setupMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Starting Setup...
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="h-5 w-5 mr-2" />
+                    Setup Server
+                  </>
+                )}
+              </Button>
+              
+              {!isSetupHostnameValid && setupHostname.trim() === '' && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Enter a hostname to continue
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
