@@ -851,7 +851,12 @@ export async function registerRoutes(
     try {
       const serverId = req.params.id;
       const session = req.userSession!;
-      const { reason } = req.body;
+      const { reason, mode = 'grace' } = req.body;
+      
+      // Validate mode
+      if (mode !== 'grace' && mode !== 'immediate') {
+        return res.status(400).json({ error: 'Invalid mode. Must be "grace" or "immediate"' });
+      }
       
       // Verify server ownership
       const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
@@ -865,9 +870,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Server already has a pending cancellation request' });
       }
       
-      // Calculate scheduled deletion date (30 days from now)
+      // Calculate scheduled deletion date based on mode
       const scheduledDeletionAt = new Date();
-      scheduledDeletionAt.setDate(scheduledDeletionAt.getDate() + 30);
+      if (mode === 'immediate') {
+        // Immediate: 5 minutes from now
+        scheduledDeletionAt.setMinutes(scheduledDeletionAt.getMinutes() + 5);
+      } else {
+        // Grace period: 30 days from now
+        scheduledDeletionAt.setDate(scheduledDeletionAt.getDate() + 30);
+      }
       
       const cancellation = await dbStorage.createCancellationRequest({
         auth0UserId: session.auth0UserId!,
@@ -876,9 +887,10 @@ export async function registerRoutes(
         reason: reason || null,
         status: 'pending',
         scheduledDeletionAt,
+        mode,
       });
       
-      log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
+      log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, mode=${mode}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
       
       res.json({ success: true, cancellation });
     } catch (error: any) {
@@ -902,6 +914,11 @@ export async function registerRoutes(
       const cancellation = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
       if (!cancellation) {
         return res.status(404).json({ error: 'No pending cancellation found' });
+      }
+      
+      // Prevent revoking immediate cancellations - they cannot be stopped
+      if (cancellation.mode === 'immediate') {
+        return res.status(400).json({ error: 'Immediate cancellations cannot be revoked. The server will be deleted within 5 minutes.' });
       }
       
       // Revoke the cancellation
