@@ -267,14 +267,6 @@ export async function registerRoutes(
       if (result.errors.length > 0) {
         result.errors.forEach(err => log(`Plan seed error: ${err}`, 'startup'));
       }
-      
-      // Log available hypervisor groups on startup
-      try {
-        const hypervisorGroups = await virtfusionClient.getHypervisorGroups();
-        log(`VirtFusion hypervisor groups: ${JSON.stringify(hypervisorGroups)}`, 'startup');
-      } catch (hgErr) {
-        log(`Could not fetch hypervisor groups: ${hgErr}`, 'startup');
-      }
     } catch (error: any) {
       log(`Failed to seed plans: ${error.message}`, 'startup');
     }
