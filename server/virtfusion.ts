@@ -1,5 +1,60 @@
 import { log } from "./index";
 
+// Cache entry with TTL tracking
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+// Simple in-memory cache for VirtFusion API responses
+class VirtFusionCache {
+  private cache = new Map<string, CacheEntry<any>>();
+  private readonly DEFAULT_TTL = 30000; // 30 seconds
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    
+    // Check if entry is still fresh
+    if (Date.now() - entry.timestamp < entry.ttl) {
+      return entry.data as T;
+    }
+    
+    return null;
+  }
+
+  // Get stale data if available (for stale-while-revalidate)
+  getStale<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    return entry.data as T;
+  }
+
+  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+    this.cache.set(key, { data, timestamp: Date.now(), ttl });
+  }
+
+  // Check if data is stale (past TTL but still in cache)
+  isStale(key: string): boolean {
+    const entry = this.cache.get(key);
+    if (!entry) return true;
+    return Date.now() - entry.timestamp >= entry.ttl;
+  }
+
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+
+  invalidatePattern(pattern: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
 // VirtFusion API response structure - based on actual API response
 interface VirtFusionServerResponse {
   id: number;
@@ -83,10 +138,13 @@ interface VirtFusionUserUpdateRequest {
 export class VirtFusionClient {
   private baseUrl: string;
   private apiToken: string;
+  private cache: VirtFusionCache;
+  private readonly REQUEST_TIMEOUT = 10000; // 10 seconds
 
   constructor() {
     this.baseUrl = (process.env.VIRTFUSION_PANEL_URL || '').replace(/\/+$/, '');
     this.apiToken = process.env.VIRTFUSION_API_TOKEN || '';
+    this.cache = new VirtFusionCache();
 
     if (!this.baseUrl) {
       throw new Error('VIRTFUSION_PANEL_URL must be set');
@@ -120,9 +178,14 @@ export class VirtFusionClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/api/v1${endpoint}`;
     
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
+    
     try {
       const response = await fetch(url, {
         ...options,
+        signal: controller.signal,
         headers: {
           'Authorization': `Bearer ${this.apiToken}`,
           'Content-Type': 'application/json',
@@ -130,6 +193,8 @@ export class VirtFusionClient {
           ...options.headers,
         },
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -159,6 +224,14 @@ export class VirtFusionClient {
       
       return JSON.parse(text);
     } catch (error: any) {
+      clearTimeout(timeoutId);
+      
+      // Handle timeout errors specifically
+      if (error.name === 'AbortError') {
+        log(`VirtFusion API timeout after ${this.REQUEST_TIMEOUT}ms - URL: ${url}`, 'virtfusion');
+        throw new Error(`VirtFusion API timeout: Request took longer than ${this.REQUEST_TIMEOUT / 1000} seconds`);
+      }
+      
       log(`VirtFusion fetch error: ${error.message} - URL: ${url}`, 'virtfusion');
       throw error;
     }
@@ -325,21 +398,143 @@ export class VirtFusionClient {
   }
 
   async listServersByUserId(userId: number) {
-    // Fetch with remoteState=true to get live power status from hypervisor
-    const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}?remoteState=true`);
-    return response.data.map(server => this.transformServer(server));
+    const cacheKey = `servers_user_${userId}`;
+    
+    // Check cache first
+    const cached = this.cache.get<ReturnType<typeof this.transformServer>[]>(cacheKey);
+    if (cached) {
+      log(`Cache hit for user ${userId} servers`, 'virtfusion');
+      
+      // If stale, refresh in background
+      if (this.cache.isStale(cacheKey)) {
+        this.refreshServersByUserId(userId, cacheKey).catch(() => {});
+      }
+      return cached;
+    }
+    
+    // Check for stale data to return while fetching fresh
+    const stale = this.cache.getStale<ReturnType<typeof this.transformServer>[]>(cacheKey);
+    if (stale) {
+      log(`Returning stale data for user ${userId} servers while refreshing`, 'virtfusion');
+      this.refreshServersByUserId(userId, cacheKey).catch(() => {});
+      return stale;
+    }
+    
+    // No cache, fetch fresh
+    return this.refreshServersByUserId(userId, cacheKey);
+  }
+
+  private async refreshServersByUserId(userId: number, cacheKey: string) {
+    try {
+      const response = await this.request<{ data: VirtFusionServerResponse[] }>(`/servers/user/${userId}?remoteState=true`);
+      const servers = response.data.map(server => this.transformServer(server));
+      this.cache.set(cacheKey, servers);
+      return servers;
+    } catch (error) {
+      // On error, return stale data if available
+      const stale = this.cache.getStale<ReturnType<typeof this.transformServer>[]>(cacheKey);
+      if (stale) {
+        log(`VirtFusion API error, returning stale cache for user ${userId}`, 'virtfusion');
+        return stale;
+      }
+      throw error;
+    }
   }
 
   async listServers() {
-    // Fetch with remoteState=true to get live power status from hypervisor
-    const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers?remoteState=true');
-    return response.data.map(server => this.transformServer(server));
+    const cacheKey = 'servers_all';
+    
+    // Check cache first
+    const cached = this.cache.get<ReturnType<typeof this.transformServer>[]>(cacheKey);
+    if (cached) {
+      log(`Cache hit for all servers`, 'virtfusion');
+      
+      // If stale, refresh in background
+      if (this.cache.isStale(cacheKey)) {
+        this.refreshAllServers(cacheKey).catch(() => {});
+      }
+      return cached;
+    }
+    
+    // Check for stale data to return while fetching fresh
+    const stale = this.cache.getStale<ReturnType<typeof this.transformServer>[]>(cacheKey);
+    if (stale) {
+      log(`Returning stale data for all servers while refreshing`, 'virtfusion');
+      this.refreshAllServers(cacheKey).catch(() => {});
+      return stale;
+    }
+    
+    // No cache, fetch fresh
+    return this.refreshAllServers(cacheKey);
+  }
+
+  private async refreshAllServers(cacheKey: string) {
+    try {
+      const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers?remoteState=true');
+      const servers = response.data.map(server => this.transformServer(server));
+      this.cache.set(cacheKey, servers);
+      return servers;
+    } catch (error) {
+      // On error, return stale data if available
+      const stale = this.cache.getStale<ReturnType<typeof this.transformServer>[]>(cacheKey);
+      if (stale) {
+        log(`VirtFusion API error, returning stale cache for all servers`, 'virtfusion');
+        return stale;
+      }
+      throw error;
+    }
   }
 
   async getServer(serverId: string) {
-    // Fetch with remoteState=true to get live power status from hypervisor
-    const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
-    return this.transformServer(response.data);
+    const cacheKey = `server_${serverId}`;
+    
+    // Check cache first
+    const cached = this.cache.get<ReturnType<typeof this.transformServer>>(cacheKey);
+    if (cached) {
+      log(`Cache hit for server ${serverId}`, 'virtfusion');
+      
+      // If stale, refresh in background
+      if (this.cache.isStale(cacheKey)) {
+        this.refreshServer(serverId, cacheKey).catch(() => {});
+      }
+      return cached;
+    }
+    
+    // Check for stale data to return while fetching fresh
+    const stale = this.cache.getStale<ReturnType<typeof this.transformServer>>(cacheKey);
+    if (stale) {
+      log(`Returning stale data for server ${serverId} while refreshing`, 'virtfusion');
+      this.refreshServer(serverId, cacheKey).catch(() => {});
+      return stale;
+    }
+    
+    // No cache, fetch fresh
+    return this.refreshServer(serverId, cacheKey);
+  }
+
+  private async refreshServer(serverId: string, cacheKey: string) {
+    try {
+      const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
+      const server = this.transformServer(response.data);
+      this.cache.set(cacheKey, server);
+      return server;
+    } catch (error) {
+      // On error, return stale data if available
+      const stale = this.cache.getStale<ReturnType<typeof this.transformServer>>(cacheKey);
+      if (stale) {
+        log(`VirtFusion API error, returning stale cache for server ${serverId}`, 'virtfusion');
+        return stale;
+      }
+      throw error;
+    }
+  }
+
+  // Invalidate cache after power actions or other mutations
+  invalidateServerCache(serverId?: string) {
+    if (serverId) {
+      this.cache.invalidate(`server_${serverId}`);
+    }
+    this.cache.invalidatePattern('servers_');
   }
 
   async getServerWithVnc(serverId: string): Promise<{ vnc?: { ip: string; port: number; enabled: boolean; password?: string; wss?: { token: string; url: string } } } | null> {
@@ -386,6 +581,8 @@ export class VirtFusionClient {
     await this.request(`/servers/${serverId}/power/${endpoint}`, {
       method: 'POST',
     });
+    // Invalidate cache after power action
+    this.invalidateServerCache(serverId);
     return { success: true };
   }
 
