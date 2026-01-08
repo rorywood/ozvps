@@ -100,8 +100,8 @@ export default function Dashboard() {
 
           <div className="glass-panel rounded-xl p-4">
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Cpu className="h-5 w-5 text-purple-500" />
+              <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Cpu className="h-5 w-5 text-blue-500" />
               </div>
             </div>
             <div className="text-2xl font-bold text-foreground font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>

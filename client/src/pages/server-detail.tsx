@@ -788,7 +788,7 @@ export default function ServerDetail() {
           
           {/* Setup Wizard Card */}
           <div className="glass-card rounded-xl border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/20 to-purple-500/20 p-6 border-b border-border">
+            <div className="bg-gradient-to-r from-primary/20 to-blue-500/20 p-6 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-lg bg-primary/20">
                   <Settings className="h-6 w-6 text-primary" />
@@ -1456,7 +1456,7 @@ export default function ServerDetail() {
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-purple-500" : "bg-muted/30"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
                     data-testid="progress-disk"
@@ -1569,7 +1569,7 @@ export default function ServerDetail() {
                       </div>
                       <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                          <Gauge className="h-2.5 w-2.5 text-purple-400" />PORT
+                          <Gauge className="h-2.5 w-2.5 text-blue-400" />PORT
                         </div>
                         <div className="text-xs font-semibold text-foreground" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
                       </div>
