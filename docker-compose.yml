@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     image: ${DOCKER_IMAGE:-ghcr.io/rorywood/ozvps-panel:latest}
@@ -46,10 +44,11 @@ services:
     networks:
       - ozvps-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ozvps} -d ${POSTGRES_DB:-ozvps}"]
+      test: ["CMD-SHELL", "pg_isready -U ozvps -d ozvps || pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
 networks:
   ozvps-network:
