@@ -117,5 +117,26 @@ export class WebhookHandlers {
         log(`Non-topup checkout completed: type=${session.metadata?.type}`, 'stripe');
       }
     }
+    
+    // Handle customer.deleted - freeze wallet and revoke billing access
+    if (event.type === 'customer.deleted') {
+      const customer = event.data.object as any;
+      const customerId = customer.id;
+      
+      log(`Stripe customer deleted: ${customerId}`, 'stripe');
+      
+      try {
+        // Find wallet by Stripe customer ID and soft-delete it
+        const result = await dbStorage.softDeleteWalletByStripeCustomerId(customerId);
+        
+        if (result) {
+          log(`Wallet frozen for deleted Stripe customer ${customerId}: auth0UserId=${result.auth0UserId}`, 'stripe');
+        } else {
+          log(`No wallet found for deleted Stripe customer ${customerId}`, 'stripe');
+        }
+      } catch (error: any) {
+        log(`Failed to freeze wallet for deleted customer ${customerId}: ${error.message}`, 'stripe');
+      }
+    }
   }
 }

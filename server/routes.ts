@@ -350,23 +350,55 @@ export async function registerRoutes(
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
 
-      // Create Stripe customer and wallet for the new user
+      // Create or find existing Stripe customer and wallet for the new user
       try {
         const stripe = await getUncachableStripeClient();
-        const customer = await stripe.customers.create({
-          email,
-          name: name || undefined,
-          metadata: {
-            auth0UserId,
-            virtfusion_user_id: String(virtFusionUser.id),
-          },
+        
+        // Check if a Stripe customer already exists with this email
+        const existingCustomers = await stripe.customers.list({
+          email: email.toLowerCase(),
+          limit: 10,
         });
+        
+        let customer;
+        // Find an active customer that isn't already linked to a different Auth0 user
+        const reusableCustomer = existingCustomers.data.find(c => {
+          // Skip deleted customers
+          if (c.deleted) return false;
+          // Skip if already linked to a different Auth0 user
+          if (c.metadata?.auth0UserId && c.metadata.auth0UserId !== auth0UserId) return false;
+          return true;
+        });
+        
+        if (reusableCustomer) {
+          // Reuse existing customer and update metadata
+          customer = reusableCustomer;
+          await stripe.customers.update(customer.id, {
+            name: name || customer.name || undefined,
+            metadata: {
+              ...customer.metadata,
+              auth0UserId,
+              virtfusion_user_id: String(virtFusionUser.id),
+            },
+          });
+          log(`Reusing existing Stripe customer ${customer.id} for new user ${auth0UserId}`, 'stripe');
+        } else {
+          // Create new customer
+          customer = await stripe.customers.create({
+            email,
+            name: name || undefined,
+            metadata: {
+              auth0UserId,
+              virtfusion_user_id: String(virtFusionUser.id),
+            },
+          });
+          log(`Created Stripe customer ${customer.id} for new user ${auth0UserId}`, 'stripe');
+        }
         
         // Create wallet with Stripe customer and VirtFusion user linked
         const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
         await dbStorage.updateWalletStripeCustomerId(auth0UserId, customer.id);
         await dbStorage.updateWalletVirtFusionUserId(auth0UserId, virtFusionUser.id);
-        log(`Created Stripe customer ${customer.id} for new user ${auth0UserId}`, 'stripe');
       } catch (stripeError: any) {
         // Non-fatal: user can still register, Stripe customer will be created on first top-up
         log(`Failed to create Stripe customer during registration: ${stripeError.message}`, 'stripe');
@@ -2093,6 +2125,14 @@ export async function registerRoutes(
       const stripe = await getUncachableStripeClient();
       const wallet = await dbStorage.getWallet(auth0UserId);
       
+      // Check if wallet is frozen (Stripe customer deleted)
+      if (wallet?.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
+      
       if (!wallet?.stripeCustomerId) {
         return res.json({ paymentMethods: [] });
       }
@@ -2133,6 +2173,14 @@ export async function registerRoutes(
 
       const stripe = await getUncachableStripeClient();
       const wallet = await dbStorage.getWallet(auth0UserId);
+      
+      // Check if wallet is frozen (Stripe customer deleted)
+      if (wallet?.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
       
       if (!wallet?.stripeCustomerId) {
         return res.status(400).json({ error: 'No Stripe customer found' });
@@ -2194,6 +2242,14 @@ export async function registerRoutes(
       
       // Get or create Stripe customer
       let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      
+      // Check if wallet is frozen (Stripe customer deleted)
+      if (wallet.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
       let stripeCustomerId = wallet.stripeCustomerId;
 
       if (!stripeCustomerId) {
@@ -2234,6 +2290,14 @@ export async function registerRoutes(
 
       const stripe = await getUncachableStripeClient();
       const wallet = await dbStorage.getWallet(auth0UserId);
+      
+      // Check if wallet is frozen (Stripe customer deleted)
+      if (wallet?.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
       
       if (!wallet?.stripeCustomerId) {
         return res.status(404).json({ error: 'No payment methods found' });
@@ -2389,6 +2453,15 @@ export async function registerRoutes(
       if (!auth0UserId) {
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
       }
+      
+      // Check if wallet is frozen (Stripe customer deleted)
+      const wallet = await dbStorage.getWallet(auth0UserId);
+      if (wallet?.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
 
       const { enabled, thresholdCents, amountCents, paymentMethodId } = req.body;
       
@@ -2509,6 +2582,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
       }
       const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      
+      // Check if wallet is frozen (Stripe customer deleted)
+      if (wallet.deletedAt) {
+        return res.status(403).json({ 
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
+        });
+      }
+      
       res.json({ wallet });
     } catch (error: any) {
       log(`Error fetching wallet: ${error.message}`, 'api');

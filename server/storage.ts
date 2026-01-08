@@ -357,6 +357,20 @@ export const dbStorage = {
     return updated;
   },
 
+  async softDeleteWalletByStripeCustomerId(stripeCustomerId: string): Promise<Wallet | undefined> {
+    const [updated] = await db
+      .update(wallets)
+      .set({ 
+        deletedAt: new Date(), 
+        updatedAt: new Date(),
+        autoTopupEnabled: false,
+        autoTopupPaymentMethodId: null,
+      })
+      .where(eq(wallets.stripeCustomerId, stripeCustomerId))
+      .returning();
+    return updated;
+  },
+
   async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
     // Check for idempotency using stripeEventId
     if (transaction.stripeEventId) {

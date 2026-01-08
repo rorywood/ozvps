@@ -53,6 +53,12 @@ async function processDueBilling() {
         log(`No wallet found for user ${server.auth0UserId}`, "billing-error");
         continue;
       }
+      
+      // Skip frozen wallets (Stripe customer deleted)
+      if (wallet.deletedAt) {
+        log(`Skipping billing for server ${server.virtfusionServerId} - wallet is frozen`, "billing");
+        continue;
+      }
 
       if (wallet.balanceCents >= dailyRate) {
         const [updated] = await db
