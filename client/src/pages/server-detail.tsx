@@ -1241,13 +1241,14 @@ export default function ServerDetail() {
                     <span className="text-lg font-bold text-white" data-testid="text-cpu-percent">
                       {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
                     </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
                   ) : (
                     <span className="text-xs text-orange-400 flex items-center gap-1.5">
-                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
+                      {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {consoleLock.isLocked ? 'Rebooting...' :
-                       powerActionPending === 'boot' ? 'Starting...' : 
+                      {powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
@@ -1276,13 +1277,14 @@ export default function ServerDetail() {
                     <span className="text-lg font-bold text-white" data-testid="text-memory-percent">
                       {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
                     </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
                   ) : (
                     <span className="text-xs text-orange-400 flex items-center gap-1.5">
-                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
+                      {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {consoleLock.isLocked ? 'Rebooting...' :
-                       powerActionPending === 'boot' ? 'Starting...' : 
+                      {powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
@@ -1315,13 +1317,14 @@ export default function ServerDetail() {
                     <span className="text-lg font-bold text-white" data-testid="text-disk-percent">
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
                   ) : (
                     <span className="text-xs text-orange-400 flex items-center gap-1.5">
-                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
+                      {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {consoleLock.isLocked ? 'Rebooting...' :
-                       powerActionPending === 'boot' ? 'Starting...' : 
+                      {powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
