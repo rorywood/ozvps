@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -398,6 +399,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
 }
 
 export default function BillingPage() {
+  useDocumentTitle('Billing');
   const [, setLocation] = useLocation();
   const search = useSearch();
   const queryClient = useQueryClient();

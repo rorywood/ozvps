@@ -6,6 +6,7 @@ import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import logo from "@/assets/logo.png";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 declare global {
   interface Window {
@@ -19,6 +20,7 @@ declare global {
 }
 
 export default function RegisterPage() {
+  useDocumentTitle('Create Account');
   const [, setLocation] = useLocation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

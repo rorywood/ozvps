@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { 
@@ -20,6 +21,7 @@ import {
 import { useState, useEffect } from "react";
 
 export default function Account() {
+  useDocumentTitle('Account Settings');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");

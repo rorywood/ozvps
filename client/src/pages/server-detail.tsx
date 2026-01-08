@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { 
   ArrowLeft, 
   Power, 
@@ -152,6 +153,9 @@ export default function ServerDetail() {
     enabled: !!serverId,
     refetchInterval: 10000, // Poll every 10 seconds for status updates
   });
+
+  // Dynamic page title
+  useDocumentTitle(server?.name ? `${server.name}` : 'Server Details');
 
   const { data: networkInfo } = useQuery({
     queryKey: ['network', serverId],

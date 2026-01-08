@@ -11,12 +11,15 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-- **Design**: Dark-first UI with glassmorphism styling using Tailwind CSS v4.
-- **Layout**: Top navigation bar with dropdown menus (replacing previous sidebar). Desktop shows horizontal nav with Dashboard, Servers, Deploy, Billing, plus Admin for admins. Profile dropdown in top-right shows avatar, balance, account settings, and sign out.
+- **Design**: Dark-first UI with glassmorphism styling using Tailwind CSS v4. Supports light/dark theme toggle.
+- **Theme System**: Custom ThemeProvider (`client/src/components/theme-provider.tsx`) with localStorage persistence. Theme toggle button in nav bar (sun/moon icons). CSS variables adapt for light mode via `:root.light` selector.
+- **Layout**: Top navigation bar with dropdown menus (replacing previous sidebar). Desktop shows horizontal nav with Dashboard, Servers, Deploy, Billing, plus Admin for admins. Profile dropdown in top-right shows avatar, balance, account settings, and sign out. Balance also shown prominently in nav bar (emerald badge linking to billing).
 - **Components**: `shadcn/ui` (New York style) with Radix primitives.
 - **Typography**: Inter (body), Outfit (display), JetBrains Mono (code).
 - **Avatars**: Gravatar integration using MD5 hash of user email. Falls back to initials if Gravatar unavailable.
 - **Responsiveness**: Mobile-first design with responsive breakpoints. Mobile shows hamburger menu in top-right that opens slide-out sheet with full navigation. Balance displayed inline on mobile header.
+- **Footer**: Displays copyright (dynamic year), ABN 95 663 314 047, nav links, and "Powered by Australian infrastructure" tagline.
+- **Page Titles**: Dynamic SEO-friendly titles via `useDocumentTitle` hook. Format: "Page Name | OzVPS".
 
 ### Technical Implementations
 - **Frontend**: React 18 with TypeScript, Wouter for routing, TanStack React Query for state management, and Vite as the build tool.

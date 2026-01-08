@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Server } from "@/lib/types";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { 
   Activity, 
   Cpu, 
@@ -33,6 +34,7 @@ function isServerBuilding(serverId: string): boolean {
 }
 
 export default function Dashboard() {
+  useDocumentTitle('Dashboard');
   const { getDisplayStatus } = usePowerActions();
   const { data: servers = [], isLoading, error } = useQuery<Server[]>({
     queryKey: ['servers'],

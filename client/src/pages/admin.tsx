@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/layout/app-shell";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { 
   ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, 
   User, Link, Shield, Eye, EyeOff, Save, Wallet, Server, Cpu, Network, 
@@ -157,6 +158,7 @@ function StatCard({ icon, label, value, detail, color }: {
 }
 
 export default function AdminPage() {
+  useDocumentTitle('Admin Center');
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   

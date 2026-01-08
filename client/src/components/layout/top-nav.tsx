@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   User,
   Settings,
-  CreditCard
+  CreditCard,
+  Sun,
+  Moon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -21,6 +23,7 @@ import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
+import { useTheme } from "@/components/theme-provider";
 import {
   Dialog,
   DialogContent,
@@ -266,6 +269,25 @@ function ProfileDropdown() {
   );
 }
 
+function ThemeToggle() {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  
+  return (
+    <button
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      className="h-9 w-9 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 transition-colors"
+      data-testid="button-theme-toggle"
+      aria-label="Toggle theme"
+    >
+      {resolvedTheme === "dark" ? (
+        <Sun className="h-4 w-4 text-amber-400" />
+      ) : (
+        <Moon className="h-4 w-4 text-primary" />
+      )}
+    </button>
+  );
+}
+
 function DesktopNav() {
   const [location] = useLocation();
   
@@ -277,7 +299,15 @@ function DesktopNav() {
     retry: false,
   });
 
+  const { data: walletData } = useQuery<{ wallet: { balanceCents: number } }>({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
   const isAdmin = userData?.user?.isAdmin ?? false;
+  const balance = walletData?.wallet?.balanceCents;
 
   return (
     <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
@@ -337,8 +367,22 @@ function DesktopNav() {
           </div>
 
           <div className="flex items-center gap-4">
-            <VersionInfo />
+            {balance !== undefined && (
+              <Link href="/billing">
+                <div 
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                  data-testid="nav-balance"
+                >
+                  <Wallet className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-emerald-400">
+                    {formatBalance(balance)}
+                  </span>
+                </div>
+              </Link>
+            )}
             <div className="w-px h-6 bg-white/10" />
+            <ThemeToggle />
+            <VersionInfo />
             <ProfileDropdown />
           </div>
         </div>
@@ -478,6 +522,11 @@ function MobileNav() {
                 </div>
 
                 <div className="p-4 border-t border-white/5 space-y-3">
+                  <div className="flex items-center justify-between px-3">
+                    <span className="text-sm text-muted-foreground">Theme</span>
+                    <ThemeToggle />
+                  </div>
+                  
                   <button
                     onClick={() => logoutMutation.mutate()}
                     disabled={logoutMutation.isPending}

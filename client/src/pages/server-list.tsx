@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api } from "@/lib/api";
 import { Server } from "@/lib/types";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Server as ServerIcon, 
@@ -58,6 +59,7 @@ function isServerBuilding(serverId: string): boolean {
 }
 
 export default function ServerList() {
+  useDocumentTitle('Servers');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { markPending, getDisplayStatus } = usePowerActions();

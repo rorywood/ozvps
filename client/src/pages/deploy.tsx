@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/app-shell";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Check,
@@ -62,6 +63,7 @@ function formatTransfer(gb: number): string {
 }
 
 export default function DeployPage() {
+  useDocumentTitle('Deploy Server');
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 declare global {
   interface Window {
@@ -20,6 +21,7 @@ declare global {
 }
 
 export default function LoginPage() {
+  useDocumentTitle('Sign In');
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
