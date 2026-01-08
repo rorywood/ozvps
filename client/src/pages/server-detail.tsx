@@ -37,7 +37,8 @@ import {
   XCircle,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  Shield
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -129,6 +130,14 @@ export default function ServerDetail() {
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  
+  // Persistent setup credentials (survives dialog close)
+  const [savedCredentials, setSavedCredentials] = useState<{
+    serverIp: string;
+    username: string;
+    password: string;
+  } | null>(null);
+  const [showSavedCredentials, setShowSavedCredentials] = useState(false);
   
   // Traffic statistics state
   const [trafficStatsPeriod, setTrafficStatsPeriod] = useState<string>('30m');
@@ -1086,6 +1095,88 @@ export default function ServerDetail() {
             >
               View Progress
             </Button>
+          </div>
+        )}
+        
+        {/* Saved Credentials Banner - Shows after closing setup dialog */}
+        {showSavedCredentials && savedCredentials && (
+          <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-3">
+                <Shield className="h-5 w-5 text-green-400 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-green-300">SSH Login Credentials</h3>
+                  <p className="text-sm text-green-300/80">
+                    Save these credentials - they won't be shown again
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-8 w-8 text-green-400 hover:bg-green-500/20"
+                onClick={() => {
+                  setShowSavedCredentials(false);
+                  setSavedCredentials(null);
+                }}
+                data-testid="button-close-credentials"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Server IP</span>
+                  <span className="font-mono text-green-300">{savedCredentials.serverIp}</span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                  onClick={() => {
+                    navigator.clipboard.writeText(savedCredentials.serverIp);
+                    toast({ title: "Copied", description: "Server IP copied to clipboard" });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Username</span>
+                  <span className="font-mono text-green-300">{savedCredentials.username}</span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                  onClick={() => {
+                    navigator.clipboard.writeText(savedCredentials.username);
+                    toast({ title: "Copied", description: "Username copied to clipboard" });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Password</span>
+                  <span className="font-mono text-green-300">{savedCredentials.password}</span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                  onClick={() => {
+                    navigator.clipboard.writeText(savedCredentials.password);
+                    toast({ title: "Copied", description: "Password copied to clipboard" });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
         
@@ -2418,6 +2509,11 @@ export default function ServerDetail() {
               state={reinstallTask}
               serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
               onDismiss={() => {
+                // Save credentials before resetting so user can still view them
+                if (reinstallTask.credentials) {
+                  setSavedCredentials(reinstallTask.credentials);
+                  setShowSavedCredentials(true);
+                }
                 reinstallTask.reset();
                 updateSetupMode(false);
                 updateSetupMinimized(false);
@@ -2426,6 +2522,18 @@ export default function ServerDetail() {
               }}
               onMinimize={() => {
                 updateSetupMinimized(true);
+              }}
+              onClose={() => {
+                // Save credentials and close dialog without continuing
+                if (reinstallTask.credentials) {
+                  setSavedCredentials(reinstallTask.credentials);
+                  setShowSavedCredentials(true);
+                }
+                reinstallTask.reset();
+                updateSetupMode(false);
+                updateSetupMinimized(false);
+                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                queryClient.invalidateQueries({ queryKey: ['servers'] });
               }}
             />
           ) : (

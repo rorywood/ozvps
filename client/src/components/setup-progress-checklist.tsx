@@ -9,6 +9,7 @@ interface SetupProgressChecklistProps {
   serverName?: string;
   onDismiss?: () => void;
   onMinimize?: () => void;
+  onClose?: () => void;
 }
 
 const CREDENTIAL_REVEAL_DELAY = 15;
@@ -86,7 +87,7 @@ function getStepState(step: ChecklistStep, currentStatus: ReinstallStatus): 'pen
   return 'pending';
 }
 
-export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimize }: SetupProgressChecklistProps) {
+export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimize, onClose }: SetupProgressChecklistProps) {
   const { status, percent, error, credentials, isActive } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
@@ -129,7 +130,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
 
   return (
     <div className="space-y-6">
-      {/* Header with minimize button */}
+      {/* Header with minimize/close button */}
       <div className="relative">
         {onMinimize && !isComplete && !isFailed && (
           <button
@@ -137,6 +138,16 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             className="absolute top-0 right-0 p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
             title="Minimize - continue in background"
             data-testid="button-minimize-setup"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+        {onClose && (isComplete || isFailed) && (
+          <button
+            onClick={onClose}
+            className="absolute top-0 right-0 p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+            title="Close"
+            data-testid="button-close-setup"
           >
             <X className="h-5 w-5" />
           </button>
