@@ -1832,20 +1832,27 @@ export async function registerRoutes(
   // Update reCAPTCHA settings (admin only)
   app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
     try {
+      log(`reCAPTCHA update request received from ${req.userSession?.email}`, 'admin');
+      
       if (!req.userSession?.isAdmin) {
+        log(`reCAPTCHA update rejected: not admin`, 'admin');
         return res.status(403).json({ error: 'Admin access required' });
       }
       const { siteKey, secretKey, enabled } = req.body;
+      log(`reCAPTCHA update data: siteKey=${siteKey ? 'provided' : 'empty'}, secretKey=${secretKey ? 'provided' : 'empty'}, enabled=${enabled}`, 'admin');
       
       // Get existing settings to check if secret key is already saved
       const existingSettings = await dbStorage.getRecaptchaSettings();
       const hasExistingSecretKey = !!existingSettings.secretKey;
+      log(`Existing reCAPTCHA settings: hasSecretKey=${hasExistingSecretKey}, enabled=${existingSettings.enabled}`, 'admin');
       
       // Require secret key when enabling, unless one is already saved
       if (enabled && !siteKey) {
+        log(`reCAPTCHA update rejected: no site key`, 'admin');
         return res.status(400).json({ error: 'Site key is required to enable reCAPTCHA' });
       }
       if (enabled && !secretKey && !hasExistingSecretKey) {
+        log(`reCAPTCHA update rejected: no secret key`, 'admin');
         return res.status(400).json({ error: 'Secret key is required to enable reCAPTCHA' });
       }
       
@@ -1858,7 +1865,7 @@ export async function registerRoutes(
         !!enabled
       );
       
-      log(`Admin updated reCAPTCHA settings: enabled=${enabled}`, 'admin');
+      log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, siteKey=${siteKey ? 'set' : 'cleared'}`, 'admin');
       res.json({ success: true });
     } catch (error: any) {
       log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');

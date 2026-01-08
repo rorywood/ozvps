@@ -281,30 +281,39 @@ export default function AdminPage() {
     if (recaptchaData) {
       setRecaptchaSiteKey(recaptchaData.siteKey || '');
       setRecaptchaEnabled(recaptchaData.enabled || false);
+      // Clear secret key input - it shows placeholder if one exists
+      setRecaptchaSecretKey('');
     }
   }, [recaptchaData]);
 
   // Mutations
   const recaptchaMutation = useMutation({
     mutationFn: async (data: { siteKey: string; secretKey: string; enabled: boolean }) => {
+      console.log('Saving reCAPTCHA settings:', { ...data, secretKey: data.secretKey ? '[REDACTED]' : '' });
       const response = await fetch('/api/admin/security/recaptcha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(data),
       });
+      console.log('reCAPTCHA save response status:', response.status);
       if (!response.ok) {
         const error = await response.json();
+        console.error('reCAPTCHA save error:', error);
         throw new Error(error.error || 'Failed to save reCAPTCHA settings');
       }
-      return response.json();
+      const result = await response.json();
+      console.log('reCAPTCHA save success:', result);
+      return result;
     },
     onSuccess: () => {
-      toast.success('reCAPTCHA settings saved');
+      toast.success('reCAPTCHA settings saved successfully!');
       queryClient.invalidateQueries({ queryKey: ['admin', 'recaptcha'] });
+      queryClient.invalidateQueries({ queryKey: ['recaptcha-config'] });
       setRecaptchaSecretKey('');
     },
     onError: (error: Error) => {
+      console.error('reCAPTCHA mutation error:', error);
       toast.error(error.message);
     },
   });
