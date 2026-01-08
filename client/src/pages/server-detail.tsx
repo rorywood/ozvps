@@ -749,7 +749,7 @@ export default function ServerDetail() {
             <AlertCircle className="h-10 w-10 mb-4" />
             <p>Server not found or access denied.</p>
             <Link href="/servers">
-              <Button variant="outline" className="mt-4 border-white/10 text-white">Return to Fleet</Button>
+              <Button variant="outline" className="mt-4 border-border text-foreground">Return to Fleet</Button>
             </Link>
           </div>
       </AppShell>
@@ -767,25 +767,25 @@ export default function ServerDetail() {
           {/* Header */}
           <div className="flex items-center gap-3 mb-4">
             <Link href="/servers">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-white hover:bg-white/5" data-testid="button-back-setup">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back-setup">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-display font-bold text-white tracking-tight">{server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}</h1>
+              <h1 className="text-2xl font-display font-bold text-foreground tracking-tight">{server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}</h1>
               <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
             </div>
           </div>
           
           {/* Setup Wizard Card */}
-          <div className="glass-card rounded-xl border border-white/10 overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/20 to-purple-500/20 p-6 border-b border-white/10">
+          <div className="glass-card rounded-xl border border-border overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/20 to-purple-500/20 p-6 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-lg bg-primary/20">
                   <Settings className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-display font-semibold text-white">Setup Your Server</h2>
+                  <h2 className="text-xl font-display font-semibold text-foreground">Setup Your Server</h2>
                   <p className="text-sm text-muted-foreground">Choose an operating system and set your hostname</p>
                 </div>
               </div>
@@ -793,18 +793,18 @@ export default function ServerDetail() {
             
             <div className="p-6 space-y-6">
               {/* Server Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/50 border border-border">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Plan</p>
-                  <p className="text-sm font-medium text-white">{server.plan.name}</p>
+                  <p className="text-sm font-medium text-foreground">{server.plan.name}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
-                  <p className="text-sm font-medium text-white">{server.location.name}</p>
+                  <p className="text-sm font-medium text-foreground">{server.location.name}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">IP Address</p>
-                  <p className="text-sm font-mono text-white">{server.primaryIp}</p>
+                  <p className="text-sm font-mono text-foreground">{server.primaryIp}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
@@ -814,13 +814,13 @@ export default function ServerDetail() {
               
               {/* Hostname Input */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-white">Hostname</Label>
+                <Label className="text-sm font-medium text-foreground">Hostname</Label>
                 <Input
                   placeholder="e.g. web-server-1"
                   value={setupHostname}
                   onChange={(e) => handleSetupHostnameChange(e.target.value)}
                   className={cn(
-                    "bg-black/30 border-white/20 text-white placeholder:text-muted-foreground focus:border-primary",
+                    "bg-card/30 border-border text-foreground placeholder:text-muted-foreground focus:border-primary",
                     setupHostnameError && "border-red-500 focus:border-red-500"
                   )}
                   data-testid="input-setup-hostname"
@@ -836,14 +836,14 @@ export default function ServerDetail() {
               {/* OS Selection */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-white">Operating System</Label>
+                  <Label className="text-sm font-medium text-foreground">Operating System</Label>
                   <div className="relative w-48">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       placeholder="Search OS..."
                       value={setupOsSearchQuery}
                       onChange={(e) => setSetupOsSearchQuery(e.target.value)}
-                      className="pl-9 h-8 bg-black/30 border-white/20 text-white text-sm"
+                      className="pl-9 h-8 bg-card/30 border-border text-foreground text-sm"
                       data-testid="input-setup-search"
                     />
                   </div>
@@ -864,7 +864,7 @@ export default function ServerDetail() {
                       <div key={category}>
                         <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                           {category}
-                          <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full">
+                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
                             {templates.length}
                           </span>
                         </h3>
@@ -884,7 +884,7 @@ export default function ServerDetail() {
                                   "flex flex-col items-center p-4 rounded-xl border transition-all text-center",
                                   isSelected
                                     ? "bg-primary/15 border-primary ring-1 ring-primary/50"
-                                    : "bg-white/[0.02] border-white/10 hover:bg-white/[0.05] hover:border-white/20"
+                                    : "bg-muted/20 border-border hover:bg-muted/30 hover:border-border"
                                 )}
                                 data-testid={`button-setup-os-${templateId}`}
                               >
@@ -894,12 +894,12 @@ export default function ServerDetail() {
                                   className="h-10 w-10 object-contain mb-2"
                                   onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                                 />
-                                <span className="text-sm font-medium text-white leading-tight">
+                                <span className="text-sm font-medium text-foreground leading-tight">
                                   {displayName}
                                 </span>
                                 {isSelected && (
                                   <div className="mt-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                                    <Check className="h-3 w-3 text-white" />
+                                    <Check className="h-3 w-3 text-foreground" />
                                   </div>
                                 )}
                               </button>
@@ -914,7 +914,7 @@ export default function ServerDetail() {
               
               {/* Setup Button */}
               <Button
-                className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 h-12"
+                className="w-full bg-primary hover:bg-primary/90 text-foreground font-medium py-3 h-12"
                 onClick={handleSetup}
                 disabled={!setupSelectedOs || !isSetupHostnameValid || setupMutation.isPending}
                 data-testid="button-start-setup"
@@ -969,11 +969,11 @@ export default function ServerDetail() {
             </div>
             
             <div className="space-y-2">
-              <h2 className="text-2xl font-display font-bold text-white">
+              <h2 className="text-2xl font-display font-bold text-foreground">
                 {isProcessing ? 'Server Deletion In Progress' : 'Server Queued for Deletion'}
               </h2>
               <p className="text-muted-foreground">
-                <span className="font-semibold text-white">{server.name}</span> {isProcessing ? 'is being permanently deleted.' : 'will be permanently deleted shortly.'}
+                <span className="font-semibold text-foreground">{server.name}</span> {isProcessing ? 'is being permanently deleted.' : 'will be permanently deleted shortly.'}
               </p>
             </div>
             
@@ -1014,7 +1014,7 @@ export default function ServerDetail() {
             </div>
             
             <Link href="/servers">
-              <Button variant="outline" className="mt-4 border-white/10 text-white hover:bg-white/5">
+              <Button variant="outline" className="mt-4 border-border text-foreground hover:bg-muted/50">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Return to Fleet
               </Button>
@@ -1073,11 +1073,11 @@ export default function ServerDetail() {
         )}
         
         {/* Header Section */}
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-white/5">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-border">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
                <Link href="/servers">
-                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-white hover:bg-white/5" data-testid="button-back">
+                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
@@ -1086,7 +1086,7 @@ export default function ServerDetail() {
                   <Input
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
-                    className="h-8 w-48 bg-black/30 border-white/20 text-white font-display font-bold text-lg"
+                    className="h-8 w-48 bg-card/30 border-border text-foreground font-display font-bold text-lg"
                     maxLength={50}
                     autoFocus
                     onKeyDown={(e) => {
@@ -1108,7 +1108,7 @@ export default function ServerDetail() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:bg-white/10"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
                     onClick={handleCancelEditName}
                     disabled={isRenamingServer}
                     data-testid="button-cancel-name"
@@ -1118,7 +1118,7 @@ export default function ServerDetail() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2 group">
-                  <h1 className="text-2xl font-display font-bold text-white tracking-tight" data-testid="text-server-name">{server.name}</h1>
+                  <h1 className="text-2xl font-display font-bold text-foreground tracking-tight" data-testid="text-server-name">{server.name}</h1>
                   {cancellationData?.cancellation && (
                     <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1" data-testid="badge-pending-cancellation">
                       <Calendar className="h-3 w-3" />
@@ -1128,7 +1128,7 @@ export default function ServerDetail() {
                   {!isSuspended && (
                     <button
                       onClick={handleStartEditName}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white p-1"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1"
                       data-testid="button-edit-name"
                     >
                       <Pencil className="h-4 w-4" />
@@ -1162,11 +1162,11 @@ export default function ServerDetail() {
             
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
               <div className="flex items-center gap-2">
-                <div className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] font-mono text-white border border-white/10">IP</div>
-                <span className="text-white/80 font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
+                <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
+                <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
                 <button 
                   onClick={() => copyToClipboard(server.primaryIp)} 
-                  className="text-muted-foreground hover:text-white"
+                  className="text-muted-foreground hover:text-foreground"
                   data-testid="button-copy-ip"
                 >
                   <Copy className="h-3 w-3" />
@@ -1174,7 +1174,7 @@ export default function ServerDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
-                <span className="text-white/80">{server.location.name}</span>
+                <span className="text-foreground">{server.location.name}</span>
               </div>
               {server.image && (
                 <div className="flex items-center gap-2">
@@ -1184,7 +1184,7 @@ export default function ServerDetail() {
                     className="h-4 w-4 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
-                  <span className="text-white/80">{server.image.name}</span>
+                  <span className="text-foreground">{server.image.name}</span>
                 </div>
               )}
             </div>
@@ -1196,8 +1196,8 @@ export default function ServerDetail() {
               className={cn(
                 "shadow-none font-medium h-9",
                 (powerActionPending || server.status !== 'running' || isSuspended)
-                  ? "bg-white/5 text-muted-foreground border-white/5 cursor-not-allowed" 
-                  : "bg-white/5 hover:bg-white/10 text-white border-white/10"
+                  ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed" 
+                  : "bg-muted/50 hover:bg-muted text-foreground border-border"
               )}
               onClick={handleOpenVnc}
               disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
@@ -1222,7 +1222,7 @@ export default function ServerDetail() {
                   className={cn(
                     "font-medium h-9 border-0",
                     (isSuspended || consoleLock.isLocked)
-                      ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
                   )}
                   data-testid="button-power-options"
@@ -1237,9 +1237,9 @@ export default function ServerDetail() {
                   {!consoleLock.isLocked && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">
+              <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
                  <DropdownMenuItem 
-                    className="focus:bg-white/10 cursor-pointer text-green-400 focus:text-green-400"
+                    className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
                     disabled={server.status === 'running' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
@@ -1247,7 +1247,7 @@ export default function ServerDetail() {
                    <Power className="h-4 w-4 mr-2" /> Start Server
                  </DropdownMenuItem>
                  <DropdownMenuItem 
-                    className="focus:bg-white/10 cursor-pointer text-yellow-400 focus:text-yellow-400"
+                    className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
                     disabled={server.status !== 'running' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
@@ -1255,7 +1255,7 @@ export default function ServerDetail() {
                    <RotateCw className="h-4 w-4 mr-2" /> Reboot
                  </DropdownMenuItem>
                  <DropdownMenuItem 
-                    className="focus:bg-white/10 cursor-pointer text-orange-400 focus:text-orange-400"
+                    className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
                     disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
@@ -1263,7 +1263,7 @@ export default function ServerDetail() {
                    <Power className="h-4 w-4 mr-2" /> Shutdown
                  </DropdownMenuItem>
                  <DropdownMenuItem 
-                    className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-400"
+                    className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
                     disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
                     onClick={() => handlePowerAction('poweroff')}
                     data-testid="menu-item-poweroff"
@@ -1277,42 +1277,42 @@ export default function ServerDetail() {
 
         {/* Specs Bar */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Cpu className="h-5 w-5" />
              </div>
              <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.vcpu} vCore</div>
+                <div className="text-sm font-bold text-foreground">{server.plan.specs.vcpu} vCore</div>
                 <div className="text-xs text-muted-foreground">CPU Allocated</div>
              </div>
           </GlassCard>
           
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Activity className="h-5 w-5" />
              </div>
              <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
+                <div className="text-sm font-bold text-foreground">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
                 <div className="text-xs text-muted-foreground">RAM Allocated</div>
              </div>
           </GlassCard>
 
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <StorageIcon className="h-5 w-5" />
              </div>
              <div>
-                <div className="text-sm font-bold text-white">{server.plan.specs.disk} GB</div>
+                <div className="text-sm font-bold text-foreground">{server.plan.specs.disk} GB</div>
                 <div className="text-xs text-muted-foreground">Storage Allocated</div>
              </div>
           </GlassCard>
 
-          <GlassCard className="p-4 flex items-center gap-4 bg-white/[0.02] border-white/5">
-             <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Network className="h-5 w-5" />
              </div>
              <div>
-                <div className="text-sm font-bold text-white" data-testid="text-traffic">
+                <div className="text-sm font-bold text-foreground" data-testid="text-traffic">
                   {server.primaryIp !== 'N/A' ? server.primaryIp : 'No IP'}
                 </div>
                 <div className="text-xs text-muted-foreground">Primary IP</div>
@@ -1322,13 +1322,13 @@ export default function ServerDetail() {
 
         {/* Navigation Tabs */}
         <Tabs defaultValue="statistics" className="space-y-6">
-          <div className="border-b border-white/10">
+          <div className="border-b border-border">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
               {["Statistics", "IP Management", "Reset Password", "Reinstallation", "Cancellation"].map(tab => (
                  <TabsTrigger 
                     key={tab} 
                     value={tab.toLowerCase().replace(' ', '-')}
-                    className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-white"
+                    className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
                     data-testid={`tab-${tab.toLowerCase().replace(' ', '-')}`}
                   >
                     {tab}
@@ -1346,7 +1346,7 @@ export default function ServerDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
-                    <span className="text-lg font-bold text-white" data-testid="text-cpu-percent">
+                    <span className="text-lg font-bold text-foreground" data-testid="text-cpu-percent">
                       {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : consoleLock.isLocked ? (
@@ -1362,11 +1362,11 @@ export default function ServerDetail() {
                     </span>
                   )}
                 </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div className="w-full bg-muted rounded-full h-1.5">
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.cpu_usage || 0}%` : '0%' }}
                     data-testid="progress-cpu"
@@ -1382,7 +1382,7 @@ export default function ServerDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
-                    <span className="text-lg font-bold text-white" data-testid="text-memory-percent">
+                    <span className="text-lg font-bold text-foreground" data-testid="text-memory-percent">
                       {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : consoleLock.isLocked ? (
@@ -1398,11 +1398,11 @@ export default function ServerDetail() {
                     </span>
                   )}
                 </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div className="w-full bg-muted rounded-full h-1.5">
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-green-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-green-500" : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.ram_usage || 0}%` : '0%' }}
                     data-testid="progress-memory"
@@ -1422,7 +1422,7 @@ export default function ServerDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
-                    <span className="text-lg font-bold text-white" data-testid="text-disk-percent">
+                    <span className="text-lg font-bold text-foreground" data-testid="text-disk-percent">
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : consoleLock.isLocked ? (
@@ -1438,11 +1438,11 @@ export default function ServerDetail() {
                     </span>
                   )}
                 </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div className="w-full bg-muted rounded-full h-1.5">
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-purple-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-purple-500" : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
                     data-testid="progress-disk"
@@ -1461,7 +1461,7 @@ export default function ServerDetail() {
             {/* Bandwidth Stats Card - Compact */}
             <GlassCard className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-white uppercase tracking-wider flex items-center gap-2">
+                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-400" />
                   Bandwidth Usage
                 </h3>
@@ -1513,7 +1513,7 @@ export default function ServerDetail() {
                   <div className="space-y-2">
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-white whitespace-nowrap" data-testid="text-bandwidth-used">
+                      <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
                         {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
                       </span>
                       {remainingDisplay !== null ? (
@@ -1526,7 +1526,7 @@ export default function ServerDetail() {
                     </div>
                     
                     {/* Progress Bar */}
-                    <div className="w-full bg-white/10 rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div 
                         className={cn(
                           "h-2 rounded-full transition-all duration-500",
@@ -1541,29 +1541,29 @@ export default function ServerDetail() {
                     
                     {/* Compact Stats Row */}
                     <div className="grid grid-cols-4 gap-1.5 text-center">
-                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <ArrowDownToLine className="h-2.5 w-2.5 text-green-400" />IN
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-rx">{rxDisplay}</div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-rx">{rxDisplay}</div>
                       </div>
-                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <ArrowUpFromLine className="h-2.5 w-2.5 text-blue-400" />OUT
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-tx">{txDisplay}</div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-tx">{txDisplay}</div>
                       </div>
-                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <Gauge className="h-2.5 w-2.5 text-purple-400" />PORT
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
                       </div>
-                      <div className="p-1.5 bg-white/5 rounded border border-white/10">
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <Network className="h-2.5 w-2.5 text-cyan-400" />%
                         </div>
-                        <div className="text-xs font-semibold text-white" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
                       </div>
                     </div>
                     
@@ -1579,7 +1579,7 @@ export default function ServerDetail() {
             {/* Bandwidth History Chart */}
             {trafficData?.history && trafficData.history.length > 0 && (
               <GlassCard className="p-4">
-                <h3 className="text-sm font-medium text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
                   <Calendar className="h-4 w-4 text-blue-400" />
                   Bandwidth History
                 </h3>
@@ -1665,11 +1665,11 @@ export default function ServerDetail() {
           <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
             <GlassCard className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-white">Network Interfaces</h3>
+                <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="border-white/10"
+                  className="border-border"
                   onClick={() => queryClient.invalidateQueries({ queryKey: ['network', serverId] })}
                   data-testid="button-refresh-network"
                 >
@@ -1681,10 +1681,10 @@ export default function ServerDetail() {
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
                 <div className="space-y-4">
                   {networkInfo.interfaces.map((iface, index) => (
-                    <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div key={index} className="p-4 bg-muted/50 rounded-lg border border-border">
                       <div className="flex items-center gap-3 mb-4">
                         <Network className="h-5 w-5 text-blue-400" />
-                        <span className="font-mono font-bold text-white">{iface.name}</span>
+                        <span className="font-mono font-bold text-foreground">{iface.name}</span>
                         <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
                       </div>
                       
@@ -1692,15 +1692,15 @@ export default function ServerDetail() {
                         <div className="space-y-2">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
                           {iface.ipv4.map((ip, ipIndex) => (
-                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-md">
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                               <div className="flex items-center gap-3">
-                                <span className="font-mono text-white" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
+                                <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
                                 <button 
                                   onClick={() => copyToClipboard(ip.address)}
-                                  className="text-muted-foreground hover:text-white p-1"
+                                  className="text-muted-foreground hover:text-foreground p-1"
                                   data-testid={`button-copy-ip-${index}-${ipIndex}`}
                                 >
                                   <Copy className="h-3 w-3" />
@@ -1715,11 +1715,11 @@ export default function ServerDetail() {
                         <div className="space-y-2 mt-4">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv6 Addresses</div>
                           {iface.ipv6.map((ip, ipIndex) => (
-                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-md">
-                              <span className="font-mono text-white text-sm">{ip.address}</span>
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                              <span className="font-mono text-foreground text-sm">{ip.address}</span>
                               <button 
                                 onClick={() => copyToClipboard(ip.address)}
-                                className="text-muted-foreground hover:text-white p-1"
+                                className="text-muted-foreground hover:text-foreground p-1"
                               >
                                 <Copy className="h-3 w-3" />
                               </button>
@@ -1767,7 +1767,7 @@ export default function ServerDetail() {
                 <div className="space-y-4">
                   <Button 
                     className={cn(
-                      "text-white",
+                      "text-foreground",
                       (isSuspended || cancellationData?.cancellation)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
                         : "bg-blue-600 hover:bg-blue-700"
@@ -1820,17 +1820,17 @@ export default function ServerDetail() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium text-white mb-2 block">Current Operating System</label>
-                    <div className="p-3 bg-white/5 rounded-md border border-white/10">
-                      <span className="text-white">{server.image?.name || 'Unknown'}</span>
+                    <label className="text-sm font-medium text-foreground mb-2 block">Current Operating System</label>
+                    <div className="p-3 bg-muted/50 rounded-md border border-border">
+                      <span className="text-foreground">{server.image?.name || 'Unknown'}</span>
                     </div>
                   </div>
 
                   <Button 
                     className={cn(
-                      "text-white",
+                      "text-foreground",
                       (isSuspended || cancellationData?.cancellation)
-                        ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                        ? "bg-muted text-muted-foreground cursor-not-allowed"
                         : "bg-red-600 hover:bg-red-700"
                     )}
                     onClick={() => setReinstallDialogOpen(true)}
@@ -1871,7 +1871,7 @@ export default function ServerDetail() {
                         )}
                       </div>
                       <div>
-                        <h3 className="text-lg font-bold text-white mb-1">
+                        <h3 className="text-lg font-bold text-foreground mb-1">
                           {cancellationData.cancellation.mode === 'immediate' ? 'Immediate Deletion in Progress' : 'Cancellation Scheduled'}
                         </h3>
                         <p className="text-sm text-muted-foreground">
@@ -1923,15 +1923,15 @@ export default function ServerDetail() {
                     {cancellationData.cancellation.reason && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground block mb-2">Reason for Cancellation</label>
-                        <div className="p-3 bg-white/5 rounded-md border border-white/10">
-                          <span className="text-white text-sm">{cancellationData.cancellation.reason}</span>
+                        <div className="p-3 bg-muted/50 rounded-md border border-border">
+                          <span className="text-foreground text-sm">{cancellationData.cancellation.reason}</span>
                         </div>
                       </div>
                     )}
                     
                     {/* Only show revoke option for grace period cancellations */}
                     {cancellationData.cancellation.mode !== 'immediate' && (
-                      <div className="pt-4 border-t border-white/10">
+                      <div className="pt-4 border-t border-border">
                         <p className="text-sm text-muted-foreground mb-4">
                           Changed your mind? You can revoke the cancellation request and keep your server.
                         </p>
@@ -1961,7 +1961,7 @@ export default function ServerDetail() {
                   // Show cancellation options
                   <>
                     <div>
-                      <h3 className="text-lg font-bold text-white mb-2">Cancel This Server</h3>
+                      <h3 className="text-lg font-bold text-foreground mb-2">Cancel This Server</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         Choose how you want to cancel this server. Once cancelled, your data will be permanently deleted.
                       </p>
@@ -1982,14 +1982,14 @@ export default function ServerDetail() {
 
                     {/* Reason Input */}
                     <div className="mb-6">
-                      <Label className="text-sm font-medium text-white mb-2 block">
+                      <Label className="text-sm font-medium text-foreground mb-2 block">
                         Reason for Cancellation (Optional)
                       </Label>
                       <Input
                         value={cancellationReason}
                         onChange={(e) => setCancellationReason(e.target.value)}
                         placeholder="e.g., No longer needed, switching providers..."
-                        className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
                         data-testid="input-cancellation-reason"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
@@ -2000,10 +2000,10 @@ export default function ServerDetail() {
                     {/* Two Options */}
                     <div className="grid gap-4 md:grid-cols-2">
                       {/* Option 1: 30-Day Grace Period */}
-                      <div className="p-4 bg-white/5 border border-white/10 rounded-lg space-y-3">
+                      <div className="p-4 bg-muted/50 border border-border rounded-lg space-y-3">
                         <div className="flex items-center gap-2">
                           <Clock className="h-5 w-5 text-orange-400" />
-                          <h4 className="font-semibold text-white">30-Day Grace Period</h4>
+                          <h4 className="font-semibold text-foreground">30-Day Grace Period</h4>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           Your server will remain active for 30 days. You can revoke the cancellation at any time during this period.
@@ -2013,9 +2013,9 @@ export default function ServerDetail() {
                         </div>
                         <Button 
                           className={cn(
-                            "w-full text-white",
+                            "w-full text-foreground",
                             isSuspended 
-                              ? "bg-white/10 text-muted-foreground cursor-not-allowed"
+                              ? "bg-muted text-muted-foreground cursor-not-allowed"
                               : "bg-orange-600 hover:bg-orange-700"
                           )}
                           onClick={() => serverId && requestCancellationMutation.mutate({ 
@@ -2044,7 +2044,7 @@ export default function ServerDetail() {
                       <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-lg space-y-3">
                         <div className="flex items-center gap-2">
                           <Trash2 className="h-5 w-5 text-red-400" />
-                          <h4 className="font-semibold text-white">Delete Immediately</h4>
+                          <h4 className="font-semibold text-foreground">Delete Immediately</h4>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           Your server will be permanently deleted within 5 minutes. This action cannot be undone or revoked.
@@ -2057,7 +2057,7 @@ export default function ServerDetail() {
                           className={cn(
                             "w-full",
                             isSuspended 
-                              ? "bg-white/10 text-muted-foreground cursor-not-allowed border-white/10"
+                              ? "bg-muted text-muted-foreground cursor-not-allowed border-border"
                               : "border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                           )}
                           onClick={() => setImmediateConfirmOpen(true)}
@@ -2095,8 +2095,8 @@ export default function ServerDetail() {
           setSelectedCategory("All");
         }
       }}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="p-6 pb-4 border-b border-white/10">
+        <DialogContent className="bg-background border-border text-foreground max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="p-6 pb-4 border-b border-border">
             <DialogTitle className="text-xl">Reinstall Server</DialogTitle>
             <DialogDescription className="text-muted-foreground">
               Select an operating system to install on your server.
@@ -2116,7 +2116,7 @@ export default function ServerDetail() {
 
           {/* Hostname Input - Required */}
           <div className="px-6 pt-4">
-            <label className="text-sm font-medium text-white block mb-2">
+            <label className="text-sm font-medium text-foreground block mb-2">
               Hostname <span className="text-red-400">*</span>
             </label>
             <Input
@@ -2124,7 +2124,7 @@ export default function ServerDetail() {
               onChange={(e) => handleHostnameChange(e.target.value)}
               placeholder="e.g., myserver"
               className={cn(
-                "bg-white/5 border-white/10 text-white placeholder:text-muted-foreground",
+                "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground",
                 hostnameError && "border-red-500/50 focus-visible:ring-red-500"
               )}
               data-testid="input-hostname"
@@ -2146,7 +2146,7 @@ export default function ServerDetail() {
                 value={osSearchQuery}
                 onChange={(e) => setOsSearchQuery(e.target.value)}
                 placeholder="Search templates..."
-                className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground"
+                className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-os-search"
               />
             </div>
@@ -2159,8 +2159,8 @@ export default function ServerDetail() {
                   className={cn(
                     "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                     selectedCategory === cat
-                      ? "bg-primary text-white"
-                      : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white"
+                      ? "bg-primary text-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                   data-testid={`button-category-${cat.toLowerCase().replace(/[^a-z]/g, '-')}`}
                 >
@@ -2197,7 +2197,7 @@ export default function ServerDetail() {
           </div>
 
           {/* Footer with Install Button */}
-          <div className="border-t border-white/10 p-6">
+          <div className="border-t border-border p-6">
             <Button 
               className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold disabled:opacity-50"
               onClick={handleReinstall}
@@ -2227,7 +2227,7 @@ export default function ServerDetail() {
         setImmediateConfirmOpen(open);
         if (!open) setImmediateConfirmText("");
       }}>
-        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white max-w-md">
+        <DialogContent className="bg-background border-border text-foreground max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <AlertTriangle className="h-5 w-5" />
@@ -2243,7 +2243,7 @@ export default function ServerDetail() {
               <p className="text-sm text-red-400 font-medium">
                 You are about to permanently delete this server:
               </p>
-              <p className="text-white font-bold">{server?.name || serverId}</p>
+              <p className="text-foreground font-bold">{server?.name || serverId}</p>
               <ul className="text-sm text-red-400/80 space-y-1 mt-3">
                 <li>• All data will be permanently destroyed</li>
                 <li>• This action cannot be revoked or undone</li>
@@ -2253,14 +2253,14 @@ export default function ServerDetail() {
             </div>
             
             <div>
-              <Label className="text-sm text-white mb-2 block">
+              <Label className="text-sm text-foreground mb-2 block">
                 Type <span className="font-mono font-bold text-red-400">delete my server</span> to confirm:
               </Label>
               <Input
                 value={immediateConfirmText}
                 onChange={(e) => setImmediateConfirmText(e.target.value)}
                 placeholder="delete my server"
-                className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground font-mono"
+                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
                 data-testid="input-confirm-delete"
               />
             </div>
@@ -2269,7 +2269,7 @@ export default function ServerDetail() {
           <div className="flex gap-3">
             <Button
               variant="outline"
-              className="flex-1 border-white/10"
+              className="flex-1 border-border"
               onClick={() => {
                 setImmediateConfirmOpen(false);
                 setImmediateConfirmText("");
@@ -2308,7 +2308,7 @@ export default function ServerDetail() {
       <Dialog open={reinstallTask.isActive && !setupMinimized} onOpenChange={() => {}}>
         <DialogContent 
           className={cn(
-            "bg-[#0a0a0a] border-white/10 text-white",
+            "bg-background border-border text-foreground",
             isSetupMode ? "max-w-lg" : "max-w-md"
           )} 
           hideCloseButton

@@ -56,7 +56,7 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
               "font-medium",
               isComplete && "text-green-500",
               isFailed && "text-red-500",
-              isRunning && "text-white"
+              isRunning && "text-foreground"
             )}>
               {STATUS_LABELS[status]}
             </span>
@@ -83,16 +83,16 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
           <p className="text-xs text-muted-foreground">Save these credentials - they won't be shown again.</p>
           
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+            <div className="flex items-center justify-between gap-2 bg-card/30 rounded px-3 py-2">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground">Server IP</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-ip">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-ip">
                   {credentials.serverIp}
                 </p>
               </div>
               <button
                 onClick={() => handleCopy(credentials.serverIp, 'ip')}
-                className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                className="p-1.5 hover:bg-muted rounded transition-colors"
                 data-testid="button-copy-ip"
               >
                 {copiedField === 'ip' ? (
@@ -103,16 +103,16 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
               </button>
             </div>
             
-            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+            <div className="flex items-center justify-between gap-2 bg-card/30 rounded px-3 py-2">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground">Username</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-username">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-username">
                   {credentials.username}
                 </p>
               </div>
               <button
                 onClick={() => handleCopy(credentials.username, 'username')}
-                className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                className="p-1.5 hover:bg-muted rounded transition-colors"
                 data-testid="button-copy-username"
               >
                 {copiedField === 'username' ? (
@@ -123,17 +123,17 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
               </button>
             </div>
             
-            <div className="flex items-center justify-between gap-2 bg-black/20 rounded px-3 py-2">
+            <div className="flex items-center justify-between gap-2 bg-card/30 rounded px-3 py-2">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground">Password</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-password">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-password">
                   {showPassword ? credentials.password : '••••••••••••'}
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowPassword(!showPassword)}
-                  className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                  className="p-1.5 hover:bg-muted rounded transition-colors"
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? (
@@ -144,7 +144,7 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
                 </button>
                 <button
                   onClick={() => handleCopy(credentials.password, 'password')}
-                  className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                  className="p-1.5 hover:bg-muted rounded transition-colors"
                   data-testid="button-copy-password"
                 >
                   {copiedField === 'password' ? (
@@ -190,7 +190,7 @@ function TimelineRow({ event, isLatest }: { event: TimelineEvent; isLatest: bool
   return (
     <div className={cn(
       "flex items-center gap-3 text-sm py-1.5 px-2 rounded",
-      isLatest ? "bg-white/5" : ""
+      isLatest ? "bg-muted/50" : ""
     )}>
       <Clock className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
       <span className="text-muted-foreground">{formatTimestamp(event.timestamp)}</span>
@@ -198,7 +198,7 @@ function TimelineRow({ event, isLatest }: { event: TimelineEvent; isLatest: bool
         "font-medium",
         event.status === 'complete' && "text-green-500",
         event.status === 'failed' && "text-red-500",
-        !['complete', 'failed'].includes(event.status) && "text-white"
+        !['complete', 'failed'].includes(event.status) && "text-foreground"
       )}>
         {STATUS_LABELS[event.status]}
       </span>

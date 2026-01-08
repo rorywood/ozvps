@@ -321,19 +321,19 @@ export default function Dashboard() {
                         <div className="hidden md:flex items-center gap-6">
                           <div className="text-center">
                             <div className="text-xs text-muted-foreground mb-1">CPU</div>
-                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${server.stats?.cpu_usage || 0}%` }} />
                             </div>
                           </div>
                           <div className="text-center">
                             <div className="text-xs text-muted-foreground mb-1">RAM</div>
-                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${server.stats?.ram_usage || 0}%` }} />
                             </div>
                           </div>
                           <div className="text-center">
                             <div className="text-xs text-muted-foreground mb-1">Disk</div>
-                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${server.stats?.disk_usage || 0}%` }} />
                             </div>
                           </div>

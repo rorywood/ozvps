@@ -50,7 +50,7 @@ export default function PricingPage() {
           <Link href={isLoggedIn ? "/dashboard" : "/login"}>
             <img src={logo} alt="OzVPS" className="h-16 w-auto mb-6 cursor-pointer" data-testid="img-logo" />
           </Link>
-          <h1 className="text-3xl font-display font-bold text-white text-center" data-testid="text-page-title">
+          <h1 className="text-3xl font-display font-bold text-foreground text-center" data-testid="text-page-title">
             VPS Pricing
           </h1>
           <p className="text-muted-foreground text-center mt-2 max-w-lg">
@@ -69,7 +69,7 @@ export default function PricingPage() {
               <GlassCard key={plan.id} className="p-6" data-testid={`card-plan-${plan.code}`}>
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
+                    <h3 className="text-xl font-semibold text-foreground">{plan.name}</h3>
                     <p className="text-3xl font-bold text-primary mt-1">
                       {formatCurrency(plan.priceMonthly)}
                       <span className="text-sm font-normal text-muted-foreground">/mo</span>
@@ -111,7 +111,7 @@ export default function PricingPage() {
         )}
 
         <GlassCard className="p-8 text-center">
-          <h2 className="text-xl font-semibold text-white mb-4">Ready to get started?</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-4">Ready to get started?</h2>
           {isLoggedIn ? (
             <div className="space-y-4">
               <p className="text-muted-foreground">

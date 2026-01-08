@@ -245,7 +245,7 @@ export default function DeployPage() {
                       {isSelected && (
                         <div className="absolute top-3 right-3">
                           <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
-                            <Check className="h-3 w-3 text-white" />
+                            <Check className="h-3 w-3 text-foreground" />
                           </div>
                         </div>
                       )}

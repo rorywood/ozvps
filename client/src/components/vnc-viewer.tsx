@@ -257,11 +257,11 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   }, [key]);
 
   return (
-    <div ref={containerRef} className="flex h-full bg-black">
+    <div ref={containerRef} className="flex h-full bg-background">
       {/* Side Control Panel */}
-      <div className={`flex-shrink-0 bg-[#0a0a0a] border-r border-white/10 transition-all duration-200 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`}>
+      <div className={`flex-shrink-0 bg-background border-r border-border transition-all duration-200 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`}>
         <div className="p-4 h-full flex flex-col gap-4 min-w-[256px]">
-          <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+          <h3 className="text-foreground font-semibold text-sm flex items-center gap-2">
             <Keyboard className="h-4 w-4" />
             Controls
           </h3>
@@ -272,7 +272,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             <Button
               variant="outline"
               size="sm"
-              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              className="w-full justify-start border-border bg-muted/50 hover:bg-muted text-foreground"
               onClick={sendCtrlAltDel}
               disabled={status !== 'connected'}
               data-testid="button-ctrl-alt-del"
@@ -283,7 +283,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             <Button
               variant="outline"
               size="sm"
-              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              className="w-full justify-start border-border bg-muted/50 hover:bg-muted text-foreground"
               onClick={() => sendKey(0xFF09, 'Tab')}
               disabled={status !== 'connected'}
               data-testid="button-send-tab"
@@ -294,7 +294,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             <Button
               variant="outline"
               size="sm"
-              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              className="w-full justify-start border-border bg-muted/50 hover:bg-muted text-foreground"
               onClick={() => sendKey(0xFF1B, 'Escape')}
               disabled={status !== 'connected'}
               data-testid="button-send-esc"
@@ -305,7 +305,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             <Button
               variant="outline"
               size="sm"
-              className="w-full justify-start border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              className="w-full justify-start border-border bg-muted/50 hover:bg-muted text-foreground"
               onClick={() => sendKey(0xFF0D, 'Enter')}
               disabled={status !== 'connected'}
               data-testid="button-send-enter"
@@ -323,7 +323,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             </p>
             <Textarea
               placeholder="Type or paste text here..."
-              className="bg-white/5 border-white/10 text-white placeholder:text-muted-foreground text-sm min-h-[100px] resize-none"
+              className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-sm min-h-[100px] resize-none"
               value={clipboardText}
               onChange={(e) => setClipboardText(e.target.value)}
               data-testid="textarea-clipboard"
@@ -332,7 +332,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                className="flex-1 border-border bg-muted/50 hover:bg-muted text-foreground"
                 onClick={pasteFromClipboard}
                 data-testid="button-paste-clipboard"
               >
@@ -342,7 +342,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 border-white/10 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400"
+                className="flex-1 border-border bg-blue-600/20 hover:bg-blue-600/30 text-blue-400"
                 onClick={sendClipboardText}
                 disabled={status !== 'connected' || !clipboardText}
                 data-testid="button-send-clipboard"
@@ -371,7 +371,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
       {/* Main VNC Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#0a0a0a] border-b border-white/10">
+        <div className="flex items-center justify-between px-4 py-2 bg-background border-b border-border">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${
               status === 'connected' ? 'bg-green-500' : 
@@ -387,12 +387,12 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
           </div>
           <div className="flex items-center gap-2">
             {/* Zoom Controls */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-md border border-white/10 px-1">
+            <div className="flex items-center gap-1 bg-muted/50 rounded-md border border-border px-1">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => handleZoomChange('out')}
-                className="text-muted-foreground hover:text-white h-7 w-7"
+                className="text-muted-foreground hover:text-foreground h-7 w-7"
                 disabled={zoom === ZOOM_PRESETS[0]}
                 data-testid="button-zoom-out"
                 title="Zoom out"
@@ -406,7 +406,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
                 variant="ghost"
                 size="icon"
                 onClick={() => handleZoomChange('in')}
-                className="text-muted-foreground hover:text-white h-7 w-7"
+                className="text-muted-foreground hover:text-foreground h-7 w-7"
                 disabled={zoom === ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
                 data-testid="button-zoom-in"
                 title="Zoom in"
@@ -420,7 +420,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
                 variant="ghost"
                 size="sm"
                 onClick={handleReconnect}
-                className="text-muted-foreground hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
                 data-testid="button-vnc-reconnect"
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
@@ -431,7 +431,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
               variant="ghost"
               size="icon"
               onClick={toggleFullscreen}
-              className="text-muted-foreground hover:text-white h-8 w-8"
+              className="text-muted-foreground hover:text-foreground h-8 w-8"
               data-testid="button-vnc-fullscreen"
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -441,7 +441,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-white h-8 w-8"
+                className="text-muted-foreground hover:text-foreground h-8 w-8"
                 data-testid="button-vnc-close"
               >
                 <X className="h-4 w-4" />
@@ -453,18 +453,18 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
         {/* VNC Screen */}
         <div className="flex-1 relative">
           {status === 'connecting' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
               <GlassCard className="p-8 flex flex-col items-center">
                 <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-                <p className="text-white font-medium">Connecting to Console...</p>
+                <p className="text-foreground font-medium">Connecting to Console...</p>
               </GlassCard>
             </div>
           )}
           
           {(status === 'disconnected' || status === 'error') && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
               <GlassCard className="p-8 flex flex-col items-center">
-                <p className="text-white font-medium mb-4">
+                <p className="text-foreground font-medium mb-4">
                   {status === 'error' ? 'Connection Failed' : 'Disconnected'}
                 </p>
                 <Button onClick={handleReconnect} className="bg-primary hover:bg-primary/90" data-testid="button-vnc-reconnect-main">

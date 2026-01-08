@@ -119,7 +119,7 @@ export default function Account() {
     <AppShell>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Account Settings</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2" data-testid="text-page-title">Account Settings</h1>
           <p className="text-muted-foreground">Manage your profile and security settings</p>
         </div>
 
@@ -133,7 +133,7 @@ export default function Account() {
             <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
               <User className="h-8 w-8 text-yellow-400" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">Unable to Load Profile</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">Unable to Load Profile</h3>
             <p className="text-muted-foreground text-center max-w-md">
               There was an issue loading your profile. Please try again later.
             </p>
@@ -147,7 +147,7 @@ export default function Account() {
                     <User className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">Profile Information</h3>
+                    <h3 className="font-semibold text-foreground">Profile Information</h3>
                     <p className="text-sm text-muted-foreground">Your personal details</p>
                   </div>
                 </div>
@@ -155,7 +155,7 @@ export default function Account() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    className="border-white/10 hover:bg-white/5"
+                    className="border-border hover:bg-muted/50"
                     onClick={() => setIsEditing(true)}
                     data-testid="button-edit-profile"
                   >
@@ -172,13 +172,13 @@ export default function Account() {
                       id="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="bg-black/20 border-white/10 text-white"
+                      className="bg-card/30 border-border text-foreground"
                       data-testid="input-name"
                     />
                   ) : (
-                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                    <div className="flex items-center gap-2 p-2 bg-card/30 rounded-md border border-border">
                       <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-white" data-testid="text-name">{profile?.name || 'Not set'}</span>
+                      <span className="text-foreground" data-testid="text-name">{profile?.name || 'Not set'}</span>
                     </div>
                   )}
                 </div>
@@ -191,13 +191,13 @@ export default function Account() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="bg-black/20 border-white/10 text-white"
+                      className="bg-card/30 border-border text-foreground"
                       data-testid="input-email"
                     />
                   ) : (
-                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                    <div className="flex items-center gap-2 p-2 bg-card/30 rounded-md border border-border">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-white" data-testid="text-email">{profile?.email || 'Not set'}</span>
+                      <span className="text-foreground" data-testid="text-email">{profile?.email || 'Not set'}</span>
                     </div>
                   )}
                 </div>
@@ -210,13 +210,13 @@ export default function Account() {
                       value={timezone}
                       onChange={(e) => setTimezone(e.target.value)}
                       placeholder="e.g., Australia/Sydney"
-                      className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50"
+                      className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
                       data-testid="input-timezone"
                     />
                   ) : (
-                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md border border-white/10">
+                    <div className="flex items-center gap-2 p-2 bg-card/30 rounded-md border border-border">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-white" data-testid="text-timezone">{profile?.timezone || 'Not set'}</span>
+                      <span className="text-foreground" data-testid="text-timezone">{profile?.timezone || 'Not set'}</span>
                     </div>
                   )}
                 </div>
@@ -244,7 +244,7 @@ export default function Account() {
                         setEmail(profile?.email || "");
                         setTimezone(profile?.timezone || "");
                       }}
-                      className="border-white/10 hover:bg-white/5"
+                      className="border-border hover:bg-muted/50"
                       data-testid="button-cancel-edit"
                     >
                       Cancel
@@ -261,7 +261,7 @@ export default function Account() {
                   <Shield className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">Security</h3>
+                  <h3 className="font-semibold text-foreground">Security</h3>
                   <p className="text-sm text-muted-foreground">Change your password</p>
                 </div>
               </div>
@@ -276,13 +276,13 @@ export default function Account() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password"
-                      className="bg-black/20 border-white/10 text-white pr-10 placeholder:text-muted-foreground/50"
+                      className="bg-card/30 border-border text-foreground pr-10 placeholder:text-muted-foreground/50"
                       data-testid="input-new-password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -297,7 +297,7 @@ export default function Account() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
-                    className="bg-black/20 border-white/10 text-white placeholder:text-muted-foreground/50"
+                    className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
                     data-testid="input-confirm-password"
                   />
                 </div>

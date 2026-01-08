@@ -213,7 +213,7 @@ export default function DeployConfigurePage() {
     return (
       <AppShell>
         <div className="text-center py-20">
-          <h2 className="text-xl font-semibold text-white mb-2">Plan not found</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Plan not found</h2>
           <p className="text-muted-foreground mb-4">The selected plan does not exist or is inactive.</p>
           <Button onClick={() => setLocation("/deploy")} variant="outline">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -237,7 +237,7 @@ export default function DeployConfigurePage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
+            <h1 className="text-2xl font-display font-bold text-foreground" data-testid="text-page-title">
               Configure Server
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
@@ -289,7 +289,7 @@ export default function DeployConfigurePage() {
                 <div className="space-y-6">
                   {templates.map((group, groupIndex) => (
                     <div key={groupIndex}>
-                      <h3 className="text-sm font-medium text-white mb-3">{group.name}</h3>
+                      <h3 className="text-sm font-medium text-foreground mb-3">{group.name}</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {group.templates.map((template) => (
                           <button
@@ -299,7 +299,7 @@ export default function DeployConfigurePage() {
                             className={`relative flex items-center gap-3 p-4 rounded-lg border transition-all text-left ${
                               selectedOsId === template.id
                                 ? 'bg-primary/10 border-primary ring-1 ring-primary'
-                                : 'bg-white/[0.02] border-white/10 hover:border-white/20'
+                                : 'bg-muted/10 border-border hover:border-border'
                             }`}
                             data-testid={`radio-os-${template.id}`}
                           >
@@ -310,7 +310,7 @@ export default function DeployConfigurePage() {
                               onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
                             />
                             <div className="flex-1 min-w-0">
-                              <span className="font-medium text-white block truncate">
+                              <span className="font-medium text-foreground block truncate">
                                 {template.name}
                               </span>
                               {template.version && (
@@ -335,15 +335,15 @@ export default function DeployConfigurePage() {
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-6">
               <GlassCard className="p-5">
-                <h2 className="text-lg font-semibold text-white mb-4">Summary</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">Summary</h2>
                 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">Plan</span>
-                    <span className="text-white font-medium">{plan.name}</span>
+                    <span className="text-foreground font-medium">{plan.name}</span>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-2 text-xs pb-4 border-b border-white/10">
+                  <div className="grid grid-cols-2 gap-2 text-xs pb-4 border-b border-border">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Cpu className="h-3.5 w-3.5" />
                       <span>{plan.vcpu} vCPU</span>
@@ -364,14 +364,14 @@ export default function DeployConfigurePage() {
 
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">Hostname</span>
-                    <span className="text-white font-mono text-xs">
+                    <span className="text-foreground font-mono text-xs">
                       {hostname || <span className="text-muted-foreground italic">Not set</span>}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">Operating System</span>
-                    <span className="text-white text-xs">
+                    <span className="text-foreground text-xs">
                       {selectedOsId ? (
                         templates.flatMap(g => g.templates).find(t => t.id === selectedOsId)?.name || 'Selected'
                       ) : (
@@ -380,23 +380,23 @@ export default function DeployConfigurePage() {
                     </span>
                   </div>
                   
-                  <div className="border-t border-white/10 pt-4 space-y-3">
+                  <div className="border-t border-border pt-4 space-y-3">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Monthly price</span>
-                      <span className="font-mono font-medium text-white">
+                      <span className="font-mono font-medium text-foreground">
                         {formatCurrency(plan.priceMonthly)}
                       </span>
                     </div>
                     
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Balance</span>
-                      <span className={`font-mono font-medium ${canAfford ? 'text-green-500' : 'text-white'}`}>
+                      <span className={`font-mono font-medium ${canAfford ? 'text-green-500' : 'text-foreground'}`}>
                         {loadingWallet ? "..." : formatCurrency(wallet?.balanceCents || 0)}
                       </span>
                     </div>
                     
                     <div className="flex justify-between items-center">
-                      <span className="text-white font-medium">Due now</span>
+                      <span className="text-foreground font-medium">Due now</span>
                       <span className="font-mono font-bold text-lg text-primary">
                         {formatCurrency(plan.priceMonthly)}
                       </span>

@@ -144,14 +144,14 @@ function StatCard({ icon, label, value, detail, color }: {
   };
   
   return (
-    <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+    <div className="rounded-xl bg-muted/20 ring-1 ring-border p-5">
       <div className="flex items-center gap-3 mb-3">
         <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
           {icon}
         </div>
         <span className="text-muted-foreground text-sm">{label}</span>
       </div>
-      <p className="text-3xl font-bold text-white">{value}</p>
+      <p className="text-3xl font-bold text-foreground">{value}</p>
       {detail && <p className="text-xs text-muted-foreground mt-1">{detail}</p>}
     </div>
   );
@@ -528,7 +528,7 @@ export default function AdminPage() {
             <ShieldCheck className="h-5 w-5 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">
               Admin Command Center
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -538,7 +538,7 @@ export default function AdminPage() {
         </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-white/5 border border-white/10 mb-6 flex-wrap h-auto gap-1 p-1">
+            <TabsList className="bg-muted/50 border border-border mb-6 flex-wrap h-auto gap-1 p-1">
               <TabsTrigger value="overview" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-overview">
                 <Activity className="h-4 w-4" />
                 Overview
@@ -608,19 +608,19 @@ export default function AdminPage() {
                     />
                   </div>
 
-                  <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+                  <div className="rounded-xl bg-muted/20 ring-1 ring-border p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+                        <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                           <HardDrive className="h-4 w-4" />
                         </div>
-                        <h2 className="text-xl font-semibold text-white">Hypervisor Status</h2>
+                        <h2 className="text-xl font-semibold text-foreground">Hypervisor Status</h2>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => refetchHypervisors()}
-                        className="text-muted-foreground hover:text-white"
+                        className="text-muted-foreground hover:text-foreground"
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
@@ -635,25 +635,25 @@ export default function AdminPage() {
                     ) : (
                       <div className="space-y-3">
                         {hypervisors.map((hv) => (
-                          <div key={hv.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] ring-1 ring-white/5">
+                          <div key={hv.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/15 ring-1 ring-border">
                             <div className="flex items-center gap-3">
                               <div className={`h-3 w-3 rounded-full ${hv.enabled && !hv.maintenance ? 'bg-green-500' : hv.maintenance ? 'bg-yellow-500' : 'bg-red-500'}`} />
                               <div>
-                                <p className="font-medium text-white">{hv.name}</p>
+                                <p className="font-medium text-foreground">{hv.name}</p>
                                 <p className="text-xs text-muted-foreground">{hv.hostname || hv.ip}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-6 text-sm">
                               <div className="text-center">
-                                <p className="text-white font-medium">{hv.vmCount}/{hv.maxVms}</p>
+                                <p className="text-foreground font-medium">{hv.vmCount}/{hv.maxVms}</p>
                                 <p className="text-xs text-muted-foreground">VMs</p>
                               </div>
                               <div className="text-center">
-                                <p className="text-white font-medium">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
+                                <p className="text-foreground font-medium">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
                                 <p className="text-xs text-muted-foreground">RAM</p>
                               </div>
                               <div className="text-center">
-                                <p className="text-white font-medium">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
+                                <p className="text-foreground font-medium">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
                                 <p className="text-xs text-muted-foreground">Disk</p>
                               </div>
                               <span className={`text-xs px-2 py-0.5 rounded ${
@@ -683,7 +683,7 @@ export default function AdminPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => refetchServers()}
-                  className="border-white/10 gap-2"
+                  className="border-border gap-2"
                   data-testid="button-refresh-servers"
                 >
                   <RefreshCw className="h-4 w-4" />
@@ -700,11 +700,11 @@ export default function AdminPage() {
                   No servers found
                 </div>
               ) : (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 overflow-hidden">
+                <div className="rounded-xl bg-muted/20 ring-1 ring-border overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-white/10 text-left bg-white/[0.02]">
+                        <tr className="border-b border-border text-left bg-muted/20">
                           <th className="p-4 text-muted-foreground font-medium">Server</th>
                           <th className="p-4 text-muted-foreground font-medium">Owner</th>
                           <th className="p-4 text-muted-foreground font-medium">Status</th>
@@ -714,13 +714,13 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {servers.map((server) => (
-                          <tr key={server.id} className="border-b border-white/5 hover:bg-white/[0.02]" data-testid={`server-row-${server.id}`}>
+                          <tr key={server.id} className="border-b border-border hover:bg-muted/20" data-testid={`server-row-${server.id}`}>
                             <td className="p-4">
-                              <p className="font-medium text-white">{server.name}</p>
+                              <p className="font-medium text-foreground">{server.name}</p>
                               <p className="text-xs text-muted-foreground">{server.hostname || `ID: ${server.id}`}</p>
                             </td>
                             <td className="p-4">
-                              <p className="text-white">{server.owner?.email || 'Unknown'}</p>
+                              <p className="text-foreground">{server.owner?.email || 'Unknown'}</p>
                             </td>
                             <td className="p-4">
                               <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
@@ -807,7 +807,7 @@ export default function AdminPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => refetchHypervisors()}
-                  className="border-white/10 gap-2"
+                  className="border-border gap-2"
                 >
                   <RefreshCw className="h-4 w-4" />
                   Refresh
@@ -827,7 +827,7 @@ export default function AdminPage() {
                   {hypervisors.map((hv) => (
                     <div
                       key={hv.id}
-                      className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5 cursor-pointer hover:bg-white/[0.04] transition-colors"
+                      className="rounded-xl bg-muted/20 ring-1 ring-border p-5 cursor-pointer hover:bg-muted/20 transition-colors"
                       onClick={() => setExpandedHypervisor(expandedHypervisor === hv.id ? null : hv.id)}
                       data-testid={`hypervisor-card-${hv.id}`}
                     >
@@ -835,7 +835,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-3">
                           <div className={`h-3 w-3 rounded-full ${hv.enabled && !hv.maintenance ? 'bg-green-500' : hv.maintenance ? 'bg-yellow-500' : 'bg-red-500'}`} />
                           <div>
-                            <p className="font-medium text-white">{hv.name}</p>
+                            <p className="font-medium text-foreground">{hv.name}</p>
                             <p className="text-xs text-muted-foreground">{hv.hostname || hv.ip}</p>
                           </div>
                         </div>
@@ -854,24 +854,24 @@ export default function AdminPage() {
                       <div className="grid grid-cols-3 gap-4 mb-3">
                         <div className="text-center">
                           <p className="text-xs text-muted-foreground">VMs</p>
-                          <p className="text-lg font-semibold text-white">{hv.vmCount}/{hv.maxVms}</p>
+                          <p className="text-lg font-semibold text-foreground">{hv.vmCount}/{hv.maxVms}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-muted-foreground">RAM</p>
-                          <p className="text-lg font-semibold text-white">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
+                          <p className="text-lg font-semibold text-foreground">{hv.memoryUsage !== null ? `${hv.memoryUsage}%` : 'N/A'}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-muted-foreground">Disk</p>
-                          <p className="text-lg font-semibold text-white">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
+                          <p className="text-lg font-semibold text-foreground">{hv.diskUsage !== null ? `${hv.diskUsage}%` : 'N/A'}</p>
                         </div>
                       </div>
 
                       {expandedHypervisor === hv.id && (
-                        <div className="border-t border-white/10 pt-4 mt-4 space-y-4">
+                        <div className="border-t border-border pt-4 mt-4 space-y-4">
                           <div>
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-muted-foreground">Memory Usage</span>
-                              <span className="text-white">
+                              <span className="text-foreground">
                                 {hv.ramUsedMb !== null && hv.ramTotalMb !== null 
                                   ? `${hv.ramUsedMb} / ${hv.ramTotalMb} MB`
                                   : 'Not available'}
@@ -882,7 +882,7 @@ export default function AdminPage() {
                           <div>
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-muted-foreground">Disk Usage</span>
-                              <span className="text-white">
+                              <span className="text-foreground">
                                 {hv.diskUsedGb !== null && hv.diskTotalGb !== null 
                                   ? `${hv.diskUsedGb} / ${hv.diskTotalGb} GB`
                                   : 'Not available'}
@@ -893,7 +893,7 @@ export default function AdminPage() {
                           <div>
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-muted-foreground">CPU Usage</span>
-                              <span className="text-white">{hv.cpuUsage !== null ? `${hv.cpuUsage}%` : 'Not available'}</span>
+                              <span className="text-foreground">{hv.cpuUsage !== null ? `${hv.cpuUsage}%` : 'Not available'}</span>
                             </div>
                             <Progress value={hv.cpuUsage ?? 0} className="h-2" />
                           </div>
@@ -921,7 +921,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-3">
                   <Globe className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <h2 className="text-lg font-semibold text-white">IP Allocations</h2>
+                    <h2 className="text-lg font-semibold text-foreground">IP Allocations</h2>
                     <p className="text-sm text-muted-foreground">{ipAllocations.length} IP addresses</p>
                   </div>
                 </div>
@@ -929,7 +929,7 @@ export default function AdminPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => refetchIpAllocations()}
-                  className="border-white/10 gap-2"
+                  className="border-border gap-2"
                 >
                   <RefreshCw className="h-4 w-4" />
                   Refresh
@@ -945,11 +945,11 @@ export default function AdminPage() {
                   No IP allocations found
                 </div>
               ) : (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 overflow-hidden">
+                <div className="rounded-xl bg-muted/20 ring-1 ring-border overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-white/10 text-left bg-white/[0.02]">
+                        <tr className="border-b border-border text-left bg-muted/20">
                           <th className="p-4 text-muted-foreground font-medium">IP Address</th>
                           <th className="p-4 text-muted-foreground font-medium">Type</th>
                           <th className="p-4 text-muted-foreground font-medium">Server</th>
@@ -958,9 +958,9 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {ipAllocations.map((ip) => (
-                          <tr key={ip.id} className="border-b border-white/5 hover:bg-white/[0.02]" data-testid={`ip-row-${ip.id}`}>
+                          <tr key={ip.id} className="border-b border-border hover:bg-muted/20" data-testid={`ip-row-${ip.id}`}>
                             <td className="p-4">
-                              <p className="font-mono text-white">{ip.address}</p>
+                              <p className="font-mono text-foreground">{ip.address}</p>
                             </td>
                             <td className="p-4">
                               <span className={`text-xs px-2 py-0.5 rounded ${
@@ -973,7 +973,7 @@ export default function AdminPage() {
                               {ip.serverName ? (
                                 <div className="flex items-center gap-2">
                                   <Server className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-white">{ip.serverName}</span>
+                                  <span className="text-foreground">{ip.serverName}</span>
                                   <span className="text-xs text-muted-foreground">(ID: {ip.serverId})</span>
                                 </div>
                               ) : (
@@ -1005,7 +1005,7 @@ export default function AdminPage() {
                     <DollarSign className="h-5 w-5 text-green-400" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-white">Credit Adjustment</h2>
+                    <h2 className="font-semibold text-foreground">Credit Adjustment</h2>
                     <p className="text-sm text-muted-foreground">Add or remove credits from user wallets. Search for a user below to adjust their balance.</p>
                   </div>
                 </div>
@@ -1017,7 +1017,7 @@ export default function AdminPage() {
                     placeholder="Enter user email address to manage credits..."
                     value={searchEmail}
                     onChange={(e) => setSearchEmail(e.target.value)}
-                    className="flex-1 bg-black/30 border-green-500/20 focus:border-green-500/40"
+                    className="flex-1 bg-card/30 border-green-500/20 focus:border-green-500/40"
                   />
                   <Button
                     data-testid="button-admin-search"
@@ -1039,15 +1039,15 @@ export default function AdminPage() {
 
               {/* Selected User Card */}
               {selectedUser && (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-amber-500/20 overflow-hidden">
-                  <div className="p-5 border-b border-white/5">
+                <div className="rounded-xl bg-muted/20 ring-1 ring-amber-500/20 overflow-hidden">
+                  <div className="p-5 border-b border-border">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
                           <User className="h-6 w-6 text-amber-400" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-white" data-testid="text-user-email">
+                          <h3 className="text-lg font-semibold text-foreground" data-testid="text-user-email">
                             {selectedUser.email}
                           </h3>
                           {selectedUser.name && (
@@ -1067,27 +1067,27 @@ export default function AdminPage() {
                   <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground text-xs mb-1">Auth0 ID</p>
-                      <p className="font-mono text-xs text-white/80 truncate">{selectedUser.auth0UserId}</p>
+                      <p className="font-mono text-xs text-foreground/80 truncate">{selectedUser.auth0UserId}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs mb-1">VirtFusion ID</p>
-                      <p className="font-mono text-white/80">
+                      <p className="font-mono text-foreground/80">
                         {selectedUser.virtFusionUserId || <span className="text-yellow-500">Not linked</span>}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs mb-1">Email Verified</p>
-                      <p className="text-white/80">{selectedUser.emailVerified ? "Yes" : "No"}</p>
+                      <p className="text-foreground/80">{selectedUser.emailVerified ? "Yes" : "No"}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs mb-1">Stripe Customer</p>
-                      <p className="font-mono text-xs text-white/80 truncate">
+                      <p className="font-mono text-xs text-foreground/80 truncate">
                         {selectedUser.wallet?.stripeCustomerId || "None"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-5 border-t border-white/5 flex flex-wrap gap-2">
+                  <div className="p-5 border-t border-border flex flex-wrap gap-2">
                     <Button
                       data-testid="button-add-credits"
                       onClick={() => handleOpenAdjust("add")}
@@ -1111,7 +1111,7 @@ export default function AdminPage() {
                       onClick={() => setTransactionsDialogOpen(true)}
                       variant="outline"
                       size="sm"
-                      className="border-white/10"
+                      className="border-border"
                     >
                       <History className="h-4 w-4 mr-1" />
                       Transactions
@@ -1139,12 +1139,12 @@ export default function AdminPage() {
               )}
 
               {/* All Users Table */}
-              <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+              <div className="rounded-xl bg-muted/20 ring-1 ring-border p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <Users className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <h2 className="font-semibold text-white">All Users</h2>
+                      <h2 className="font-semibold text-foreground">All Users</h2>
                       <p className="text-sm text-muted-foreground">{vfUsers.length} active users</p>
                     </div>
                   </div>
@@ -1152,7 +1152,7 @@ export default function AdminPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => refetchUsers()}
-                    className="border-white/10 gap-2"
+                    className="border-border gap-2"
                   >
                     <RefreshCw className="h-4 w-4" />
                     Refresh
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-white/10 text-left">
+                        <tr className="border-b border-border text-left">
                           <th className="p-3 text-muted-foreground font-medium">User</th>
                           <th className="p-3 text-muted-foreground font-medium">VirtFusion</th>
                           <th className="p-3 text-muted-foreground font-medium">Servers</th>
@@ -1180,9 +1180,9 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {vfUsers.map((user, idx) => (
-                          <tr key={user.auth0UserId || idx} className="border-b border-white/5 hover:bg-white/[0.02]" data-testid={`user-row-${idx}`}>
+                          <tr key={user.auth0UserId || idx} className="border-b border-border hover:bg-muted/20" data-testid={`user-row-${idx}`}>
                             <td className="p-3">
-                              <p className="font-medium text-white">{user.name}</p>
+                              <p className="font-medium text-foreground">{user.name}</p>
                               <p className="text-xs text-muted-foreground">{user.email}</p>
                             </td>
                             <td className="p-3">
@@ -1198,7 +1198,7 @@ export default function AdminPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 text-white">
+                            <td className="p-3 text-foreground">
                               {user.serverCount}
                             </td>
                             <td className="p-3">
@@ -1217,10 +1217,10 @@ export default function AdminPage() {
 
             {/* Security Tab */}
             <TabsContent value="security" className="space-y-6">
-              <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+              <div className="rounded-xl bg-muted/20 ring-1 ring-border p-5">
                 <div className="flex items-center justify-between mb-5">
                   <div>
-                    <h3 className="font-medium text-white">reCAPTCHA Protection</h3>
+                    <h3 className="font-medium text-foreground">reCAPTCHA Protection</h3>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       Protect login forms from bots with Google reCAPTCHA v2
                     </p>
@@ -1242,7 +1242,7 @@ export default function AdminPage() {
                       placeholder="6Lc..."
                       value={recaptchaSiteKey}
                       onChange={(e) => setRecaptchaSiteKey(e.target.value)}
-                      className="font-mono text-sm bg-black/20 border-white/10"
+                      className="font-mono text-sm bg-card/30 border-border"
                     />
                   </div>
 
@@ -1256,12 +1256,12 @@ export default function AdminPage() {
                         placeholder={recaptchaData?.hasSecretKey ? "••••••••••••••••" : "Enter secret key"}
                         value={recaptchaSecretKey}
                         onChange={(e) => setRecaptchaSecretKey(e.target.value)}
-                        className="font-mono text-sm pr-10 bg-black/20 border-white/10"
+                        className="font-mono text-sm pr-10 bg-card/30 border-border"
                       />
                       <button
                         type="button"
                         onClick={() => setShowSecretKey(!showSecretKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -1302,7 +1302,7 @@ export default function AdminPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => refetchAuditLogs()}
-                  className="border-white/10 gap-2"
+                  className="border-border gap-2"
                 >
                   <RefreshCw className="h-4 w-4" />
                   Refresh
@@ -1322,7 +1322,7 @@ export default function AdminPage() {
                   {auditLogs.map((log) => (
                     <div
                       key={log.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5"
+                      className="flex items-center justify-between p-4 rounded-xl bg-muted/20 ring-1 ring-border"
                       data-testid={`audit-log-${log.id}`}
                     >
                       <div className="flex items-center gap-3">
@@ -1336,7 +1336,7 @@ export default function AdminPage() {
                           )}
                         </div>
                         <div>
-                          <p className="text-sm text-white">
+                          <p className="text-sm text-foreground">
                             <span className="font-medium">{log.action}</span>
                             {log.targetId && (
                               <span className="text-muted-foreground"> on {log.targetType} #{log.targetId}</span>
@@ -1368,9 +1368,9 @@ export default function AdminPage() {
 
       {/* Server Action Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <DialogContent className="bg-gray-900 border-white/10">
+        <DialogContent className="bg-gray-900 border-border">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
+            <DialogTitle className="text-foreground flex items-center gap-2">
               {actionType === 'delete' && <Trash2 className="h-5 w-5 text-red-400" />}
               {actionType === 'suspend' && <Ban className="h-5 w-5 text-yellow-400" />}
               {actionType === 'unsuspend' && <CheckCircle className="h-5 w-5 text-green-400" />}
@@ -1397,7 +1397,7 @@ export default function AdminPage() {
                   value={transferUserId}
                   onChange={(e) => setTransferUserId(e.target.value)}
                   placeholder="Enter VirtFusion user ID"
-                  className="bg-white/5 border-white/10"
+                  className="bg-muted/50 border-border"
                 />
               </div>
             )}
@@ -1412,7 +1412,7 @@ export default function AdminPage() {
                   value={actionReason}
                   onChange={(e) => setActionReason(e.target.value)}
                   placeholder="Provide a reason for this action (required for audit)"
-                  className="bg-white/5 border-white/10 min-h-[80px]"
+                  className="bg-muted/50 border-border min-h-[80px]"
                 />
               </div>
             )}
@@ -1431,7 +1431,7 @@ export default function AdminPage() {
             <Button
               variant="outline"
               onClick={() => setActionDialogOpen(false)}
-              className="border-white/10"
+              className="border-border"
             >
               Cancel
             </Button>
@@ -1449,9 +1449,9 @@ export default function AdminPage() {
 
       {/* Adjust Credits Dialog */}
       <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-white/10">
+        <DialogContent className="bg-zinc-900 border-border">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
+            <DialogTitle className="flex items-center gap-2 text-foreground">
               <DollarSign className="h-5 w-5 text-amber-400" />
               {adjustType === "add" ? "Add Credits" : "Remove Credits"}
             </DialogTitle>
@@ -1464,7 +1464,7 @@ export default function AdminPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>User</Label>
-              <p className="text-sm text-white">{selectedUser?.email}</p>
+              <p className="text-sm text-foreground">{selectedUser?.email}</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="amount">Amount (AUD)</Label>
@@ -1477,7 +1477,7 @@ export default function AdminPage() {
                 placeholder="0.00"
                 value={adjustAmount}
                 onChange={(e) => setAdjustAmount(e.target.value)}
-                className="bg-black/20 border-white/10"
+                className="bg-card/30 border-border"
               />
             </div>
             <div className="space-y-2">
@@ -1488,12 +1488,12 @@ export default function AdminPage() {
                 placeholder="Enter reason for adjustment..."
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
-                className="bg-black/20 border-white/10"
+                className="bg-card/30 border-border"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustDialogOpen(false)} className="border-white/10">
+            <Button variant="outline" onClick={() => setAdjustDialogOpen(false)} className="border-border">
               Cancel
             </Button>
             <Button
@@ -1514,9 +1514,9 @@ export default function AdminPage() {
 
       {/* Transactions Dialog */}
       <Dialog open={transactionsDialogOpen} onOpenChange={setTransactionsDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-white/10 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-zinc-900 border-border max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
+            <DialogTitle className="flex items-center gap-2 text-foreground">
               <History className="h-5 w-5 text-amber-400" />
               Transaction History
             </DialogTitle>
@@ -1536,10 +1536,10 @@ export default function AdminPage() {
                 {(transactionsData?.transactions || []).map((tx: Transaction) => (
                   <div
                     key={tx.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] ring-1 ring-white/5"
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/20 ring-1 ring-border"
                   >
                     <div>
-                      <p className="text-sm font-medium text-white capitalize">{tx.type.replace(/_/g, ' ')}</p>
+                      <p className="text-sm font-medium text-foreground capitalize">{tx.type.replace(/_/g, ' ')}</p>
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(tx.createdAt), 'MMM d, yyyy HH:mm')}
                       </p>
@@ -1557,9 +1557,9 @@ export default function AdminPage() {
 
       {/* Link VirtFusion Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-white/10">
+        <DialogContent className="bg-zinc-900 border-border">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
+            <DialogTitle className="flex items-center gap-2 text-foreground">
               <Link className="h-5 w-5 text-blue-400" />
               Link VirtFusion Account
             </DialogTitle>
@@ -1570,7 +1570,7 @@ export default function AdminPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>User</Label>
-              <p className="text-sm text-white">{selectedUser?.email}</p>
+              <p className="text-sm text-foreground">{selectedUser?.email}</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="oldExtRelationId">Old External Relation ID</Label>
@@ -1579,7 +1579,7 @@ export default function AdminPage() {
                 placeholder="e.g., auth0|abc123..."
                 value={oldExtRelationId}
                 onChange={(e) => setOldExtRelationId(e.target.value)}
-                className="bg-black/20 border-white/10 font-mono text-sm"
+                className="bg-card/30 border-border font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
                 This is the Auth0 user ID that was previously used for this VirtFusion account.
@@ -1587,7 +1587,7 @@ export default function AdminPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setLinkDialogOpen(false)} className="border-white/10">
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)} className="border-border">
               Cancel
             </Button>
             <Button

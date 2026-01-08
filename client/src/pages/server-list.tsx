@@ -117,7 +117,7 @@ export default function ServerList() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold text-white mb-2">Servers</h1>
+            <h1 className="text-3xl font-display font-bold text-foreground mb-2">Servers</h1>
             <p className="text-muted-foreground">Manage your virtual private servers</p>
           </div>
           <div className="flex items-center gap-2">
@@ -125,10 +125,10 @@ export default function ServerList() {
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
                   placeholder="Search servers..." 
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50 h-10"
+                  className="pl-9 bg-card/30 border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50 h-10"
                 />
               </div>
-              <Button variant="outline" className="border-white/10 bg-black/20 text-white hover:bg-white/5">
+              <Button variant="outline" className="border-border bg-card/30 text-foreground hover:bg-muted/50">
                 <Filter className="h-4 w-4 mr-2" />
                 Filter
               </Button>
@@ -150,11 +150,11 @@ export default function ServerList() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
               <ServerIcon className="h-10 w-10 text-primary" />
             </div>
-            <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
+            <h3 className="text-xl font-display font-medium text-foreground mb-2">No Servers Yet</h3>
             <p className="text-muted-foreground text-center max-w-md mb-6">
               You don't have any VPS servers yet. Order a server through your billing portal to get started.
             </p>
-            <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-order-server" asChild>
+            <Button variant="outline" className="border-border hover:bg-muted/50" data-testid="button-order-server" asChild>
               <Link href="/deploy">
                 <Zap className="h-4 w-4 mr-2" />
                 Deploy a Server
@@ -196,7 +196,7 @@ export default function ServerList() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">{getDisplayServerName(server.name)}</h3>
+                              <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">{getDisplayServerName(server.name)}</h3>
                               {server.suspended ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
                                   SUSPENDED
@@ -268,22 +268,22 @@ export default function ServerList() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-2 flex-1 text-sm">
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Location</div>
-                      <div className="text-white font-medium flex items-center gap-2">
+                      <div className="text-foreground font-medium flex items-center gap-2">
                         <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
                         {server.location.name}
                       </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Specs</div>
-                      <div className="text-white font-medium">{server.plan.specs.vcpu} vCPU / {server.plan.specs.ram / 1024}GB</div>
+                      <div className="text-foreground font-medium">{server.plan.specs.vcpu} vCPU / {server.plan.specs.ram / 1024}GB</div>
                     </div>
                      <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Disk</div>
-                      <div className="text-white font-medium">{server.plan.specs.disk}GB NVMe</div>
+                      <div className="text-foreground font-medium">{server.plan.specs.disk}GB NVMe</div>
                     </div>
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Image</div>
-                      <div className="text-white font-medium flex items-center gap-2">
+                      <div className="text-foreground font-medium flex items-center gap-2">
                         {server.needsSetup ? (
                           <span className="text-blue-400 italic text-sm">No OS installed</span>
                         ) : (
@@ -303,7 +303,7 @@ export default function ServerList() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5 flex-wrap">
+                  <div className="flex items-center gap-2 pt-4 lg:pt-0 border-t lg:border-t-0 border-border flex-wrap">
                     {server.suspended && (
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-500/10 border border-yellow-500/20">
                         <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
@@ -313,7 +313,7 @@ export default function ServerList() {
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      className="h-9 border-white/10 hover:bg-white/5 hover:text-white text-muted-foreground hidden sm:flex"
+                      className="h-9 border-border hover:bg-muted/50 hover:text-foreground text-muted-foreground hidden sm:flex"
                       disabled={server.suspended}
                       onClick={(e) => {
                         e.preventDefault();
@@ -331,7 +331,7 @@ export default function ServerList() {
                       <span className="hidden sm:inline">Console</span>
                     </Button>
                     
-                    <div className="flex items-center bg-black/20 rounded-md border border-white/10 p-1">
+                    <div className="flex items-center bg-card/30 rounded-md border border-border p-1">
                       <Button 
                         size="icon" 
                         variant="ghost" 
@@ -343,7 +343,7 @@ export default function ServerList() {
                       >
                         <Power className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
-                      <div className="w-px h-5 bg-white/10 mx-0.5" />
+                      <div className="w-px h-5 bg-muted mx-0.5" />
                       <Button 
                         size="icon" 
                         variant="ghost" 
@@ -355,7 +355,7 @@ export default function ServerList() {
                       >
                         <RotateCw className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
-                      <div className="w-px h-5 bg-white/10 mx-0.5" />
+                      <div className="w-px h-5 bg-muted mx-0.5" />
                       <Button 
                         size="icon" 
                         variant="ghost" 
@@ -371,14 +371,14 @@ export default function ServerList() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-white">
+                        <Button size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-foreground">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+                      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-xl border-border text-foreground">
                         <DropdownMenuLabel>Server Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator className="bg-white/10" />
-                        <DropdownMenuItem className="focus:bg-white/10 cursor-pointer">View Details</DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-muted" />
+                        <DropdownMenuItem className="focus:bg-muted cursor-pointer">View Details</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

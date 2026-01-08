@@ -134,7 +134,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         {onMinimize && !isComplete && !isFailed && (
           <button
             onClick={onMinimize}
-            className="absolute top-0 right-0 p-2 hover:bg-white/10 rounded-lg transition-colors text-muted-foreground hover:text-white"
+            className="absolute top-0 right-0 p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
             title="Minimize - continue in background"
             data-testid="button-minimize-setup"
           >
@@ -154,7 +154,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
             )}
           </div>
-          <h3 className="text-xl font-display font-semibold text-white">
+          <h3 className="text-xl font-display font-semibold text-foreground">
             {isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
           </h3>
           {serverName && (
@@ -169,10 +169,10 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
           <span className="text-muted-foreground">Progress</span>
           <span className={cn(
             "font-medium",
-            isComplete ? "text-green-500" : isFailed ? "text-red-500" : "text-white"
+            isComplete ? "text-green-500" : isFailed ? "text-red-500" : "text-foreground"
           )}>{percent}%</span>
         </div>
-        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div 
             className={cn(
               "h-full transition-all duration-500 ease-out rounded-full",
@@ -211,7 +211,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                 "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all",
                 stepState === 'complete' && "bg-green-500/20 border-green-500 text-green-500",
                 stepState === 'active' && "bg-primary/20 border-primary text-primary",
-                stepState === 'pending' && "bg-white/5 border-white/20 text-white/40"
+                stepState === 'pending' && "bg-muted/50 border-border text-foreground/40"
               )}>
                 {stepState === 'complete' ? (
                   <CheckCircle2 className="h-5 w-5" />
@@ -228,8 +228,8 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                   <span className={cn(
                     "font-medium",
                     stepState === 'complete' && "text-green-400",
-                    stepState === 'active' && "text-white",
-                    stepState === 'pending' && "text-white/40"
+                    stepState === 'active' && "text-foreground",
+                    stepState === 'pending' && "text-foreground/40"
                   )}>
                     {step.label}
                   </span>
@@ -241,7 +241,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                 </div>
                 <p className={cn(
                   "text-sm",
-                  stepState === 'pending' ? "text-white/30" : "text-muted-foreground"
+                  stepState === 'pending' ? "text-foreground/30" : "text-muted-foreground"
                 )}>
                   {step.description}
                 </p>
@@ -252,7 +252,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                 "hidden sm:flex",
                 stepState === 'complete' && "text-green-500/50",
                 stepState === 'active' && "text-primary/50",
-                stepState === 'pending' && "text-white/10"
+                stepState === 'pending' && "text-foreground/10"
               )}>
                 {step.icon}
               </div>
@@ -283,7 +283,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                   stroke="currentColor"
                   strokeWidth="4"
                   fill="none"
-                  className="text-white/10"
+                  className="text-foreground/10"
                 />
                 <circle
                   cx="40"
@@ -299,7 +299,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">{credentialCountdown}</span>
+                <span className="text-2xl font-bold text-foreground">{credentialCountdown}</span>
               </div>
             </div>
           </div>
@@ -323,16 +323,16 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
           
           <div className="space-y-3">
             {/* Server IP */}
-            <div className="flex items-center justify-between gap-3 bg-black/30 rounded-lg px-4 py-3">
+            <div className="flex items-center justify-between gap-3 bg-card/30 rounded-lg px-4 py-3">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground block">Server IP</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-ip">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-ip">
                   {credentials.serverIp}
                 </p>
               </div>
               <button
                 onClick={() => handleCopy(credentials.serverIp, 'ip')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
                 data-testid="button-copy-ip"
               >
                 {copiedField === 'ip' ? (
@@ -344,16 +344,16 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             </div>
             
             {/* Username */}
-            <div className="flex items-center justify-between gap-3 bg-black/30 rounded-lg px-4 py-3">
+            <div className="flex items-center justify-between gap-3 bg-card/30 rounded-lg px-4 py-3">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground block">Username</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-username">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-username">
                   {credentials.username}
                 </p>
               </div>
               <button
                 onClick={() => handleCopy(credentials.username, 'username')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
                 data-testid="button-copy-username"
               >
                 {copiedField === 'username' ? (
@@ -365,17 +365,17 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             </div>
             
             {/* Password */}
-            <div className="flex items-center justify-between gap-3 bg-black/30 rounded-lg px-4 py-3">
+            <div className="flex items-center justify-between gap-3 bg-card/30 rounded-lg px-4 py-3">
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-muted-foreground block">Password</span>
-                <p className="text-sm font-mono text-white truncate" data-testid="text-credentials-password">
+                <p className="text-sm font-mono text-foreground truncate" data-testid="text-credentials-password">
                   {showPassword ? credentials.password : '••••••••••••'}
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowPassword(!showPassword)}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? (
@@ -386,7 +386,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
                 </button>
                 <button
                   onClick={() => handleCopy(credentials.password, 'password')}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
                   data-testid="button-copy-password"
                 >
                   {copiedField === 'password' ? (
@@ -400,9 +400,9 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
           </div>
 
           {/* SSH Command Help */}
-          <div className="pt-2 border-t border-white/10">
+          <div className="pt-2 border-t border-border">
             <p className="text-xs text-muted-foreground mb-2">Connect via SSH:</p>
-            <code className="text-xs font-mono text-green-400 bg-black/30 px-3 py-2 rounded block">
+            <code className="text-xs font-mono text-green-400 bg-card/30 px-3 py-2 rounded block">
               ssh {credentials.username}@{credentials.serverIp}
             </code>
           </div>

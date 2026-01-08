@@ -15,7 +15,7 @@ export default function SystemError({ errorCode = "API_UNAVAILABLE", onRetry }: 
         </div>
         
         <div className="space-y-2">
-          <h1 className="text-3xl font-display font-bold text-white">Oh No!</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">Oh No!</h1>
           <p className="text-lg text-muted-foreground">
             We're experiencing some technical difficulties at the moment.
           </p>
@@ -24,7 +24,7 @@ export default function SystemError({ errorCode = "API_UNAVAILABLE", onRetry }: 
           </p>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+        <div className="bg-muted/50 border border-border rounded-lg p-4">
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Error Code</div>
           <div className="font-mono text-red-400 text-lg" data-testid="text-error-code">{errorCode}</div>
         </div>

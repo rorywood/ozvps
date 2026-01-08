@@ -24,10 +24,10 @@ export function OsTemplateRow({ template, isSelected, onSelect }: OsTemplateRowP
       onClick={onSelect}
       className={cn(
         "w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
-        "hover:bg-white/10 hover:border-white/20",
+        "hover:bg-muted hover:border-border",
         isSelected
           ? "bg-primary/20 border-primary ring-1 ring-primary/50"
-          : "bg-white/5 border-white/10"
+          : "bg-muted/50 border-border"
       )}
       data-testid={`button-os-${template.id}`}
     >
@@ -39,7 +39,7 @@ export function OsTemplateRow({ template, isSelected, onSelect }: OsTemplateRowP
         className="w-7 h-7 object-contain flex-shrink-0"
       />
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-white text-sm truncate">
+        <div className="font-medium text-foreground text-sm truncate">
           {displayName}
         </div>
         {template.description && (
@@ -50,7 +50,7 @@ export function OsTemplateRow({ template, isSelected, onSelect }: OsTemplateRowP
       </div>
       {isSelected && (
         <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-          <Check className="w-3 h-3 text-white" />
+          <Check className="w-3 h-3 text-primary-foreground" />
         </div>
       )}
     </button>

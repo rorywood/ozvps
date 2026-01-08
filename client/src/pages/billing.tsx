@@ -183,7 +183,7 @@ function AddCardFormInner({
   return (
     <form onSubmit={handleSubmit}>
       <div className="space-y-4">
-        <div className="p-4 rounded-lg bg-black/30 border border-white/10">
+        <div className="p-4 rounded-lg bg-card/30 border border-border">
           <CardElement options={cardElementOptions} />
         </div>
         
@@ -196,7 +196,7 @@ function AddCardFormInner({
             type="button"
             variant="outline"
             onClick={onCancel}
-            className="border-white/10"
+            className="border-border"
             disabled={isProcessing}
           >
             Cancel
@@ -304,14 +304,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
   const selectedPm = paymentMethods.find(pm => pm.id === autoTopupData?.paymentMethodId);
 
   return (
-    <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5" data-testid="auto-topup-section">
+    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-5" data-testid="auto-topup-section">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
             <Zap className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="font-medium text-white">Auto Top-Up</h3>
+            <h3 className="font-medium text-foreground">Auto Top-Up</h3>
             <p className="text-sm text-muted-foreground">Automatically add funds</p>
           </div>
         </div>
@@ -324,7 +324,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
       </div>
 
       {autoTopupData?.enabled && (
-        <div className="space-y-4 pt-4 mt-4 border-t border-white/5">
+        <div className="space-y-4 pt-4 mt-4 border-t border-border">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">When balance drops below</Label>
@@ -333,7 +333,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                 onValueChange={handleThresholdChange}
                 disabled={updateMutation.isPending}
               >
-                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-threshold">
+                <SelectTrigger className="bg-card/30 border-border" data-testid="select-threshold">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -353,7 +353,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                 onValueChange={handleAmountChange}
                 disabled={updateMutation.isPending}
               >
-                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-amount">
+                <SelectTrigger className="bg-card/30 border-border" data-testid="select-amount">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -377,7 +377,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                 onValueChange={handlePaymentMethodChange}
                 disabled={updateMutation.isPending}
               >
-                <SelectTrigger className="bg-black/20 border-white/10" data-testid="select-payment-method">
+                <SelectTrigger className="bg-card/30 border-border" data-testid="select-payment-method">
                   <SelectValue>
                     {selectedPm ? `•••• ${selectedPm.last4}` : 'Select card'}
                   </SelectValue>
@@ -697,7 +697,7 @@ export default function BillingPage() {
     <AppShell>
       <div className="space-y-6 max-w-4xl">
         <div>
-          <h1 className="text-3xl font-display font-bold text-white" data-testid="text-page-title">
+          <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-page-title">
             Billing
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -706,11 +706,11 @@ export default function BillingPage() {
         </div>
 
         {!stripeConfigured ? (
-          <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/5 p-12 text-center">
+          <div className="rounded-2xl bg-muted/10 ring-1 ring-border p-12 text-center">
             <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mx-auto mb-4">
               <CreditCard className="h-8 w-8 text-yellow-400" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">Payments Not Available</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">Payments Not Available</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               The payment system is being configured. Please contact support if you need to add funds to your account.
             </p>
@@ -764,7 +764,7 @@ export default function BillingPage() {
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     ) : (
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-white font-display" data-testid="text-balance">
+                        <span className="text-4xl font-bold text-foreground font-display" data-testid="text-balance">
                           {formatCurrency(wallet?.balanceCents || 0)}
                         </span>
                         <span className="text-muted-foreground">AUD</span>
@@ -793,7 +793,7 @@ export default function BillingPage() {
                           <Button
                             key={amount}
                             variant={selectedAmount === amount ? "default" : "outline"}
-                            className={selectedAmount === amount ? "" : "border-white/10"}
+                            className={selectedAmount === amount ? "" : "border-border"}
                             onClick={() => handlePresetSelect(amount)}
                             data-testid={`button-amount-${amount}`}
                           >
@@ -809,7 +809,7 @@ export default function BillingPage() {
                           placeholder="Custom amount"
                           value={customAmount}
                           onChange={(e) => handleCustomAmountChange(e.target.value)}
-                          className="pl-8 bg-black/20 border-white/10"
+                          className="pl-8 bg-card/30 border-border"
                           data-testid="input-custom-amount"
                         />
                       </div>
@@ -819,15 +819,15 @@ export default function BillingPage() {
                       
                       {/* Payment Method Selection */}
                       {paymentMethods.length > 0 && (
-                        <div className="pt-4 border-t border-white/10">
-                          <label className="text-sm font-medium text-white mb-2 block">
+                        <div className="pt-4 border-t border-border">
+                          <label className="text-sm font-medium text-foreground mb-2 block">
                             Pay with saved card
                           </label>
                           <Select
                             value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
                             onValueChange={(value) => setSelectedPaymentMethodId(value)}
                           >
-                            <SelectTrigger className="w-full bg-black/20 border-white/10" data-testid="select-payment-method">
+                            <SelectTrigger className="w-full bg-card/30 border-border" data-testid="select-payment-method">
                               <SelectValue placeholder="Select a card" />
                             </SelectTrigger>
                             <SelectContent>
@@ -848,7 +848,7 @@ export default function BillingPage() {
                       <Button
                         variant="outline"
                         onClick={() => setTopupDialogOpen(false)}
-                        className="border-white/10"
+                        className="border-border"
                       >
                         Cancel
                       </Button>
@@ -868,12 +868,12 @@ export default function BillingPage() {
               </div>
 
               {wallet?.stripeCustomerId && (
-                <div className="pt-4 mt-4 border-t border-white/5">
+                <div className="pt-4 mt-4 border-t border-border">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
                     <div className="flex items-center gap-2">
                       <code 
-                        className="text-xs font-mono text-white/70 bg-black/30 px-2 py-1 rounded"
+                        className="text-xs font-mono text-foreground/70 bg-card/30 px-2 py-1 rounded"
                         data-testid="text-stripe-customer-id"
                       >
                         {showStripeId 
@@ -883,7 +883,7 @@ export default function BillingPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setShowStripeId(!showStripeId)}
                         data-testid="button-toggle-stripe-id"
                       >
@@ -893,7 +893,7 @@ export default function BillingPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                           onClick={() => {
                             navigator.clipboard.writeText(wallet.stripeCustomerId!);
                             toast({
@@ -920,20 +920,20 @@ export default function BillingPage() {
                     <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-white">Payment Methods</h2>
+                    <h2 className="font-semibold text-foreground">Payment Methods</h2>
                     <p className="text-sm text-muted-foreground">Saved cards for top-ups</p>
                   </div>
                 </div>
                 <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 border-white/10" data-testid="button-add-card">
+                    <Button variant="outline" size="sm" className="gap-1 border-border" data-testid="button-add-card">
                       <Plus className="h-4 w-4" />
                       Add Card
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-md bg-zinc-900 border-white/10">
+                  <DialogContent className="max-w-md bg-zinc-900 border-border">
                     <DialogHeader>
-                      <DialogTitle className="text-white">Add Payment Method</DialogTitle>
+                      <DialogTitle className="text-foreground">Add Payment Method</DialogTitle>
                       <DialogDescription className="text-muted-foreground">
                         Add a new card to your account for faster top-ups.
                       </DialogDescription>
@@ -962,7 +962,7 @@ export default function BillingPage() {
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : paymentMethods.length === 0 ? (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                <div className="rounded-xl bg-muted/10 ring-1 ring-border p-8 text-center">
                   <p className="text-muted-foreground">No saved payment methods</p>
                   <p className="text-sm text-muted-foreground/70 mt-1">Add a card for faster top-ups</p>
                 </div>
@@ -971,7 +971,7 @@ export default function BillingPage() {
                   {paymentMethods.map((pm) => (
                     <div 
                       key={pm.id}
-                      className="flex-shrink-0 rounded-xl bg-white/[0.03] ring-1 ring-white/5 p-4 min-w-[200px]"
+                      className="flex-shrink-0 rounded-xl bg-muted/15 ring-1 ring-border p-4 min-w-[200px]"
                       data-testid={`payment-method-${pm.id}`}
                     >
                       <div className="flex items-center justify-between mb-3">
@@ -987,7 +987,7 @@ export default function BillingPage() {
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                      <div className="text-lg font-medium text-white mb-1">
+                      <div className="text-lg font-medium text-foreground mb-1">
                         •••• {pm.last4}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -1009,7 +1009,7 @@ export default function BillingPage() {
                   <History className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Transaction History</h2>
+                  <h2 className="font-semibold text-foreground">Transaction History</h2>
                   <p className="text-sm text-muted-foreground">Your wallet activity</p>
                 </div>
               </div>
@@ -1019,7 +1019,7 @@ export default function BillingPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : transactions.length === 0 ? (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                <div className="rounded-xl bg-muted/10 ring-1 ring-border p-8 text-center">
                   <div className="h-12 w-12 rounded-full bg-muted/10 flex items-center justify-center mx-auto mb-3">
                     <History className="h-6 w-6 text-muted-foreground" />
                   </div>
@@ -1031,7 +1031,7 @@ export default function BillingPage() {
                   {transactions.slice(0, 10).map((tx) => (
                     <div 
                       key={tx.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5 hover:bg-white/[0.04] transition-colors"
+                      className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
                       data-testid={`transaction-${tx.id}`}
                     >
                       <div className="flex items-center gap-3">
@@ -1046,7 +1046,7 @@ export default function BillingPage() {
                           }
                         </div>
                         <div>
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-foreground">
                             {formatTransactionType(tx.type, tx.metadata)}
                           </div>
                           <div className="text-sm text-muted-foreground">
@@ -1077,7 +1077,7 @@ export default function BillingPage() {
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Invoices</h2>
+                  <h2 className="font-semibold text-foreground">Invoices</h2>
                   <p className="text-sm text-muted-foreground">Download your payment invoices</p>
                 </div>
               </div>
@@ -1087,7 +1087,7 @@ export default function BillingPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : !invoicesData?.invoices || invoicesData.invoices.length === 0 ? (
-                <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-8 text-center">
+                <div className="rounded-xl bg-muted/10 ring-1 ring-border p-8 text-center">
                   <div className="h-12 w-12 rounded-full bg-muted/10 flex items-center justify-center mx-auto mb-3">
                     <FileText className="h-6 w-6 text-muted-foreground" />
                   </div>
@@ -1099,7 +1099,7 @@ export default function BillingPage() {
                   {invoicesData.invoices.map((invoice) => (
                     <div 
                       key={invoice.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] ring-1 ring-white/5 hover:bg-white/[0.04] transition-colors"
+                      className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
                       data-testid={`invoice-${invoice.id}`}
                     >
                       <div className="flex items-center gap-3">
@@ -1107,7 +1107,7 @@ export default function BillingPage() {
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>
-                          <div className="font-medium text-white">{invoice.invoiceNumber}</div>
+                          <div className="font-medium text-foreground">{invoice.invoiceNumber}</div>
                           <div className="text-sm text-muted-foreground">
                             {formatDate(invoice.createdAt)} · {invoice.description}
                           </div>
@@ -1146,10 +1146,10 @@ export default function BillingPage() {
             </div>
 
             {/* Support */}
-            <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+            <div className="rounded-xl bg-muted/10 ring-1 ring-border p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium text-white">Need Help?</h4>
+                  <h4 className="font-medium text-foreground">Need Help?</h4>
                   <p className="text-sm text-muted-foreground">
                     Having issues with payments or your wallet balance?
                   </p>

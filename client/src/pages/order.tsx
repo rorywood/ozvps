@@ -7,7 +7,7 @@ export default function OrderPage() {
     <AppShell>
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
+        <h1 className="text-2xl font-display font-bold text-foreground" data-testid="text-page-title">
           Order VPS
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -25,7 +25,7 @@ export default function OrderPage() {
           </div>
           
           <div className="space-y-2">
-            <h2 className="text-xl font-display font-semibold text-white flex items-center justify-center gap-2">
+            <h2 className="text-xl font-display font-semibold text-foreground flex items-center justify-center gap-2">
               <Clock className="h-5 w-5 text-yellow-500" />
               Coming Soon
             </h2>
