@@ -119,6 +119,29 @@ export default function ServerDetail() {
   const [immediateConfirmOpen, setImmediateConfirmOpen] = useState(false);
   const [immediateConfirmText, setImmediateConfirmText] = useState("");
   
+  // Setup progress minimized state (persistent banner when minimized)
+  const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
+    try {
+      const stored = sessionStorage.getItem(`setupMinimized:${serverId}`);
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+  
+  const updateSetupMinimized = (value: boolean) => {
+    setSetupMinimized(value);
+    try {
+      if (value) {
+        sessionStorage.setItem(`setupMinimized:${serverId}`, 'true');
+      } else {
+        sessionStorage.removeItem(`setupMinimized:${serverId}`);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  };
+  
   const reinstallTask = useReinstallTask(serverId || '');
 
   const { data: server, isLoading, isError } = useQuery({
@@ -170,6 +193,24 @@ export default function ServerDetail() {
 
   // Console lock hook - must be after server query
   const consoleLock = useConsoleLock(serverId || '', server?.status);
+  
+  // Clear building flags when server no longer needs setup (setup completed)
+  useEffect(() => {
+    if (server && !server.needsSetup && serverId) {
+      try {
+        // Server setup is complete, clear any leftover building flags
+        if (sessionStorage.getItem(`setupMode:${serverId}`) || 
+            sessionStorage.getItem(`setupMinimized:${serverId}`)) {
+          sessionStorage.removeItem(`setupMode:${serverId}`);
+          sessionStorage.removeItem(`setupMinimized:${serverId}`);
+          setSetupMode(false);
+          setSetupMinimized(false);
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [server?.needsSetup, serverId]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -950,6 +991,36 @@ export default function ServerDetail() {
   return (
     <AppShell>
       <div className="space-y-6 pb-20">
+        
+        {/* Building Banner - Shown when setup is minimized */}
+        {reinstallTask.isActive && isSetupMode && setupMinimized && (
+          <div 
+            className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/30 transition-colors" 
+            data-testid="banner-building"
+            onClick={() => updateSetupMinimized(false)}
+          >
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 text-blue-400 animate-spin flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-blue-300">Server Building</h3>
+                <p className="text-sm text-blue-300/80">
+                  Your server is being set up. Click to view progress. ({reinstallTask.percent}% complete)
+                </p>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="border-blue-400/50 text-blue-300 hover:bg-blue-500/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateSetupMinimized(false);
+              }}
+            >
+              View Progress
+            </Button>
+          </div>
+        )}
         
         {/* Suspension Banner */}
         {isSuspended && (
@@ -2058,7 +2129,7 @@ export default function ServerDetail() {
       </Dialog>
 
       {/* Setup/Reinstall Progress Dialog */}
-      <Dialog open={reinstallTask.isActive} onOpenChange={() => {}}>
+      <Dialog open={reinstallTask.isActive && !setupMinimized} onOpenChange={() => {}}>
         <DialogContent 
           className={cn(
             "bg-[#0a0a0a] border-white/10 text-white",
@@ -2074,8 +2145,12 @@ export default function ServerDetail() {
               onDismiss={() => {
                 reinstallTask.reset();
                 updateSetupMode(false);
+                updateSetupMinimized(false);
                 queryClient.invalidateQueries({ queryKey: ['server', serverId] });
                 queryClient.invalidateQueries({ queryKey: ['servers'] });
+              }}
+              onMinimize={() => {
+                updateSetupMinimized(true);
               }}
             />
           ) : (

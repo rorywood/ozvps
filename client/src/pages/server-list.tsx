@@ -46,6 +46,17 @@ function getDisplayServerName(name: string | undefined): string {
   return name;
 }
 
+// Helper to check if server is actively building (setup wizard in progress)
+function isServerBuilding(serverId: string): boolean {
+  try {
+    const setupMode = sessionStorage.getItem(`setupMode:${serverId}`);
+    const setupMinimized = sessionStorage.getItem(`setupMinimized:${serverId}`);
+    return setupMode === 'true' || setupMinimized === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export default function ServerList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -161,17 +172,19 @@ export default function ServerList() {
                       const displayStatus = getDisplayStatus(server.id, server.status);
                       const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
                       const needsSetup = server.needsSetup === true;
+                      const building = needsSetup && isServerBuilding(server.id);
                       return (
                         <>
                           <div className={cn(
                             "h-12 w-12 rounded-xl flex items-center justify-center border shadow-[0_0_15px_-3px_rgba(0,0,0,0.5)]",
                             server.suspended ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 shadow-yellow-500/20" :
+                            building ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-500 shadow-cyan-500/20" :
                             needsSetup ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-blue-500/20" :
                             displayStatus === 'running' ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-green-500/20" : 
                             displayStatus === 'stopped' ? "bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/20" :
                             "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
                           )}>
-                            {isTransitioning ? (
+                            {isTransitioning || building ? (
                               <Loader2 className="h-6 w-6 animate-spin" />
                             ) : needsSetup ? (
                               <MonitorCog className="h-6 w-6" />
@@ -185,6 +198,11 @@ export default function ServerList() {
                               {server.suspended ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400">
                                   SUSPENDED
+                                </span>
+                              ) : building ? (
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-cyan-500/20 border-cyan-500/30 text-cyan-400 flex items-center gap-1">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  BUILDING
                                 </span>
                               ) : needsSetup ? (
                                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-blue-500/20 border-blue-500/30 text-blue-400">

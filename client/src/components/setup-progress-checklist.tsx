@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { CheckCircle2, Circle, Loader2, AlertCircle, Eye, EyeOff, Copy, Check, Rocket, Server, HardDrive, Settings, Power, Shield } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { CheckCircle2, Circle, Loader2, AlertCircle, Eye, EyeOff, Copy, Check, Rocket, Server, HardDrive, Settings, Power, Shield, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReinstallTaskState, ReinstallStatus } from "@/hooks/use-reinstall-task";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,10 @@ interface SetupProgressChecklistProps {
   state: ReinstallTaskState;
   serverName?: string;
   onDismiss?: () => void;
+  onMinimize?: () => void;
 }
+
+const CREDENTIAL_REVEAL_DELAY = 15;
 
 interface ChecklistStep {
   id: string;
@@ -83,13 +86,36 @@ function getStepState(step: ChecklistStep, currentStatus: ReinstallStatus): 'pen
   return 'pending';
 }
 
-export function SetupProgressChecklist({ state, serverName, onDismiss }: SetupProgressChecklistProps) {
+export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimize }: SetupProgressChecklistProps) {
   const { status, percent, error, credentials, isActive } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
+  const [credentialCountdown, setCredentialCountdown] = useState(CREDENTIAL_REVEAL_DELAY);
+  const [credentialsRevealed, setCredentialsRevealed] = useState(false);
+  const countdownStarted = useRef(false);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
+  
+  useEffect(() => {
+    if (isComplete && credentials && !countdownStarted.current) {
+      countdownStarted.current = true;
+      setCredentialCountdown(CREDENTIAL_REVEAL_DELAY);
+      
+      const interval = setInterval(() => {
+        setCredentialCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setCredentialsRevealed(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [isComplete, credentials]);
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
     try {
@@ -103,26 +129,38 @@ export function SetupProgressChecklist({ state, serverName, onDismiss }: SetupPr
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center space-y-2">
-        <div className={cn(
-          "mx-auto w-16 h-16 rounded-full flex items-center justify-center",
-          isComplete ? "bg-green-500/20" : isFailed ? "bg-red-500/20" : "bg-primary/20"
-        )}>
-          {isComplete ? (
-            <CheckCircle2 className="h-8 w-8 text-green-500" />
-          ) : isFailed ? (
-            <AlertCircle className="h-8 w-8 text-red-500" />
-          ) : (
-            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+      {/* Header with minimize button */}
+      <div className="relative">
+        {onMinimize && !isComplete && !isFailed && (
+          <button
+            onClick={onMinimize}
+            className="absolute top-0 right-0 p-2 hover:bg-white/10 rounded-lg transition-colors text-muted-foreground hover:text-white"
+            title="Minimize - continue in background"
+            data-testid="button-minimize-setup"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+        <div className="text-center space-y-2">
+          <div className={cn(
+            "mx-auto w-16 h-16 rounded-full flex items-center justify-center",
+            isComplete ? "bg-green-500/20" : isFailed ? "bg-red-500/20" : "bg-primary/20"
+          )}>
+            {isComplete ? (
+              <CheckCircle2 className="h-8 w-8 text-green-500" />
+            ) : isFailed ? (
+              <AlertCircle className="h-8 w-8 text-red-500" />
+            ) : (
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            )}
+          </div>
+          <h3 className="text-xl font-display font-semibold text-white">
+            {isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
+          </h3>
+          {serverName && (
+            <p className="text-sm text-muted-foreground">{serverName}</p>
           )}
         </div>
-        <h3 className="text-xl font-display font-semibold text-white">
-          {isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
-        </h3>
-        {serverName && (
-          <p className="text-sm text-muted-foreground">{serverName}</p>
-        )}
       </div>
 
       {/* Progress Bar */}
@@ -223,8 +261,55 @@ export function SetupProgressChecklist({ state, serverName, onDismiss }: SetupPr
         })}
       </div>
 
-      {/* Credentials Section - Only show on completion */}
-      {isComplete && credentials && (
+      {/* Credentials Section - Only show on completion after countdown */}
+      {isComplete && credentials && !credentialsRevealed && (
+        <div className="space-y-4 p-5 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-lg bg-blue-500/20">
+              <Clock className="h-6 w-6 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-medium text-blue-400">Server Starting Up</h4>
+              <p className="text-xs text-muted-foreground">Please wait while your server finishes booting...</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-4 py-4">
+            <div className="relative w-20 h-20">
+              <svg className="w-20 h-20 transform -rotate-90">
+                <circle
+                  cx="40"
+                  cy="40"
+                  r="35"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                  className="text-white/10"
+                />
+                <circle
+                  cx="40"
+                  cy="40"
+                  r="35"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                  strokeDasharray={220}
+                  strokeDashoffset={220 - (220 * (CREDENTIAL_REVEAL_DELAY - credentialCountdown) / CREDENTIAL_REVEAL_DELAY)}
+                  className="text-blue-500 transition-all duration-1000"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-2xl font-bold text-white">{credentialCountdown}</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-center text-muted-foreground">
+            Credentials will appear in {credentialCountdown} seconds
+          </p>
+        </div>
+      )}
+      
+      {isComplete && credentials && credentialsRevealed && (
         <div className="space-y-4 p-5 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
@@ -324,8 +409,8 @@ export function SetupProgressChecklist({ state, serverName, onDismiss }: SetupPr
         </div>
       )}
 
-      {/* Action Button */}
-      {(isComplete || isFailed) && onDismiss && (
+      {/* Action Button - Only show after credentials revealed or on failure */}
+      {((isComplete && credentialsRevealed) || isFailed) && onDismiss && (
         <Button
           onClick={onDismiss}
           className={cn(
