@@ -235,7 +235,7 @@ export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 export const registerSchema = z.object({
@@ -247,7 +247,7 @@ export const registerSchema = z.object({
 
 export const serverNameSchema = z.object({
   name: z.string()
-    .min(2, 'Server name must be at least 2 characters')
+    .min(3, 'Server name must be at least 3 characters')
     .max(48, 'Server name must be 48 characters or less')
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9\s\-_.]*$/, 'Server name can only contain letters, numbers, spaces, hyphens, underscores, and periods'),
 });
