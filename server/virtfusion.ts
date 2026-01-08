@@ -934,12 +934,28 @@ export class VirtFusionClient {
     try {
       log(`Resetting password for server ${serverId}`, 'virtfusion');
       
+      // First, get the server info to determine the OS type
+      const serverInfo = await this.request<{ data: VirtFusionServerResponse }>(`/servers/${serverId}`);
+      const osData = (serverInfo.data as any).os;
+      const osDist = osData?.dist?.toLowerCase() || '';
+      const osName = osData?.name?.toLowerCase() || '';
+      
+      // Determine the appropriate username based on OS
+      // Windows uses "Administrator", Linux/BSD/etc use "root"
+      let resetUser = 'root';
+      if (osDist.includes('windows') || osName.includes('windows')) {
+        resetUser = 'Administrator';
+      }
+      
+      log(`Detected OS: ${osDist || osName || 'unknown'}, using user: ${resetUser}`, 'virtfusion');
+      
       // VirtFusion API: POST /servers/{serverId}/resetPassword
       // Response includes expectedPassword field (admin API v4.1.0+)
-      // Note: sendMail parameter only available in v5.0.0+, so we don't send any body
-      // to maintain compatibility with older VirtFusion versions
-      const data = await this.request<{ data: { expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
+      // Required: "user" parameter specifies which user's password to reset
+      // Optional: "sendMail" parameter (v5.0.0+) controls email notification
+      const data = await this.request<{ data: { queueId?: number; expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
+        body: JSON.stringify({ user: resetUser, sendMail: false }),
       });
       
       // Invalidate cache since server credentials have changed
