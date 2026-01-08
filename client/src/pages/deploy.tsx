@@ -9,12 +9,8 @@ import {
   Loader2,
   Zap,
   Wallet,
-  Cpu,
-  MemoryStick,
-  HardDrive,
-  ArrowUpDown,
-  MapPin,
-  ChevronRight
+  Server,
+  MapPin
 } from "lucide-react";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
@@ -29,6 +25,7 @@ interface Plan {
   transferGb: number;
   priceMonthly: number;
   active: boolean;
+  popular?: boolean;
 }
 
 interface Location {
@@ -46,7 +43,8 @@ interface Wallet {
 }
 
 function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  const dollars = cents / 100;
+  return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
 }
 
 function formatRAM(mb: number): string {
@@ -126,21 +124,17 @@ export default function DeployPage() {
   return (
     <AppShell>
       <div className="min-h-[calc(100vh-12rem)] flex flex-col overflow-x-hidden">
-        {/* Hero Header */}
+        {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center flex-shrink-0">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
-                Deploy a Server
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Choose your configuration and deploy instantly
-              </p>
-            </div>
+          <div className="flex items-center gap-3 mb-1">
+            <Server className="h-6 w-6 text-blue-400" />
+            <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
+              Deploy Server
+            </h1>
           </div>
+          <p className="text-muted-foreground text-sm ml-9">
+            Select a plan and region to get started
+          </p>
         </div>
 
         {/* Main Content */}
@@ -148,9 +142,9 @@ export default function DeployPage() {
           
           {/* Location Selection */}
           <section>
-            <div className="flex items-center gap-2 mb-4">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="h-4 w-4 text-blue-400" />
+              <h2 className="text-sm font-medium text-white">
                 Region
               </h2>
             </div>
@@ -161,181 +155,198 @@ export default function DeployPage() {
                   type="button"
                   disabled={!location.enabled}
                   onClick={() => location.enabled && setSelectedLocationCode(location.code)}
-                  className={`group relative flex items-center gap-2.5 px-4 py-2.5 rounded-full transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
                     !location.enabled 
-                      ? 'opacity-40 cursor-not-allowed bg-white/5' 
+                      ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5' 
                       : selectedLocationCode === location.code 
-                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' 
-                        : 'bg-white/5 hover:bg-white/10 text-white'
+                        ? 'bg-blue-500/10 border-blue-500/50 text-white' 
+                        : 'bg-white/5 border-white/10 hover:border-white/20 text-white/80 hover:text-white'
                   }`}
                   data-testid={`radio-location-${location.code.toLowerCase()}`}
                 >
                   <img 
                     src={flagAU} 
                     alt={location.countryCode} 
-                    className="h-4 w-6 object-cover rounded-sm"
+                    className="h-4 w-5 object-cover rounded-sm"
                   />
-                  <span className="font-medium text-sm">{location.name}</span>
+                  <span className="text-sm font-medium">{location.name}</span>
+                  {selectedLocationCode === location.code && (
+                    <Check className="h-3.5 w-3.5 text-blue-400" />
+                  )}
                   {!location.enabled && (
-                    <span className="text-[10px] opacity-60">Soon</span>
+                    <span className="text-[10px] text-muted-foreground">Soon</span>
                   )}
                 </button>
               ))}
             </div>
           </section>
 
-          {/* Plan Selection - Responsive Grid */}
+          {/* Plan Selection */}
           <section>
-            <div className="flex items-center gap-2 mb-4">
-              <Cpu className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Choose Plan
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-4 w-4 text-blue-400" />
+              <h2 className="text-sm font-medium text-white">
+                Select Plan
               </h2>
             </div>
             
             {loadingPlans ? (
               <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                <Loader2 className="h-6 w-6 text-blue-400 animate-spin" />
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {plans.map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => setSelectedPlanId(plan.id)}
-                    className={`relative p-5 rounded-2xl transition-all duration-200 text-left ${
-                      selectedPlanId === plan.id
-                        ? 'bg-gradient-to-br from-primary/15 to-primary/5 ring-2 ring-primary shadow-xl shadow-primary/10'
-                        : 'bg-white/[0.03] hover:bg-white/[0.06] ring-1 ring-white/10 hover:ring-white/20'
-                    }`}
-                    data-testid={`card-plan-${plan.code}`}
-                  >
-                    {selectedPlanId === plan.id && (
-                      <div className="absolute top-3 right-3 bg-primary rounded-full p-1">
-                        <Check className="h-3 w-3 text-primary-foreground" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                {plans.map((plan) => {
+                  const isSelected = selectedPlanId === plan.id;
+                  const isPopular = plan.code === 'lite';
+                  
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={`relative p-4 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? 'bg-blue-500/10 border-blue-500/50'
+                          : 'bg-white/[0.02] border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
+                      }`}
+                      data-testid={`card-plan-${plan.code}`}
+                    >
+                      {/* Popular Badge */}
+                      {isPopular && (
+                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                          <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-blue-500 text-white rounded-full">
+                            Popular
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Selected Check */}
+                      {isSelected && (
+                        <div className="absolute top-3 right-3">
+                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
+                            <Check className="h-3 w-3 text-white" />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Plan Name & Price */}
+                      <div className="mb-4">
+                        <h3 className="text-base font-semibold text-white">{plan.name}</h3>
+                        <div className="flex items-baseline gap-0.5 mt-1">
+                          <span className="text-2xl font-bold text-white">
+                            {formatCurrency(plan.priceMonthly)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">/mo</span>
+                        </div>
                       </div>
-                    )}
-                    
-                    <div className="mb-4">
-                      <h3 className="font-semibold text-white text-lg">{plan.name}</h3>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-2xl font-bold text-primary font-mono">
-                          {formatCurrency(plan.priceMonthly)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">/mo</span>
+                      
+                      {/* Specs */}
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">vCPU</span>
+                          <span className="text-white font-medium">{plan.vcpu}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">RAM</span>
+                          <span className="text-white font-medium">{formatRAM(plan.ramMb)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">NVMe</span>
+                          <span className="text-white font-medium">{plan.storageGb} GB</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Transfer</span>
+                          <span className="text-white font-medium">{formatTransfer(plan.transferGb)}</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Cpu className="h-3.5 w-3.5" />
-                        <span>{plan.vcpu} vCPU</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MemoryStick className="h-3.5 w-3.5" />
-                        <span>{formatRAM(plan.ramMb)} RAM</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <HardDrive className="h-3.5 w-3.5" />
-                        <span>{plan.storageGb} GB NVMe</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <ArrowUpDown className="h-3.5 w-3.5" />
-                        <span>{formatTransfer(plan.transferGb)} Transfer</span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </section>
         </div>
 
-        {/* Sticky Bottom Summary Bar - With proper spacing */}
+        {/* Sticky Bottom Bar */}
         <div className="fixed bottom-0 left-0 right-0 z-40 lg:pl-64">
-          <div className="bg-gradient-to-t from-background via-background to-transparent h-8 pointer-events-none" />
-          <div className="bg-background/80 backdrop-blur-xl border-t border-white/10">
-            <div className="max-w-5xl mx-auto px-4 py-4">
+          <div className="bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a] to-transparent h-6 pointer-events-none" />
+          <div className="bg-[#0a0a0a]/95 backdrop-blur-sm border-t border-white/10">
+            <div className="max-w-5xl mx-auto px-4 py-3">
               <div className="flex items-center justify-between gap-4">
-                {/* Left: Selection Summary */}
-                <div className="flex items-center gap-6 min-w-0">
+                {/* Left: Summary */}
+                <div className="flex items-center gap-4 text-sm">
                   {selectedLocation && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <img src={flagAU} alt="AU" className="h-4 w-5 object-cover rounded-sm" />
-                      <span className="text-white font-medium">{selectedLocation.name}</span>
+                    <div className="flex items-center gap-2">
+                      <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
+                      <span className="text-white/80">{selectedLocation.name}</span>
                     </div>
                   )}
                   {selectedPlan && (
-                    <>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
-                      <div className="text-sm hidden sm:block">
-                        <span className="text-white font-medium">{selectedPlan.name}</span>
-                        <span className="text-muted-foreground ml-2">
-                          {selectedPlan.vcpu} vCPU, {formatRAM(selectedPlan.ramMb)}
-                        </span>
-                      </div>
-                    </>
+                    <div className="hidden sm:flex items-center gap-1.5 text-white/60">
+                      <span className="text-white/40">|</span>
+                      <span className="text-white">{selectedPlan.name}</span>
+                      <span className="text-white/40">-</span>
+                      <span>{selectedPlan.vcpu} vCPU, {formatRAM(selectedPlan.ramMb)}</span>
+                    </div>
                   )}
                 </div>
 
-                {/* Right: Price & Action */}
+                {/* Right: Balance, Price & Deploy */}
                 <div className="flex items-center gap-4">
-                  {/* Balance indicator */}
-                  <div className="text-right hidden sm:block">
-                    <div className="text-xs text-muted-foreground">Balance</div>
-                    <div className={`font-mono font-medium ${canAfford ? 'text-green-500' : 'text-white'}`}>
-                      {loadingWallet ? "..." : formatCurrency(wallet?.balanceCents || 0)}
+                  {/* Balance */}
+                  <div className="hidden sm:block text-right">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
+                    <div className={`text-sm font-mono font-medium ${canAfford ? 'text-green-400' : 'text-white'}`}>
+                      {loadingWallet ? "..." : `$${((wallet?.balanceCents || 0) / 100).toFixed(2)}`}
                     </div>
                   </div>
 
-                  {/* Price & Deploy */}
-                  <div className="flex items-center gap-3">
-                    {selectedPlan && (
-                      <div className="text-right">
-                        <div className="text-xs text-muted-foreground">Due now</div>
-                        <div className="font-mono font-bold text-primary text-lg">
-                          {formatCurrency(selectedPlan.priceMonthly)}
-                        </div>
+                  {/* Price */}
+                  {selectedPlan && (
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Due Now</div>
+                      <div className="text-sm font-mono font-bold text-white">
+                        ${(selectedPlan.priceMonthly / 100).toFixed(2)}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {!selectedPlan ? (
-                      <Button 
-                        className="h-11 px-6" 
-                        disabled 
-                        data-testid="button-deploy-disabled"
-                      >
-                        Select a plan
-                      </Button>
-                    ) : canAfford ? (
-                      <Button 
-                        className="h-11 px-6 gap-2 shadow-lg shadow-primary/25" 
-                        onClick={handleDeploy}
-                        disabled={loadingWallet || deployMutation.isPending}
-                        data-testid="button-deploy"
-                      >
-                        {deployMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Zap className="h-4 w-4" />
-                            Deploy
-                          </>
-                        )}
-                      </Button>
-                    ) : (
-                      <Button 
-                        className="h-11 px-6 gap-2" 
-                        variant="outline"
-                        onClick={handleAddFunds}
-                        data-testid="button-add-funds"
-                      >
-                        <Wallet className="h-4 w-4" />
-                        Add Funds
-                      </Button>
-                    )}
-                  </div>
+                  {/* Deploy Button */}
+                  {!selectedPlan ? (
+                    <Button 
+                      className="h-9 px-5 bg-white/10 text-white/50 hover:bg-white/10 cursor-not-allowed border-0" 
+                      disabled 
+                      data-testid="button-deploy-disabled"
+                    >
+                      Select a plan
+                    </Button>
+                  ) : canAfford ? (
+                    <Button 
+                      className="h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white border-0" 
+                      onClick={handleDeploy}
+                      disabled={loadingWallet || deployMutation.isPending}
+                      data-testid="button-deploy"
+                    >
+                      {deployMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-1.5" />
+                          Deploy
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="h-9 px-5 bg-white/10 hover:bg-white/15 text-white border-0" 
+                      onClick={handleAddFunds}
+                      data-testid="button-add-funds"
+                    >
+                      <Wallet className="h-4 w-4 mr-1.5" />
+                      Add Funds
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
