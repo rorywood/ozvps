@@ -381,11 +381,22 @@ case "$1" in
         # Login to GitHub Container Registry
         echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
         
+        # Stop and remove old containers
+        echo -e "${YELLOW}Stopping old containers...${NC}"
+        docker compose down --remove-orphans
+        
         # Pull latest image
+        echo -e "${YELLOW}Pulling latest image...${NC}"
         docker compose pull
         
-        # Restart with new image
-        docker compose up -d --remove-orphans
+        # Start with new image
+        echo -e "${YELLOW}Starting new containers...${NC}"
+        docker compose up -d
+        
+        # Clean up old/unused Docker images to free disk space
+        echo -e "${YELLOW}Cleaning up old Docker images...${NC}"
+        docker image prune -af --filter "until=24h" 2>/dev/null || true
+        docker system prune -f --filter "until=24h" 2>/dev/null || true
         
         echo -e "${GREEN}Update complete!${NC}"
         echo "Run './ozvpsctl.sh status' to check the application status."
