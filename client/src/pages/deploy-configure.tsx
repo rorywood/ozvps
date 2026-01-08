@@ -151,24 +151,40 @@ export default function DeployConfigurePage() {
   const templates = templatesData || [];
 
   const validateHostname = (value: string): boolean => {
-    if (!value || value.length === 0) {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || trimmed.length === 0) {
       setHostnameError("Hostname is required");
       return false;
     }
-    if (value.length > 63) {
-      setHostnameError("Hostname must be 63 characters or less");
+    if (trimmed.length > 253) {
+      setHostnameError("Hostname must be 253 characters or less");
       return false;
     }
-    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(value)) {
-      setHostnameError("Hostname must start and end with a letter or number, and contain only letters, numbers, and hyphens");
-      return false;
+    const labels = trimmed.split('.');
+    for (const label of labels) {
+      if (label.length === 0) {
+        setHostnameError("Hostname cannot have empty labels (consecutive dots)");
+        return false;
+      }
+      if (label.length > 63) {
+        setHostnameError("Each part of the hostname must be 63 characters or less");
+        return false;
+      }
+      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) {
+        setHostnameError("Single character parts must be a letter or number");
+        return false;
+      }
+      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) {
+        setHostnameError("Each part must start and end with a letter or number");
+        return false;
+      }
     }
     setHostnameError("");
     return true;
   };
 
   const handleHostnameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toLowerCase();
+    const value = e.target.value.toLowerCase().trim();
     setHostname(value);
     if (value) {
       validateHostname(value);
@@ -187,7 +203,7 @@ export default function DeployConfigurePage() {
     deployMutation.mutate({
       planId: plan.id,
       osId: selectedOsId,
-      hostname: hostname,
+      hostname: hostname.trim().toLowerCase(),
       locationCode,
     });
   };
@@ -266,7 +282,7 @@ export default function DeployConfigurePage() {
                   <p className="text-xs text-red-500">{hostnameError}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Lowercase letters, numbers, and hyphens only. Must start and end with a letter or number.
+                    Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
                   </p>
                 )}
               </div>

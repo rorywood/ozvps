@@ -498,20 +498,29 @@ export default function ServerDetail() {
   const validateHostname = (value: string): string => {
     const trimmed = value.trim().toLowerCase();
     if (!trimmed) return 'Hostname is required';
-    if (trimmed.length > 63) return 'Hostname must be 63 characters or less';
-    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmed)) {
-      if (trimmed.startsWith('-') || trimmed.endsWith('-')) {
-        return 'Hostname cannot start or end with a hyphen';
+    if (trimmed.length > 253) return 'Hostname must be 253 characters or less';
+    const labels = trimmed.split('.');
+    for (const label of labels) {
+      if (label.length === 0) return 'Hostname cannot have empty labels (consecutive dots)';
+      if (label.length > 63) return 'Each part of the hostname must be 63 characters or less';
+      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) {
+        return 'Single character parts must be a letter or number';
       }
-      return 'Hostname can only contain lowercase letters, numbers, and hyphens';
+      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) {
+        if (label.startsWith('-') || label.endsWith('-')) {
+          return 'Hostname parts cannot start or end with a hyphen';
+        }
+        return 'Hostname can only contain lowercase letters, numbers, hyphens, and dots';
+      }
     }
     return '';
   };
 
   const handleHostnameChange = (value: string) => {
-    setHostname(value);
-    if (value.trim()) {
-      setHostnameError(validateHostname(value));
+    const normalizedValue = value.toLowerCase().trim();
+    setHostname(normalizedValue);
+    if (normalizedValue) {
+      setHostnameError(validateHostname(normalizedValue));
     } else {
       setHostnameError('');
     }
@@ -541,7 +550,7 @@ export default function ServerDetail() {
       return;
     }
     
-    reinstallMutation.mutate({ 
+    reinstallMutation.mutate({
       id: serverId, 
       osId: parseInt(selectedOs),
       hostname: normalizedHostname
@@ -550,9 +559,10 @@ export default function ServerDetail() {
 
   // Setup wizard handlers
   const handleSetupHostnameChange = (value: string) => {
-    setSetupHostname(value);
-    if (value.trim()) {
-      setSetupHostnameError(validateHostname(value));
+    const normalizedValue = value.toLowerCase().trim();
+    setSetupHostname(normalizedValue);
+    if (normalizedValue) {
+      setSetupHostnameError(validateHostname(normalizedValue));
     } else {
       setSetupHostnameError('');
     }
@@ -838,7 +848,7 @@ export default function ServerDetail() {
                   <p className="text-xs text-red-400">{setupHostnameError}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Lowercase letters, numbers, and hyphens only. Max 63 characters.
+                  Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
                 </p>
               </div>
               
@@ -1590,89 +1600,53 @@ export default function ServerDetail() {
               })()}
             </GlassCard>
 
-            {/* Bandwidth History Chart */}
-            {trafficData?.history && trafficData.history.length > 0 && (
-              <GlassCard className="p-4">
-                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
-                  <Calendar className="h-4 w-4 text-blue-400" />
-                  Bandwidth History
-                </h3>
-                <div className="h-[200px]">
-                  <ChartContainer
-                    config={{
-                      rx: { label: "Download", color: "hsl(142, 76%, 36%)" },
-                      tx: { label: "Upload", color: "hsl(217, 91%, 60%)" },
-                    }}
-                    className="h-full w-full"
-                  >
-                    <AreaChart
-                      data={[...trafficData.history].reverse().map((item: any) => ({
-                        month: new Date(2024, item.month - 1).toLocaleDateString('en-AU', { month: 'short' }),
-                        rx: parseFloat((item.rx / (1024 * 1024 * 1024)).toFixed(2)),
-                        tx: parseFloat((item.tx / (1024 * 1024 * 1024)).toFixed(2)),
-                      }))}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="colorRx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorTx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis 
-                        dataKey="month" 
-                        stroke="rgba(255,255,255,0.5)" 
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis 
-                        stroke="rgba(255,255,255,0.5)" 
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => `${value}GB`}
-                      />
-                      <ChartTooltip 
-                        content={<ChartTooltipContent />}
-                        formatter={(value: number) => [`${value.toFixed(2)} GB`]}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="rx" 
-                        stroke="hsl(142, 76%, 36%)" 
-                        fillOpacity={1}
-                        fill="url(#colorRx)"
-                        name="Download"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="tx" 
-                        stroke="hsl(217, 91%, 60%)" 
-                        fillOpacity={1}
-                        fill="url(#colorTx)"
-                        name="Upload"
-                      />
-                    </AreaChart>
-                  </ChartContainer>
-                </div>
-                <div className="flex items-center justify-center gap-6 mt-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-sm bg-green-500" />
-                    <span className="text-xs text-muted-foreground">Download</span>
+            {/* Network Speed Card */}
+            <GlassCard className="p-4">
+              <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
+                <Activity className="h-4 w-4 text-blue-400" />
+                Network Port Speed
+              </h3>
+              {(() => {
+                const network = trafficData?.network;
+                const portSpeed = network?.portSpeed || 500;
+                const inSpeed = network?.inSpeedMbps || portSpeed;
+                const outSpeed = network?.outSpeedMbps || portSpeed;
+                
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-muted/30 rounded-lg border border-border">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <ArrowDownToLine className="h-4 w-4 text-green-400" />
+                          <span>Max Download</span>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-bold text-green-400" data-testid="text-download-speed">
+                            {inSpeed}
+                          </span>
+                          <span className="text-sm text-muted-foreground">Mbps</span>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-muted/30 rounded-lg border border-border">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <ArrowUpFromLine className="h-4 w-4 text-blue-400" />
+                          <span>Max Upload</span>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-bold text-blue-400" data-testid="text-upload-speed">
+                            {outSpeed}
+                          </span>
+                          <span className="text-sm text-muted-foreground">Mbps</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Provisioned network port speeds for your server
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-sm bg-blue-500" />
-                    <span className="text-xs text-muted-foreground">Upload</span>
-                  </div>
-                </div>
-              </GlassCard>
-            )}
+                );
+              })()}
+            </GlassCard>
           </TabsContent>
 
           {/* IP Management Tab */}
@@ -2147,7 +2121,7 @@ export default function ServerDetail() {
               <p className="text-xs text-red-400 mt-1">{hostnameError}</p>
             ) : (
               <p className="text-xs text-muted-foreground mt-1">
-                Lowercase letters, numbers, and hyphens only (1-63 characters)
+                Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
               </p>
             )}
           </div>
