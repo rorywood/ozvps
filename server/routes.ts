@@ -1841,27 +1841,19 @@ export async function registerRoutes(
       const { siteKey, secretKey, enabled } = req.body;
       log(`reCAPTCHA update data: siteKey=${siteKey ? 'provided' : 'empty'}, secretKey=${secretKey ? 'provided' : 'empty'}, enabled=${enabled}`, 'admin');
       
-      // Get existing settings to check if secret key is already saved
-      const existingSettings = await dbStorage.getRecaptchaSettings();
-      const hasExistingSecretKey = !!existingSettings.secretKey;
-      log(`Existing reCAPTCHA settings: hasSecretKey=${hasExistingSecretKey}, enabled=${existingSettings.enabled}`, 'admin');
-      
-      // Require secret key when enabling, unless one is already saved
+      // Require both keys when enabling
       if (enabled && !siteKey) {
         log(`reCAPTCHA update rejected: no site key`, 'admin');
         return res.status(400).json({ error: 'Site key is required to enable reCAPTCHA' });
       }
-      if (enabled && !secretKey && !hasExistingSecretKey) {
+      if (enabled && !secretKey) {
         log(`reCAPTCHA update rejected: no secret key`, 'admin');
         return res.status(400).json({ error: 'Secret key is required to enable reCAPTCHA' });
       }
       
-      // If secretKey is empty but one exists, preserve the existing one
-      const finalSecretKey = secretKey || (hasExistingSecretKey ? existingSettings.secretKey : null);
-      
       await dbStorage.updateRecaptchaSettings(
         siteKey || null,
-        finalSecretKey,
+        secretKey || null,
         !!enabled
       );
       

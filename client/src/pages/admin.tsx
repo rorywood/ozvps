@@ -486,7 +486,7 @@ export default function AdminPage() {
         toast.error('Site key is required to enable reCAPTCHA');
         return;
       }
-      if (!recaptchaSecretKey.trim() && !recaptchaData?.hasSecretKey) {
+      if (!recaptchaSecretKey.trim()) {
         toast.error('Secret key is required to enable reCAPTCHA');
         return;
       }
@@ -1276,7 +1276,7 @@ export default function AdminPage() {
                         data-testid="input-recaptcha-secret-key"
                         id="recaptcha-secret-key"
                         type={showSecretKey ? "text" : "password"}
-                        placeholder={recaptchaData?.hasSecretKey ? "••••••••••••••••" : "Enter secret key"}
+                        placeholder="6Lc..."
                         value={recaptchaSecretKey}
                         onChange={(e) => setRecaptchaSecretKey(e.target.value)}
                         className="font-mono text-sm pr-10 bg-card/30 border-border"
@@ -1289,19 +1289,7 @@ export default function AdminPage() {
                         {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                    {recaptchaData?.hasSecretKey && !recaptchaSecretKey && (
-                      <p className="text-xs text-muted-foreground">
-                        Secret key is already configured. Enter a new key only if you want to change it.
-                      </p>
-                    )}
                   </div>
-
-                  {recaptchaEnabled && !recaptchaSiteKey && (
-                    <p className="text-xs text-amber-400">Site key is required to enable reCAPTCHA.</p>
-                  )}
-                  {recaptchaEnabled && recaptchaSiteKey && !recaptchaSecretKey && !recaptchaData?.hasSecretKey && (
-                    <p className="text-xs text-amber-400">Secret key is required to enable reCAPTCHA.</p>
-                  )}
 
                   <div className="flex justify-end gap-3 pt-2">
                     {recaptchaEnabled && (
