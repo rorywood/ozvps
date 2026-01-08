@@ -135,12 +135,21 @@ export default function Dashboard() {
             </div>
             <div className="text-2xl font-bold text-foreground font-display" data-testid="text-bandwidth">
               {bandwidthData ? 
-                `${(bandwidthData.totalBandwidth / (1024 * 1024 * 1024)).toFixed(1)} GB` : 
+                (() => {
+                  const bytes = bandwidthData.totalBandwidth;
+                  const gb = bytes / (1024 * 1024 * 1024);
+                  if (gb >= 1) {
+                    return `${gb.toFixed(2)} GB`;
+                  } else {
+                    const mb = bytes / (1024 * 1024);
+                    return `${mb.toFixed(2)} MB`;
+                  }
+                })() : 
                 '—'
               }
             </div>
-            <div className="text-sm text-muted-foreground">
-              Bandwidth{bandwidthData?.totalLimit ? ` / ${bandwidthData.totalLimit} GB` : ''}
+            <div className="text-xs text-muted-foreground">
+              Total Bandwidth Used{bandwidthData?.totalLimit ? ` / ${bandwidthData.totalLimit} GB` : ''}
             </div>
           </div>
         </div>

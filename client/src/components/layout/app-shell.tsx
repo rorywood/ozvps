@@ -1,6 +1,16 @@
 import { TopNav } from "./top-nav";
 import { Link } from "wouter";
-import { VERSION } from "@/lib/version";
+import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
+import { useState } from "react";
+import { Info, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -13,6 +23,76 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <Footer />
     </div>
+  );
+}
+
+function VersionDialog() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button 
+          className="text-xs font-mono text-muted-foreground/40 hover:text-primary transition-colors cursor-pointer"
+          data-testid="button-version-info"
+        >
+          v{VERSION}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-border">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            <Info className="h-5 w-5 text-primary" />
+            OzVPS Panel v{VERSION}
+          </DialogTitle>
+        </DialogHeader>
+        <ScrollArea className="max-h-[60vh]">
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground mb-2">Features</h4>
+              <ul className="space-y-1">
+                {FEATURES.map((feature, i) => (
+                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <button 
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              >
+                Version History
+                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+              
+              {expanded && (
+                <div className="mt-2 space-y-3">
+                  {VERSION_HISTORY.map((release, i) => (
+                    <div key={i} className="border-l-2 border-primary/30 pl-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-mono text-primary">v{release.version}</span>
+                        <span className="text-[10px] text-muted-foreground">{release.date}</span>
+                      </div>
+                      <ul className="space-y-0.5">
+                        {release.changes.map((change, j) => (
+                          <li key={j} className="text-[11px] text-muted-foreground">
+                            • {change}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -47,9 +127,7 @@ function Footer() {
           <p className="text-xs text-muted-foreground/60">
             Powered by Australian infrastructure. Built with ❤️ in Queensland.
           </p>
-          <span className="text-xs font-mono text-muted-foreground/40">
-            v{VERSION}
-          </span>
+          <VersionDialog />
         </div>
       </div>
     </footer>

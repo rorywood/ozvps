@@ -32,8 +32,10 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = window.document.documentElement;
+    const body = window.document.body;
 
     root.classList.remove("light", "dark");
+    body.classList.remove("light", "dark");
 
     let effectiveTheme: "dark" | "light" = "dark";
 
@@ -46,6 +48,7 @@ export function ThemeProvider({
     }
 
     root.classList.add(effectiveTheme);
+    body.classList.add(effectiveTheme);
     setResolvedTheme(effectiveTheme);
   }, [theme]);
 
@@ -54,9 +57,12 @@ export function ThemeProvider({
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       const handleChange = () => {
         const root = window.document.documentElement;
+        const body = window.document.body;
         root.classList.remove("light", "dark");
+        body.classList.remove("light", "dark");
         const newTheme = mediaQuery.matches ? "dark" : "light";
         root.classList.add(newTheme);
+        body.classList.add(newTheme);
         setResolvedTheme(newTheme);
       };
 

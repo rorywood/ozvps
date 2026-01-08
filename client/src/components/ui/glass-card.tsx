@@ -12,9 +12,9 @@ const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
         ref={ref}
         className={cn(
           "rounded-xl border shadow-sm transition-all duration-200",
-          variant === "default" && "bg-card/40 backdrop-blur-xl border-white/5",
-          variant === "panel" && "bg-black/40 backdrop-blur-2xl border-white/5",
-          variant === "interactive" && "bg-card/40 backdrop-blur-xl border-white/5 hover:bg-card/50 hover:border-white/10 cursor-pointer hover:shadow-lg hover:-translate-y-0.5",
+          variant === "default" && "bg-card/40 backdrop-blur-xl border-border/30",
+          variant === "panel" && "bg-card/60 backdrop-blur-2xl border-border/30",
+          variant === "interactive" && "bg-card/40 backdrop-blur-xl border-border/30 hover:bg-card/50 hover:border-border/50 cursor-pointer hover:shadow-lg hover:-translate-y-0.5",
           className
         )}
         {...props}
