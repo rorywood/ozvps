@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Server, Shield, Zap, Globe } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -163,6 +164,7 @@ export default function RegisterPage() {
   const widgetIdRef = useRef<number | null>(null);
   
   const [honeypot, setHoneypot] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const { data: recaptchaConfig } = useQuery({
     queryKey: ['recaptcha-config'],
@@ -255,6 +257,11 @@ export default function RegisterPage() {
       setError("Verification failed. Please try again.");
       return;
     }
+
+    if (!name.trim()) {
+      setError("Please enter your name");
+      return;
+    }
     
     if (!email.trim()) {
       setError("Please enter your email address");
@@ -278,6 +285,11 @@ export default function RegisterPage() {
     
     if (recaptchaEnabled && !recaptchaToken) {
       setError("Please complete the reCAPTCHA verification");
+      return;
+    }
+
+    if (!termsAccepted) {
+      setError("Please accept the Terms of Service to continue");
       return;
     }
 
@@ -397,17 +409,18 @@ export default function RegisterPage() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-sm font-medium">Name (Optional)</Label>
+                  <Label htmlFor="name" className="text-sm font-medium">Name</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input 
                       id="name" 
                       type="text"
-                      placeholder="Your name" 
+                      placeholder="Your full name" 
                       className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       autoComplete="name"
+                      required
                       data-testid="input-name"
                     />
                   </div>
@@ -504,6 +517,31 @@ export default function RegisterPage() {
                   />
                 </div>
 
+                <div className="flex items-start gap-3 py-1">
+                  <Checkbox 
+                    id="terms" 
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                    className="mt-0.5 border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    data-testid="checkbox-terms"
+                  />
+                  <Label 
+                    htmlFor="terms" 
+                    className="text-sm text-muted-foreground font-normal leading-relaxed cursor-pointer"
+                  >
+                    I agree to the{" "}
+                    <a 
+                      href="https://www.ozvps.com.au/terms" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:text-primary/80 underline underline-offset-2"
+                      data-testid="link-terms"
+                    >
+                      Terms of Service
+                    </a>
+                  </Label>
+                </div>
+
                 {error && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
@@ -543,7 +581,7 @@ export default function RegisterPage() {
               </div>
 
               <p className="text-center text-xs text-muted-foreground mt-6">
-                By creating an account, you agree to our Terms of Service
+                Need help? Contact support@ozvps.com.au
               </p>
             </motion.div>
           )}
