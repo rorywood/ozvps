@@ -247,6 +247,136 @@ async function getServerWithOwnershipCheck(serverId: string, userVirtFusionId: n
   }
 }
 
+// Error types for Stripe customer provisioning
+class StripeCustomerError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'WALLET_FROZEN' | 'STRIPE_ERROR' | 'PERSISTENCE_ERROR' | 'NO_CUSTOMER',
+    public readonly httpStatus: number
+  ) {
+    super(message);
+    this.name = 'StripeCustomerError';
+  }
+}
+
+// Ensure Stripe customer exists for wallet/billing operations
+// This function validates that a user has a valid Stripe customer before allowing billing operations
+async function ensureStripeCustomer(
+  session: { auth0UserId: string | null; email: string; name?: string; userId?: number },
+  options: { allowCreate?: boolean } = { allowCreate: true }
+): Promise<{ wallet: any; stripeCustomerId: string }> {
+  const { auth0UserId, email, name, userId } = session;
+  
+  if (!auth0UserId) {
+    throw new StripeCustomerError('No Auth0 user ID in session', 'NO_CUSTOMER', 400);
+  }
+  
+  // Get or create wallet
+  const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+  
+  // Check if wallet is frozen (user deleted from Stripe)
+  if (wallet.deletedAt) {
+    throw new StripeCustomerError(
+      'Billing access suspended. Please contact support.',
+      'WALLET_FROZEN',
+      403
+    );
+  }
+  
+  // Check if we already have a Stripe customer
+  if (wallet.stripeCustomerId) {
+    // Verify the customer still exists in Stripe
+    try {
+      const stripe = await getUncachableStripeClient();
+      const customer = await stripe.customers.retrieve(wallet.stripeCustomerId);
+      
+      // Check if customer was deleted in Stripe
+      if ((customer as any).deleted) {
+        log(`Stripe customer ${wallet.stripeCustomerId} was deleted, will recreate`, 'stripe');
+        // Customer was deleted, need to create a new one
+        if (!options.allowCreate) {
+          throw new StripeCustomerError(
+            'Payment account needs setup. Please complete billing setup.',
+            'NO_CUSTOMER',
+            409
+          );
+        }
+        // Fall through to create a new customer
+      } else {
+        // Customer exists and is valid
+        return { wallet, stripeCustomerId: wallet.stripeCustomerId };
+      }
+    } catch (error: any) {
+      if (error instanceof StripeCustomerError) throw error;
+      
+      // If it's a "resource not found" error, we need to create a new customer
+      if (error.type === 'StripeInvalidRequestError' && error.code === 'resource_missing') {
+        log(`Stripe customer ${wallet.stripeCustomerId} not found, will recreate`, 'stripe');
+        if (!options.allowCreate) {
+          throw new StripeCustomerError(
+            'Payment account needs setup. Please complete billing setup.',
+            'NO_CUSTOMER',
+            409
+          );
+        }
+        // Fall through to create a new customer
+      } else {
+        log(`Failed to verify Stripe customer ${wallet.stripeCustomerId}: ${error.message}`, 'stripe');
+        throw new StripeCustomerError(
+          'Unable to verify payment account. Please try again.',
+          'STRIPE_ERROR',
+          502
+        );
+      }
+    }
+  }
+  
+  // No valid Stripe customer exists - check if we should create one
+  if (!options.allowCreate) {
+    throw new StripeCustomerError(
+      'Payment account not set up. Please complete billing setup.',
+      'NO_CUSTOMER',
+      409
+    );
+  }
+  
+  // Create new Stripe customer
+  try {
+    const stripe = await getUncachableStripeClient();
+    const customer = await stripe.customers.create({
+      email,
+      name: name || undefined,
+      metadata: {
+        auth0UserId,
+        ozvps_user_id: String(userId || ''),
+      },
+    });
+    
+    // Persist the Stripe customer ID
+    const updatedWallet = await dbStorage.updateWalletStripeCustomerId(auth0UserId, customer.id);
+    if (!updatedWallet?.stripeCustomerId) {
+      log(`Failed to persist Stripe customer ${customer.id} for ${auth0UserId}`, 'stripe');
+      throw new StripeCustomerError(
+        'Failed to link payment account. Please try again.',
+        'PERSISTENCE_ERROR',
+        500
+      );
+    }
+    
+    log(`Created and linked Stripe customer ${customer.id} for ${auth0UserId}`, 'stripe');
+    return { wallet: updatedWallet, stripeCustomerId: customer.id };
+  } catch (error: any) {
+    if (error instanceof StripeCustomerError) throw error;
+    
+    log(`Failed to create Stripe customer for ${auth0UserId}: ${error.message}`, 'stripe');
+    throw new StripeCustomerError(
+      'Failed to set up payment account. Please try again.',
+      'STRIPE_ERROR',
+      502
+    );
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -2228,40 +2358,19 @@ export async function registerRoutes(
   });
 
   // Create SetupIntent for adding a new payment method (authenticated)
+  // SECURITY: Ensures Stripe customer exists before creating setup intent
   app.post('/api/billing/setup-intent', authMiddleware, async (req, res) => {
     try {
-      const auth0UserId = req.userSession!.auth0UserId;
-      const email = req.userSession!.email;
-      const name = req.userSession!.name;
+      // Ensure Stripe customer exists
+      const { stripeCustomerId } = await ensureStripeCustomer({
+        auth0UserId: req.userSession!.auth0UserId,
+        email: req.userSession!.email,
+        name: req.userSession!.name,
+        userId: req.userSession!.userId,
+      });
       
-      if (!auth0UserId) {
-        return res.status(400).json({ error: 'No Auth0 user ID in session' });
-      }
-
       const stripe = await getUncachableStripeClient();
-      
-      // Get or create Stripe customer
-      let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
-      
-      // Check if wallet is frozen (Stripe customer deleted)
-      if (wallet.deletedAt) {
-        return res.status(403).json({ 
-          error: 'Billing access suspended. Please contact support.',
-          code: 'WALLET_FROZEN'
-        });
-      }
-      let stripeCustomerId = wallet.stripeCustomerId;
-
-      if (!stripeCustomerId) {
-        const customer = await stripe.customers.create({
-          email,
-          name: name || undefined,
-          metadata: { auth0UserId },
-        });
-        stripeCustomerId = customer.id;
-        await dbStorage.updateWalletStripeCustomerId(auth0UserId, stripeCustomerId);
-        log(`Created Stripe customer ${stripeCustomerId} for setup intent`, 'stripe');
-      }
+      const auth0UserId = req.userSession!.auth0UserId;
 
       const setupIntent = await stripe.setupIntents.create({
         customer: stripeCustomerId,
@@ -2273,6 +2382,12 @@ export async function registerRoutes(
         clientSecret: setupIntent.client_secret,
       });
     } catch (error: any) {
+      if (error instanceof StripeCustomerError) {
+        return res.status(error.httpStatus).json({ 
+          error: error.message, 
+          code: error.code 
+        });
+      }
       log(`Error creating setup intent: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to create setup intent' });
     }
@@ -2575,24 +2690,27 @@ export async function registerRoutes(
   });
 
   // Get wallet balance (authenticated)
+  // SECURITY: Ensures Stripe customer exists before returning wallet
   app.get('/api/wallet', authMiddleware, async (req, res) => {
     try {
-      const auth0UserId = req.userSession!.auth0UserId;
-      if (!auth0UserId) {
-        return res.status(400).json({ error: 'No Auth0 user ID in session' });
-      }
-      const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      const { wallet, stripeCustomerId } = await ensureStripeCustomer({
+        auth0UserId: req.userSession!.auth0UserId,
+        email: req.userSession!.email,
+        name: req.userSession!.name,
+        userId: req.userSession!.userId,
+      });
       
-      // Check if wallet is frozen (Stripe customer deleted)
-      if (wallet.deletedAt) {
-        return res.status(403).json({ 
-          error: 'Billing access suspended. Please contact support.',
-          code: 'WALLET_FROZEN'
+      res.json({ 
+        wallet,
+        hasStripeCustomer: !!stripeCustomerId 
+      });
+    } catch (error: any) {
+      if (error instanceof StripeCustomerError) {
+        return res.status(error.httpStatus).json({ 
+          error: error.message, 
+          code: error.code 
         });
       }
-      
-      res.json({ wallet });
-    } catch (error: any) {
       log(`Error fetching wallet: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch wallet' });
     }
@@ -2618,57 +2736,26 @@ export async function registerRoutes(
     amountCents: z.number().min(500).max(50000), // $5 to $500 AUD
   });
 
+  // SECURITY: Ensures Stripe customer exists before creating checkout session
   app.post('/api/wallet/topup', authMiddleware, async (req, res) => {
     try {
-      const auth0UserId = req.userSession!.auth0UserId;
-      const email = req.userSession!.email;
-      const name = req.userSession!.name;
-      if (!auth0UserId) {
-        return res.status(400).json({ error: 'No Auth0 user ID in session' });
-      }
-
       const result = topupSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: 'Invalid amount. Must be between $5 and $500.' });
       }
 
       const { amountCents } = result.data;
-      const stripe = await getUncachableStripeClient();
-
-      // Get or create wallet - ensure it exists
-      let wallet = await dbStorage.getOrCreateWallet(auth0UserId);
-      if (!wallet) {
-        log(`Failed to get/create wallet for ${auth0UserId}`, 'stripe');
-        return res.status(500).json({ error: 'Failed to initialize wallet' });
-      }
       
-      let stripeCustomerId = wallet.stripeCustomerId;
-
-      if (!stripeCustomerId) {
-        // Create Stripe customer and wait for persistence
-        try {
-          const customer = await stripe.customers.create({
-            email,
-            name: name || undefined,
-            metadata: {
-              auth0UserId,
-              ozvps_user_id: String(req.userSession!.userId || ''),
-            },
-          });
-          stripeCustomerId = customer.id;
-          
-          // Await the update and verify it succeeded
-          const updatedWallet = await dbStorage.updateWalletStripeCustomerId(auth0UserId, stripeCustomerId);
-          if (!updatedWallet?.stripeCustomerId) {
-            log(`Failed to persist Stripe customer ${stripeCustomerId} for ${auth0UserId}`, 'stripe');
-            return res.status(500).json({ error: 'Failed to link payment account' });
-          }
-          log(`Created and linked Stripe customer ${stripeCustomerId} for ${auth0UserId}`, 'stripe');
-        } catch (stripeError: any) {
-          log(`Failed to create Stripe customer: ${stripeError.message}`, 'stripe');
-          return res.status(500).json({ error: 'Failed to set up payment account' });
-        }
-      }
+      // Ensure Stripe customer exists
+      const { stripeCustomerId } = await ensureStripeCustomer({
+        auth0UserId: req.userSession!.auth0UserId,
+        email: req.userSession!.email,
+        name: req.userSession!.name,
+        userId: req.userSession!.userId,
+      });
+      
+      const stripe = await getUncachableStripeClient();
+      const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
       const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
@@ -2715,12 +2802,19 @@ export async function registerRoutes(
       log(`Created checkout session for ${auth0UserId}: ${amountCents} cents`, 'stripe');
       res.json({ url: session.url });
     } catch (error: any) {
+      if (error instanceof StripeCustomerError) {
+        return res.status(error.httpStatus).json({ 
+          error: error.message, 
+          code: error.code 
+        });
+      }
       log(`Error creating checkout session: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to create checkout session' });
     }
   });
 
   // Direct charge with saved card for instant top-up (authenticated)
+  // SECURITY: Ensures Stripe customer exists before charging
   const directChargeSchema = z.object({
     amountCents: z.number().min(500).max(50000), // $5 to $500 AUD
     paymentMethodId: z.string().min(1),
@@ -2728,28 +2822,27 @@ export async function registerRoutes(
 
   app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
     try {
-      const auth0UserId = req.userSession!.auth0UserId;
-      if (!auth0UserId) {
-        return res.status(400).json({ error: 'No Auth0 user ID in session' });
-      }
-
       const result = directChargeSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: 'Invalid request. Amount must be between $5 and $500, and a payment method is required.' });
       }
 
       const { amountCents, paymentMethodId } = result.data;
+      
+      // Ensure Stripe customer exists
+      const { stripeCustomerId } = await ensureStripeCustomer({
+        auth0UserId: req.userSession!.auth0UserId,
+        email: req.userSession!.email,
+        name: req.userSession!.name,
+        userId: req.userSession!.userId,
+      });
+      
       const stripe = await getUncachableStripeClient();
-
-      // Get wallet and verify it has the Stripe customer
-      const wallet = await dbStorage.getWallet(auth0UserId);
-      if (!wallet?.stripeCustomerId) {
-        return res.status(400).json({ error: 'No payment account found. Please add a card first.' });
-      }
+      const auth0UserId = req.userSession!.auth0UserId;
 
       // Verify the payment method belongs to this customer
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-      if (paymentMethod.customer !== wallet.stripeCustomerId) {
+      if (paymentMethod.customer !== stripeCustomerId) {
         return res.status(403).json({ error: 'Invalid payment method' });
       }
 
@@ -2765,7 +2858,7 @@ export async function registerRoutes(
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountCents,
         currency: 'aud',
-        customer: wallet.stripeCustomerId,
+        customer: stripeCustomerId,
         payment_method: paymentMethodId,
         off_session: true,
         confirm: true,
@@ -2791,7 +2884,7 @@ export async function registerRoutes(
         try {
           // First create a draft invoice
           const stripeInvoice = await stripe.invoices.create({
-            customer: wallet.stripeCustomerId,
+            customer: stripeCustomerId,
             auto_advance: false,
             collection_method: 'send_invoice',
             days_until_due: 0,
@@ -2806,7 +2899,7 @@ export async function registerRoutes(
           
           // Add line item to the invoice with the correct amount
           await stripe.invoiceItems.create({
-            customer: wallet.stripeCustomerId,
+            customer: stripeCustomerId,
             invoice: stripeInvoice.id,
             amount: amountCents,
             currency: 'aud',
@@ -2847,6 +2940,13 @@ export async function registerRoutes(
         res.status(400).json({ error: 'Payment failed. Please try again or use a different card.' });
       }
     } catch (error: any) {
+      // Handle Stripe customer errors
+      if (error instanceof StripeCustomerError) {
+        return res.status(error.httpStatus).json({ 
+          error: error.message, 
+          code: error.code 
+        });
+      }
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
         log(`Card error for direct charge: ${error.message}`, 'stripe');
