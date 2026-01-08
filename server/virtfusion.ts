@@ -49,6 +49,14 @@ class SimpleCache {
 
 const apiCache = new SimpleCache();
 
+// Custom error class for API timeouts
+export class VirtFusionTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VirtFusionTimeoutError';
+  }
+}
+
 // VirtFusion API response structure - based on actual API response
 interface VirtFusionServerResponse {
   id: number;
@@ -216,9 +224,34 @@ export class VirtFusionClient {
       return JSON.parse(text);
     } catch (error: any) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      // Comprehensive timeout detection for various fetch implementations (native fetch, node-fetch, undici)
+      const isTimeoutError = 
+        // AbortController abort
+        error.name === 'AbortError' || 
+        // Native TimeoutError
+        error.name === 'TimeoutError' ||
+        // Transport layer timeout codes
+        error.cause?.code === 'ECONNABORTED' ||
+        error.cause?.code === 'ETIMEDOUT' ||
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ETIMEDOUT' ||
+        // Undici FetchError with AbortError cause
+        (error.name === 'FetchError' && error.cause?.name === 'AbortError') ||
+        // Undici FetchError with type === 'aborted' (no cause)
+        (error.name === 'FetchError' && error.type === 'aborted') ||
+        // Undici/node-fetch timeout detection via cause
+        error.cause?.name === 'TimeoutError' ||
+        error.cause?.name === 'AbortError' ||
+        // Message-based detection as fallback for any fetch implementation
+        (error.message && (
+          error.message.toLowerCase().includes('timeout') ||
+          error.message.toLowerCase().includes('timed out') ||
+          error.message.toLowerCase().includes('aborted')
+        ));
+      
+      if (isTimeoutError) {
         log(`VirtFusion API timeout after ${REQUEST_TIMEOUT_MS}ms - URL: ${url}`, 'virtfusion');
-        throw new Error(`VirtFusion API timeout after ${REQUEST_TIMEOUT_MS / 1000}s`);
+        throw new VirtFusionTimeoutError(`VirtFusion API timeout after ${REQUEST_TIMEOUT_MS / 1000}s`);
       }
       log(`VirtFusion fetch error: ${error.message} - URL: ${url}`, 'virtfusion');
       throw error;
@@ -837,6 +870,9 @@ export class VirtFusionClient {
         body: JSON.stringify(body),
       });
       
+      // Invalidate cache since server state has changed
+      this.invalidateServerCache(serverId);
+      
       // VirtFusion auto-generates a password and returns it in settings.decryptedPassword
       const generatedPassword = data.data?.settings?.decryptedPassword || null;
       
@@ -879,6 +915,10 @@ export class VirtFusionClient {
         method: 'PUT',
         body: JSON.stringify({ name }),
       });
+      
+      // Invalidate cache since server has been modified
+      this.invalidateServerCache(serverId);
+      
       return data.data;
     } catch (error) {
       log(`Failed to update server name for ${serverId}: ${error}`, 'virtfusion');
@@ -1216,11 +1256,16 @@ export class VirtFusionClient {
       await this.request(`/servers/${serverId}`, {
         method: 'DELETE',
       });
+      
+      // Invalidate cache since server is deleted
+      this.invalidateServerCache(String(serverId));
+      
       log(`Successfully deleted server ${serverId}`, 'virtfusion');
       return true;
     } catch (error: any) {
       if (error.message?.includes('404')) {
         log(`Server ${serverId} already deleted or not found`, 'virtfusion');
+        this.invalidateServerCache(String(serverId));
         return true;
       }
       log(`Failed to delete server ${serverId}: ${error}`, 'virtfusion');
@@ -1746,6 +1791,10 @@ export class VirtFusionClient {
       await this.request(`/servers/${serverId}/suspend`, {
         method: 'POST',
       });
+      
+      // Invalidate cache since server state has changed
+      this.invalidateServerCache(String(serverId));
+      
       log(`Successfully suspended server ${serverId}`, 'virtfusion');
       return true;
     } catch (error) {
@@ -1761,6 +1810,10 @@ export class VirtFusionClient {
       await this.request(`/servers/${serverId}/unsuspend`, {
         method: 'POST',
       });
+      
+      // Invalidate cache since server state has changed
+      this.invalidateServerCache(String(serverId));
+      
       log(`Successfully unsuspended server ${serverId}`, 'virtfusion');
       return true;
     } catch (error) {

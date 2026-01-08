@@ -1,8 +1,8 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
-import { virtfusionClient } from "./virtfusion";
+import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
@@ -10,6 +10,15 @@ import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature } from "./security";
+
+// Helper to handle API errors with proper status codes
+function handleApiError(res: Response, error: any, defaultMessage: string = 'Internal server error') {
+  if (error instanceof VirtFusionTimeoutError) {
+    return res.status(504).json({ error: 'The server management service is taking too long to respond. Please try again.' });
+  }
+  log(`API Error: ${error.message}`, 'routes');
+  return res.status(500).json({ error: defaultMessage });
+}
 
 declare global {
   namespace Express {
@@ -621,7 +630,7 @@ export async function registerRoutes(
       res.json(servers);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch servers' });
+      return handleApiError(res, error, 'Failed to fetch servers');
     }
   });
 
@@ -631,7 +640,7 @@ export async function registerRoutes(
       res.json(server);
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch server' });
+      return handleApiError(res, error, 'Failed to fetch server');
     }
   });
 
@@ -661,7 +670,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to perform power action' });
+      return handleApiError(res, error, 'Failed to perform power action');
     }
   });
 
@@ -671,7 +680,7 @@ export async function registerRoutes(
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
       log(`Error fetching metrics for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch metrics' });
+      return handleApiError(res, error, 'Failed to fetch metrics');
     }
   });
 
@@ -681,7 +690,7 @@ export async function registerRoutes(
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
     } catch (error: any) {
       log(`Error fetching live stats for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch live stats' });
+      return handleApiError(res, error, 'Failed to fetch live stats');
     }
   });
 
@@ -691,7 +700,7 @@ export async function registerRoutes(
       res.json(traffic || []);
     } catch (error: any) {
       log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch traffic data' });
+      return handleApiError(res, error, 'Failed to fetch traffic data');
     }
   });
 
