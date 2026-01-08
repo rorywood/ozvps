@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Server, Shield, Zap, Globe } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
@@ -19,6 +20,134 @@ declare global {
   }
 }
 
+interface ChecklistItem {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
+const CHECKLIST_ITEMS: Omit<ChecklistItem, 'completed'>[] = [
+  { id: 'account', label: 'Creating your account' },
+  { id: 'wallet', label: 'Setting up your wallet' },
+  { id: 'dashboard', label: 'Preparing your dashboard' },
+  { id: 'ready', label: 'All set! Redirecting...' },
+];
+
+function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
+  const [items, setItems] = useState<ChecklistItem[]>(
+    CHECKLIST_ITEMS.map(item => ({ ...item, completed: false }))
+  );
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (currentIndex >= items.length) {
+      const timer = setTimeout(onComplete, 500);
+      return () => clearTimeout(timer);
+    }
+
+    const delay = currentIndex === 0 ? 300 : 800 + Math.random() * 400;
+    const timer = setTimeout(() => {
+      setItems(prev => prev.map((item, idx) => 
+        idx === currentIndex ? { ...item, completed: true } : item
+      ));
+      setCurrentIndex(prev => prev + 1);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, items.length, onComplete]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="w-full max-w-md mx-auto"
+    >
+      <div className="text-center mb-8">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 200, damping: 15 }}
+          className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/20 border border-green-500/30 mb-6"
+        >
+          <CheckCircle2 className="w-10 h-10 text-green-500" />
+        </motion.div>
+        <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+          Welcome to OzVPS!
+        </h2>
+        <p className="text-muted-foreground">
+          Setting up your account...
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {items.map((item, index) => (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ 
+              opacity: index <= currentIndex ? 1 : 0.4,
+              x: 0 
+            }}
+            transition={{ 
+              duration: 0.3, 
+              delay: index * 0.1,
+              ease: "easeOut"
+            }}
+            className="flex items-center gap-4 p-4 rounded-xl bg-card/50 border border-border"
+          >
+            <div className={`
+              flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300
+              ${item.completed 
+                ? 'bg-green-500/20 border-green-500/50' 
+                : index === currentIndex 
+                  ? 'bg-primary/20 border-primary/50' 
+                  : 'bg-muted border-border'
+              } border
+            `}>
+              {item.completed ? (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                </motion.div>
+              ) : index === currentIndex ? (
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+              ) : (
+                <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+              )}
+            </div>
+            <span className={`
+              text-sm font-medium transition-colors duration-300
+              ${item.completed ? 'text-foreground' : 'text-muted-foreground'}
+            `}>
+              {item.label}
+            </span>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="mt-8"
+      >
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
+            initial={{ width: "0%" }}
+            animate={{ width: `${((currentIndex) / items.length) * 100}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function RegisterPage() {
   useDocumentTitle('Create Account');
   const [, setLocation] = useLocation();
@@ -27,6 +156,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [showChecklist, setShowChecklist] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
@@ -106,7 +236,7 @@ export default function RegisterPage() {
       return response.json();
     },
     onSuccess: () => {
-      setLocation("/dashboard");
+      setShowChecklist(true);
     },
     onError: (err: any) => {
       setError(err.message || "Registration failed. Please try again.");
@@ -154,6 +284,10 @@ export default function RegisterPage() {
     registerMutation.mutate();
   };
 
+  const handleChecklistComplete = () => {
+    setLocation("/dashboard");
+  };
+
   const passwordStrength = () => {
     if (!password) return null;
     let strength = 0;
@@ -170,169 +304,250 @@ export default function RegisterPage() {
 
   const strength = passwordStrength();
 
+  const features = [
+    { icon: Server, title: "Instant Deployment", description: "Deploy servers in seconds" },
+    { icon: Shield, title: "Enterprise Security", description: "Protected by Australian infrastructure" },
+    { icon: Zap, title: "High Performance", description: "NVMe storage & premium network" },
+    { icon: Globe, title: "99.9% Uptime", description: "Reliable cloud hosting" },
+  ];
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-card/50 ring-1 ring-border">
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-green-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
+    <div className="min-h-screen flex bg-background">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-green-500/10">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-green-500/20 via-transparent to-transparent" />
         
-        <div className="relative z-10">
-          <div className="flex flex-col items-center mb-8">
-            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-5" data-testid="img-logo" />
-            <h1 className="text-2xl font-display font-bold text-foreground text-center">
-              Create Your Account
-            </h1>
-            <p className="text-muted-foreground text-center mt-2 text-base">
-              Get started with OzVPS cloud servers
-            </p>
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        
+        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
+          <Link href="/">
+            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-12 cursor-pointer" data-testid="img-logo-side" />
+          </Link>
+          
+          <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
+            Cloud Servers<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-green-500">
+              Made Simple
+            </span>
+          </h1>
+          
+          <p className="text-lg text-muted-foreground mb-12 max-w-md">
+            Deploy high-performance virtual servers with our easy-to-use control panel. 
+            Pay as you go with our prepaid wallet system.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-6">
+            {features.map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 + 0.2 }}
+                className="flex items-start gap-3"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <feature.icon className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
+                  <p className="text-xs text-muted-foreground">{feature.description}</p>
+                </div>
+              </motion.div>
+            ))}
           </div>
+        </div>
+      </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name (Optional)</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="name" 
-                  type="text"
-                  placeholder="Your name" 
-                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoComplete="name"
-                  data-testid="input-name"
-                />
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
+        <AnimatePresence mode="wait">
+          {showChecklist ? (
+            <motion.div
+              key="checklist"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full max-w-md"
+            >
+              <OnboardingChecklist onComplete={handleChecklistComplete} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="w-full max-w-md"
+            >
+              <div className="lg:hidden flex justify-center mb-8">
+                <Link href="/">
+                  <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo" />
+                </Link>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="email" 
-                  type="email"
-                  placeholder="you@example.com" 
-                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  data-testid="input-email"
-                />
+              <div className="mb-8">
+                <h1 className="text-3xl font-display font-bold text-foreground">
+                  Create Account
+                </h1>
+                <p className="text-muted-foreground mt-2">
+                  Get started with OzVPS cloud servers
+                </p>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="password" 
-                  type="password"
-                  placeholder="Create a password"
-                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  data-testid="input-password"
-                />
-              </div>
-              {strength && (
-                <div className="space-y-1">
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300`} />
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium">Name (Optional)</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="name" 
+                      type="text"
+                      placeholder="Your name" 
+                      className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                      data-testid="input-name"
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Password strength: <span className={strength.color === 'bg-green-500' ? 'text-green-400' : strength.color === 'bg-yellow-500' ? 'text-yellow-400' : 'text-red-400'}>{strength.label}</span>
-                  </p>
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="confirmPassword" 
-                  type="password"
-                  placeholder="Confirm your password"
-                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                  data-testid="input-confirm-password"
-                />
-              </div>
-              {confirmPassword && password === confirmPassword && (
-                <div className="flex items-center gap-1.5 text-xs text-green-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Passwords match
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="email" 
+                      type="email"
+                      placeholder="you@example.com" 
+                      className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      data-testid="input-email"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {recaptchaEnabled && (
-              <div className="flex justify-center" data-testid="recaptcha-container">
-                <div ref={recaptchaRef} />
-                {!recaptchaLoaded && (
-                  <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Loading verification...
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="password" 
+                      type="password"
+                      placeholder="Create a password"
+                      className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="new-password"
+                      data-testid="input-password"
+                    />
+                  </div>
+                  {strength && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300`} />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Password strength: <span className={strength.color === 'bg-green-500' ? 'text-green-400' : strength.color === 'bg-yellow-500' ? 'text-yellow-400' : 'text-red-400'}>{strength.label}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="confirmPassword" 
+                      type="password"
+                      placeholder="Confirm your password"
+                      className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      autoComplete="new-password"
+                      data-testid="input-confirm-password"
+                    />
+                  </div>
+                  {confirmPassword && password === confirmPassword && (
+                    <div className="flex items-center gap-1.5 text-xs text-green-400 pt-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Passwords match
+                    </div>
+                  )}
+                </div>
+
+                {recaptchaEnabled && (
+                  <div className="flex justify-center py-2" data-testid="recaptcha-container">
+                    <div ref={recaptchaRef} />
+                    {!recaptchaLoaded && (
+                      <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading verification...
+                      </div>
+                    )}
                   </div>
                 )}
+
+                <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
+                  <Label htmlFor="website">Website</Label>
+                  <Input 
+                    id="website" 
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypot}
+                    onChange={(e) => setHoneypot(e.target.value)}
+                  />
+                </div>
+
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3"
+                    data-testid="text-error"
+                  >
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </motion.div>
+                )}
+
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 text-base font-medium bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg shadow-green-500/25 border-0"
+                  disabled={registerMutation.isPending}
+                  data-testid="button-submit"
+                >
+                  {registerMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
+              </form>
+
+              <div className="mt-8 text-center">
+                <p className="text-muted-foreground text-sm">
+                  Already have an account?{" "}
+                  <Link href="/login" className="text-primary hover:text-primary/80 font-medium" data-testid="link-login">
+                    Sign in
+                  </Link>
+                </p>
               </div>
-            )}
 
-            <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
-              <Label htmlFor="website">Website</Label>
-              <Input 
-                id="website" 
-                type="text"
-                tabIndex={-1}
-                autoComplete="off"
-                value={honeypot}
-                onChange={(e) => setHoneypot(e.target.value)}
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-3" data-testid="text-error">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <Button 
-              type="submit" 
-              className="w-full h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-primary-foreground shadow-[0_0_20px_rgba(34,197,94,0.3)] border-0 mt-2"
-              disabled={registerMutation.isPending}
-              data-testid="button-submit"
-            >
-              {registerMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Create Account"
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-muted-foreground text-sm">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:text-primary/80 font-medium" data-testid="link-login">
-                Sign in
-              </Link>
-            </p>
-          </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-4">
-            By creating an account, you agree to our Terms of Service
-          </p>
-        </div>
+              <p className="text-center text-xs text-muted-foreground mt-6">
+                By creating an account, you agree to our Terms of Service
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
