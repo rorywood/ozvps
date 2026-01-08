@@ -1,0 +1,40 @@
+ ✘ Container ozvps-postgres Error dependency postgr...                     0.5s
+dependency failed to start: container ozvps-postgres is unhealthy
+root@app:/opt/ozvps# docker logs ozvps-postgres
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:34.475 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:34.768 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:35.168 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:35.777 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:36.788 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:38.610 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:42.008 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:51:48.654 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+
+PostgreSQL Database directory appears to contain a database; Skipping initializa                                                                                                                                                                                                                                             tion
+
+2026-01-08 23:52:01.674 UTC [1] FATAL:  could not write lock file "postmaster.pi                                                                                                                                                                                                                                             d": No space left on device
+root@app:/opt/ozvps#
