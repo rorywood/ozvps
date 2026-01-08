@@ -182,7 +182,7 @@ export function useReinstallTask(serverId: string) {
         return;
       } else if (buildStatus.isBuilding) {
         newStatus = mapVirtFusionStatus(buildStatus.phase);
-        newPercent = buildStatus.percent ?? STATUS_PERCENT_MAP[newStatus];
+        newPercent = STATUS_PERCENT_MAP[newStatus];
         addTimelineEvent(newStatus);
       } else {
         newStatus = 'queued';
@@ -248,18 +248,41 @@ export function useReinstallTask(serverId: string) {
       percent: 0,
       error: null,
       timeline: [],
+      credentials: null,
     });
     lastStatusRef.current = 'idle';
   }, [serverId, stopPolling]);
 
   // On mount, verify if there's actually an active task from VirtFusion
   // This prevents stale UI when user refreshes after reinstall completes
+  // Also detects builds started from other sessions/devices
   useEffect(() => {
-    const verifyActiveTask = async () => {
+    const checkBuildStatus = async () => {
       if (!serverId) return;
       
       try {
         const buildStatus = await api.getBuildStatus(serverId);
+        
+        // If there's an active build but we have no local state, hydrate from backend
+        if (buildStatus.isBuilding && !state.isActive) {
+          const newStatus = mapVirtFusionStatus(buildStatus.phase);
+          const newPercent = STATUS_PERCENT_MAP[newStatus];
+          setState({
+            isActive: true,
+            taskId: null,
+            status: newStatus,
+            percent: newPercent,
+            error: null,
+            timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
+            credentials: null, // No credentials available from other sessions
+          });
+          lastStatusRef.current = newStatus;
+          // Start polling
+          if (!pollRef.current) {
+            pollRef.current = setInterval(poll, 5000);
+          }
+          return;
+        }
         
         // If no active build and we have a stored state showing active, reset it
         if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
@@ -282,9 +305,7 @@ export function useReinstallTask(serverId: string) {
       }
     };
 
-    if (state.isActive) {
-      verifyActiveTask();
-    }
+    checkBuildStatus();
   }, [serverId]); // Only run on mount
 
   useEffect(() => {

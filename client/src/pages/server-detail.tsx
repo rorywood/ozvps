@@ -208,11 +208,11 @@ export default function ServerDetail() {
   // Console lock hook - must be after server query
   const consoleLock = useConsoleLock(serverId || '', server?.status);
   
-  // Clear building flags when server no longer needs setup (setup completed)
+  // Clear building flags when server no longer needs setup AND reinstall task is complete
   useEffect(() => {
-    if (server && !server.needsSetup && serverId) {
+    if (server && !server.needsSetup && serverId && !reinstallTask.isActive) {
       try {
-        // Server setup is complete, clear any leftover building flags
+        // Server setup is complete and task is done, clear any leftover building flags
         if (sessionStorage.getItem(`setupMode:${serverId}`) || 
             sessionStorage.getItem(`setupMinimized:${serverId}`)) {
           sessionStorage.removeItem(`setupMode:${serverId}`);
@@ -224,7 +224,7 @@ export default function ServerDetail() {
         // Ignore storage errors
       }
     }
-  }, [server?.needsSetup, serverId]);
+  }, [server?.needsSetup, serverId, reinstallTask.isActive]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -758,6 +758,15 @@ export default function ServerDetail() {
 
   const isSuspended = server?.suspended === true;
   const needsSetup = server?.needsSetup === true;
+  
+  // Check if initial setup is in progress (blocks server usage until complete)
+  // reinstallTask now hydrates from backend on mount, so isActive is authoritative
+  // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
+  const isSettingUp = reinstallTask.isActive && (needsSetup || isSetupMode);
+  
+  // Also block server usage during ANY active build task (setup or reinstall)
+  // This ensures cross-session protection even without sessionStorage
+  const hasBuildInProgress = reinstallTask.isActive && reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed';
 
   // If server needs setup, show the setup wizard
   if (needsSetup && !reinstallTask.isActive) {
@@ -1195,15 +1204,20 @@ export default function ServerDetail() {
               variant="secondary" 
               className={cn(
                 "shadow-none font-medium h-9",
-                (powerActionPending || server.status !== 'running' || isSuspended)
+                (powerActionPending || server.status !== 'running' || isSuspended || hasBuildInProgress)
                   ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed" 
                   : "bg-muted/50 hover:bg-muted text-foreground border-border"
               )}
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || hasBuildInProgress}
               data-testid="button-console"
             >
-              {consoleLock.isLocked ? (
+              {hasBuildInProgress ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
+                  {isSettingUp ? "Setting up..." : "Building..."}
+                </>
+              ) : consoleLock.isLocked ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
                   Restarting...
@@ -1221,26 +1235,26 @@ export default function ServerDetail() {
                 <Button 
                   className={cn(
                     "font-medium h-9 border-0",
-                    (isSuspended || consoleLock.isLocked)
+                    (isSuspended || consoleLock.isLocked || hasBuildInProgress)
                       ? "bg-muted text-muted-foreground cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
                   )}
                   data-testid="button-power-options"
-                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked}
+                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked || hasBuildInProgress}
                 >
-                  {(powerActionPending || consoleLock.isLocked) ? (
+                  {(powerActionPending || consoleLock.isLocked || hasBuildInProgress) ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Power className="h-4 w-4 mr-2" />
                   )}
-                  {consoleLock.isLocked ? "Restarting..." : "Power Options"}
-                  {!consoleLock.isLocked && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
+                  {hasBuildInProgress ? (isSettingUp ? "Setting up..." : "Building...") : consoleLock.isLocked ? "Restarting..." : "Power Options"}
+                  {!consoleLock.isLocked && !hasBuildInProgress && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={server.status === 'running' || !!powerActionPending || isSuspended}
+                    disabled={server.status === 'running' || !!powerActionPending || isSuspended || hasBuildInProgress}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
                   >
@@ -1248,7 +1262,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended}
+                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended || hasBuildInProgress}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
                   >
@@ -1256,7 +1270,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || hasBuildInProgress}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
                   >
@@ -1264,7 +1278,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || hasBuildInProgress}
                     onClick={() => handlePowerAction('poweroff')}
                     data-testid="menu-item-poweroff"
                   >

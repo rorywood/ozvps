@@ -23,7 +23,8 @@ import flagAU from "@/assets/flag-au.png";
 import { getOsLogoUrlFromServer, FALLBACK_LOGO } from "@/lib/os-logos";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 
-function isServerBuilding(serverId: string): boolean {
+function hasActiveSetupSession(serverId: string): boolean {
+  // Check sessionStorage for active setup task (only for current browser session)
   try {
     const setupMode = sessionStorage.getItem(`setupMode:${serverId}`);
     const setupMinimized = sessionStorage.getItem(`setupMinimized:${serverId}`);
@@ -207,13 +208,13 @@ export default function Dashboard() {
                         <div className={cn(
                           "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
                           server.suspended ? "bg-yellow-500/10 text-yellow-500" :
-                          server.needsSetup && isServerBuilding(server.id) ? "bg-cyan-500/10 text-cyan-500" :
+                          hasActiveSetupSession(server.id) ? "bg-cyan-500/10 text-cyan-500" :
                           server.needsSetup ? "bg-blue-500/10 text-blue-500" :
                           displayStatus === 'running' ? "bg-green-500/10 text-green-500" : 
                           displayStatus === 'stopped' ? "bg-red-500/10 text-red-500" :
                           "bg-yellow-500/10 text-yellow-500"
                         )}>
-                          {isTransitioning || (server.needsSetup && isServerBuilding(server.id)) ? (
+                          {isTransitioning || hasActiveSetupSession(server.id) ? (
                             <Loader2 className="h-6 w-6 animate-spin" />
                           ) : (
                             <ServerIcon className="h-6 w-6" />
@@ -228,23 +229,21 @@ export default function Dashboard() {
                             </h3>
                             
                             {/* Building or Needs Setup badge */}
-                            {server.needsSetup && (
-                              isServerBuilding(server.id) ? (
-                                <span 
-                                  className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center gap-1"
-                                  data-testid={`badge-building-${server.id}`}
-                                >
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                  BUILDING
-                                </span>
-                              ) : (
-                                <span 
-                                  className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1"
-                                  data-testid={`badge-needs-setup-${server.id}`}
-                                >
-                                  NEEDS SETUP
-                                </span>
-                              )
+                            {hasActiveSetupSession(server.id) ? (
+                              <span 
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center gap-1"
+                                data-testid={`badge-building-${server.id}`}
+                              >
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                SETTING UP
+                              </span>
+                            ) : server.needsSetup && (
+                              <span 
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1"
+                                data-testid={`badge-needs-setup-${server.id}`}
+                              >
+                                NEEDS SETUP
+                              </span>
                             )}
                             
                             {/* Status badges */}
@@ -344,13 +343,13 @@ export default function Dashboard() {
                           <div className={cn(
                             "px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5",
                             server.suspended ? "bg-yellow-500/10 text-yellow-400" :
-                            server.needsSetup && isServerBuilding(server.id) ? "bg-cyan-500/10 text-cyan-400" :
+                            hasActiveSetupSession(server.id) ? "bg-cyan-500/10 text-cyan-400" :
                             server.needsSetup ? "bg-blue-500/10 text-blue-400" :
                             displayStatus === 'running' ? "bg-green-500/10 text-green-400" : 
                             displayStatus === 'stopped' ? "bg-red-500/10 text-red-400" :
                             "bg-yellow-500/10 text-yellow-400"
                           )}>
-                            {server.needsSetup && isServerBuilding(server.id) ? (
+                            {hasActiveSetupSession(server.id) ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <div className={cn("w-1.5 h-1.5 rounded-full", 
@@ -362,7 +361,7 @@ export default function Dashboard() {
                               )} />
                             )}
                             {server.suspended ? 'Suspended' : 
-                             server.needsSetup && isServerBuilding(server.id) ? 'Building' :
+                             hasActiveSetupSession(server.id) ? 'Setting Up' :
                              server.needsSetup ? 'Awaiting Setup' : 
                              displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
                           </div>
