@@ -189,7 +189,7 @@ class ApiClient {
     return response.json();
   }
 
-  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; error?: string }> {
+  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; username?: string; error?: string }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

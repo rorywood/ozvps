@@ -1194,7 +1194,7 @@ export async function registerRoutes(
       }
       
       log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
-      res.json({ success: true, password: result.password });
+      res.json({ success: true, password: result.password, username: result.username });
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reset server password' });

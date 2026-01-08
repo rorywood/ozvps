@@ -245,6 +245,94 @@ export default function ServerDetail() {
       }
     }
   }, [server?.needsSetup, serverId, reinstallTask.isActive]);
+  
+  // Persist credentials when setup completes - also restore from sessionStorage on mount
+  useEffect(() => {
+    if (serverId) {
+      try {
+        const storedCreds = sessionStorage.getItem(`setupCredentials:${serverId}`);
+        if (storedCreds && !savedCredentials) {
+          const creds = JSON.parse(storedCreds);
+          setSavedCredentials(creds);
+          setShowSavedCredentials(true);
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [serverId]);
+  
+  // Save credentials to sessionStorage when they become available
+  useEffect(() => {
+    if (reinstallTask.credentials && serverId) {
+      setSavedCredentials(reinstallTask.credentials);
+      setShowSavedCredentials(true);
+      try {
+        sessionStorage.setItem(`setupCredentials:${serverId}`, JSON.stringify(reinstallTask.credentials));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [reinstallTask.credentials, serverId]);
+  
+  // Track if we've already triggered auto-password-reset to avoid duplicates
+  const autoPasswordResetTriggeredRef = useRef(false);
+  const autoPasswordResetInProgressRef = useRef(false);
+  
+  // Auto-fetch credentials when setup completes but no password was returned from build
+  // This handles cases where VirtFusion doesn't include the password in the build response
+  // Uses a 2-second delay to allow credentials to be populated from the build response first
+  useEffect(() => {
+    const shouldAutoReset = 
+      reinstallTask.status === 'complete' && 
+      !reinstallTask.credentials && 
+      !savedCredentials &&
+      serverId && 
+      server?.primaryIp &&
+      !autoPasswordResetTriggeredRef.current &&
+      !autoPasswordResetInProgressRef.current;
+    
+    if (shouldAutoReset) {
+      autoPasswordResetTriggeredRef.current = true;
+      autoPasswordResetInProgressRef.current = true;
+      
+      // Add a short delay before auto-reset to give time for any async credential updates
+      const timeoutId = setTimeout(() => {
+        // Double-check we still need credentials after the delay
+        if (!savedCredentials) {
+          api.resetServerPassword(serverId).then(response => {
+            if (response.password) {
+              const creds = {
+                serverIp: server.primaryIp || 'N/A',
+                username: response.username || 'root',
+                password: response.password
+              };
+              setSavedCredentials(creds);
+              setShowSavedCredentials(true);
+              try {
+                sessionStorage.setItem(`setupCredentials:${serverId}`, JSON.stringify(creds));
+              } catch {
+                // Ignore storage errors
+              }
+            }
+          }).catch(() => {
+            // Silent fail - user can manually reset password
+          }).finally(() => {
+            autoPasswordResetInProgressRef.current = false;
+          });
+        } else {
+          autoPasswordResetInProgressRef.current = false;
+        }
+      }, 2000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+    
+    // Reset the flag when task is reset
+    if (!reinstallTask.isActive) {
+      autoPasswordResetTriggeredRef.current = false;
+    }
+  }, [reinstallTask.status, reinstallTask.credentials, reinstallTask.isActive, savedCredentials, serverId, server?.primaryIp]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();

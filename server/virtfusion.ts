@@ -920,8 +920,23 @@ export class VirtFusionClient {
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);
       
-      // VirtFusion auto-generates a password and returns it in settings.decryptedPassword
-      const generatedPassword = data.data?.settings?.decryptedPassword || null;
+      // Log the response structure to debug password location
+      log(`Build response for server ${serverId}: settings keys = ${Object.keys(data.data?.settings || {}).join(', ')}`, 'virtfusion');
+      
+      // VirtFusion may return password in various fields depending on version
+      // Check settings.decryptedPassword, settings.password, or root level
+      const generatedPassword = 
+        data.data?.settings?.decryptedPassword || 
+        data.data?.settings?.password ||
+        data.data?.decryptedPassword ||
+        data.data?.password ||
+        null;
+      
+      if (generatedPassword) {
+        log(`Password found for server ${serverId} in build response`, 'virtfusion');
+      } else {
+        log(`No password returned in build response for server ${serverId}`, 'virtfusion');
+      }
       
       return { ...data.data, generatedPassword };
     } catch (error) {
@@ -971,7 +986,7 @@ export class VirtFusionClient {
         log(`Password reset for server ${serverId} completed successfully`, 'virtfusion');
       }
       
-      return { success: true, password: newPassword };
+      return { success: true, password: newPassword, username: resetUser };
     } catch (error) {
       log(`Failed to reset password for server ${serverId}: ${error}`, 'virtfusion');
       throw error;
