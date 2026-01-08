@@ -117,6 +117,12 @@ prompt_required "Stripe Secret Key (sk_live_... or sk_test_...)" STRIPE_SECRET_K
 prompt_required "Stripe Publishable Key (pk_live_... or pk_test_...)" STRIPE_PUBLISHABLE_KEY false
 prompt_optional "Stripe Webhook Secret (whsec_...)" STRIPE_WEBHOOK_SECRET "" true
 
+# Domain Configuration
+echo ""
+echo -e "${BLUE}--- Domain Configuration ---${NC}"
+prompt_required "Domain name for the panel (e.g., app.ozvps.com.au)" APP_DOMAIN false
+prompt_optional "Email for SSL certificate notifications" SSL_EMAIL "admin@${APP_DOMAIN}" false
+
 echo ""
 echo -e "${GREEN}Configuration collected successfully!${NC}"
 echo ""
@@ -154,7 +160,70 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}=== Step 3: Setting Up OzVPS Panel ===${NC}"
+echo -e "${YELLOW}=== Step 3: Installing Nginx & SSL ===${NC}"
+echo ""
+
+# Install nginx
+if command -v nginx &> /dev/null; then
+    echo -e "${GREEN}Nginx is already installed.${NC}"
+else
+    echo "Installing Nginx..."
+    apt-get install -y nginx
+    systemctl start nginx
+    systemctl enable nginx
+    echo -e "${GREEN}Nginx installed successfully.${NC}"
+fi
+
+# Install certbot
+if command -v certbot &> /dev/null; then
+    echo -e "${GREEN}Certbot is already installed.${NC}"
+else
+    echo "Installing Certbot..."
+    apt-get install -y certbot python3-certbot-nginx
+    echo -e "${GREEN}Certbot installed successfully.${NC}"
+fi
+
+# Create nginx configuration
+echo "Configuring Nginx..."
+cat > /etc/nginx/sites-available/ozvps << NGINX_CONFIG
+server {
+    listen 80;
+    server_name ${APP_DOMAIN};
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINX_CONFIG
+
+# Enable the site
+ln -sf /etc/nginx/sites-available/ozvps /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+
+# Test and reload nginx
+nginx -t
+systemctl reload nginx
+echo -e "${GREEN}Nginx configured successfully.${NC}"
+
+# Get SSL certificate
+echo ""
+echo -e "${BLUE}Obtaining SSL certificate for ${APP_DOMAIN}...${NC}"
+certbot --nginx -d "$APP_DOMAIN" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect
+
+echo -e "${GREEN}SSL certificate installed successfully.${NC}"
+
+echo ""
+echo -e "${YELLOW}=== Step 4: Setting Up OzVPS Panel ===${NC}"
 echo ""
 
 # Create installation directory
@@ -193,6 +262,10 @@ AUTH0_WEBHOOK_SECRET=${AUTH0_WEBHOOK_SECRET}
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
 STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
 STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+
+# Domain
+APP_DOMAIN=${APP_DOMAIN}
+SSL_EMAIL=${SSL_EMAIL}
 EOF
 
 # Secure the .env file
@@ -447,7 +520,7 @@ CONTROL_SCRIPT
 chmod +x "$INSTALL_DIR/ozvpsctl.sh"
 
 echo ""
-echo -e "${YELLOW}=== Step 4: Starting OzVPS Panel ===${NC}"
+echo -e "${YELLOW}=== Step 5: Starting OzVPS Panel ===${NC}"
 echo ""
 
 # Login to GitHub Container Registry
@@ -462,12 +535,17 @@ docker compose pull
 echo "Starting OzVPS Panel..."
 docker compose up -d
 
+# Wait for app to be healthy
+echo ""
+echo "Waiting for application to start..."
+sleep 10
+
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║           OzVPS Panel Installation Complete!              ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "Your OzVPS Panel is now running at: ${BLUE}http://$(hostname -I | awk '{print $1}'):5000${NC}"
+echo -e "Your OzVPS Panel is now running at: ${BLUE}https://${APP_DOMAIN}${NC}"
 echo ""
 echo "Useful commands:"
 echo "  cd /opt/ozvps"
@@ -476,5 +554,5 @@ echo "  ./ozvpsctl.sh logs -f     - View logs"
 echo "  ./ozvpsctl.sh update      - Update to latest version"
 echo "  ./ozvpsctl.sh backup-db   - Backup database"
 echo ""
-echo -e "${YELLOW}Important: Set up a reverse proxy (nginx/Caddy) for HTTPS.${NC}"
+echo -e "${GREEN}SSL is configured and will auto-renew via certbot.${NC}"
 echo ""
