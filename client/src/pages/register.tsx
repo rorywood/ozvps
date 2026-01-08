@@ -29,6 +29,7 @@ interface ChecklistItem {
 
 const CHECKLIST_ITEMS: Omit<ChecklistItem, 'completed'>[] = [
   { id: 'account', label: 'Creating your account' },
+  { id: 'security', label: 'Configuring security settings' },
   { id: 'wallet', label: 'Setting up your wallet' },
   { id: 'dashboard', label: 'Preparing your dashboard' },
   { id: 'ready', label: 'All set! Redirecting...' },
@@ -46,7 +47,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
       return () => clearTimeout(timer);
     }
 
-    const delay = currentIndex === 0 ? 300 : 800 + Math.random() * 400;
+    const delay = currentIndex === 0 ? 800 : 1200 + Math.random() * 600;
     const timer = setTimeout(() => {
       setItems(prev => prev.map((item, idx) => 
         idx === currentIndex ? { ...item, completed: true } : item
