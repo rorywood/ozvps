@@ -132,6 +132,16 @@ class ApiClient {
     return response.json();
   }
 
+  async getTrafficStatistics(id: string, period: string = '30m'): Promise<{
+    points: Array<{ timestamp: string; rx: number; tx: number }>;
+    interval: number;
+    period: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/traffic/statistics?period=${period}`);
+    if (!response.ok) throw new Error('Failed to fetch traffic statistics');
+    return response.json();
+  }
+
   async getTotalBandwidth(): Promise<{ totalBandwidth: number; totalLimit: number; serverCount: number }> {
     const response = await fetch(`${this.baseUrl}/bandwidth/total`);
     if (!response.ok) throw new Error('Failed to fetch total bandwidth');

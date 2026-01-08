@@ -926,6 +926,22 @@ export async function registerRoutes(
     }
   });
 
+  // Real-time traffic statistics for graphing
+  app.get('/api/servers/:id/traffic/statistics', authMiddleware, async (req, res) => {
+    try {
+      const period = (req.query.period as string) || '30m';
+      const validPeriods = ['30m', '1h', '12h', '1d', '1w'];
+      if (!validPeriods.includes(period)) {
+        return res.status(400).json({ error: 'Invalid period. Valid options: 30m, 1h, 12h, 1d, 1w' });
+      }
+      const statistics = await virtfusionClient.getServerTrafficStatistics(req.params.id, period);
+      res.json(statistics || { points: [], interval: 60, period });
+    } catch (error: any) {
+      log(`Error fetching traffic statistics for server ${req.params.id}: ${error.message}`, 'api');
+      return handleApiError(res, error, 'Failed to fetch traffic statistics');
+    }
+  });
+
   // Aggregate bandwidth usage across all user's servers
   app.get('/api/bandwidth/total', authMiddleware, async (req, res) => {
     try {

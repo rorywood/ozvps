@@ -130,6 +130,9 @@ export default function ServerDetail() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
   
+  // Traffic statistics state
+  const [trafficStatsPeriod, setTrafficStatsPeriod] = useState<string>('30m');
+  
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
     try {
@@ -188,6 +191,14 @@ export default function ServerDetail() {
     queryKey: ['traffic', serverId],
     queryFn: () => api.getTrafficHistory(serverId || ''),
     enabled: !!serverId
+  });
+  
+  // Traffic statistics for real-time graphing
+  const { data: trafficStats, isFetching: isTrafficStatsFetching } = useQuery({
+    queryKey: ['traffic-stats', serverId, trafficStatsPeriod],
+    queryFn: () => api.getTrafficStatistics(serverId || '', trafficStatsPeriod),
+    enabled: !!serverId,
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
   
   // Fetch cancellation status
@@ -1600,49 +1611,149 @@ export default function ServerDetail() {
               })()}
             </GlassCard>
 
-            {/* Network Speed Card */}
+            {/* Network Traffic Graph */}
             <GlassCard className="p-4">
-              <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
-                <Activity className="h-4 w-4 text-blue-400" />
-                Network Port Speed
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-blue-400" />
+                  Network Traffic
+                </h3>
+                <div className="flex items-center gap-1">
+                  {['30m', '1h', '12h', '1d', '1w'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => setTrafficStatsPeriod(period)}
+                      className={cn(
+                        "px-2 py-1 text-xs rounded transition-colors",
+                        trafficStatsPeriod === period
+                          ? "bg-blue-500 text-white"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                      data-testid={`button-period-${period}`}
+                    >
+                      {period}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {(() => {
-                const network = trafficData?.network;
-                const portSpeed = network?.portSpeed || 500;
-                const inSpeed = network?.inSpeedMbps || portSpeed;
-                const outSpeed = network?.outSpeedMbps || portSpeed;
+                const points = trafficStats?.points || [];
+                
+                // Transform data for chart - convert bytes to Mbps
+                const chartData = points.map((point: any) => {
+                  const timestamp = new Date(point.timestamp || point.time);
+                  const rxMbps = ((point.rx || 0) * 8) / 1000000; // bytes to Mbps
+                  const txMbps = ((point.tx || 0) * 8) / 1000000;
+                  return {
+                    time: timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    date: timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+                    rx: Math.round(rxMbps * 100) / 100,
+                    tx: Math.round(txMbps * 100) / 100,
+                  };
+                });
+                
+                // Calculate max for Y axis
+                const maxValue = Math.max(
+                  ...chartData.map((d: any) => Math.max(d.rx || 0, d.tx || 0)),
+                  1
+                );
+                
+                const formatYAxis = (value: number) => {
+                  if (value >= 1000) return `${(value / 1000).toFixed(1)}Gbps`;
+                  return `${value.toFixed(1)}Mbps`;
+                };
+                
+                if (isTrafficStatsFetching && chartData.length === 0) {
+                  return (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading traffic data...
+                    </div>
+                  );
+                }
+                
+                if (chartData.length === 0) {
+                  return (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                      No traffic data available for this period
+                    </div>
+                  );
+                }
                 
                 return (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-muted/30 rounded-lg border border-border">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <ArrowDownToLine className="h-4 w-4 text-green-400" />
-                          <span>Max Download</span>
-                        </div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-bold text-green-400" data-testid="text-download-speed">
-                            {inSpeed}
-                          </span>
-                          <span className="text-sm text-muted-foreground">Mbps</span>
-                        </div>
+                  <div className="space-y-3">
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id="rxGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="txGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <XAxis 
+                            dataKey="time" 
+                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={formatYAxis}
+                            domain={[0, Math.ceil(maxValue * 1.1)]}
+                          />
+                          <ChartTooltip
+                            content={({ active, payload, label }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-background/95 border border-border rounded-lg p-2 shadow-lg">
+                                    <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                    <p className="text-xs text-blue-400">
+                                      RX: {payload[0]?.value?.toFixed(2)} Mbps
+                                    </p>
+                                    <p className="text-xs text-green-400">
+                                      TX: {payload[1]?.value?.toFixed(2)} Mbps
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="rx"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            fill="url(#rxGradient)"
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="tx"
+                            stroke="#22c55e"
+                            strokeWidth={2}
+                            fill="url(#txGradient)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex items-center justify-center gap-6 text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-0.5 bg-blue-500 rounded"></div>
+                        <span className="text-muted-foreground">RX (Download)</span>
                       </div>
-                      <div className="p-4 bg-muted/30 rounded-lg border border-border">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <ArrowUpFromLine className="h-4 w-4 text-blue-400" />
-                          <span>Max Upload</span>
-                        </div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-bold text-blue-400" data-testid="text-upload-speed">
-                            {outSpeed}
-                          </span>
-                          <span className="text-sm text-muted-foreground">Mbps</span>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-0.5 bg-green-500 rounded"></div>
+                        <span className="text-muted-foreground">TX (Upload)</span>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Provisioned network port speeds for your server
-                    </p>
                   </div>
                 );
               })()}

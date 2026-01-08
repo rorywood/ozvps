@@ -685,6 +685,51 @@ export class VirtFusionClient {
     }
   }
 
+  async getServerTrafficStatistics(serverId: string, period: string = '30m') {
+    try {
+      // VirtFusion API: GET /servers/{serverId}/traffic/statistics
+      // Provides real-time network traffic data for graphing
+      // Period options: 30m, 1h, 12h, 1d, 1w
+      const response = await this.request<any>(`/servers/${serverId}/traffic/statistics?period=${period}`);
+      
+      log(`Traffic statistics raw response for ${serverId}: ${JSON.stringify(response).slice(0, 1000)}`, 'virtfusion');
+      
+      // VirtFusion may return data in various structures:
+      // 1. { data: [...] } - wrapped in data property
+      // 2. { data: { points: [...] } } - nested with points
+      // 3. [...] - direct array at root
+      // 4. { points: [...] } - points at root
+      const statsData = response?.data ?? response;
+      
+      // VirtFusion returns data in various possible formats - handle flexibly
+      let points: any[] = [];
+      if (Array.isArray(statsData)) {
+        points = statsData;
+      } else if (Array.isArray(response)) {
+        points = response;
+      } else if (statsData?.points && Array.isArray(statsData.points)) {
+        points = statsData.points;
+      } else if (statsData?.data && Array.isArray(statsData.data)) {
+        points = statsData.data;
+      } else if (statsData?.statistics && Array.isArray(statsData.statistics)) {
+        points = statsData.statistics;
+      } else if (response?.points && Array.isArray(response.points)) {
+        points = response.points;
+      }
+      
+      log(`Traffic statistics parsed ${points.length} points for ${serverId}`, 'virtfusion');
+      
+      return {
+        points,
+        interval: statsData?.interval || response?.interval || 60,
+        period: period,
+      };
+    } catch (error) {
+      log(`Failed to fetch traffic statistics for server ${serverId}: ${error}`, 'virtfusion');
+      return null;
+    }
+  }
+
   async getServerBuildStatus(serverId: string) {
     try {
       const response = await this.request<{ data: any }>(`/servers/${serverId}`);
