@@ -292,6 +292,13 @@ export async function registerRoutes(
 
       const { email, password, name } = parsed.data;
 
+      // Check if user already exists in Auth0 (defense-in-depth)
+      const existingUser = await auth0Client.getUserByEmail(email);
+      if (existingUser) {
+        log(`Registration blocked: email ${email} already exists in Auth0`, 'auth');
+        return res.status(400).json({ error: 'An account with this email already exists. Please sign in instead.' });
+      }
+
       // Create user in Auth0
       const auth0Result = await auth0Client.createUser(email, password, name);
       if (!auth0Result.success || !auth0Result.user) {
