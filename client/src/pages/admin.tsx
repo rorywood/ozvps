@@ -173,11 +173,6 @@ export default function AdminPage() {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [oldExtRelationId, setOldExtRelationId] = useState("");
   
-  // Security settings state
-  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState("");
-  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
-  const [recaptchaEnabled, setRecaptchaEnabled] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
   
   // Server action state
   const [selectedServer, setSelectedServer] = useState<VFServer | null>(null);
@@ -264,59 +259,7 @@ export default function AdminPage() {
     enabled: isAdmin && activeTab === 'audit',
   });
 
-  // reCAPTCHA settings
-  const { data: recaptchaData, isLoading: recaptchaLoading } = useQuery({
-    queryKey: ['admin', 'recaptcha'],
-    queryFn: async () => {
-      const response = await fetch('/api/admin/security/recaptcha', {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch reCAPTCHA settings');
-      return response.json();
-    },
-    enabled: isAdmin && activeTab === 'security',
-  });
-
-  useEffect(() => {
-    if (recaptchaData) {
-      setRecaptchaSiteKey(recaptchaData.siteKey || '');
-      setRecaptchaEnabled(recaptchaData.enabled || false);
-      // Clear secret key input - it shows placeholder if one exists
-      setRecaptchaSecretKey('');
-    }
-  }, [recaptchaData]);
-
   // Mutations
-  const recaptchaMutation = useMutation({
-    mutationFn: async (data: { siteKey: string; secretKey: string; enabled: boolean }) => {
-      console.log('Saving reCAPTCHA settings:', { ...data, secretKey: data.secretKey ? '[REDACTED]' : '' });
-      const response = await fetch('/api/admin/security/recaptcha', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(data),
-      });
-      console.log('reCAPTCHA save response status:', response.status);
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('reCAPTCHA save error:', error);
-        throw new Error(error.error || 'Failed to save reCAPTCHA settings');
-      }
-      const result = await response.json();
-      console.log('reCAPTCHA save success:', result);
-      return result;
-    },
-    onSuccess: () => {
-      toast.success('reCAPTCHA settings saved successfully!');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'recaptcha'] });
-      queryClient.invalidateQueries({ queryKey: ['recaptcha-config'] });
-      setRecaptchaSecretKey('');
-    },
-    onError: (error: Error) => {
-      console.error('reCAPTCHA mutation error:', error);
-      toast.error(error.message);
-    },
-  });
 
   const searchMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -479,25 +422,6 @@ export default function AdminPage() {
     });
   };
 
-  const handleSaveRecaptcha = () => {
-    // Validate before sending
-    if (recaptchaEnabled) {
-      if (!recaptchaSiteKey.trim()) {
-        toast.error('Site key is required to enable reCAPTCHA');
-        return;
-      }
-      if (!recaptchaSecretKey.trim()) {
-        toast.error('Secret key is required to enable reCAPTCHA');
-        return;
-      }
-    }
-    recaptchaMutation.mutate({
-      siteKey: recaptchaSiteKey.trim(),
-      secretKey: recaptchaSecretKey.trim(),
-      enabled: recaptchaEnabled,
-    });
-  };
-
   const openActionDialog = (server: VFServer, action: string) => {
     setSelectedServer(server);
     setActionType(action);
@@ -581,10 +505,6 @@ export default function AdminPage() {
               <TabsTrigger value="users" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-users">
                 <Users className="h-4 w-4" />
                 Users & Billing
-              </TabsTrigger>
-              <TabsTrigger value="security" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-security">
-                <Shield className="h-4 w-4" />
-                Security
               </TabsTrigger>
               <TabsTrigger value="audit" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-audit">
                 <FileText className="h-4 w-4" />
@@ -1238,99 +1158,6 @@ export default function AdminPage() {
               </div>
             </TabsContent>
 
-            {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6">
-              <div className="rounded-xl bg-muted/20 ring-1 ring-border p-5">
-                <div className="flex items-center justify-between mb-5">
-                  <div>
-                    <h3 className="font-medium text-foreground">reCAPTCHA Protection</h3>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      Protect login forms from bots with Google reCAPTCHA v2
-                    </p>
-                  </div>
-                  <Switch
-                    data-testid="switch-recaptcha-enabled"
-                    checked={recaptchaEnabled}
-                    onCheckedChange={setRecaptchaEnabled}
-                    disabled={recaptchaLoading}
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="recaptcha-site-key" className="text-sm">Site Key</Label>
-                    <Input
-                      data-testid="input-recaptcha-site-key"
-                      id="recaptcha-site-key"
-                      placeholder="6Lc..."
-                      value={recaptchaSiteKey}
-                      onChange={(e) => setRecaptchaSiteKey(e.target.value)}
-                      className="font-mono text-sm bg-card/30 border-border"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="recaptcha-secret-key" className="text-sm">Secret Key</Label>
-                    <div className="relative">
-                      <Input
-                        data-testid="input-recaptcha-secret-key"
-                        id="recaptcha-secret-key"
-                        type={showSecretKey ? "text" : "password"}
-                        placeholder="6Lc..."
-                        value={recaptchaSecretKey}
-                        onChange={(e) => setRecaptchaSecretKey(e.target.value)}
-                        className="font-mono text-sm pr-10 bg-card/30 border-border"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowSecretKey(!showSecretKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    {recaptchaEnabled && (
-                      <Button
-                        variant="outline"
-                        data-testid="button-disable-recaptcha"
-                        onClick={() => {
-                          recaptchaMutation.mutate({
-                            siteKey: '',
-                            secretKey: '',
-                            enabled: false,
-                          });
-                        }}
-                        disabled={recaptchaMutation.isPending}
-                        className="gap-2 border-red-500/50 text-red-400 hover:bg-red-500/10"
-                      >
-                        {recaptchaMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <XCircle className="h-4 w-4" />
-                        )}
-                        Disable reCAPTCHA
-                      </Button>
-                    )}
-                    <Button
-                      data-testid="button-save-recaptcha"
-                      onClick={handleSaveRecaptcha}
-                      disabled={recaptchaMutation.isPending || recaptchaLoading}
-                      className="gap-2"
-                    >
-                      {recaptchaMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                      Save Settings
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
 
             {/* Audit Log Tab */}
             <TabsContent value="audit" className="space-y-4">
