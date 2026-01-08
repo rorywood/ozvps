@@ -139,8 +139,6 @@ export default function ServerDetail() {
   } | null>(null);
   const [showSavedCredentials, setShowSavedCredentials] = useState(false);
   
-  // Traffic statistics state
-  const [trafficStatsPeriod, setTrafficStatsPeriod] = useState<string>('30m');
   
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
@@ -202,13 +200,6 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
   
-  // Traffic statistics for real-time graphing
-  const { data: trafficStats, isFetching: isTrafficStatsFetching } = useQuery({
-    queryKey: ['traffic-stats', serverId, trafficStatsPeriod],
-    queryFn: () => api.getTrafficStatistics(serverId || '', trafficStatsPeriod),
-    enabled: !!serverId,
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
   
   // Fetch cancellation status
   const { data: cancellationData, refetch: refetchCancellation } = useQuery({
@@ -1785,164 +1776,6 @@ export default function ServerDetail() {
                     {periodStart && periodEnd && (
                       <div className="text-[10px] text-muted-foreground text-center">{periodStart} - {periodEnd}</div>
                     )}
-                  </div>
-                );
-              })()}
-            </GlassCard>
-
-            {/* Network Traffic Graph */}
-            <GlassCard className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-blue-400" />
-                  Network Traffic
-                </h3>
-                <div className="flex items-center gap-1">
-                  {['30m', '1h', '12h', '1d', '1w'].map((period) => (
-                    <button
-                      key={period}
-                      onClick={() => setTrafficStatsPeriod(period)}
-                      className={cn(
-                        "px-2 py-1 text-xs rounded transition-colors",
-                        trafficStatsPeriod === period
-                          ? "bg-blue-500 text-white"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      )}
-                      data-testid={`button-period-${period}`}
-                    >
-                      {period}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {(() => {
-                const points = trafficStats?.points || [];
-                
-                // Transform data for chart - convert bytes to Mbps
-                const chartData = points.map((point: any) => {
-                  const timestamp = new Date(point.timestamp || point.time);
-                  const rxMbps = ((point.rx || 0) * 8) / 1000000; // bytes to Mbps
-                  const txMbps = ((point.tx || 0) * 8) / 1000000;
-                  return {
-                    time: timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    date: timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }),
-                    rx: Math.round(rxMbps * 100) / 100,
-                    tx: Math.round(txMbps * 100) / 100,
-                  };
-                });
-                
-                // Calculate max for Y axis
-                const maxValue = Math.max(
-                  ...chartData.map((d: any) => Math.max(d.rx || 0, d.tx || 0)),
-                  1
-                );
-                
-                const formatYAxis = (value: number) => {
-                  if (value >= 1000) return `${(value / 1000).toFixed(1)}Gbps`;
-                  return `${value.toFixed(1)}Mbps`;
-                };
-                
-                if (isTrafficStatsFetching && chartData.length === 0) {
-                  return (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Loading traffic data...
-                    </div>
-                  );
-                }
-                
-                if (trafficStats?.supported === false) {
-                  return (
-                    <div className="h-48 flex flex-col items-center justify-center text-muted-foreground text-sm">
-                      <Activity className="h-8 w-8 mb-2 opacity-50" />
-                      <p>Real-time traffic graphs are not available</p>
-                      <p className="text-xs mt-1">Your VirtFusion instance doesn't support this feature</p>
-                    </div>
-                  );
-                }
-                
-                if (chartData.length === 0) {
-                  return (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                      No traffic data available for this period
-                    </div>
-                  );
-                }
-                
-                return (
-                  <div className="space-y-3">
-                    <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                          <defs>
-                            <linearGradient id="rxGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                            </linearGradient>
-                            <linearGradient id="txGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                          <XAxis 
-                            dataKey="time" 
-                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <YAxis 
-                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            tickLine={false}
-                            axisLine={false}
-                            tickFormatter={formatYAxis}
-                            domain={[0, Math.ceil(maxValue * 1.1)]}
-                          />
-                          <ChartTooltip
-                            content={({ active, payload, label }) => {
-                              if (active && payload && payload.length) {
-                                return (
-                                  <div className="bg-background/95 border border-border rounded-lg p-2 shadow-lg">
-                                    <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                                    <p className="text-xs text-blue-400">
-                                      RX: {payload[0]?.value?.toFixed(2)} Mbps
-                                    </p>
-                                    <p className="text-xs text-green-400">
-                                      TX: {payload[1]?.value?.toFixed(2)} Mbps
-                                    </p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="rx"
-                            stroke="#3b82f6"
-                            strokeWidth={2}
-                            fill="url(#rxGradient)"
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="tx"
-                            stroke="#22c55e"
-                            strokeWidth={2}
-                            fill="url(#txGradient)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="flex items-center justify-center gap-6 text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-0.5 bg-blue-500 rounded"></div>
-                        <span className="text-muted-foreground">RX (Download)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-0.5 bg-green-500 rounded"></div>
-                        <span className="text-muted-foreground">TX (Upload)</span>
-                      </div>
-                    </div>
                   </div>
                 );
               })()}

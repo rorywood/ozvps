@@ -10,9 +10,7 @@ import {
   ShieldCheck,
   User,
   Settings,
-  CreditCard,
-  Sun,
-  Moon
+  CreditCard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -20,7 +18,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { useTheme } from "@/components/theme-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -204,25 +201,6 @@ function ProfileDropdown() {
   );
 }
 
-function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  
-  return (
-    <button
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-      className="h-9 w-9 rounded-lg flex items-center justify-center bg-foreground/5 hover:bg-foreground/10 transition-colors"
-      data-testid="button-theme-toggle"
-      aria-label="Toggle theme"
-    >
-      {resolvedTheme === "dark" ? (
-        <Sun className="h-4 w-4 text-amber-400" />
-      ) : (
-        <Moon className="h-4 w-4 text-primary" />
-      )}
-    </button>
-  );
-}
-
 function DesktopNav() {
   const [location] = useLocation();
   
@@ -316,7 +294,6 @@ function DesktopNav() {
               </Link>
             )}
             <div className="w-px h-6 bg-border" />
-            <ThemeToggle />
             <ProfileDropdown />
           </div>
         </div>
@@ -456,11 +433,6 @@ function MobileNav() {
                 </div>
 
                 <div className="p-4 border-t border-border space-y-3">
-                  <div className="flex items-center justify-between px-3">
-                    <span className="text-sm text-muted-foreground">Theme</span>
-                    <ThemeToggle />
-                  </div>
-                  
                   <button
                     onClick={() => logoutMutation.mutate()}
                     disabled={logoutMutation.isPending}
