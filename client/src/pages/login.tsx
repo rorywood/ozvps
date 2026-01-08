@@ -188,7 +188,9 @@ export default function LoginPage() {
   const { data: recaptchaConfig } = useQuery({
     queryKey: ['recaptcha-config'],
     queryFn: async () => {
-      const response = await fetch('/api/security/recaptcha-config');
+      const response = await fetch('/api/security/recaptcha-config', {
+        credentials: 'include',
+      });
       if (!response.ok) return { enabled: false, siteKey: null };
       return response.json();
     },
@@ -477,12 +479,18 @@ export default function LoginPage() {
             </div>
 
             {recaptchaEnabled && (
-              <div className="flex justify-center py-2" data-testid="recaptcha-container">
+              <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
                 <div ref={recaptchaRef} />
-                {!recaptchaLoaded && (
+                {!recaptchaLoaded && !recaptchaError && (
                   <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     Loading verification...
+                  </div>
+                )}
+                {recaptchaError && (
+                  <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mt-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{recaptchaError}</span>
                   </div>
                 )}
               </div>
