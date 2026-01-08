@@ -1447,7 +1447,7 @@ export default function ServerDetail() {
               <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={server.status === 'running' || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                    disabled={displayStatus === 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
                   >
@@ -1455,7 +1455,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                    disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
                   >
@@ -1463,7 +1463,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
                   >
@@ -1471,7 +1471,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('poweroff')}
                     data-testid="menu-item-poweroff"
                   >

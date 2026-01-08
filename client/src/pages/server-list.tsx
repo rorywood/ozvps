@@ -338,7 +338,7 @@ export default function ServerList() {
                         variant="ghost" 
                         className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Start"}
-                        disabled={server.status === 'running' || powerMutation.isPending || server.suspended}
+                        disabled={displayStatus === 'running' || isTransitioning || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'boot')}
                         aria-label="Start server"
                       >
@@ -350,7 +350,7 @@ export default function ServerList() {
                         variant="ghost" 
                         className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-yellow-400 hover:bg-yellow-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Reboot"}
-                        disabled={server.status !== 'running' || powerMutation.isPending || server.suspended}
+                        disabled={displayStatus !== 'running' || isTransitioning || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'reboot')}
                         aria-label="Reboot server"
                       >
@@ -362,7 +362,7 @@ export default function ServerList() {
                         variant="ghost" 
                         className="h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-sm" 
                         title={server.suspended ? "Suspended" : "Stop"}
-                        disabled={server.status === 'stopped' || powerMutation.isPending || server.suspended}
+                        disabled={displayStatus === 'stopped' || isTransitioning || powerMutation.isPending || server.suspended}
                         onClick={(e) => handlePowerAction(e, server.id, 'shutdown')}
                         aria-label="Stop server"
                       >
