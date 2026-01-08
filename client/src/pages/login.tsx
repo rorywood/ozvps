@@ -162,6 +162,7 @@ export default function LoginPage() {
   const [sessionMessage, setSessionMessage] = useState<{ error: string; code: string } | null>(null);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
+  const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
@@ -202,18 +203,21 @@ export default function LoginPage() {
     if (!recaptchaEnabled || !recaptchaConfig?.siteKey) {
       setRecaptchaLoaded(false);
       setRecaptchaToken(null);
+      setRecaptchaError(null);
       widgetIdRef.current = null;
       return;
     }
 
     let attempts = 0;
-    const maxAttempts = 20;
+    const maxAttempts = 40; // 10 seconds total
     let retryTimer: NodeJS.Timeout | null = null;
+    let scriptErrored = false;
 
     const tryRenderRecaptcha = () => {
       // Check if already rendered
       if (widgetIdRef.current !== null) {
         setRecaptchaLoaded(true);
+        setRecaptchaError(null);
         return;
       }
 
@@ -229,11 +233,18 @@ export default function LoginPage() {
             theme: 'dark',
           });
           setRecaptchaLoaded(true);
+          setRecaptchaError(null);
           return;
         } catch (e: any) {
           // If already rendered error, just mark as loaded
           if (e.message?.includes('already been rendered')) {
             setRecaptchaLoaded(true);
+            setRecaptchaError(null);
+            return;
+          }
+          // Check for invalid site key error
+          if (e.message?.includes('Invalid site key') || e.message?.includes('Invalid domain')) {
+            setRecaptchaError('Invalid reCAPTCHA configuration. Please contact support.');
             return;
           }
           console.error('Failed to render reCAPTCHA:', e);
@@ -242,8 +253,11 @@ export default function LoginPage() {
 
       // Retry if not successful
       attempts++;
-      if (attempts < maxAttempts) {
+      if (attempts < maxAttempts && !scriptErrored) {
         retryTimer = setTimeout(tryRenderRecaptcha, 250);
+      } else if (attempts >= maxAttempts) {
+        // Max retries reached - show error
+        setRecaptchaError('Failed to load verification. Please refresh the page or try again later.');
       }
     };
 
@@ -262,6 +276,10 @@ export default function LoginPage() {
           tryRenderRecaptcha();
         }
       };
+      script.onerror = () => {
+        scriptErrored = true;
+        setRecaptchaError('Failed to load reCAPTCHA. Check your internet connection or try disabling ad blockers.');
+      };
       document.head.appendChild(script);
     } else {
       // Script exists, try to render
@@ -277,6 +295,7 @@ export default function LoginPage() {
       // Reset state on unmount so it can be re-rendered on next mount
       setRecaptchaLoaded(false);
       setRecaptchaToken(null);
+      setRecaptchaError(null);
       widgetIdRef.current = null;
     };
   }, [recaptchaEnabled, recaptchaConfig?.siteKey]);
