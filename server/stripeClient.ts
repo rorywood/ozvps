@@ -1,8 +1,21 @@
 import Stripe from 'stripe';
 
+interface StripeConfig {
+  publishableKey: string;
+  secretKey: string;
+  webhookSecret?: string;
+}
+
+let cachedConfig: StripeConfig | null = null;
 let connectionSettings: any;
 
-async function getCredentials() {
+function isReplitEnvironment(): boolean {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY || process.env.WEB_REPL_RENEWAL;
+  return !!(hostname && xReplitToken);
+}
+
+async function getCredentialsFromReplit(): Promise<StripeConfig> {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
@@ -41,24 +54,62 @@ async function getCredentials() {
   return {
     publishableKey: connectionSettings.settings.publishable,
     secretKey: connectionSettings.settings.secret,
+    webhookSecret: connectionSettings.settings.webhook_secret,
   };
 }
 
+function getCredentialsFromEnv(): StripeConfig {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!secretKey || !publishableKey) {
+    throw new Error(
+      'Stripe configuration missing. Set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY environment variables.'
+    );
+  }
+
+  return {
+    publishableKey,
+    secretKey,
+    webhookSecret,
+  };
+}
+
+async function resolveStripeConfig(): Promise<StripeConfig> {
+  if (cachedConfig) {
+    return cachedConfig;
+  }
+
+  if (isReplitEnvironment()) {
+    cachedConfig = await getCredentialsFromReplit();
+  } else {
+    cachedConfig = getCredentialsFromEnv();
+  }
+
+  return cachedConfig;
+}
+
 export async function getUncachableStripeClient() {
-  const { secretKey } = await getCredentials();
+  const { secretKey } = await resolveStripeConfig();
   return new Stripe(secretKey, {
-    apiVersion: '2025-08-27.basil',
+    apiVersion: '2025-11-17.clover',
   });
 }
 
 export async function getStripePublishableKey() {
-  const { publishableKey } = await getCredentials();
+  const { publishableKey } = await resolveStripeConfig();
   return publishableKey;
 }
 
 export async function getStripeSecretKey() {
-  const { secretKey } = await getCredentials();
+  const { secretKey } = await resolveStripeConfig();
   return secretKey;
+}
+
+export async function getStripeWebhookSecret(): Promise<string | undefined> {
+  const { webhookSecret } = await resolveStripeConfig();
+  return webhookSecret;
 }
 
 let stripeSync: any = null;
