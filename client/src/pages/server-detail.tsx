@@ -137,6 +137,24 @@ export default function ServerDetail() {
     password: string;
   } | null>(null);
   const [showSavedCredentials, setShowSavedCredentials] = useState(false);
+  const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
+  
+  // Auto-hide credentials banner after 2 minutes
+  useEffect(() => {
+    if (showSavedCredentials && savedCredentials) {
+      const timer = setTimeout(() => {
+        setShowSavedCredentials(false);
+        setSavedCredentials(null);
+        // Clear from sessionStorage too
+        try {
+          sessionStorage.removeItem(`setupCredentials:${serverId}`);
+        } catch {
+          // Ignore
+        }
+      }, 2 * 60 * 1000); // 2 minutes
+      return () => clearTimeout(timer);
+    }
+  }, [showSavedCredentials, savedCredentials, serverId]);
   
   
   // Setup progress minimized state (persistent banner when minimized)
@@ -1239,19 +1257,41 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Password</span>
-                  <span className="font-mono text-green-300">{savedCredentials.password}</span>
+                  <span className="font-mono text-green-300">
+                    {showCredentialsPassword ? savedCredentials.password : '••••••••••••'}
+                  </span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
-                  onClick={() => {
-                    navigator.clipboard.writeText(savedCredentials.password);
-                    toast({ title: "Copied", description: "Password copied to clipboard" });
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
+                    data-testid="button-toggle-password-visibility"
+                  >
+                    {showCredentialsPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    onClick={() => {
+                      navigator.clipboard.writeText(savedCredentials.password);
+                      toast({ title: "Copied", description: "Password copied to clipboard" });
+                      // Dismiss the credentials banner after copying password
+                      setShowSavedCredentials(false);
+                      setSavedCredentials(null);
+                      try {
+                        sessionStorage.removeItem(`setupCredentials:${serverId}`);
+                      } catch {
+                        // Ignore
+                      }
+                    }}
+                    data-testid="button-copy-password"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
