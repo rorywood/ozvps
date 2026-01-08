@@ -191,12 +191,20 @@ export default function RegisterPage() {
   });
 
   const registrationEnabled = registrationStatus?.enabled !== false;
-  const recaptchaEnabled = recaptchaConfig?.enabled && recaptchaConfig?.siteKey;
+  
+  // Validate reCAPTCHA site key format (valid keys start with "6L")
+  const isValidSiteKey = (key: string | null | undefined): boolean => {
+    if (!key || typeof key !== 'string') return false;
+    // Valid reCAPTCHA v2 site keys start with "6L" and are ~40 chars
+    return key.startsWith('6L') && key.length > 30;
+  };
+
+  const recaptchaEnabled = recaptchaConfig?.enabled && isValidSiteKey(recaptchaConfig?.siteKey);
 
   // Load reCAPTCHA script and render widget with retry mechanism
   useEffect(() => {
-    // Reset state when reCAPTCHA is disabled
-    if (!recaptchaEnabled || !recaptchaConfig?.siteKey) {
+    // Reset state when reCAPTCHA is disabled or invalid
+    if (!recaptchaConfig?.enabled || !isValidSiteKey(recaptchaConfig?.siteKey)) {
       setRecaptchaLoaded(false);
       setRecaptchaToken(null);
       setRecaptchaError(null);
