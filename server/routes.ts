@@ -413,6 +413,11 @@ export async function registerRoutes(
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
     try {
+      // Check if registration is disabled
+      if (process.env.REGISTRATION_DISABLED === 'true') {
+        return res.status(403).json({ error: 'Registration is currently disabled. Please contact support.' });
+      }
+
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid registration data' });
@@ -1856,6 +1861,13 @@ export async function registerRoutes(
     } catch (error: any) {
       res.json({ enabled: false, siteKey: null });
     }
+  });
+
+  // Check if registration is enabled (public)
+  app.get('/api/auth/registration-status', (req, res) => {
+    res.json({
+      enabled: process.env.REGISTRATION_DISABLED !== 'true',
+    });
   });
 
   // ================== Admin VirtFusion Management Routes ==================

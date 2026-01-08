@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Server, Shield, Zap, Globe } from "lucide-react";
+import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Server, Shield, Zap, Globe, XCircle } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -177,6 +177,17 @@ export default function RegisterPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: registrationStatus, isLoading: registrationLoading } = useQuery({
+    queryKey: ['registration-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/auth/registration-status');
+      if (!response.ok) return { enabled: true };
+      return response.json();
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const registrationEnabled = registrationStatus?.enabled !== false;
   const recaptchaEnabled = recaptchaConfig?.enabled && recaptchaConfig?.siteKey;
 
   const initRecaptcha = useCallback(() => {
@@ -408,6 +419,28 @@ export default function RegisterPage() {
                 </p>
               </div>
 
+              {!registrationEnabled && !registrationLoading ? (
+                <div className="space-y-6">
+                  <div className="flex flex-col items-center justify-center text-center p-8 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                    <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
+                      <XCircle className="w-8 h-8 text-amber-500" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-foreground mb-2">Registration Temporarily Closed</h2>
+                    <p className="text-muted-foreground text-sm max-w-sm">
+                      New account registration is currently disabled. Please contact support if you need access or check back later.
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-muted-foreground text-sm">
+                      Already have an account?{" "}
+                      <Link href="/login" className="text-primary hover:text-primary/80 font-medium" data-testid="link-login-disabled">
+                        Sign in
+                      </Link>
+                    </p>
+                  </div>
+                </div>
+              ) : (
+              <>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-sm font-medium">Name</Label>
@@ -584,6 +617,8 @@ export default function RegisterPage() {
               <p className="text-center text-xs text-muted-foreground mt-6">
                 Need help? Contact support@ozvps.com.au
               </p>
+              </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
