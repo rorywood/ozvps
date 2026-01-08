@@ -115,12 +115,24 @@ class Auth0Client {
 
       const userInfo = await userInfoResponse.json() as any;
       
+      // Auth0 sometimes returns email as name - prefer actual name fields
+      // Check: given_name/family_name, then name (if different from email), then nickname
+      let displayName = userInfo.name;
+      if (!displayName || displayName === userInfo.email || displayName === userInfo.nickname) {
+        // Try to construct from given_name and family_name
+        if (userInfo.given_name || userInfo.family_name) {
+          displayName = [userInfo.given_name, userInfo.family_name].filter(Boolean).join(' ');
+        } else if (userInfo.nickname && userInfo.nickname !== userInfo.email?.split('@')[0]) {
+          displayName = userInfo.nickname;
+        }
+      }
+      
       return {
         success: true,
         user: {
           user_id: userInfo.sub,
           email: userInfo.email,
-          name: userInfo.name || userInfo.nickname,
+          name: displayName || userInfo.nickname,
           email_verified: userInfo.email_verified,
         },
       };
@@ -241,6 +253,37 @@ class Auth0Client {
     } catch (error: any) {
       log(`Auth0 get user by ID error: ${error.message}`, 'auth0');
       return null;
+    }
+  }
+
+  async updateUserName(auth0UserId: string, name: string): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to update Auth0 user name: ${response.status}`, 'auth0');
+        return false;
+      }
+
+      log(`Updated Auth0 user name for ${auth0UserId}`, 'auth0');
+      return true;
+    } catch (error: any) {
+      log(`Auth0 update user name error: ${error.message}`, 'auth0');
+      return false;
     }
   }
 

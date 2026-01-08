@@ -479,6 +479,11 @@ export async function registerRoutes(
       const auth0UserId = `auth0|${auth0Result.user.user_id}`;
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
+      
+      // Update user name in Auth0 profile (dbconnections/signup doesn't store name properly)
+      if (name) {
+        await auth0Client.updateUserName(auth0UserId, name);
+      }
 
       // Create or find existing Stripe customer and wallet for the new user
       try {
