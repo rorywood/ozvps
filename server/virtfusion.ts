@@ -1,7 +1,7 @@
 import { log } from "./index";
 
-// Request timeout in milliseconds (10 seconds)
-const REQUEST_TIMEOUT_MS = 10000;
+// Request timeout in milliseconds (20 seconds)
+const REQUEST_TIMEOUT_MS = 20000;
 
 // Cache TTL in milliseconds (30 seconds)
 const CACHE_TTL_MS = 30000;
