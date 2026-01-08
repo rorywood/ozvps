@@ -179,6 +179,18 @@ class ApiClient {
     return response.json();
   }
 
+  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; error?: string }> {
+    const response = await fetch(`${this.baseUrl}/servers/${id}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to reset server password');
+    }
+    return response.json();
+  }
+
 
   async updateServerName(id: string, name: string): Promise<{ success: boolean; name: string }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {

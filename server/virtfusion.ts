@@ -885,6 +885,31 @@ export class VirtFusionClient {
     }
   }
 
+  async resetServerPassword(serverId: string) {
+    try {
+      log(`Resetting password for server ${serverId}`, 'virtfusion');
+      
+      const data = await this.request<{ data: { password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
+        method: 'PUT',
+      });
+      
+      // Invalidate cache since server credentials have changed
+      this.invalidateServerCache(serverId);
+      
+      // VirtFusion returns the new password - check various possible field names
+      const newPassword = data.data?.decryptedPassword || data.data?.password || null;
+      
+      if (!newPassword) {
+        log(`Password reset for server ${serverId} succeeded but no password returned`, 'virtfusion');
+      }
+      
+      return { success: true, password: newPassword };
+    } catch (error) {
+      log(`Failed to reset password for server ${serverId}: ${error}`, 'virtfusion');
+      throw error;
+    }
+  }
+
   async getServerNetworkInfo(serverId: string) {
     try {
       const response = await this.request<{ data: VirtFusionServerResponse }>(`/servers/${serverId}`);

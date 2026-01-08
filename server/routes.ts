@@ -1148,6 +1148,38 @@ export async function registerRoutes(
     }
   });
 
+  // Reset server password - security-sensitive endpoint with ownership verification
+  app.post('/api/servers/:id/reset-password', authMiddleware, async (req, res) => {
+    try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. Password reset is disabled.' });
+      }
+      
+      // Block password reset if server has a pending cancellation
+      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
+      if (pendingCancellation) {
+        return res.status(403).json({ error: 'Server is scheduled for deletion. Password reset is disabled.' });
+      }
+
+      const result = await virtfusionClient.resetServerPassword(req.params.id);
+      
+      if (!result.password) {
+        return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
+      }
+      
+      log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
+      res.json({ success: true, password: result.password });
+    } catch (error: any) {
+      log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).json({ error: error.message || 'Failed to reset server password' });
+    }
+  });
+
   // Server Cancellation endpoints
   
   // Get all pending cancellations for current user (for displaying badges on server list)
