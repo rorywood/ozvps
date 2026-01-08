@@ -416,6 +416,7 @@ export default function BillingPage() {
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [invoicesPage, setInvoicesPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
+  const MAX_INVOICE_PAGES = 5;
 
   useEffect(() => {
     if (addCardDialogOpen && !stripePromise) {
@@ -513,7 +514,7 @@ export default function BillingPage() {
 
   useEffect(() => {
     const invCount = invoicesData?.invoices?.length || 0;
-    const invMaxPage = Math.max(1, Math.ceil(invCount / ITEMS_PER_PAGE));
+    const invMaxPage = Math.min(MAX_INVOICE_PAGES, Math.max(1, Math.ceil(invCount / ITEMS_PER_PAGE)));
     if (invoicesPage > invMaxPage) {
       setInvoicesPage(invMaxPage);
     }
@@ -1152,6 +1153,7 @@ export default function BillingPage() {
               ) : (
                 <div className="space-y-2">
                   {invoicesData.invoices
+                    .slice(0, MAX_INVOICE_PAGES * ITEMS_PER_PAGE)
                     .slice((invoicesPage - 1) * ITEMS_PER_PAGE, invoicesPage * ITEMS_PER_PAGE)
                     .map((invoice) => (
                     <div 
@@ -1199,42 +1201,55 @@ export default function BillingPage() {
                     </div>
                   ))}
                   {/* Pagination Controls */}
-                  {invoicesData.invoices.length > ITEMS_PER_PAGE && (
-                    <div className="flex items-center justify-center gap-2 pt-4">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setInvoicesPage(p => Math.max(1, p - 1))}
-                        disabled={invoicesPage === 1}
-                        data-testid="invoices-prev-page"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      {Array.from({ length: Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map(page => (
-                        <Button
-                          key={page}
-                          variant={invoicesPage === page ? "default" : "outline"}
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setInvoicesPage(page)}
-                          data-testid={`invoices-page-${page}`}
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setInvoicesPage(p => Math.min(Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE), p + 1))}
-                        disabled={invoicesPage === Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE)}
-                        data-testid="invoices-next-page"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                  {(() => {
+                    const totalPages = Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE);
+                    const displayPages = Math.min(totalPages, MAX_INVOICE_PAGES);
+                    const hasMorePages = totalPages > MAX_INVOICE_PAGES;
+                    
+                    return invoicesData.invoices.length > ITEMS_PER_PAGE && (
+                      <div className="space-y-3 pt-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setInvoicesPage(p => Math.max(1, p - 1))}
+                            disabled={invoicesPage === 1}
+                            data-testid="invoices-prev-page"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          {Array.from({ length: displayPages }, (_, i) => i + 1).map(page => (
+                            <Button
+                              key={page}
+                              variant={invoicesPage === page ? "default" : "outline"}
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setInvoicesPage(page)}
+                              data-testid={`invoices-page-${page}`}
+                            >
+                              {page}
+                            </Button>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setInvoicesPage(p => Math.min(displayPages, p + 1))}
+                            disabled={invoicesPage === displayPages}
+                            data-testid="invoices-next-page"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {hasMorePages && (
+                          <p className="text-center text-xs text-muted-foreground">
+                            Showing recent invoices. Contact support for older invoice history.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
