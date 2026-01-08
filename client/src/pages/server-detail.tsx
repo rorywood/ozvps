@@ -65,6 +65,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function ServerDetail() {
   const [, params] = useRoute("/servers/:id");
@@ -203,7 +205,7 @@ export default function ServerDetail() {
             sessionStorage.getItem(`setupMinimized:${serverId}`)) {
           sessionStorage.removeItem(`setupMode:${serverId}`);
           sessionStorage.removeItem(`setupMinimized:${serverId}`);
-          setSetupMode(false);
+          setIsSetupMode(false);
           setSetupMinimized(false);
         }
       } catch {
@@ -1538,6 +1540,90 @@ export default function ServerDetail() {
                 );
               })()}
             </GlassCard>
+
+            {/* Bandwidth History Chart */}
+            {trafficData?.history && trafficData.history.length > 0 && (
+              <GlassCard className="p-4">
+                <h3 className="text-sm font-medium text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+                  <Calendar className="h-4 w-4 text-blue-400" />
+                  Bandwidth History
+                </h3>
+                <div className="h-[200px]">
+                  <ChartContainer
+                    config={{
+                      rx: { label: "Download", color: "hsl(142, 76%, 36%)" },
+                      tx: { label: "Upload", color: "hsl(217, 91%, 60%)" },
+                    }}
+                    className="h-full w-full"
+                  >
+                    <AreaChart
+                      data={[...trafficData.history].reverse().map((item: any) => ({
+                        month: new Date(2024, item.month - 1).toLocaleDateString('en-AU', { month: 'short' }),
+                        rx: parseFloat((item.rx / (1024 * 1024 * 1024)).toFixed(2)),
+                        tx: parseFloat((item.tx / (1024 * 1024 * 1024)).toFixed(2)),
+                      }))}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorRx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorTx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="rgba(255,255,255,0.5)" 
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis 
+                        stroke="rgba(255,255,255,0.5)" 
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => `${value}GB`}
+                      />
+                      <ChartTooltip 
+                        content={<ChartTooltipContent />}
+                        formatter={(value: number) => [`${value.toFixed(2)} GB`]}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="rx" 
+                        stroke="hsl(142, 76%, 36%)" 
+                        fillOpacity={1}
+                        fill="url(#colorRx)"
+                        name="Download"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="tx" 
+                        stroke="hsl(217, 91%, 60%)" 
+                        fillOpacity={1}
+                        fill="url(#colorTx)"
+                        name="Upload"
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                </div>
+                <div className="flex items-center justify-center gap-6 mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-sm bg-green-500" />
+                    <span className="text-xs text-muted-foreground">Download</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-sm bg-blue-500" />
+                    <span className="text-xs text-muted-foreground">Upload</span>
+                  </div>
+                </div>
+              </GlassCard>
+            )}
           </TabsContent>
 
           {/* IP Management Tab */}

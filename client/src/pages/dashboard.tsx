@@ -12,7 +12,8 @@ import {
   Clock,
   AlertTriangle,
   ChevronRight,
-  Settings
+  Settings,
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,12 @@ export default function Dashboard() {
   
   const serverBillingStatuses = billingData?.billing || {};
 
+  const { data: bandwidthData } = useQuery({
+    queryKey: ['total-bandwidth'],
+    queryFn: () => api.getTotalBandwidth(),
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   useSyncPowerActions(servers);
 
   const stats = {
@@ -77,7 +84,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats - Grid of cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="glass-panel rounded-xl p-4">
             <div className="flex items-center gap-3 mb-3">
               <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
@@ -116,6 +123,23 @@ export default function Dashboard() {
             </div>
             <div className="text-2xl font-bold text-white font-display" data-testid="text-disk-gb">{stats.total_disk_gb} GB</div>
             <div className="text-sm text-muted-foreground">Storage</div>
+          </div>
+
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-blue-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-bandwidth">
+              {bandwidthData ? 
+                `${(bandwidthData.totalBandwidth / (1024 * 1024 * 1024)).toFixed(1)} GB` : 
+                '—'
+              }
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Bandwidth{bandwidthData?.totalLimit ? ` / ${bandwidthData.totalLimit} GB` : ''}
+            </div>
           </div>
         </div>
 

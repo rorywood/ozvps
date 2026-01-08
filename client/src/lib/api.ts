@@ -132,6 +132,12 @@ class ApiClient {
     return response.json();
   }
 
+  async getTotalBandwidth(): Promise<{ totalBandwidth: number; totalLimit: number; serverCount: number }> {
+    const response = await fetch(`${this.baseUrl}/bandwidth/total`);
+    if (!response.ok) throw new Error('Failed to fetch total bandwidth');
+    return response.json();
+  }
+
   async getNetworkInfo(id: string): Promise<{ interfaces: NetworkInterface[] }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/network`);
     if (!response.ok) throw new Error('Failed to fetch network info');

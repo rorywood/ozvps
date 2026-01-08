@@ -921,6 +921,48 @@ export async function registerRoutes(
     }
   });
 
+  // Aggregate bandwidth usage across all user's servers
+  app.get('/api/bandwidth/total', authMiddleware, async (req, res) => {
+    try {
+      const userId = req.userSession?.virtFusionUserId;
+      if (!userId) {
+        return res.json({ totalBandwidth: 0, totalLimit: 0, serverCount: 0 });
+      }
+
+      const servers = await virtfusionClient.listServersByUserId(userId);
+      if (!servers || servers.length === 0) {
+        return res.json({ totalBandwidth: 0, totalLimit: 0, serverCount: 0 });
+      }
+
+      let totalBandwidth = 0;
+      let totalLimit = 0;
+      
+      // Fetch traffic data for each server in parallel
+      const trafficPromises = servers.map(async (server: any) => {
+        try {
+          const traffic = await virtfusionClient.getServerTrafficHistory(server.id.toString());
+          if (traffic?.current) {
+            totalBandwidth += traffic.current.total || 0;
+            totalLimit += traffic.current.limit || 0;
+          }
+        } catch (error) {
+          // Skip servers that fail to fetch traffic data
+        }
+      });
+      
+      await Promise.all(trafficPromises);
+      
+      res.json({ 
+        totalBandwidth, 
+        totalLimit, 
+        serverCount: servers.length 
+      });
+    } catch (error: any) {
+      log(`Error fetching total bandwidth: ${error.message}`, 'api');
+      return res.json({ totalBandwidth: 0, totalLimit: 0, serverCount: 0 });
+    }
+  });
+
   app.put('/api/servers/:id/name', authMiddleware, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
