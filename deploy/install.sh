@@ -87,7 +87,7 @@ echo ""
 echo -e "${BLUE}--- GitHub Container Registry ---${NC}"
 prompt_required "GitHub username" GITHUB_USER false
 prompt_required "GitHub Personal Access Token (with read:packages scope)" GHCR_TOKEN true
-prompt_optional "GitHub repository name" GITHUB_REPO "ozvps-panel" false
+prompt_optional "GitHub repository name" GITHUB_REPO "ozvps" false
 
 # Database
 echo ""
