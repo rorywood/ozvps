@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { VncScreen } from "react-vnc";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -15,31 +15,10 @@ import {
   Clipboard,
   Send,
   Copy,
-  ZoomIn,
-  ZoomOut
+  Monitor,
+  Scan,
+  Shrink
 } from "lucide-react";
-
-const ZOOM_PRESETS = [1.0, 1.25, 1.5, 1.75, 2.0] as const;
-const ZOOM_STORAGE_KEY = 'consoleScale';
-
-function getStoredZoom(): number {
-  try {
-    const stored = localStorage.getItem(ZOOM_STORAGE_KEY);
-    if (stored) {
-      const value = parseFloat(stored);
-      if (ZOOM_PRESETS.includes(value as any)) {
-        return value;
-      }
-    }
-  } catch (e) {}
-  return 1.5; // Default to 150%
-}
-
-function setStoredZoom(value: number): void {
-  try {
-    localStorage.setItem(ZOOM_STORAGE_KEY, value.toString());
-  } catch (e) {}
-}
 
 interface VncViewerProps {
   wsUrl: string;
@@ -56,30 +35,15 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
   const [key, setKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [clipboardText, setClipboardText] = useState("");
-  const [zoom, setZoom] = useState(getStoredZoom);
+  const [nativeSize, setNativeSize] = useState(false);
 
-  const handleZoomChange = (direction: 'in' | 'out') => {
-    const currentIndex = ZOOM_PRESETS.indexOf(zoom as any);
-    let newIndex = currentIndex;
-    if (direction === 'in' && currentIndex < ZOOM_PRESETS.length - 1) {
-      newIndex = currentIndex + 1;
-    } else if (direction === 'out' && currentIndex > 0) {
-      newIndex = currentIndex - 1;
-    }
-    const newZoom = ZOOM_PRESETS[newIndex];
-    setZoom(newZoom);
-    setStoredZoom(newZoom);
-  };
-
-  const handleConnect = () => {
+  const handleConnect = useCallback(() => {
     setStatus('connected');
-    // Force cursor visibility on the canvas after connect
     forceCursorVisible();
-  };
-  
-  // Force the canvas cursor to be visible by directly mutating the style
+  }, []);
+
   const forceCursorVisible = () => {
-    const vncContainer = document.querySelector('[data-testid="vnc-container"]');
+    const vncContainer = document.querySelector('[data-testid="vnc-screen"]');
     if (vncContainer) {
       const canvases = vncContainer.querySelectorAll('canvas');
       canvases.forEach(canvas => {
@@ -89,12 +53,11 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
       });
     }
   };
-  
-  // Use MutationObserver to catch when noVNC resets cursor to none
+
   useEffect(() => {
-    const vncContainer = document.querySelector('[data-testid="vnc-container"]');
+    const vncContainer = document.querySelector('[data-testid="vnc-screen"]');
     if (!vncContainer) return;
-    
+
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
@@ -105,16 +68,13 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
         }
       });
     });
-    
-    // Observe all canvases for style changes
+
     const canvases = vncContainer.querySelectorAll('canvas');
     canvases.forEach(canvas => {
       observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
-      // Initial force
       (canvas as HTMLElement).style.setProperty('cursor', 'crosshair', 'important');
     });
-    
-    // Also observe container for new canvases
+
     const containerObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -126,23 +86,23 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
         });
       });
     });
-    
+
     containerObserver.observe(vncContainer, { childList: true, subtree: true });
-    
+
     return () => {
       observer.disconnect();
       containerObserver.disconnect();
     };
   }, [key, status]);
 
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     setStatus('disconnected');
     if (onDisconnect) onDisconnect();
-  };
+  }, [onDisconnect]);
 
-  const handleSecurityFailure = () => {
+  const handleSecurityFailure = useCallback(() => {
     setStatus('error');
-  };
+  }, []);
 
   const handleReconnect = () => {
     setStatus('connecting');
@@ -159,7 +119,6 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
-  // Send Ctrl+Alt+Del
   const sendCtrlAltDel = () => {
     const rfb = vncRef.current?.rfb;
     if (rfb) {
@@ -167,7 +126,6 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
-  // Send key combination helper
   const sendKey = (keysym: number, code: string) => {
     const rfb = vncRef.current?.rfb;
     if (rfb) {
@@ -176,29 +134,21 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     }
   };
 
-  // Characters that require Shift key to be pressed
   const SHIFT_CHARS = '~!@#$%^&*()_+{}|:"<>?ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const SHIFT_KEYSYM = 0xFFE1; // XK_Shift_L
+  const SHIFT_KEYSYM = 0xFFE1;
 
-  // Map character to its base keysym (the key without shift)
   const getKeysymForChar = (char: string): number => {
     const code = char.charCodeAt(0);
-    
-    // Special keys
-    if (char === '\n' || char === '\r') return 0xFF0D; // Return/Enter
-    if (char === '\t') return 0xFF09; // Tab
-    if (char === '\b') return 0xFF08; // Backspace
-    if (char === ' ') return 0x0020; // Space
-    
-    // For printable ASCII, keysym equals the character code
+    if (char === '\n' || char === '\r') return 0xFF0D;
+    if (char === '\t') return 0xFF09;
+    if (char === '\b') return 0xFF08;
+    if (char === ' ') return 0x0020;
     if (code >= 32 && code <= 126) {
       return code;
     }
-    
     return code;
   };
 
-  // Send text to clipboard/paste with proper case sensitivity
   const sendClipboardText = async () => {
     const rfb = vncRef.current?.rfb;
     if (!rfb || !clipboardText) return;
@@ -206,27 +156,22 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     for (const char of clipboardText) {
       const needsShift = SHIFT_CHARS.includes(char);
       const keysym = getKeysymForChar(char);
-      
-      // Press Shift if needed for uppercase/symbols
+
       if (needsShift) {
         rfb.sendKey(SHIFT_KEYSYM, 'ShiftLeft', true);
       }
-      
-      // Send the actual key
+
       rfb.sendKey(keysym, null, true);
       rfb.sendKey(keysym, null, false);
-      
-      // Release Shift if we pressed it
+
       if (needsShift) {
         rfb.sendKey(SHIFT_KEYSYM, 'ShiftLeft', false);
       }
-      
-      // Small delay between characters for reliability
+
       await new Promise(resolve => setTimeout(resolve, 15));
     }
   };
 
-  // Paste from local clipboard
   const pasteFromClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -244,29 +189,30 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Continuously force cursor visibility on canvas (noVNC uses inline styles)
   useEffect(() => {
     const forceInterval = setInterval(() => {
       forceCursorVisible();
     }, 500);
-    
-    // Initial force
     forceCursorVisible();
-    
     return () => clearInterval(forceInterval);
   }, [key]);
 
   return (
-    <div ref={containerRef} className="flex h-full bg-background">
-      {/* Side Control Panel */}
-      <div className={`flex-shrink-0 bg-background border-r border-border transition-all duration-200 ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`}>
-        <div className="p-4 h-full flex flex-col gap-4 min-w-[256px]">
+    <div ref={containerRef} className="flex h-full w-full bg-black">
+      {/* Sidebar */}
+      <div 
+        className={`
+          flex-shrink-0 bg-background/95 backdrop-blur border-r border-border 
+          transition-all duration-200 ease-out overflow-hidden
+          ${sidebarOpen ? 'w-64' : 'w-0'}
+        `}
+      >
+        <div className="p-4 h-full flex flex-col gap-4 w-64">
           <h3 className="text-foreground font-semibold text-sm flex items-center gap-2">
             <Keyboard className="h-4 w-4" />
             Controls
           </h3>
-          
-          {/* Keyboard Shortcuts */}
+
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Keyboard</p>
             <Button
@@ -314,8 +260,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
               Enter
             </Button>
           </div>
-          
-          {/* Clipboard */}
+
           <div className="space-y-2 flex-1">
             <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Clipboard className="h-3 w-3" />
@@ -357,73 +302,66 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
           </div>
         </div>
       </div>
-      
-      {/* Toggle Sidebar Button - Always visible with clear styling */}
+
+      {/* Sidebar Toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute top-1/2 -translate-y-1/2 z-20 bg-blue-600 hover:bg-blue-500 border-2 border-blue-400 rounded-r-lg p-2 text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+        className={`
+          absolute top-1/2 -translate-y-1/2 z-30
+          bg-blue-600 hover:bg-blue-500 border-2 border-blue-400 
+          rounded-r-lg p-2 text-white shadow-lg shadow-blue-600/30 
+          transition-all duration-200 cursor-pointer
+        `}
         style={{ left: sidebarOpen ? '256px' : '0' }}
         data-testid="button-toggle-sidebar"
       >
         {sidebarOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
       </button>
 
-      {/* Main VNC Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-background border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              status === 'connected' ? 'bg-green-500' : 
-              status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
-              'bg-red-500'
-            }`} />
-            <span className="text-sm text-muted-foreground">
-              {status === 'connected' ? 'Connected' : 
-               status === 'connecting' ? 'Connecting...' : 
-               status === 'error' ? 'Connection Error' :
-               'Disconnected'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1 bg-muted/50 rounded-md border border-border px-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleZoomChange('out')}
-                className="text-muted-foreground hover:text-foreground h-7 w-7"
-                disabled={zoom === ZOOM_PRESETS[0]}
-                data-testid="button-zoom-out"
-                title="Zoom out"
-              >
-                <ZoomOut className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-xs text-muted-foreground font-mono min-w-[40px] text-center">
-                {Math.round(zoom * 100)}%
+      {/* Main Console Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Header Bar */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-background/95 backdrop-blur border-b border-border">
+          <div className="flex items-center gap-3">
+            <Monitor className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                status === 'connected' ? 'bg-green-500' : 
+                status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
+                'bg-red-500'
+              }`} />
+              <span className="text-sm text-muted-foreground">
+                {status === 'connected' ? 'Connected' : 
+                 status === 'connecting' ? 'Connecting...' : 
+                 status === 'error' ? 'Connection Error' :
+                 'Disconnected'}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleZoomChange('in')}
-                className="text-muted-foreground hover:text-foreground h-7 w-7"
-                disabled={zoom === ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
-                data-testid="button-zoom-in"
-                title="Zoom in"
-              >
-                <ZoomIn className="h-3.5 w-3.5" />
-              </Button>
             </div>
-            
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Scale Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setNativeSize(!nativeSize)}
+              className={`text-xs gap-1.5 h-7 px-2 ${nativeSize ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              data-testid="button-toggle-scale"
+              title={nativeSize ? "Fit to screen" : "Show native size (1:1)"}
+            >
+              {nativeSize ? <Shrink className="h-3.5 w-3.5" /> : <Scan className="h-3.5 w-3.5" />}
+              {nativeSize ? 'Native' : 'Fit'}
+            </Button>
+
             {(status === 'disconnected' || status === 'error') && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleReconnect}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground gap-1"
                 data-testid="button-vnc-reconnect"
               >
-                <RefreshCw className="h-4 w-4 mr-1" />
+                <RefreshCw className="h-4 w-4" />
                 Reconnect
               </Button>
             )}
@@ -432,6 +370,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
               size="icon"
               onClick={toggleFullscreen}
               className="text-muted-foreground hover:text-foreground h-8 w-8"
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               data-testid="button-vnc-fullscreen"
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -441,7 +380,8 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground h-8 w-8"
+                className="text-muted-foreground hover:text-foreground hover:bg-red-500/20 h-8 w-8"
+                title="Close console"
                 data-testid="button-vnc-close"
               >
                 <X className="h-4 w-4" />
@@ -449,63 +389,66 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
             )}
           </div>
         </div>
-        
-        {/* VNC Screen */}
-        <div className="flex-1 relative">
+
+        {/* VNC Display Area */}
+        <div className="flex-1 relative bg-black overflow-auto">
+          {/* Status Overlays */}
           {status === 'connecting' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
               <GlassCard className="p-8 flex flex-col items-center">
                 <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
                 <p className="text-foreground font-medium">Connecting to Console...</p>
+                <p className="text-muted-foreground text-sm mt-1">Please wait</p>
               </GlassCard>
             </div>
           )}
-          
+
           {(status === 'disconnected' || status === 'error') && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
               <GlassCard className="p-8 flex flex-col items-center">
-                <p className="text-foreground font-medium mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+                  <X className="h-6 w-6 text-red-500" />
+                </div>
+                <p className="text-foreground font-medium mb-1">
                   {status === 'error' ? 'Connection Failed' : 'Disconnected'}
                 </p>
-                <Button onClick={handleReconnect} className="bg-primary hover:bg-primary/90" data-testid="button-vnc-reconnect-main">
+                <p className="text-muted-foreground text-sm mb-4">
+                  {status === 'error' ? 'Unable to connect to the server' : 'The console session has ended'}
+                </p>
+                <Button 
+                  onClick={handleReconnect} 
+                  className="bg-primary hover:bg-primary/90"
+                  data-testid="button-vnc-reconnect-main"
+                >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Reconnect
                 </Button>
               </GlassCard>
             </div>
           )}
-          
-          <div 
-            className="w-full h-full overflow-auto"
-            style={{ 
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-              width: `${100 / zoom}%`,
-              height: `${100 / zoom}%`,
+
+          {/* VNC Screen - scaleViewport for auto-fit, or native 1:1 */}
+          <VncScreen
+            key={key}
+            url={wsUrl}
+            scaleViewport={!nativeSize}
+            background="#000000"
+            style={{
+              width: nativeSize ? undefined : '100%',
+              height: nativeSize ? undefined : '100%',
+              display: 'block',
             }}
-          >
-            <VncScreen
-              key={key}
-              url={wsUrl}
-              scaleViewport
-              background="#000000"
-              style={{ 
-                width: '100%', 
-                height: '100%', 
-                minHeight: '400px'
-              }}
-              ref={vncRef}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onSecurityFailure={handleSecurityFailure}
-              rfbOptions={{
-                credentials: { password },
-                showDotCursor: true,
-                localCursor: true
-              }}
-              data-testid="vnc-container"
-            />
-          </div>
+            ref={vncRef}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onSecurityFailure={handleSecurityFailure}
+            rfbOptions={{
+              credentials: { password },
+              showDotCursor: true,
+              localCursor: true
+            }}
+            data-testid="vnc-screen"
+          />
         </div>
       </div>
     </div>
