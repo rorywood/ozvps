@@ -339,7 +339,7 @@ export async function registerRoutes(
         extRelationId: virtFusionUser.extRelationId,
         email: email,
         name: name || virtFusionUser.name,
-        auth0UserId: auth0Result.user.user_id,
+        auth0UserId: auth0UserId, // Use the prefixed version for consistency
         expiresAt,
       });
 
@@ -352,7 +352,7 @@ export async function registerRoutes(
 
       res.status(201).json({
         user: {
-          id: auth0Result.user.user_id,
+          id: auth0UserId,
           email: email,
           name: name || virtFusionUser.name,
         },
@@ -516,7 +516,7 @@ export async function registerRoutes(
       }
 
       // Check if user is admin (from Auth0 app_metadata)
-      const isAdmin = await auth0Client.isUserAdmin(auth0Result.user.user_id);
+      const isAdmin = await auth0Client.isUserAdmin(auth0UserIdPrefixed);
       if (isAdmin) {
         log(`Admin user logged in: ${email}`, 'auth');
       }
@@ -529,7 +529,7 @@ export async function registerRoutes(
         extRelationId: extRelationId ?? undefined,
         email: email,
         name: auth0Result.user.name,
-        auth0UserId: auth0Result.user.user_id,
+        auth0UserId: auth0UserIdPrefixed, // Use prefixed version for consistency with Auth0 API
         isAdmin,
         expiresAt,
       });
@@ -543,7 +543,7 @@ export async function registerRoutes(
 
       res.json({
         user: {
-          id: auth0Result.user.user_id,
+          id: auth0UserIdPrefixed,
           email: email,
           name: auth0Result.user.name,
           isAdmin,
