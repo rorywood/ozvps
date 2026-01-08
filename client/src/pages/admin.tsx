@@ -342,6 +342,7 @@ export default function AdminPage() {
       }
       queryClient.invalidateQueries({ queryKey: ['admin', 'wallets'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
