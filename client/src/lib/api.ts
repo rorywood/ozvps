@@ -133,6 +133,7 @@ class ApiClient {
   }
 
   async getTrafficStatistics(id: string, period: string = '30m'): Promise<{
+    supported?: boolean;
     points: Array<{ timestamp: string; rx: number; tx: number }>;
     interval: number;
     period: string;

@@ -690,6 +690,7 @@ export class VirtFusionClient {
       // VirtFusion API: GET /servers/{serverId}/traffic/statistics
       // Provides real-time network traffic data for graphing
       // Period options: 30m, 1h, 12h, 1d, 1w
+      // Note: This endpoint may not be available on all VirtFusion instances
       const response = await this.request<any>(`/servers/${serverId}/traffic/statistics?period=${period}`);
       
       log(`Traffic statistics raw response for ${serverId}: ${JSON.stringify(response).slice(0, 1000)}`, 'virtfusion');
@@ -720,11 +721,23 @@ export class VirtFusionClient {
       log(`Traffic statistics parsed ${points.length} points for ${serverId}`, 'virtfusion');
       
       return {
+        supported: true,
         points,
         interval: statsData?.interval || response?.interval || 60,
         period: period,
       };
-    } catch (error) {
+    } catch (error: any) {
+      // Check if this is a 404 error - endpoint not available on this VirtFusion instance
+      const is404 = error?.message?.includes('404') || error?.status === 404;
+      if (is404) {
+        log(`Traffic statistics endpoint not available for server ${serverId} (VirtFusion doesn't support this feature)`, 'virtfusion');
+        return {
+          supported: false,
+          points: [],
+          interval: 60,
+          period: period,
+        };
+      }
       log(`Failed to fetch traffic statistics for server ${serverId}: ${error}`, 'virtfusion');
       return null;
     }

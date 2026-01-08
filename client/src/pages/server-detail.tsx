@@ -1851,6 +1851,16 @@ export default function ServerDetail() {
                   );
                 }
                 
+                if (trafficStats?.supported === false) {
+                  return (
+                    <div className="h-48 flex flex-col items-center justify-center text-muted-foreground text-sm">
+                      <Activity className="h-8 w-8 mb-2 opacity-50" />
+                      <p>Real-time traffic graphs are not available</p>
+                      <p className="text-xs mt-1">Your VirtFusion instance doesn't support this feature</p>
+                    </div>
+                  );
+                }
+                
                 if (chartData.length === 0) {
                   return (
                     <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
