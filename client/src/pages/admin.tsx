@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AppShell } from "@/components/layout/app-shell";
 import { 
   ShieldCheck, Search, Plus, Minus, AlertTriangle, Loader2, DollarSign, History, 
   User, Link, Shield, Eye, EyeOff, Save, Wallet, Server, Cpu, Network, 
@@ -500,14 +500,11 @@ export default function AdminPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen bg-gradient-dark">
-        <Sidebar />
-        <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen">
-          <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        </main>
-      </div>
+      <AppShell>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppShell>
     );
   }
 
@@ -522,23 +519,21 @@ export default function AdminPage() {
   const auditLogs: AuditLog[] = auditLogsData?.logs || [];
 
   return (
-    <div className="min-h-screen bg-gradient-dark">
-      <Sidebar />
-      <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen">
-        <div className="p-4 sm:p-6 lg:p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-              <ShieldCheck className="h-5 w-5 text-amber-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
-                Admin Command Center
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Unified management dashboard
-              </p>
-            </div>
+    <AppShell>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+            <ShieldCheck className="h-5 w-5 text-amber-400" />
           </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
+              Admin Command Center
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              Unified management dashboard
+            </p>
+          </div>
+        </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="bg-white/5 border border-white/10 mb-6 flex-wrap h-auto gap-1 p-1">
@@ -1368,8 +1363,6 @@ export default function AdminPage() {
               )}
             </TabsContent>
           </Tabs>
-        </div>
-      </main>
 
       {/* Server Action Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
@@ -1608,6 +1601,7 @@ export default function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </AppShell>
   );
 }

@@ -282,10 +282,10 @@ function DesktopNav() {
   return (
     <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
       <div className="container mx-auto max-w-7xl px-6">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-8">
             <Link href="/dashboard">
-              <img src={logo} alt="OzVPS" className="h-10 w-auto cursor-pointer" data-testid="img-logo" />
+              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer" data-testid="img-logo" />
             </Link>
             
             <nav className="flex items-center gap-1">
@@ -391,7 +391,7 @@ function MobileNav() {
     <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
-          <img src={logo} alt="OzVPS" className="h-10 w-auto cursor-pointer" data-testid="img-logo-mobile" />
+          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo-mobile" />
         </Link>
         
         <div className="flex items-center gap-3">
