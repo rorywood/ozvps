@@ -1028,11 +1028,12 @@ export default function ServerDetail() {
                   )}
                 </div>
               )}
-              {(powerActionPending || isTransitioning) ? (
+              {(powerActionPending || isTransitioning || consoleLock.isLocked) ? (
                 <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
-                  <span className="text-xs text-yellow-400 font-medium">
-                    {displayStatus === 'starting' ? 'Starting...' :
+                  <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
+                  <span className="text-xs text-orange-400 font-medium">
+                    {consoleLock.isLocked ? 'Rebooting...' :
+                     displayStatus === 'starting' ? 'Starting...' :
                      displayStatus === 'rebooting' ? 'Rebooting...' :
                      displayStatus === 'stopping' ? 'Stopping...' :
                      powerActionPending === 'boot' ? 'Starting...' :
@@ -1236,16 +1237,17 @@ export default function ServerDetail() {
               <GlassCard className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
-                  {server.status === 'running' && !powerActionPending ? (
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
                     <span className="text-lg font-bold text-white" data-testid="text-cpu-percent">
                       {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      {(powerActionPending || server.status !== 'stopped') && (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
+                      {consoleLock.isLocked ? 'Rebooting...' :
+                       powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
@@ -1255,9 +1257,9 @@ export default function ServerDetail() {
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending ? "bg-blue-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-white/20"
                     )}
-                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.cpu_usage || 0}%` : '0%' }}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.cpu_usage || 0}%` : '0%' }}
                     data-testid="progress-cpu"
                   />
                 </div>
@@ -1270,16 +1272,17 @@ export default function ServerDetail() {
               <GlassCard className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
-                  {server.status === 'running' && !powerActionPending ? (
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
                     <span className="text-lg font-bold text-white" data-testid="text-memory-percent">
                       {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      {(powerActionPending || server.status !== 'stopped') && (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
+                      {consoleLock.isLocked ? 'Rebooting...' :
+                       powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
@@ -1289,15 +1292,15 @@ export default function ServerDetail() {
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending ? "bg-green-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-green-500" : "bg-white/20"
                     )}
-                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.ram_usage || 0}%` : '0%' }}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.ram_usage || 0}%` : '0%' }}
                     data-testid="progress-memory"
                   />
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span data-testid="text-memory-used">
-                    {server.status === 'running' && !powerActionPending && liveStats?.memory_used_mb 
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.memory_used_mb 
                       ? `${liveStats.memory_used_mb} MB / ${liveStats.memory_total_mb} MB` 
                       : '—'}
                   </span>
@@ -1308,16 +1311,17 @@ export default function ServerDetail() {
               <GlassCard className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
-                  {server.status === 'running' && !powerActionPending ? (
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
                     <span className="text-lg font-bold text-white" data-testid="text-disk-percent">
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      {(powerActionPending || server.status !== 'stopped') && (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || consoleLock.isLocked || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
+                      {consoleLock.isLocked ? 'Rebooting...' :
+                       powerActionPending === 'boot' ? 'Starting...' : 
                        powerActionPending ? 'Please wait...' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
@@ -1327,15 +1331,15 @@ export default function ServerDetail() {
                   <div 
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending ? "bg-purple-500" : "bg-white/20"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-purple-500" : "bg-white/20"
                     )}
-                    style={{ width: server.status === 'running' && !powerActionPending ? `${liveStats?.disk_usage || 0}%` : '0%' }}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
                     data-testid="progress-disk"
                   />
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span data-testid="text-disk-used">
-                    {server.status === 'running' && !powerActionPending && liveStats?.disk_used_gb 
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb 
                       ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` 
                       : '—'}
                   </span>

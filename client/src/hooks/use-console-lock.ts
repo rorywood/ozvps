@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const SESSION_KEY_PREFIX = 'consoleLockUntil:';
-const LOCK_DURATION_MS = 15000;
+const LOCK_DURATION_MS = 18000;
 
 function getSessionKey(serverId: string): string {
   return `${SESSION_KEY_PREFIX}${serverId}`;
