@@ -371,8 +371,10 @@ export class VirtFusionClient {
       // VirtFusion uses /users/{id} endpoint for getting user by ID
       const data = await this.request<{ data: VirtFusionUser }>(`/users/${userId}`);
       return data.data;
-    } catch (error) {
-      log(`Failed to fetch user by ID ${userId}: ${error}`, 'virtfusion');
+    } catch (error: any) {
+      if (!error?.message?.includes('404')) {
+        log(`Failed to fetch user by ID ${userId}: ${error}`, 'virtfusion');
+      }
       return null;
     }
   }
@@ -1671,8 +1673,10 @@ export class VirtFusionClient {
         usedAddresses: b.usedAddresses || b.used || 0,
         available: (b.totalAddresses || b.size || 0) - (b.usedAddresses || b.used || 0),
       }));
-    } catch (error) {
-      log(`Failed to fetch IP blocks: ${error}`, 'virtfusion');
+    } catch (error: any) {
+      if (!error?.message?.includes('404')) {
+        log(`Failed to fetch IP blocks: ${error}`, 'virtfusion');
+      }
       return [];
     }
   }

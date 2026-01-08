@@ -18,6 +18,7 @@ interface Auth0User {
   email_verified?: boolean;
   app_metadata?: {
     virtfusion_user_id?: number;
+    is_admin?: boolean;
   };
 }
 
@@ -223,7 +224,9 @@ class Auth0Client {
       );
 
       if (!response.ok) {
-        log(`Failed to get Auth0 user by ID: ${response.status}`, 'auth0');
+        if (response.status !== 404) {
+          log(`Failed to get Auth0 user by ID: ${response.status}`, 'auth0');
+        }
         return null;
       }
 
