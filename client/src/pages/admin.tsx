@@ -471,9 +471,20 @@ export default function AdminPage() {
   };
 
   const handleSaveRecaptcha = () => {
+    // Validate before sending
+    if (recaptchaEnabled) {
+      if (!recaptchaSiteKey.trim()) {
+        toast.error('Site key is required to enable reCAPTCHA');
+        return;
+      }
+      if (!recaptchaSecretKey.trim() && !recaptchaData?.hasSecretKey) {
+        toast.error('Secret key is required to enable reCAPTCHA');
+        return;
+      }
+    }
     recaptchaMutation.mutate({
-      siteKey: recaptchaSiteKey,
-      secretKey: recaptchaSecretKey,
+      siteKey: recaptchaSiteKey.trim(),
+      secretKey: recaptchaSecretKey.trim(),
       enabled: recaptchaEnabled,
     });
   };
@@ -1276,6 +1287,13 @@ export default function AdminPage() {
                     )}
                   </div>
 
+                  {recaptchaEnabled && !recaptchaSiteKey && (
+                    <p className="text-xs text-amber-400">Site key is required to enable reCAPTCHA.</p>
+                  )}
+                  {recaptchaEnabled && recaptchaSiteKey && !recaptchaSecretKey && !recaptchaData?.hasSecretKey && (
+                    <p className="text-xs text-amber-400">Secret key is required to enable reCAPTCHA.</p>
+                  )}
+
                   <div className="flex justify-end gap-3 pt-2">
                     {recaptchaEnabled && (
                       <Button
@@ -1302,7 +1320,7 @@ export default function AdminPage() {
                     <Button
                       data-testid="button-save-recaptcha"
                       onClick={handleSaveRecaptcha}
-                      disabled={recaptchaMutation.isPending || (recaptchaEnabled && (!recaptchaSiteKey || (!recaptchaSecretKey && !recaptchaData?.hasSecretKey)))}
+                      disabled={recaptchaMutation.isPending || recaptchaLoading}
                       className="gap-2"
                     >
                       {recaptchaMutation.isPending ? (
