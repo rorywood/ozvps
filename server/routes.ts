@@ -9,7 +9,16 @@ import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature } from "./security";
+import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked } from "./security";
+
+// Helper to get client IP from request
+function getClientIp(req: any): string {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.headers['x-real-ip'] || 
+         req.socket?.remoteAddress || 
+         req.ip || 
+         'unknown';
+}
 
 // Helper to handle API errors with proper status codes
 function handleApiError(res: Response, error: any, defaultMessage: string = 'Internal server error') {
@@ -290,7 +299,32 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid registration data' });
       }
 
-      const { email, password, name } = parsed.data;
+      const { email, password, name, recaptchaToken } = parsed.data;
+
+      // Check reCAPTCHA if enabled
+      const recaptchaSettings = await dbStorage.getRecaptchaSettings();
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+        if (!recaptchaToken) {
+          return res.status(400).json({ error: 'reCAPTCHA verification required' });
+        }
+
+        try {
+          const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
+          });
+          const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
+          
+          if (!verifyResult.success) {
+            log(`reCAPTCHA verification failed for registration: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
+            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+          }
+        } catch (err: any) {
+          log(`reCAPTCHA verification error during registration: ${err.message}`, 'security');
+          return res.status(500).json({ error: 'Failed to verify reCAPTCHA. Please try again.' });
+        }
+      }
 
       // Check if user already exists in Auth0 (defense-in-depth)
       const existingUser = await auth0Client.getUserByEmail(email);
@@ -405,11 +439,25 @@ export async function registerRoutes(
         }
       }
 
+      // Get client IP for rate limiting
+      const clientIp = getClientIp(req);
+      
+      // Check if IP is blocked (distributed attack protection)
+      const ipBlockStatus = isIpBlocked(clientIp);
+      if (ipBlockStatus.blocked) {
+        const remainingMins = Math.ceil((ipBlockStatus.remainingMs || 0) / 60000);
+        log(`Blocked login attempt from blocked IP: ${clientIp}`, 'security');
+        return res.status(429).json({ 
+          error: `Too many login attempts from your location. Try again in ${remainingMins} minutes.`,
+          code: 'IP_BLOCKED'
+        });
+      }
+      
       // Check if account is locked due to too many failed attempts
-      const lockStatus = isAccountLocked(email);
+      const lockStatus = isAccountLocked(email, clientIp);
       if (lockStatus.locked) {
         const remainingMins = Math.ceil((lockStatus.remainingMs || 0) / 60000);
-        log(`Blocked login attempt for locked account: ${email}`, 'security');
+        log(`Blocked login attempt for locked account: ${email} from IP: ${clientIp} (${lockStatus.reason})`, 'security');
         return res.status(429).json({ 
           error: `Account temporarily locked due to too many failed attempts. Try again in ${remainingMins} minutes.`,
           code: 'ACCOUNT_LOCKED'
@@ -417,7 +465,7 @@ export async function registerRoutes(
       }
 
       // Apply progressive delay based on failed attempts
-      const delay = getProgressiveDelay(email);
+      const delay = getProgressiveDelay(email, clientIp);
       if (delay > 0) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -425,12 +473,12 @@ export async function registerRoutes(
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
-        recordFailedLogin(email);
+        recordFailedLogin(email, clientIp);
         return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
       
       // Clear failed login attempts on successful auth
-      clearFailedLogins(email);
+      clearFailedLogins(email, clientIp);
 
       // Check if user is blocked
       const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
