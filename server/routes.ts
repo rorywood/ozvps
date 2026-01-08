@@ -1475,13 +1475,41 @@ export async function registerRoutes(
   app.put('/api/user/profile', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
+      const sessionId = req.cookies?.[SESSION_COOKIE];
+      const { name } = req.body;
       
-      // Profile updates are managed through Auth0
-      // For now, just return the current session data
+      // Validate name if provided
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim().length < 1) {
+          return res.status(400).json({ error: 'Name must be a non-empty string' });
+        }
+        if (name.trim().length > 100) {
+          return res.status(400).json({ error: 'Name must be 100 characters or less' });
+        }
+      }
+      
+      let updatedName = session.name;
+      
+      // Update name in Auth0 if provided
+      if (name && name.trim() !== session.name && session.auth0UserId) {
+        const success = await auth0Client.updateUserName(session.auth0UserId, name.trim());
+        if (!success) {
+          return res.status(500).json({ error: 'Failed to update name' });
+        }
+        updatedName = name.trim();
+        
+        // Persist the name change to the session storage
+        if (sessionId) {
+          await storage.updateSession(sessionId, { name: updatedName });
+        }
+        
+        log(`Updated user name for ${session.email} to: ${updatedName}`, 'api');
+      }
+      
       res.json({
         id: session.userId || session.id,
         email: session.email,
-        name: session.name,
+        name: updatedName,
         virtFusionUserId: session.virtFusionUserId,
         createdAt: new Date().toISOString(),
       });

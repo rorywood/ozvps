@@ -416,6 +416,7 @@ export default function BillingPage() {
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [invoicesPage, setInvoicesPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
+  const MAX_TRANSACTION_PAGES = 5;
   const MAX_INVOICE_PAGES = 5;
 
   useEffect(() => {
@@ -506,7 +507,7 @@ export default function BillingPage() {
   // Clamp pagination when data changes to prevent blank pages
   useEffect(() => {
     const txCount = transactionsData?.transactions?.length || 0;
-    const txMaxPage = Math.max(1, Math.ceil(txCount / ITEMS_PER_PAGE));
+    const txMaxPage = Math.min(MAX_TRANSACTION_PAGES, Math.max(1, Math.ceil(txCount / ITEMS_PER_PAGE)));
     if (transactionsPage > txMaxPage) {
       setTransactionsPage(txMaxPage);
     }
@@ -1051,6 +1052,7 @@ export default function BillingPage() {
               ) : (
                 <div className="space-y-2">
                   {transactions
+                    .slice(0, MAX_TRANSACTION_PAGES * ITEMS_PER_PAGE)
                     .slice((transactionsPage - 1) * ITEMS_PER_PAGE, transactionsPage * ITEMS_PER_PAGE)
                     .map((tx) => (
                     <div 
@@ -1086,42 +1088,55 @@ export default function BillingPage() {
                     </div>
                   ))}
                   {/* Pagination Controls */}
-                  {transactions.length > ITEMS_PER_PAGE && (
-                    <div className="flex items-center justify-center gap-2 pt-4">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setTransactionsPage(p => Math.max(1, p - 1))}
-                        disabled={transactionsPage === 1}
-                        data-testid="transactions-prev-page"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      {Array.from({ length: Math.ceil(transactions.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map(page => (
-                        <Button
-                          key={page}
-                          variant={transactionsPage === page ? "default" : "outline"}
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setTransactionsPage(page)}
-                          data-testid={`transactions-page-${page}`}
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setTransactionsPage(p => Math.min(Math.ceil(transactions.length / ITEMS_PER_PAGE), p + 1))}
-                        disabled={transactionsPage === Math.ceil(transactions.length / ITEMS_PER_PAGE)}
-                        data-testid="transactions-next-page"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                  {(() => {
+                    const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
+                    const displayPages = Math.min(totalPages, MAX_TRANSACTION_PAGES);
+                    const hasMorePages = totalPages > MAX_TRANSACTION_PAGES;
+                    
+                    return transactions.length > ITEMS_PER_PAGE && (
+                      <div className="space-y-3 pt-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setTransactionsPage(p => Math.max(1, p - 1))}
+                            disabled={transactionsPage === 1}
+                            data-testid="transactions-prev-page"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          {Array.from({ length: displayPages }, (_, i) => i + 1).map(page => (
+                            <Button
+                              key={page}
+                              variant={transactionsPage === page ? "default" : "outline"}
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setTransactionsPage(page)}
+                              data-testid={`transactions-page-${page}`}
+                            >
+                              {page}
+                            </Button>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setTransactionsPage(p => Math.min(displayPages, p + 1))}
+                            disabled={transactionsPage === displayPages}
+                            data-testid="transactions-next-page"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {hasMorePages && (
+                          <p className="text-center text-xs text-muted-foreground">
+                            Showing recent transactions. Contact support for older transaction history.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
