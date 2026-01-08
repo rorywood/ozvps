@@ -1096,8 +1096,8 @@ export default function ServerDetail() {
             >
               {consoleLock.isLocked ? (
                 <>
-                  <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
-                  Console ({consoleLock.remainingSeconds}s)
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
+                  Restarting...
                 </>
               ) : (
                 <>
@@ -1112,20 +1112,20 @@ export default function ServerDetail() {
                 <Button 
                   className={cn(
                     "font-medium h-9 border-0",
-                    isSuspended 
+                    (isSuspended || consoleLock.isLocked)
                       ? "bg-white/10 text-muted-foreground cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
                   )}
                   data-testid="button-power-options"
-                  disabled={!!powerActionPending || isSuspended}
+                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked}
                 >
-                  {powerActionPending ? (
+                  {(powerActionPending || consoleLock.isLocked) ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Power className="h-4 w-4 mr-2" />
                   )}
-                  Power Options
-                  <ChevronDown className="h-3 w-3 ml-2 opacity-70" />
+                  {consoleLock.isLocked ? "Restarting..." : "Power Options"}
+                  {!consoleLock.isLocked && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">

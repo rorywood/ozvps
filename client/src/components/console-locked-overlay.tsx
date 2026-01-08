@@ -1,10 +1,6 @@
-import { Clock, Terminal } from "lucide-react";
+import { Loader2, Terminal } from "lucide-react";
 
-interface ConsoleLockedOverlayProps {
-  remainingSeconds: number;
-}
-
-export function ConsoleLockedOverlay({ remainingSeconds }: ConsoleLockedOverlayProps) {
+export function ConsoleLockedOverlay() {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
       <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 max-w-md text-center space-y-6">
@@ -15,20 +11,13 @@ export function ConsoleLockedOverlay({ remainingSeconds }: ConsoleLockedOverlayP
         <div className="space-y-2">
           <h2 className="text-xl font-semibold text-white">Console Initializing</h2>
           <p className="text-muted-foreground">
-            The server is starting up. Console access will be available shortly.
+            The server is restarting. Console access will be available shortly.
           </p>
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-2xl font-mono text-primary">
-          <Clock className="w-6 h-6" />
-          <span data-testid="text-countdown">{remainingSeconds}s</span>
-        </div>
-
-        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-primary rounded-full transition-all duration-1000"
-            style={{ width: `${Math.max(0, (15 - remainingSeconds) / 15 * 100)}%` }}
-          />
+        <div className="flex items-center justify-center gap-2 text-primary">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span data-testid="text-console-initializing">Please wait...</span>
         </div>
       </div>
     </div>

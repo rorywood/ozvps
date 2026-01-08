@@ -77,7 +77,7 @@ export default function ServerConsole() {
   if (consoleLock.isLocked) {
     return (
       <div className="min-h-screen bg-[#0a0a0a]">
-        <ConsoleLockedOverlay remainingSeconds={consoleLock.remainingSeconds} />
+        <ConsoleLockedOverlay />
       </div>
     );
   }
