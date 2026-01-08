@@ -890,10 +890,11 @@ export class VirtFusionClient {
       log(`Resetting password for server ${serverId}`, 'virtfusion');
       
       // VirtFusion API: POST /servers/{serverId}/resetPassword
-      // Response includes expectedPassword field (admin API v4.3.0+)
+      // Response includes expectedPassword field (admin API v4.1.0+)
+      // Note: sendMail parameter only available in v5.0.0+, so we don't send any body
+      // to maintain compatibility with older VirtFusion versions
       const data = await this.request<{ data: { expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
-        body: JSON.stringify({ sendMail: false }), // Don't email, we show it in UI
       });
       
       // Invalidate cache since server credentials have changed
