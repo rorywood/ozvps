@@ -1952,18 +1952,8 @@ export default function ServerDetail() {
           {/* IP Management Tab */}
           <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
             <GlassCard className="p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-border"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ['network', serverId] })}
-                  data-testid="button-refresh-network"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
               </div>
               
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
