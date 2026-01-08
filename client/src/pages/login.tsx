@@ -560,7 +560,18 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground mt-6">
+          <div className="mt-6 text-center">
+            <a 
+              href="https://ozvps.com.au" 
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="link-back-to-website"
+            >
+              <Globe className="h-4 w-4" />
+              Back to ozvps.com.au
+            </a>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-4">
             Need help? Contact support@ozvps.com
           </p>
         </motion.div>
