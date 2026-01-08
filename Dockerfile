@@ -21,12 +21,20 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install production dependencies only
+# Install all dependencies (drizzle-kit and tsx are in devDependencies but needed for migrations)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
+
+# Copy files needed for migrations
+COPY --from=builder /app/drizzle.config.cjs ./drizzle.config.cjs
+COPY --from=builder /app/shared ./shared
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S ozvps && \
@@ -42,9 +50,9 @@ USER ozvps
 EXPOSE 5000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
 
-# Start the application
+# Start the application with migrations
 ENV NODE_ENV=production
-CMD ["node", "dist/index.cjs"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
