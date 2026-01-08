@@ -170,8 +170,14 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: () => {
+      // Set auth to null first to prevent refetch loops
+      queryClient.setQueryData(['auth'], null);
+      queryClient.setQueryData(['auth', 'me'], null);
+      queryClient.setQueryData(['auth', 'session'], null);
+      // Then clear and redirect
       queryClient.clear();
-      setLocation('/login');
+      // Use window.location for a clean redirect that resets React state
+      window.location.href = '/login';
     },
   });
 

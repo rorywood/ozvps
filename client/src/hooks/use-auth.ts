@@ -25,8 +25,13 @@ export function useAuth() {
       return response.json();
     },
     onSuccess: () => {
+      // Set auth to null first to prevent refetch loops
+      queryClient.setQueryData(['auth'], null);
+      queryClient.setQueryData(['auth', 'me'], null);
+      queryClient.setQueryData(['auth', 'session'], null);
       queryClient.clear();
-      setLocation("/login");
+      // Use window.location for a clean redirect that resets React state
+      window.location.href = '/login';
     },
   });
 
