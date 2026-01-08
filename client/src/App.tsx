@@ -48,20 +48,12 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const [, setLocation] = useLocation();
-  
   const { data: auth, isLoading } = useQuery({
     queryKey: ['auth'],
     queryFn: () => api.getAuthUser(),
     retry: false,
     staleTime: 0, // Always refetch on navigation for security
   });
-
-  React.useEffect(() => {
-    if (!isLoading && !auth) {
-      setLocation('/login');
-    }
-  }, [isLoading, auth, setLocation]);
 
   if (isLoading) {
     return (
@@ -72,11 +64,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!auth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 text-primary animate-spin" />
-      </div>
-    );
+    return <Redirect to="/login" />;
   }
 
   return <>{children}</>;
