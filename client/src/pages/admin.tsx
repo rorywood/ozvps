@@ -8,7 +8,7 @@ import {
   User, Link, Shield, Eye, EyeOff, Save, Wallet, Server, Cpu, Network, 
   Users, FileText, Power, RefreshCw, Trash2, CheckCircle, Activity, HardDrive, 
   Play, Square, RotateCcw, ArrowRightLeft, ChevronDown, ChevronUp, Ban, Unlink,
-  Globe, MapPin
+  Globe, MapPin, XCircle
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -1276,7 +1276,29 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end gap-3 pt-2">
+                    {recaptchaEnabled && (
+                      <Button
+                        variant="outline"
+                        data-testid="button-disable-recaptcha"
+                        onClick={() => {
+                          recaptchaMutation.mutate({
+                            siteKey: '',
+                            secretKey: '',
+                            enabled: false,
+                          });
+                        }}
+                        disabled={recaptchaMutation.isPending}
+                        className="gap-2 border-red-500/50 text-red-400 hover:bg-red-500/10"
+                      >
+                        {recaptchaMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <XCircle className="h-4 w-4" />
+                        )}
+                        Disable reCAPTCHA
+                      </Button>
+                    )}
                     <Button
                       data-testid="button-save-recaptcha"
                       onClick={handleSaveRecaptcha}
