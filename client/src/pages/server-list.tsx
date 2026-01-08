@@ -174,7 +174,8 @@ export default function ServerList() {
                       const displayStatus = getDisplayStatus(server.id, server.status);
                       const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
                       const needsSetup = server.needsSetup === true;
-                      const building = needsSetup && isServerBuilding(server.id);
+                      const hasActiveSetup = isServerBuilding(server.id);
+                      const building = hasActiveSetup;
                       return (
                         <>
                           <div className={cn(
