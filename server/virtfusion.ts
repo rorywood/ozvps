@@ -889,18 +889,24 @@ export class VirtFusionClient {
     try {
       log(`Resetting password for server ${serverId}`, 'virtfusion');
       
-      const data = await this.request<{ data: { password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
+      // VirtFusion API: PUT /servers/{serverId}/password
+      // Response includes expectedPassword field (admin API v4.1.0+)
+      const data = await this.request<{ data: { expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/password`, {
         method: 'PUT',
+        body: JSON.stringify({ sendMail: false }), // Don't email, we show it in UI
       });
       
       // Invalidate cache since server credentials have changed
       this.invalidateServerCache(serverId);
       
       // VirtFusion returns the new password - check various possible field names
-      const newPassword = data.data?.decryptedPassword || data.data?.password || null;
+      // v4.1.0+ uses expectedPassword, older versions may use password or decryptedPassword
+      const newPassword = data.data?.expectedPassword || data.data?.decryptedPassword || data.data?.password || null;
       
       if (!newPassword) {
-        log(`Password reset for server ${serverId} succeeded but no password returned`, 'virtfusion');
+        log(`Password reset for server ${serverId} succeeded but no password returned in response`, 'virtfusion');
+      } else {
+        log(`Password reset for server ${serverId} completed successfully`, 'virtfusion');
       }
       
       return { success: true, password: newPassword };
