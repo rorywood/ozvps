@@ -971,23 +971,12 @@ export const dbStorage = {
     }
   },
 
-  async getRecaptchaSettings(): Promise<{ enabled: boolean; siteKey: string | null; secretKey: string | null }> {
-    const settings = await db.select().from(securitySettings);
-    const siteKey = settings.find(s => s.key === 'recaptcha_site_key');
-    const secretKey = settings.find(s => s.key === 'recaptcha_secret_key');
-    const enabled = settings.find(s => s.key === 'recaptcha_enabled');
+  getRecaptchaSettings(): { enabled: boolean; siteKey: string | null; secretKey: string | null } {
+    const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
+    const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
+    const enabled = !!(siteKey && secretKey);
     
-    return {
-      enabled: enabled?.enabled ?? false,
-      siteKey: siteKey?.value ?? null,
-      secretKey: secretKey?.value ?? null,
-    };
-  },
-
-  async updateRecaptchaSettings(siteKey: string | null, secretKey: string | null, enabled: boolean): Promise<void> {
-    await this.upsertSecuritySetting('recaptcha_site_key', siteKey, true);
-    await this.upsertSecuritySetting('recaptcha_secret_key', secretKey, true);
-    await this.upsertSecuritySetting('recaptcha_enabled', null, enabled);
+    return { enabled, siteKey, secretKey };
   },
 
   // ========== ADMIN AUDIT LOGGING ==========

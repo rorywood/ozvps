@@ -425,8 +425,8 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
-      // Check reCAPTCHA if enabled and token provided
-      const recaptchaSettings = await dbStorage.getRecaptchaSettings();
+      // Check reCAPTCHA if enabled (configured via env vars)
+      const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
           // Allow registration without token if reCAPTCHA failed to load on client
@@ -577,8 +577,8 @@ export async function registerRoutes(
       const { email, password } = parsed.data;
       const { recaptchaToken } = req.body;
 
-      // Check reCAPTCHA if enabled and token provided
-      const recaptchaSettings = await dbStorage.getRecaptchaSettings();
+      // Check reCAPTCHA if enabled (configured via env vars)
+      const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
           // Allow login without token if reCAPTCHA failed to load on client
@@ -1811,71 +1811,13 @@ export async function registerRoutes(
     }
   });
 
-  // Get reCAPTCHA settings (admin only)
-  app.get('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
-    try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-      const settings = await dbStorage.getRecaptchaSettings();
-      res.json({
-        enabled: settings.enabled,
-        siteKey: settings.siteKey || '',
-        hasSecretKey: !!settings.secretKey,
-      });
-    } catch (error: any) {
-      log(`Error fetching reCAPTCHA settings: ${error.message}`, 'admin');
-      res.status(500).json({ error: 'Failed to fetch reCAPTCHA settings' });
-    }
-  });
-
-  // Update reCAPTCHA settings (admin only)
-  app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
-    try {
-      log(`reCAPTCHA update request received from ${req.userSession?.email}`, 'admin');
-      
-      if (!req.userSession?.isAdmin) {
-        log(`reCAPTCHA update rejected: not admin`, 'admin');
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-      const { siteKey, secretKey, enabled } = req.body;
-      log(`reCAPTCHA update data: siteKey=${siteKey ? 'provided' : 'empty'}, secretKey=${secretKey ? 'provided' : 'empty'}, enabled=${enabled}`, 'admin');
-      
-      // Require both keys when enabling
-      if (enabled && !siteKey) {
-        log(`reCAPTCHA update rejected: no site key`, 'admin');
-        return res.status(400).json({ error: 'Site key is required to enable reCAPTCHA' });
-      }
-      if (enabled && !secretKey) {
-        log(`reCAPTCHA update rejected: no secret key`, 'admin');
-        return res.status(400).json({ error: 'Secret key is required to enable reCAPTCHA' });
-      }
-      
-      await dbStorage.updateRecaptchaSettings(
-        siteKey || null,
-        secretKey || null,
-        !!enabled
-      );
-      
-      log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, siteKey=${siteKey ? 'set' : 'cleared'}`, 'admin');
-      res.json({ success: true });
-    } catch (error: any) {
-      log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');
-      res.status(500).json({ error: 'Failed to update reCAPTCHA settings' });
-    }
-  });
-
-  // Get public reCAPTCHA config (for login page - only returns site key if enabled)
-  app.get('/api/security/recaptcha-config', async (req, res) => {
-    try {
-      const settings = await dbStorage.getRecaptchaSettings();
-      res.json({
-        enabled: settings.enabled,
-        siteKey: settings.enabled ? settings.siteKey : null,
-      });
-    } catch (error: any) {
-      res.json({ enabled: false, siteKey: null });
-    }
+  // Get public reCAPTCHA config (for login page - returns site key if configured via env vars)
+  app.get('/api/security/recaptcha-config', (req, res) => {
+    const settings = dbStorage.getRecaptchaSettings();
+    res.json({
+      enabled: settings.enabled,
+      siteKey: settings.enabled ? settings.siteKey : null,
+    });
   });
 
   // Check if registration is enabled (public)
