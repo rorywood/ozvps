@@ -1,0 +1,72 @@
+root@app:/opt/ozvps# source /opt/ozvps/.env && curl -v -H "Authorization: Bearer                                                                                                                                                                                                                                              $a598c5c3053ce95cc7be30b9694691935c7bea43/x4K6NVNrd2m98Th92e2qORYl5llq14hlP2dEw                                                                                                                                                                                                                                             uaYeYwgwDzsjiPJb2SVKlCXkjCyFpL12ESHIWizlw9NwusRUgf2PBszogDEHGaP2bI4l1ANJ6Ouv3Gss                                                                                                                                                                                                                                             Ky2ffSjwLKiPXEWI5N7SQgrXxjLzBHPy0GjEy31hjBVhTgFql1o7lpA3ukTg10BcyM4PJq6xKqjIhucP                                                                                                                                                                                                                                             1d8aKMH8mbyJpYzUVAA6RhijTn7MtkHcOwl5p0QGVyk4P9gi55GoVeki8X4vxOLXp0rXzxsIflQxpO6k                                                                                                                                                                                                                                             45tjFajSzkkMkxQ6c9RMreVlhmLAKIKNa3I2LEaFSf1tjLbBSANeXDkRsbi9dEJf18PVV9zOlzHu0bSH                                                                                                                                                                                                                                             Lh5BwEUHNJWt1LxYfWIoD5CFrV6tjEetpx0vOuIDM5bOF94LX8WM2pTGEZKk96sAu0u5x3DdRQ4ZX1Cx                                                                                                                                                                                                                                             don3Wt4HUzk81RjI2gmeZUWOlvV4tUCTeJMoeqMAj0mUFDL9qL4O7AhToBqJn24" https://panel.o                                                                                                                                                                                                                                             zvps.com.au/api/v1/connect
+*   Trying 103.167.10.20:443...
+* Connected to panel.ozvps.com.au (103.167.10.20) port 443 (#0)
+* ALPN, offering h2
+* ALPN, offering http/1.1
+*  CAfile: /etc/ssl/certs/ca-certificates.crt
+*  CApath: /etc/ssl/certs
+* TLSv1.0 (OUT), TLS header, Certificate Status (22):
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+* TLSv1.2 (IN), TLS header, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+* TLSv1.2 (OUT), TLS header, Finished (20):
+* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (OUT), TLS header, Certificate Status (22):
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+* TLSv1.2 (IN), TLS header, Finished (20):
+* TLSv1.2 (IN), TLS header, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, CERT verify (15):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Finished (20):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.3 (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384
+* ALPN, server accepted to use h2
+* Server certificate:
+*  subject: CN=panel.ozvps.com.au
+*  start date: Dec 27 03:41:04 2025 GMT
+*  expire date: Mar 27 03:41:03 2026 GMT
+*  subjectAltName: host "panel.ozvps.com.au" matched cert's "panel.ozvps.com.au"
+*  issuer: C=US; O=Let's Encrypt; CN=R12
+*  SSL certificate verify ok.
+* Using HTTP2, server supports multiplexing
+* Connection state changed (HTTP/2 confirmed)
+* Copying HTTP/2 data in stream buffer to connection buffer after upgrade: len=0
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* Using Stream ID: 1 (easy handle 0x558ff745d9f0)
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+> GET /api/v1/connect HTTP/2
+> Host: panel.ozvps.com.au
+> user-agent: curl/7.81.0
+> accept: */*
+> authorization: Bearer /x4K6NVNrd2m98Th92e2qORYl5llq14hlP2dEwuaYeYwgwDzsjiPJb2S                                                                                                                                                                                                                                             VKlCXkjCyFpL12ESHIWizlw9NwusRUgf2PBszogDEHGaP2bI4l1ANJ6Ouv3GssKy2ffSjwLKiPXEWI5N                                                                                                                                                                                                                                             7SQgrXxjLzBHPy0GjEy31hjBVhTgFql1o7lpA3ukTg10BcyM4PJq6xKqjIhucP1d8aKMH8mbyJpYzUVA                                                                                                                                                                                                                                             A6RhijTn7MtkHcOwl5p0QGVyk4P9gi55GoVeki8X4vxOLXp0rXzxsIflQxpO6k45tjFajSzkkMkxQ6c9                                                                                                                                                                                                                                             RMreVlhmLAKIKNa3I2LEaFSf1tjLbBSANeXDkRsbi9dEJf18PVV9zOlzHu0bSHLh5BwEUHNJWt1LxYfW                                                                                                                                                                                                                                             IoD5CFrV6tjEetpx0vOuIDM5bOF94LX8WM2pTGEZKk96sAu0u5x3DdRQ4ZX1Cxdon3Wt4HUzk81RjI2g                                                                                                                                                                                                                                             meZUWOlvV4tUCTeJMoeqMAj0mUFDL9qL4O7AhToBqJn24
+>
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* old SSL session ID is stale, removing
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* Connection state changed (MAX_CONCURRENT_STREAMS == 128)!
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+< HTTP/2 401
+< server: nginx
+< content-type: text/html; charset=utf-8
+< cache-control: no-cache, private
+< date: Thu, 08 Jan 2026 13:24:24 GMT
+< x-ratelimit-limit: 20000
+< x-ratelimit-remaining: 19999
+< access-control-allow-origin: *
+<
+* Connection #0 to host panel.ozvps.com.au left intact
+root@app:/opt/ozvps#
