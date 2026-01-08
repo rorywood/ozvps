@@ -874,7 +874,6 @@ export default function ServerDetail() {
   
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
-  const hasBuildInProgress = reinstallTask.isActive && reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed';
 
   // If server needs setup, show the setup wizard
   if (needsSetup && !reinstallTask.isActive) {
@@ -1176,8 +1175,8 @@ export default function ServerDetail() {
           </div>
         )}
         
-        {/* Saved Credentials Banner - Shows after build completes */}
-        {showSavedCredentials && savedCredentials && !hasBuildInProgress && (
+        {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
+        {showSavedCredentials && savedCredentials && !reinstallTask.isActive && (
           <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
@@ -1395,15 +1394,15 @@ export default function ServerDetail() {
               variant="secondary" 
               className={cn(
                 "shadow-none font-medium h-9",
-                (powerActionPending || server.status !== 'running' || isSuspended || hasBuildInProgress)
+                (powerActionPending || server.status !== 'running' || isSuspended || reinstallTask.isActive)
                   ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed" 
                   : "bg-muted/50 hover:bg-muted text-foreground border-border"
               )}
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || hasBuildInProgress}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
               data-testid="button-console"
             >
-              {hasBuildInProgress ? (
+              {reinstallTask.isActive ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
                   {isSettingUp ? "Setting up..." : "Building..."}
@@ -1426,26 +1425,26 @@ export default function ServerDetail() {
                 <Button 
                   className={cn(
                     "font-medium h-9 border-0",
-                    (isSuspended || consoleLock.isLocked || hasBuildInProgress)
+                    (isSuspended || consoleLock.isLocked || reinstallTask.isActive)
                       ? "bg-muted text-muted-foreground cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
                   )}
                   data-testid="button-power-options"
-                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked || hasBuildInProgress}
+                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
                 >
-                  {(powerActionPending || consoleLock.isLocked || hasBuildInProgress) ? (
+                  {(powerActionPending || consoleLock.isLocked || reinstallTask.isActive) ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Power className="h-4 w-4 mr-2" />
                   )}
-                  {hasBuildInProgress ? (isSettingUp ? "Setting up..." : "Building...") : consoleLock.isLocked ? "Restarting..." : "Power Options"}
-                  {!consoleLock.isLocked && !hasBuildInProgress && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
+                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") : consoleLock.isLocked ? "Restarting..." : "Power Options"}
+                  {!consoleLock.isLocked && !reinstallTask.isActive && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={server.status === 'running' || !!powerActionPending || isSuspended || hasBuildInProgress}
+                    disabled={server.status === 'running' || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('boot')}
                     data-testid="menu-item-start"
                   >
@@ -1453,7 +1452,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended || hasBuildInProgress}
+                    disabled={server.status !== 'running' || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('reboot')}
                     data-testid="menu-item-reboot"
                   >
@@ -1461,7 +1460,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || hasBuildInProgress}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('shutdown')}
                     data-testid="menu-item-shutdown"
                   >
@@ -1469,7 +1468,7 @@ export default function ServerDetail() {
                  </DropdownMenuItem>
                  <DropdownMenuItem 
                     className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || hasBuildInProgress}
+                    disabled={server.status === 'stopped' || !!powerActionPending || isSuspended || reinstallTask.isActive}
                     onClick={() => handlePowerAction('poweroff')}
                     data-testid="menu-item-poweroff"
                   >
