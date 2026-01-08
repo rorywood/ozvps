@@ -1285,6 +1285,31 @@ export async function registerRoutes(
         return res.status(400).json({ error: result.error });
       }
 
+      // Sync with Stripe - create customer balance transaction
+      const wallet = result.wallet;
+      if (wallet?.stripeCustomerId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          const formattedAmount = (Math.abs(amountCents) / 100).toFixed(2);
+          const adjustmentType = amountCents > 0 ? 'credit' : 'debit';
+          
+          await stripe.customers.createBalanceTransaction(wallet.stripeCustomerId, {
+            amount: -amountCents, // Stripe uses negative for credits (reduces amount owed)
+            currency: 'aud',
+            description: `Admin ${adjustmentType}: $${formattedAmount} - ${reason}`,
+            metadata: {
+              admin_email: req.userSession.email,
+              reason: reason.trim(),
+              type: 'admin_adjustment'
+            }
+          });
+          log(`Stripe balance synced for ${auth0UserId}: ${amountCents > 0 ? '+' : ''}${amountCents} cents`, 'admin');
+        } catch (stripeError: any) {
+          // Log but don't fail - the local wallet is already updated
+          log(`Warning: Failed to sync with Stripe: ${stripeError.message}`, 'admin');
+        }
+      }
+
       log(`Admin ${req.userSession.email} adjusted wallet for ${auth0UserId}: ${amountCents > 0 ? '+' : ''}${amountCents} cents (${reason})`, 'admin');
       res.json({ success: true, wallet: result.wallet });
     } catch (error: any) {

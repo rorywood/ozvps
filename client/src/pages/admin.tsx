@@ -1000,141 +1000,145 @@ export default function AdminPage() {
 
             {/* Users & Billing Tab */}
             <TabsContent value="users" className="space-y-6">
-              {/* User Lookup Section */}
-              <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
+              {/* Credit Adjustment Section - Prominent */}
+              <div className="rounded-xl bg-gradient-to-br from-green-500/10 to-green-500/5 ring-1 ring-green-500/20 p-5">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Search className="h-5 w-5 text-primary" />
+                  <div className="h-10 w-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                    <DollarSign className="h-5 w-5 text-green-400" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-white">User Lookup</h2>
-                    <p className="text-sm text-muted-foreground">Search and manage individual users</p>
+                    <h2 className="font-semibold text-white">Credit Adjustment</h2>
+                    <p className="text-sm text-muted-foreground">Add or remove credits from user wallets. Search for a user below to adjust their balance.</p>
                   </div>
                 </div>
                 
-                <form onSubmit={handleSearch} className="flex gap-3 mb-4">
+                <form onSubmit={handleSearch} className="flex gap-3">
                   <Input
                     data-testid="input-admin-search"
                     type="email"
-                    placeholder="Enter user email address..."
+                    placeholder="Enter user email address to manage credits..."
                     value={searchEmail}
                     onChange={(e) => setSearchEmail(e.target.value)}
-                    className="flex-1 bg-black/20 border-white/10"
+                    className="flex-1 bg-black/30 border-green-500/20 focus:border-green-500/40"
                   />
                   <Button
                     data-testid="button-admin-search"
                     type="submit"
                     disabled={searchEmail.length < 3 || searchMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700"
                   >
                     {searchMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      "Search"
+                      <>
+                        <Search className="h-4 w-4 mr-2" />
+                        Find User
+                      </>
                     )}
                   </Button>
                 </form>
-
-                {/* Selected User Card */}
-                {selectedUser && (
-                  <div className="rounded-xl bg-white/[0.02] ring-1 ring-amber-500/20 overflow-hidden">
-                    <div className="p-5 border-b border-white/5">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                            <User className="h-6 w-6 text-amber-400" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-white" data-testid="text-user-email">
-                              {selectedUser.email}
-                            </h3>
-                            {selectedUser.name && (
-                              <p className="text-sm text-muted-foreground">{selectedUser.name}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-green-500/10">
-                          <Wallet className="h-4 w-4 text-green-500" />
-                          <span className="text-lg font-bold text-green-400" data-testid="text-user-balance">
-                            ${((selectedUser.wallet?.balanceCents || 0) / 100).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">Auth0 ID</p>
-                        <p className="font-mono text-xs text-white/80 truncate">{selectedUser.auth0UserId}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">VirtFusion ID</p>
-                        <p className="font-mono text-white/80">
-                          {selectedUser.virtFusionUserId || <span className="text-yellow-500">Not linked</span>}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">Email Verified</p>
-                        <p className="text-white/80">{selectedUser.emailVerified ? "Yes" : "No"}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">Stripe Customer</p>
-                        <p className="font-mono text-xs text-white/80 truncate">
-                          {selectedUser.wallet?.stripeCustomerId || "None"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="p-5 border-t border-white/5 flex flex-wrap gap-2">
-                      <Button
-                        data-testid="button-add-credits"
-                        onClick={() => handleOpenAdjust("add")}
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Credits
-                      </Button>
-                      <Button
-                        data-testid="button-remove-credits"
-                        onClick={() => handleOpenAdjust("remove")}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        <Minus className="h-4 w-4 mr-1" />
-                        Remove Credits
-                      </Button>
-                      <Button
-                        data-testid="button-view-transactions"
-                        onClick={() => setTransactionsDialogOpen(true)}
-                        variant="outline"
-                        size="sm"
-                        className="border-white/10"
-                      >
-                        <History className="h-4 w-4 mr-1" />
-                        Transactions
-                      </Button>
-                      {!selectedUser.virtFusionUserId && (
-                        <Button
-                          data-testid="button-link-virtfusion"
-                          onClick={() => setLinkDialogOpen(true)}
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          <Link className="h-4 w-4 mr-1" />
-                          Link VirtFusion
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {searchMutation.isSuccess && !selectedUser && (
-                  <div className="rounded-xl bg-yellow-500/5 ring-1 ring-yellow-500/20 p-5 flex items-center gap-3">
-                    <AlertTriangle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
-                    <p className="text-yellow-400">No user found with that email address.</p>
-                  </div>
-                )}
               </div>
+
+              {/* Selected User Card */}
+              {selectedUser && (
+                <div className="rounded-xl bg-white/[0.02] ring-1 ring-amber-500/20 overflow-hidden">
+                  <div className="p-5 border-b border-white/5">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                          <User className="h-6 w-6 text-amber-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-white" data-testid="text-user-email">
+                            {selectedUser.email}
+                          </h3>
+                          {selectedUser.name && (
+                            <p className="text-sm text-muted-foreground">{selectedUser.name}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-green-500/10">
+                        <Wallet className="h-4 w-4 text-green-500" />
+                        <span className="text-lg font-bold text-green-400" data-testid="text-user-balance">
+                          ${((selectedUser.wallet?.balanceCents || 0) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">Auth0 ID</p>
+                      <p className="font-mono text-xs text-white/80 truncate">{selectedUser.auth0UserId}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">VirtFusion ID</p>
+                      <p className="font-mono text-white/80">
+                        {selectedUser.virtFusionUserId || <span className="text-yellow-500">Not linked</span>}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">Email Verified</p>
+                      <p className="text-white/80">{selectedUser.emailVerified ? "Yes" : "No"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-1">Stripe Customer</p>
+                      <p className="font-mono text-xs text-white/80 truncate">
+                        {selectedUser.wallet?.stripeCustomerId || "None"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-5 border-t border-white/5 flex flex-wrap gap-2">
+                    <Button
+                      data-testid="button-add-credits"
+                      onClick={() => handleOpenAdjust("add")}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Credits
+                    </Button>
+                    <Button
+                      data-testid="button-remove-credits"
+                      onClick={() => handleOpenAdjust("remove")}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      <Minus className="h-4 w-4 mr-1" />
+                      Remove Credits
+                    </Button>
+                    <Button
+                      data-testid="button-view-transactions"
+                      onClick={() => setTransactionsDialogOpen(true)}
+                      variant="outline"
+                      size="sm"
+                      className="border-white/10"
+                    >
+                      <History className="h-4 w-4 mr-1" />
+                      Transactions
+                    </Button>
+                    {!selectedUser.virtFusionUserId && (
+                      <Button
+                        data-testid="button-link-virtfusion"
+                        onClick={() => setLinkDialogOpen(true)}
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Link className="h-4 w-4 mr-1" />
+                        Link VirtFusion
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {searchMutation.isSuccess && !selectedUser && (
+                <div className="rounded-xl bg-yellow-500/5 ring-1 ring-yellow-500/20 p-5 flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+                  <p className="text-yellow-400">No user found with that email address.</p>
+                </div>
+              )}
 
               {/* All Users Table */}
               <div className="rounded-xl bg-white/[0.02] ring-1 ring-white/5 p-5">
