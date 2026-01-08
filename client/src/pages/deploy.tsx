@@ -11,8 +11,19 @@ import {
   Zap,
   Wallet,
   Server,
-  MapPin
+  MapPin,
+  AlertTriangle
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 
@@ -70,6 +81,7 @@ export default function DeployPage() {
   
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
@@ -114,8 +126,14 @@ export default function DeployPage() {
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  const handleDeploy = () => {
+  const handleDeployClick = () => {
     if (!selectedPlanId || !selectedLocationCode) return;
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmDeploy = () => {
+    if (!selectedPlanId || !selectedLocationCode) return;
+    setConfirmDialogOpen(false);
     deployMutation.mutate({ planId: selectedPlanId, locationCode: selectedLocationCode });
   };
 
@@ -326,7 +344,7 @@ export default function DeployPage() {
                   ) : canAfford ? (
                     <Button 
                       className="h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white border-0" 
-                      onClick={handleDeploy}
+                      onClick={handleDeployClick}
                       disabled={loadingWallet || deployMutation.isPending}
                       data-testid="button-deploy"
                     >
@@ -355,6 +373,38 @@ export default function DeployPage() {
           </div>
         </div>
       </div>
+
+      {/* Deploy Confirmation Dialog */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              Confirm Deployment
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              You are about to spend{" "}
+              <span className="font-semibold text-white">
+                {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "$0"}
+              </span>{" "}
+              to deploy this server.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border hover:bg-muted" data-testid="button-cancel-deploy">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDeploy}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="button-confirm-deploy"
+            >
+              <Zap className="h-4 w-4 mr-1.5" />
+              Deploy
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

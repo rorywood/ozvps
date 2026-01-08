@@ -4,9 +4,7 @@ import {
   Server, 
   LogOut,
   Menu,
-  Info,
   ChevronDown,
-  ChevronUp,
   Zap,
   Wallet,
   ShieldCheck,
@@ -22,16 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
 import { useTheme } from "@/components/theme-provider";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,77 +53,6 @@ interface UserMeResponse {
     name?: string;
     isAdmin?: boolean;
   };
-}
-
-function VersionInfo() {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <button
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
-          data-testid="button-version-info"
-        >
-          <span className="font-mono text-primary">v{VERSION}</span>
-          <Info className="h-3 w-3" />
-        </button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" />
-            OzVPS Panel v{VERSION}
-          </DialogTitle>
-        </DialogHeader>
-        <ScrollArea className="max-h-[60vh]">
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-2">Features</h4>
-              <ul className="space-y-1">
-                {FEATURES.map((feature, i) => (
-                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            <div>
-              <button 
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-2 text-sm font-semibold text-white hover:text-primary transition-colors"
-              >
-                Version History
-                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-              
-              {expanded && (
-                <div className="mt-2 space-y-3">
-                  {VERSION_HISTORY.map((release, i) => (
-                    <div key={i} className="border-l-2 border-primary/30 pl-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-mono text-primary">v{release.version}</span>
-                        <span className="text-[10px] text-muted-foreground">{release.date}</span>
-                      </div>
-                      <ul className="space-y-0.5">
-                        {release.changes.map((change, j) => (
-                          <li key={j} className="text-[11px] text-muted-foreground">
-                            • {change}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function UserAvatar({ email, name, size = 32 }: { email: string; name?: string; size?: number }) {
@@ -382,7 +300,6 @@ function DesktopNav() {
             )}
             <div className="w-px h-6 bg-white/10" />
             <ThemeToggle />
-            <VersionInfo />
             <ProfileDropdown />
           </div>
         </div>
@@ -536,11 +453,6 @@ function MobileNav() {
                     <LogOut className="h-4 w-4" />
                     {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
                   </button>
-                  
-                  <div className="flex items-center justify-between px-3 text-xs text-muted-foreground">
-                    <span>OzVPS Panel</span>
-                    <VersionInfo />
-                  </div>
                 </div>
               </div>
             </SheetContent>

@@ -1,5 +1,6 @@
 import { TopNav } from "./top-nav";
 import { Link } from "wouter";
+import { VERSION } from "@/lib/version";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -42,10 +43,13 @@ function Footer() {
           </div>
         </div>
         
-        <div className="mt-6 pt-6 border-t border-border/50 text-center">
+        <div className="mt-6 pt-6 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground/60">
-            Powered by Australian infrastructure. Built with love in Queensland.
+            Powered by Australian infrastructure. Built with ❤️ in Queensland.
           </p>
+          <span className="text-xs font-mono text-muted-foreground/40">
+            v{VERSION}
+          </span>
         </div>
       </div>
     </footer>
