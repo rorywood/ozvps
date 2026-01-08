@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Server } from "@/lib/types";
 import { 
+  Activity, 
+  Cpu, 
   HardDrive, 
   Server as ServerIcon, 
   Loader2,
@@ -75,6 +77,25 @@ export default function Dashboard() {
             <div className="text-sm text-muted-foreground">Active Servers</div>
           </div>
 
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Cpu className="h-5 w-5 text-purple-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>
+            <div className="text-sm text-muted-foreground">CPU Cores</div>
+          </div>
+
+          <div className="glass-panel rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <HardDrive className="h-5 w-5 text-cyan-500" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white font-display" data-testid="text-ram-gb">{stats.total_ram_gb} GB</div>
+            <div className="text-sm text-muted-foreground">Memory</div>
+          </div>
 
           <div className="glass-panel rounded-xl p-4">
             <div className="flex items-center gap-3 mb-3">
@@ -239,17 +260,45 @@ export default function Dashboard() {
                           </div>
                         </div>
 
+                        {/* Resource usage - desktop */}
+                        <div className="hidden md:flex items-center gap-6">
+                          <div className="text-center">
+                            <div className="text-xs text-muted-foreground mb-1">CPU</div>
+                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${server.stats?.cpu_usage || 0}%` }} />
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-muted-foreground mb-1">RAM</div>
+                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${server.stats?.ram_usage || 0}%` }} />
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-muted-foreground mb-1">Disk</div>
+                            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${server.stats?.disk_usage || 0}%` }} />
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Status & arrow */}
                         <div className="flex items-center gap-3">
                           <div className={cn(
-                            "px-3 py-1 rounded-full text-xs font-medium",
+                            "px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5",
                             server.suspended ? "bg-yellow-500/10 text-yellow-400" :
                             server.needsSetup ? "bg-blue-500/10 text-blue-400" :
                             displayStatus === 'running' ? "bg-green-500/10 text-green-400" : 
                             displayStatus === 'stopped' ? "bg-red-500/10 text-red-400" :
                             "bg-yellow-500/10 text-yellow-400"
                           )}>
+                            <div className={cn("w-1.5 h-1.5 rounded-full", 
+                              server.suspended ? "bg-yellow-400" :
+                              server.needsSetup ? "bg-blue-400 animate-pulse" :
+                              displayStatus === 'running' ? "bg-green-400" : 
+                              displayStatus === 'stopped' ? "bg-red-400" : 
+                              "bg-yellow-400 animate-pulse"
+                            )} />
                             {server.suspended ? 'Suspended' : server.needsSetup ? 'Awaiting Setup' : displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
                           </div>
                           <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
