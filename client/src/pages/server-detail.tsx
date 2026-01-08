@@ -1176,8 +1176,8 @@ export default function ServerDetail() {
           </div>
         )}
         
-        {/* Saved Credentials Banner - Shows after closing setup dialog */}
-        {showSavedCredentials && savedCredentials && (
+        {/* Saved Credentials Banner - Shows after build completes */}
+        {showSavedCredentials && savedCredentials && !hasBuildInProgress && (
           <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
