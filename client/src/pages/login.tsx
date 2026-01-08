@@ -1,15 +1,145 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
+
+interface WelcomeItem {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
+const WELCOME_ITEMS: Omit<WelcomeItem, 'completed'>[] = [
+  { id: 'auth', label: 'Verifying your credentials' },
+  { id: 'session', label: 'Restoring your session' },
+  { id: 'ready', label: 'All set! Redirecting...' },
+];
+
+function WelcomeBackScreen({ displayName, onComplete }: { displayName: string; onComplete: () => void }) {
+  const [items, setItems] = useState<WelcomeItem[]>(
+    WELCOME_ITEMS.map(item => ({ ...item, completed: false }))
+  );
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [hasCompleted, setHasCompleted] = useState(false);
+
+  // Fallback navigation - ensure redirect happens even if animation is interrupted
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (!hasCompleted) {
+        onComplete();
+      }
+    }, 5000); // Maximum 5 seconds before forcing redirect
+    return () => clearTimeout(fallbackTimer);
+  }, [onComplete, hasCompleted]);
+
+  useEffect(() => {
+    if (currentIndex >= items.length) {
+      const timer = setTimeout(() => {
+        setHasCompleted(true);
+        onComplete();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+
+    const delay = currentIndex === 0 ? 600 : 800 + Math.random() * 400;
+    const timer = setTimeout(() => {
+      setItems(prev => prev.map((item, idx) => 
+        idx === currentIndex ? { ...item, completed: true } : item
+      ));
+      setCurrentIndex(prev => prev + 1);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, items.length, onComplete]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-transparent" />
+      
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="w-full max-w-md mx-auto px-6 relative z-10"
+      >
+        <div className="text-center mb-8">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15 }}
+            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/20 border border-green-500/30 mb-6"
+          >
+            <CheckCircle2 className="w-10 h-10 text-green-500" />
+          </motion.div>
+          <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+            Welcome back, {displayName}!
+          </h2>
+          <p className="text-muted-foreground">
+            Good to see you again...
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {items.map((item, index) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ 
+                opacity: index <= currentIndex ? 1 : 0.4,
+                x: 0 
+              }}
+              transition={{ 
+                duration: 0.3, 
+                delay: index * 0.1,
+                ease: "easeOut"
+              }}
+              className="flex items-center gap-4 p-4 rounded-xl bg-card/50 border border-border backdrop-blur-sm"
+            >
+              <div className={`
+                flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300
+                ${item.completed 
+                  ? 'bg-green-500/20 border-green-500/50' 
+                  : index === currentIndex 
+                    ? 'bg-primary/20 border-primary/50' 
+                    : 'bg-muted border-border'
+                } border
+              `}>
+                {item.completed ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  </motion.div>
+                ) : index === currentIndex ? (
+                  <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                ) : (
+                  <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                )}
+              </div>
+              <span className={`
+                text-sm font-medium transition-colors duration-300
+                ${item.completed ? 'text-foreground' : 'text-muted-foreground'}
+              `}>
+                {item.label}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 declare global {
   interface Window {
@@ -34,6 +164,8 @@ export default function LoginPage() {
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeDisplayName, setWelcomeDisplayName] = useState("");
   
   const [honeypot, setHoneypot] = useState("");
   const { toast } = useToast();
@@ -121,11 +253,13 @@ export default function LoginPage() {
     onSuccess: (data) => {
       const displayName = formatDisplayName(data.user?.name, data.user?.email);
       queryClient.clear();
+      // Toast for accessibility (screen readers)
       toast({
         title: `Welcome back, ${displayName}!`,
         description: "You've successfully signed in to your account.",
       });
-      setLocation("/");
+      setWelcomeDisplayName(displayName);
+      setShowWelcome(true);
     },
     onError: (err: any) => {
       setError(err.message || "Invalid email or password");
@@ -164,6 +298,16 @@ export default function LoginPage() {
     { icon: Zap, title: "High Performance", description: "NVMe storage & premium network" },
     { icon: Globe, title: "99.9% Uptime", description: "Reliable cloud hosting" },
   ];
+
+  // Show welcome screen after successful login
+  if (showWelcome) {
+    return (
+      <WelcomeBackScreen 
+        displayName={welcomeDisplayName} 
+        onComplete={() => setLocation("/")} 
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-background">
