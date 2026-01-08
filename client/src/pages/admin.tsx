@@ -268,7 +268,9 @@ export default function AdminPage() {
   const { data: recaptchaData, isLoading: recaptchaLoading } = useQuery({
     queryKey: ['admin', 'recaptcha'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/security/recaptcha');
+      const response = await fetch('/api/admin/security/recaptcha', {
+        credentials: 'include',
+      });
       if (!response.ok) throw new Error('Failed to fetch reCAPTCHA settings');
       return response.json();
     },
@@ -288,6 +290,7 @@ export default function AdminPage() {
       const response = await fetch('/api/admin/security/recaptcha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
       if (!response.ok) {
@@ -1277,7 +1280,7 @@ export default function AdminPage() {
                     <Button
                       data-testid="button-save-recaptcha"
                       onClick={handleSaveRecaptcha}
-                      disabled={recaptchaMutation.isPending || (recaptchaEnabled && !recaptchaSiteKey)}
+                      disabled={recaptchaMutation.isPending || (recaptchaEnabled && (!recaptchaSiteKey || (!recaptchaSecretKey && !recaptchaData?.hasSecretKey)))}
                       className="gap-2"
                     >
                       {recaptchaMutation.isPending ? (

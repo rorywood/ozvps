@@ -1832,13 +1832,24 @@ export async function registerRoutes(
       }
       const { siteKey, secretKey, enabled } = req.body;
       
-      if (enabled && (!siteKey || !secretKey)) {
-        return res.status(400).json({ error: 'Site key and secret key are required to enable reCAPTCHA' });
+      // Get existing settings to check if secret key is already saved
+      const existingSettings = await dbStorage.getRecaptchaSettings();
+      const hasExistingSecretKey = !!existingSettings.secretKey;
+      
+      // Require secret key when enabling, unless one is already saved
+      if (enabled && !siteKey) {
+        return res.status(400).json({ error: 'Site key is required to enable reCAPTCHA' });
       }
+      if (enabled && !secretKey && !hasExistingSecretKey) {
+        return res.status(400).json({ error: 'Secret key is required to enable reCAPTCHA' });
+      }
+      
+      // If secretKey is empty but one exists, preserve the existing one
+      const finalSecretKey = secretKey || (hasExistingSecretKey ? existingSettings.secretKey : null);
       
       await dbStorage.updateRecaptchaSettings(
         siteKey || null,
-        secretKey || null,
+        finalSecretKey,
         !!enabled
       );
       
