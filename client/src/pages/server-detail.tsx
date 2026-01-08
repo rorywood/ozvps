@@ -145,16 +145,10 @@ export default function ServerDetail() {
       const timer = setTimeout(() => {
         setShowSavedCredentials(false);
         setSavedCredentials(null);
-        // Clear from sessionStorage too
-        try {
-          sessionStorage.removeItem(`setupCredentials:${serverId}`);
-        } catch {
-          // Ignore
-        }
       }, 2 * 60 * 1000); // 2 minutes
       return () => clearTimeout(timer);
     }
-  }, [showSavedCredentials, savedCredentials, serverId]);
+  }, [showSavedCredentials, savedCredentials]);
   
   
   // Setup progress minimized state (persistent banner when minimized)
@@ -254,34 +248,13 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, serverId, reinstallTask.isActive]);
   
-  // Persist credentials when setup completes - also restore from sessionStorage on mount
+  // Set credentials in state when they become available (one-time display only, no persistence)
   useEffect(() => {
-    if (serverId) {
-      try {
-        const storedCreds = sessionStorage.getItem(`setupCredentials:${serverId}`);
-        if (storedCreds && !savedCredentials) {
-          const creds = JSON.parse(storedCreds);
-          setSavedCredentials(creds);
-          setShowSavedCredentials(true);
-        }
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  }, [serverId]);
-  
-  // Save credentials to sessionStorage when they become available
-  useEffect(() => {
-    if (reinstallTask.credentials && serverId) {
+    if (reinstallTask.credentials && serverId && !savedCredentials) {
       setSavedCredentials(reinstallTask.credentials);
       setShowSavedCredentials(true);
-      try {
-        sessionStorage.setItem(`setupCredentials:${serverId}`, JSON.stringify(reinstallTask.credentials));
-      } catch {
-        // Ignore storage errors
-      }
     }
-  }, [reinstallTask.credentials, serverId]);
+  }, [reinstallTask.credentials, serverId, savedCredentials]);
   
   // Track if we've already triggered auto-password-reset to avoid duplicates
   const autoPasswordResetTriggeredRef = useRef(false);
@@ -317,11 +290,6 @@ export default function ServerDetail() {
               };
               setSavedCredentials(creds);
               setShowSavedCredentials(true);
-              try {
-                sessionStorage.setItem(`setupCredentials:${serverId}`, JSON.stringify(creds));
-              } catch {
-                // Ignore storage errors
-              }
             }
           }).catch(() => {
             // Silent fail - user can manually reset password
@@ -1281,11 +1249,6 @@ export default function ServerDetail() {
                       // Dismiss the credentials banner after copying password
                       setShowSavedCredentials(false);
                       setSavedCredentials(null);
-                      try {
-                        sessionStorage.removeItem(`setupCredentials:${serverId}`);
-                      } catch {
-                        // Ignore
-                      }
                     }}
                     data-testid="button-copy-password"
                   >
