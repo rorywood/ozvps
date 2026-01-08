@@ -26,7 +26,6 @@ import {
   Gauge,
   Calendar,
   TrendingUp,
-  Pencil,
   Check,
   Search,
   AlertTriangle,
@@ -1317,22 +1316,23 @@ export default function ServerDetail() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 group">
-                  <h1 className="text-2xl font-display font-bold text-foreground tracking-tight" data-testid="text-server-name">{server.name}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 
+                    className={cn(
+                      "text-2xl font-display font-bold text-foreground tracking-tight",
+                      !isSuspended && "cursor-pointer hover:text-foreground/80 transition-colors"
+                    )}
+                    onClick={!isSuspended ? handleStartEditName : undefined}
+                    data-testid="text-server-name"
+                    title={!isSuspended ? "Click to rename" : undefined}
+                  >
+                    {server.name}
+                  </h1>
                   {cancellationData?.cancellation && (
                     <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1" data-testid="badge-pending-cancellation">
                       <Calendar className="h-3 w-3" />
                       PENDING CANCELLATION
                     </span>
-                  )}
-                  {!isSuspended && (
-                    <button
-                      onClick={handleStartEditName}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1"
-                      data-testid="button-edit-name"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
                   )}
                 </div>
               )}
