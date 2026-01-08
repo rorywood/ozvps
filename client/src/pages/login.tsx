@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useToast } from "@/hooks/use-toast";
 
 declare global {
   interface Window {
@@ -35,6 +36,21 @@ export default function LoginPage() {
   const widgetIdRef = useRef<number | null>(null);
   
   const [honeypot, setHoneypot] = useState("");
+  const { toast } = useToast();
+
+  const formatDisplayName = (name?: string, email?: string): string => {
+    if (name) {
+      return name
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    if (email) {
+      const localPart = email.split('@')[0];
+      return localPart.charAt(0).toUpperCase() + localPart.slice(1);
+    }
+    return 'there';
+  };
 
   const { data: recaptchaConfig } = useQuery({
     queryKey: ['recaptcha-config'],
@@ -102,8 +118,13 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: () => api.login(email, password, recaptchaToken || undefined),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const displayName = formatDisplayName(data.user?.name, data.user?.email);
       queryClient.clear();
+      toast({
+        title: `Welcome back, ${displayName}!`,
+        description: "You've successfully signed in to your account.",
+      });
       setLocation("/");
     },
     onError: (err: any) => {

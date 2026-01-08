@@ -46,6 +46,20 @@ function formatBalance(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function formatDisplayName(name?: string, email?: string): string {
+  if (name) {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+  if (email) {
+    const localPart = email.split('@')[0];
+    return localPart.charAt(0).toUpperCase() + localPart.slice(1);
+  }
+  return 'User';
+}
+
 interface UserMeResponse {
   user: {
     id: number | string;
@@ -117,10 +131,13 @@ function ProfileDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button 
-          className="flex items-center gap-2 p-1.5 rounded-full hover:bg-foreground/5 transition-colors"
+          className="flex items-center gap-2 p-1.5 pr-2 rounded-full hover:bg-foreground/5 transition-colors"
           data-testid="button-profile-dropdown"
         >
           {user?.email && <UserAvatar email={user.email} name={user.name} size={36} />}
+          <span className="hidden sm:block text-sm font-medium text-foreground max-w-[120px] truncate" data-testid="text-nav-username">
+            {formatDisplayName(user?.name, user?.email)}
+          </span>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
@@ -132,7 +149,7 @@ function ProfileDropdown() {
           <div className="flex items-center gap-3 py-1">
             {user?.email && <UserAvatar email={user.email} name={user.name} size={40} />}
             <div className="flex flex-col space-y-0.5 overflow-hidden">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name || 'User'}</p>
+              <p className="text-sm font-medium text-foreground truncate">{formatDisplayName(user?.name, user?.email)}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
           </div>
@@ -382,7 +399,7 @@ function MobileNav() {
                     <div className="flex items-center gap-3">
                       <UserAvatar email={user.email} name={user.name} size={48} />
                       <div className="flex flex-col overflow-hidden">
-                        <p className="text-sm font-medium text-foreground truncate">{user.name || 'User'}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{formatDisplayName(user.name, user.email)}</p>
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                       </div>
                     </div>
