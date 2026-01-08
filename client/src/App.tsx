@@ -16,6 +16,7 @@ import Pricing from "@/pages/pricing";
 import Deploy from "@/pages/deploy";
 import DeployConfigure from "@/pages/deploy-configure";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
@@ -93,6 +94,9 @@ function Router() {
     <Switch>
       <Route path="/login">
         {auth ? <Redirect to="/dashboard" /> : <Login />}
+      </Route>
+      <Route path="/register">
+        {auth ? <Redirect to="/dashboard" /> : <Register />}
       </Route>
       <Route path="/pricing">
         <Pricing />
