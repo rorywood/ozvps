@@ -889,9 +889,9 @@ export class VirtFusionClient {
     try {
       log(`Resetting password for server ${serverId}`, 'virtfusion');
       
-      // VirtFusion API: PUT /servers/{serverId}/password
-      // Response includes expectedPassword field (admin API v4.1.0+)
-      const data = await this.request<{ data: { expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/password`, {
+      // VirtFusion API: PUT /servers/{serverId}/password/reset
+      // Response includes expectedPassword field (admin API v4.3.0+)
+      const data = await this.request<{ data: { expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/password/reset`, {
         method: 'PUT',
         body: JSON.stringify({ sendMail: false }), // Don't email, we show it in UI
       });
