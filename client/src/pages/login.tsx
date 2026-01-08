@@ -146,12 +146,12 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-purple-500/10">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-blue-500/10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/20 via-transparent to-transparent" />
         
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
           <Link href="/">
@@ -160,7 +160,7 @@ export default function LoginPage() {
           
           <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
             Welcome Back<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-500">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400">
               to OzVPS
             </span>
           </h1>

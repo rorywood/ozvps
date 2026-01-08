@@ -773,7 +773,7 @@ export default function BillingPage() {
             )}
 
             {/* Wallet Balance - Hero Card */}
-            <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
+            <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-blue-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-14 w-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
@@ -937,7 +937,7 @@ export default function BillingPage() {
             <div data-testid="payment-methods-section">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
                     <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
@@ -1128,7 +1128,7 @@ export default function BillingPage() {
             {/* Invoices */}
             <div data-testid="invoices-section">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
