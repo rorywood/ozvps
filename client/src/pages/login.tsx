@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
@@ -196,46 +196,90 @@ export default function LoginPage() {
 
   const recaptchaEnabled = recaptchaConfig?.enabled && recaptchaConfig?.siteKey;
 
-  const initRecaptcha = useCallback(() => {
-    if (recaptchaRef.current && recaptchaConfig?.siteKey && window.grecaptcha && widgetIdRef.current === null) {
-      try {
-        widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
-          sitekey: recaptchaConfig.siteKey,
-          callback: (token: string) => setRecaptchaToken(token),
-          theme: 'dark',
-        });
-        setRecaptchaLoaded(true);
-      } catch (e) {
-        console.error('Failed to render reCAPTCHA:', e);
-      }
-    }
-  }, [recaptchaConfig?.siteKey]);
-
+  // Load reCAPTCHA script and render widget with retry mechanism
   useEffect(() => {
-    if (!recaptchaEnabled) return;
-
-    const existingScript = document.querySelector('script[src*="recaptcha"]');
-    if (existingScript) {
-      if (window.grecaptcha) {
-        window.grecaptcha.ready(initRecaptcha);
-      }
+    // Reset state when reCAPTCHA is disabled
+    if (!recaptchaEnabled || !recaptchaConfig?.siteKey) {
+      setRecaptchaLoaded(false);
+      setRecaptchaToken(null);
+      widgetIdRef.current = null;
       return;
     }
 
-    window.onRecaptchaLoad = () => {
-      window.grecaptcha.ready(initRecaptcha);
+    let attempts = 0;
+    const maxAttempts = 20;
+    let retryTimer: NodeJS.Timeout | null = null;
+
+    const tryRenderRecaptcha = () => {
+      // Check if already rendered
+      if (widgetIdRef.current !== null) {
+        setRecaptchaLoaded(true);
+        return;
+      }
+
+      // Check if ref and grecaptcha are available
+      if (recaptchaRef.current && window.grecaptcha?.render) {
+        try {
+          // Clear the container first in case there's stale content
+          recaptchaRef.current.innerHTML = '';
+          
+          widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
+            sitekey: recaptchaConfig.siteKey,
+            callback: (token: string) => setRecaptchaToken(token),
+            theme: 'dark',
+          });
+          setRecaptchaLoaded(true);
+          return;
+        } catch (e: any) {
+          // If already rendered error, just mark as loaded
+          if (e.message?.includes('already been rendered')) {
+            setRecaptchaLoaded(true);
+            return;
+          }
+          console.error('Failed to render reCAPTCHA:', e);
+        }
+      }
+
+      // Retry if not successful
+      attempts++;
+      if (attempts < maxAttempts) {
+        retryTimer = setTimeout(tryRenderRecaptcha, 250);
+      }
     };
 
-    const script = document.createElement('script');
-    script.src = 'https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit';
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
+    // Load script if not present
+    const existingScript = document.querySelector('script[src*="recaptcha/api.js"]');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        // Wait for grecaptcha to be ready
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(tryRenderRecaptcha);
+        } else {
+          tryRenderRecaptcha();
+        }
+      };
+      document.head.appendChild(script);
+    } else {
+      // Script exists, try to render
+      if (window.grecaptcha?.ready) {
+        window.grecaptcha.ready(tryRenderRecaptcha);
+      } else {
+        tryRenderRecaptcha();
+      }
+    }
 
     return () => {
-      delete window.onRecaptchaLoad;
+      if (retryTimer) clearTimeout(retryTimer);
+      // Reset state on unmount so it can be re-rendered on next mount
+      setRecaptchaLoaded(false);
+      setRecaptchaToken(null);
+      widgetIdRef.current = null;
     };
-  }, [recaptchaEnabled, initRecaptcha]);
+  }, [recaptchaEnabled, recaptchaConfig?.siteKey]);
 
   useEffect(() => {
     const storedError = sessionStorage.getItem('sessionError');
