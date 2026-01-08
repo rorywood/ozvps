@@ -4,7 +4,6 @@ import {
   Server, 
   LogOut,
   Menu,
-  X,
   Info,
   ChevronDown,
   ChevronUp,
@@ -13,8 +12,7 @@ import {
   ShieldCheck,
   User,
   Settings,
-  CreditCard,
-  ExternalLink
+  CreditCard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -39,20 +37,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-} from "@/components/ui/navigation-menu";
 import { getGravatarUrl } from "@/lib/gravatar";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
+  { href: "/billing", icon: Wallet, label: "Billing" },
 ];
 
 const adminNavItems = [
@@ -393,7 +384,6 @@ function MobileNav() {
 
   const allNavItems = [
     ...navItems,
-    { href: "/billing", icon: Wallet, label: "Billing" },
     { href: "/account", icon: Settings, label: "Account" },
   ];
 
