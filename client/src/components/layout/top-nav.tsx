@@ -117,7 +117,7 @@ function ProfileDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button 
-          className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2 p-1.5 rounded-full hover:bg-foreground/5 transition-colors"
           data-testid="button-profile-dropdown"
         >
           {user?.email && <UserAvatar email={user.email} name={user.name} size={36} />}
@@ -126,13 +126,13 @@ function ProfileDropdown() {
       </DropdownMenuTrigger>
       <DropdownMenuContent 
         align="end" 
-        className="w-64 bg-[#0a0a0a]/95 backdrop-blur-xl border-white/10"
+        className="w-64 bg-card/95 backdrop-blur-xl border-border"
       >
         <DropdownMenuLabel className="font-normal">
           <div className="flex items-center gap-3 py-1">
             {user?.email && <UserAvatar email={user.email} name={user.name} size={40} />}
             <div className="flex flex-col space-y-0.5 overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">{user?.name || 'User'}</p>
+              <p className="text-sm font-medium text-foreground truncate">{user?.name || 'User'}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
           </div>
@@ -140,14 +140,14 @@ function ProfileDropdown() {
         
         {balance !== undefined && (
           <>
-            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuSeparator className="bg-border" />
             <div className="px-2 py-2">
               <div className="flex items-center justify-between px-2 py-2 rounded-lg bg-primary/5 border border-primary/10">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Wallet className="h-3.5 w-3.5 text-primary" />
                   <span>Balance</span>
                 </div>
-                <span className="font-mono text-sm font-medium text-white" data-testid="text-dropdown-balance">
+                <span className="font-mono text-sm font-medium text-foreground" data-testid="text-dropdown-balance">
                   {formatBalance(balance)}
                 </span>
               </div>
@@ -155,26 +155,26 @@ function ProfileDropdown() {
           </>
         )}
         
-        <DropdownMenuSeparator className="bg-white/10" />
+        <DropdownMenuSeparator className="bg-border" />
         
         <Link href="/account">
-          <DropdownMenuItem className="cursor-pointer focus:bg-white/5" data-testid="dropdown-account">
+          <DropdownMenuItem className="cursor-pointer focus:bg-foreground/5" data-testid="dropdown-account">
             <User className="mr-2 h-4 w-4" />
             <span>Profile Settings</span>
           </DropdownMenuItem>
         </Link>
         
         <Link href="/billing">
-          <DropdownMenuItem className="cursor-pointer focus:bg-white/5" data-testid="dropdown-billing">
+          <DropdownMenuItem className="cursor-pointer focus:bg-foreground/5" data-testid="dropdown-billing">
             <CreditCard className="mr-2 h-4 w-4" />
             <span>Billing & Payments</span>
           </DropdownMenuItem>
         </Link>
         
-        <DropdownMenuSeparator className="bg-white/10" />
+        <DropdownMenuSeparator className="bg-border" />
         
         <DropdownMenuItem 
-          className="cursor-pointer focus:bg-white/5 text-red-400 focus:text-red-400"
+          className="cursor-pointer focus:bg-foreground/5 text-red-400 focus:text-red-400"
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
           data-testid="dropdown-logout"
@@ -193,7 +193,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-      className="h-9 w-9 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 transition-colors"
+      className="h-9 w-9 rounded-lg flex items-center justify-center bg-foreground/5 hover:bg-foreground/10 transition-colors"
       data-testid="button-theme-toggle"
       aria-label="Toggle theme"
     >
@@ -228,7 +228,7 @@ function DesktopNav() {
   const balance = walletData?.wallet?.balanceCents;
 
   return (
-    <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
+    <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border/50">
       <div className="container mx-auto max-w-7xl px-6">
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-8">
@@ -247,7 +247,7 @@ function DesktopNav() {
                         "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
                         isActive
                           ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:text-white hover:bg-white/5"
+                          : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
                       )}
                     >
                       <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "")} />
@@ -259,7 +259,7 @@ function DesktopNav() {
               
               {isAdmin && (
                 <>
-                  <div className="w-px h-6 bg-white/10 mx-2" />
+                  <div className="w-px h-6 bg-border mx-2" />
                   {adminNavItems.map((item) => {
                     const isActive = location === item.href || location.startsWith(item.href);
                     return (
@@ -298,7 +298,7 @@ function DesktopNav() {
                 </div>
               </Link>
             )}
-            <div className="w-px h-6 bg-white/10" />
+            <div className="w-px h-6 bg-border" />
             <ThemeToggle />
             <ProfileDropdown />
           </div>
@@ -349,7 +349,7 @@ function MobileNav() {
   ];
 
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/5">
+    <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border/50">
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
           <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo-mobile" />
@@ -359,7 +359,7 @@ function MobileNav() {
           {balance !== undefined && (
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/10" data-testid="mobile-balance-display">
               <Wallet className="h-3.5 w-3.5 text-primary" />
-              <span className="font-mono text-xs font-medium text-white">
+              <span className="font-mono text-xs font-medium text-foreground">
                 {formatBalance(balance)}
               </span>
             </div>
@@ -368,21 +368,21 @@ function MobileNav() {
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <button
-                className="p-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="p-2 rounded-lg hover:bg-foreground/5 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 data-testid="button-mobile-menu"
                 aria-label="Open navigation menu"
               >
                 <Menu className="h-6 w-6" />
               </button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-72 p-0 glass-panel border-l border-white/5">
+            <SheetContent side="right" className="w-72 p-0 glass-panel border-l border-border">
               <div className="h-full flex flex-col">
-                <div className="p-6 border-b border-white/5">
+                <div className="p-6 border-b border-border">
                   {user?.email && (
                     <div className="flex items-center gap-3">
                       <UserAvatar email={user.email} name={user.name} size={48} />
                       <div className="flex flex-col overflow-hidden">
-                        <p className="text-sm font-medium text-white truncate">{user.name || 'User'}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{user.name || 'User'}</p>
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                       </div>
                     </div>
@@ -401,7 +401,7 @@ function MobileNav() {
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
                             isActive
                               ? "bg-primary/10 text-primary border border-primary/20"
-                              : "text-muted-foreground hover:text-white hover:bg-white/5"
+                              : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
                           )}
                         >
                           <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "")} />
@@ -413,7 +413,7 @@ function MobileNav() {
 
                   {isAdmin && (
                     <>
-                      <div className="my-3 border-t border-white/10" />
+                      <div className="my-3 border-t border-border" />
                       {adminNavItems.map((item) => {
                         const isActive = location === item.href || location.startsWith(item.href);
                         return (
@@ -438,7 +438,7 @@ function MobileNav() {
                   )}
                 </div>
 
-                <div className="p-4 border-t border-white/5 space-y-3">
+                <div className="p-4 border-t border-border space-y-3">
                   <div className="flex items-center justify-between px-3">
                     <span className="text-sm text-muted-foreground">Theme</span>
                     <ThemeToggle />

@@ -148,7 +148,7 @@ export default function DeployPage() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-1">
             <Server className="h-6 w-6 text-blue-400" />
-            <h1 className="text-2xl font-display font-bold text-white" data-testid="text-page-title">
+            <h1 className="text-2xl font-display font-bold text-foreground" data-testid="text-page-title">
               Deploy Server
             </h1>
           </div>
@@ -164,7 +164,7 @@ export default function DeployPage() {
           <section>
             <div className="flex items-center gap-2 mb-3">
               <MapPin className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-white">
+              <h2 className="text-sm font-medium text-foreground">
                 Region
               </h2>
             </div>
@@ -177,10 +177,10 @@ export default function DeployPage() {
                   onClick={() => location.enabled && setSelectedLocationCode(location.code)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
                     !location.enabled 
-                      ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5' 
+                      ? 'opacity-40 cursor-not-allowed bg-muted/50 border-border/50' 
                       : selectedLocationCode === location.code 
-                        ? 'bg-blue-500/10 border-blue-500/50 text-white' 
-                        : 'bg-white/5 border-white/10 hover:border-white/20 text-white/80 hover:text-white'
+                        ? 'bg-blue-500/10 border-blue-500/50 text-foreground' 
+                        : 'bg-muted/50 border-border hover:border-primary/50 text-muted-foreground hover:text-foreground'
                   }`}
                   data-testid={`radio-location-${location.code.toLowerCase()}`}
                 >
@@ -205,7 +205,7 @@ export default function DeployPage() {
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Zap className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-white">
+              <h2 className="text-sm font-medium text-foreground">
                 Select Plan
               </h2>
             </div>
@@ -228,7 +228,7 @@ export default function DeployPage() {
                       className={`relative p-4 rounded-xl border text-left transition-all ${
                         isSelected
                           ? 'bg-blue-500/10 border-blue-500/50'
-                          : 'bg-white/[0.02] border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
+                          : 'bg-card/50 border-border hover:border-primary/30 hover:bg-card/70'
                       }`}
                       data-testid={`card-plan-${plan.code}`}
                     >
@@ -252,9 +252,9 @@ export default function DeployPage() {
                       
                       {/* Plan Name & Price */}
                       <div className="mb-4">
-                        <h3 className="text-base font-semibold text-white">{plan.name}</h3>
+                        <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
                         <div className="flex items-baseline gap-0.5 mt-1">
-                          <span className="text-2xl font-bold text-white">
+                          <span className="text-2xl font-bold text-foreground">
                             {formatCurrency(plan.priceMonthly)}
                           </span>
                           <span className="text-xs text-muted-foreground">/mo</span>
@@ -265,19 +265,19 @@ export default function DeployPage() {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">vCPU</span>
-                          <span className="text-white font-medium">{plan.vcpu}</span>
+                          <span className="text-foreground font-medium">{plan.vcpu}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">RAM</span>
-                          <span className="text-white font-medium">{formatRAM(plan.ramMb)}</span>
+                          <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">NVMe</span>
-                          <span className="text-white font-medium">{plan.storageGb} GB</span>
+                          <span className="text-foreground font-medium">{plan.storageGb} GB</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Transfer</span>
-                          <span className="text-white font-medium">{formatTransfer(plan.transferGb)}</span>
+                          <span className="text-foreground font-medium">{formatTransfer(plan.transferGb)}</span>
                         </div>
                       </div>
                     </button>
@@ -290,8 +290,8 @@ export default function DeployPage() {
 
         {/* Sticky Bottom Bar */}
         <div className="fixed bottom-0 left-0 right-0 z-40 lg:pl-64">
-          <div className="bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a] to-transparent h-6 pointer-events-none" />
-          <div className="bg-[#0a0a0a]/95 backdrop-blur-sm border-t border-white/10">
+          <div className="bg-gradient-to-t from-background via-background to-transparent h-6 pointer-events-none" />
+          <div className="bg-background/95 backdrop-blur-sm border-t border-border">
             <div className="max-w-5xl mx-auto px-4 py-3">
               <div className="flex items-center justify-between gap-4">
                 {/* Left: Summary */}
@@ -299,14 +299,14 @@ export default function DeployPage() {
                   {selectedLocation && (
                     <div className="flex items-center gap-2">
                       <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
-                      <span className="text-white/80">{selectedLocation.name}</span>
+                      <span className="text-foreground/80">{selectedLocation.name}</span>
                     </div>
                   )}
                   {selectedPlan && (
-                    <div className="hidden sm:flex items-center gap-1.5 text-white/60">
-                      <span className="text-white/40">|</span>
-                      <span className="text-white">{selectedPlan.name}</span>
-                      <span className="text-white/40">-</span>
+                    <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground">
+                      <span className="text-border">|</span>
+                      <span className="text-foreground">{selectedPlan.name}</span>
+                      <span className="text-border">-</span>
                       <span>{selectedPlan.vcpu} vCPU, {formatRAM(selectedPlan.ramMb)}</span>
                     </div>
                   )}
@@ -317,7 +317,7 @@ export default function DeployPage() {
                   {/* Balance */}
                   <div className="hidden sm:block text-right">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
-                    <div className={`text-sm font-mono font-medium ${canAfford ? 'text-green-400' : 'text-white'}`}>
+                    <div className={`text-sm font-mono font-medium ${canAfford ? 'text-green-400' : 'text-foreground'}`}>
                       {loadingWallet ? "..." : `$${((wallet?.balanceCents || 0) / 100).toFixed(2)}`}
                     </div>
                   </div>
@@ -326,7 +326,7 @@ export default function DeployPage() {
                   {selectedPlan && (
                     <div className="text-right">
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Due Now</div>
-                      <div className="text-sm font-mono font-bold text-white">
+                      <div className="text-sm font-mono font-bold text-foreground">
                         ${(selectedPlan.priceMonthly / 100).toFixed(2)}
                       </div>
                     </div>
@@ -335,7 +335,7 @@ export default function DeployPage() {
                   {/* Deploy Button */}
                   {!selectedPlan ? (
                     <Button 
-                      className="h-9 px-5 bg-white/10 text-white/50 hover:bg-white/10 cursor-not-allowed border-0" 
+                      className="h-9 px-5 bg-muted text-muted-foreground hover:bg-muted cursor-not-allowed border-0" 
                       disabled 
                       data-testid="button-deploy-disabled"
                     >
@@ -359,7 +359,7 @@ export default function DeployPage() {
                     </Button>
                   ) : (
                     <Button 
-                      className="h-9 px-5 bg-white/10 hover:bg-white/15 text-white border-0" 
+                      className="h-9 px-5 bg-muted hover:bg-muted/80 text-foreground border-0" 
                       onClick={handleAddFunds}
                       data-testid="button-add-funds"
                     >
@@ -384,7 +384,7 @@ export default function DeployPage() {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
               You are about to spend{" "}
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-foreground">
                 {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "$0"}
               </span>{" "}
               to deploy this server.

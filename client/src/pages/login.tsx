@@ -138,14 +138,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-white/10">
+      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-card/50 ring-1 ring-border">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl" />
         
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-10">
             <img src={logo} alt="OzVPS" className="h-20 w-auto mb-6" data-testid="img-logo" />
-            <h1 className="text-2xl font-display font-bold text-white text-center">
+            <h1 className="text-2xl font-display font-bold text-foreground text-center">
               Welcome Back
             </h1>
             <p className="text-muted-foreground text-center mt-3 text-base">
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   id="email" 
                   type="email"
                   placeholder="you@example.com" 
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -179,7 +179,7 @@ export default function LoginPage() {
                   id="password" 
                   type="password"
                   placeholder="Enter your password"
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"

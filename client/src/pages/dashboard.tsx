@@ -81,7 +81,7 @@ export default function Dashboard() {
     <AppShell>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Dashboard</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2" data-testid="text-page-title">Dashboard</h1>
           <p className="text-muted-foreground">Overview of your infrastructure</p>
         </div>
 
@@ -93,7 +93,7 @@ export default function Dashboard() {
                 <ServerIcon className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-white font-display" data-testid="text-active-servers">{stats.active_servers}/{stats.total_servers}</div>
+            <div className="text-2xl font-bold text-foreground font-display" data-testid="text-active-servers">{stats.active_servers}/{stats.total_servers}</div>
             <div className="text-sm text-muted-foreground">Active Servers</div>
           </div>
 
@@ -103,7 +103,7 @@ export default function Dashboard() {
                 <Cpu className="h-5 w-5 text-purple-500" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-white font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>
+            <div className="text-2xl font-bold text-foreground font-display" data-testid="text-cpu-cores">{stats.total_cpu_cores}</div>
             <div className="text-sm text-muted-foreground">CPU Cores</div>
           </div>
 
@@ -113,7 +113,7 @@ export default function Dashboard() {
                 <HardDrive className="h-5 w-5 text-cyan-500" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-white font-display" data-testid="text-ram-gb">{stats.total_ram_gb} GB</div>
+            <div className="text-2xl font-bold text-foreground font-display" data-testid="text-ram-gb">{stats.total_ram_gb} GB</div>
             <div className="text-sm text-muted-foreground">Memory</div>
           </div>
 
@@ -123,7 +123,7 @@ export default function Dashboard() {
                 <HardDrive className="h-5 w-5 text-green-500" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-white font-display" data-testid="text-disk-gb">{stats.total_disk_gb} GB</div>
+            <div className="text-2xl font-bold text-foreground font-display" data-testid="text-disk-gb">{stats.total_disk_gb} GB</div>
             <div className="text-sm text-muted-foreground">Storage</div>
           </div>
 
@@ -133,7 +133,7 @@ export default function Dashboard() {
                 <TrendingUp className="h-5 w-5 text-blue-500" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-white font-display" data-testid="text-bandwidth">
+            <div className="text-2xl font-bold text-foreground font-display" data-testid="text-bandwidth">
               {bandwidthData ? 
                 `${(bandwidthData.totalBandwidth / (1024 * 1024 * 1024)).toFixed(1)} GB` : 
                 '—'
@@ -147,29 +147,29 @@ export default function Dashboard() {
 
         {/* Servers Section */}
         <div className="space-y-4">
-          <h2 className="text-xl font-display font-semibold text-white">Your Servers</h2>
+          <h2 className="text-xl font-display font-semibold text-foreground">Your Servers</h2>
           
           {isLoading ? (
-            <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/5 p-12 flex flex-col items-center justify-center">
+            <div className="rounded-2xl bg-card/50 ring-1 ring-border/50 p-12 flex flex-col items-center justify-center">
               <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
               <p className="text-muted-foreground">Loading servers...</p>
             </div>
           ) : error ? (
-            <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/5 p-12 flex flex-col items-center justify-center" data-testid="error-state">
+            <div className="rounded-2xl bg-card/50 ring-1 ring-border/50 p-12 flex flex-col items-center justify-center" data-testid="error-state">
               <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
                 <ServerIcon className="h-8 w-8 text-yellow-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Connection Issue</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">Connection Issue</h3>
               <p className="text-muted-foreground text-center max-w-md mb-6">
                 Unable to fetch servers. Please try again or contact support if the issue persists.
               </p>
             </div>
           ) : servers.length === 0 ? (
-            <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/5 p-12 flex flex-col items-center justify-center" data-testid="empty-servers-state">
+            <div className="rounded-2xl bg-card/50 ring-1 ring-border/50 p-12 flex flex-col items-center justify-center" data-testid="empty-servers-state">
               <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
                 <ServerIcon className="h-10 w-10 text-primary" />
               </div>
-              <h3 className="text-xl font-display font-medium text-white mb-2">No Servers Yet</h3>
+              <h3 className="text-xl font-display font-medium text-foreground mb-2">No Servers Yet</h3>
               <p className="text-muted-foreground text-center max-w-md mb-6">
                 You don't have any VPS servers. Deploy your first server to get started.
               </p>
@@ -190,7 +190,7 @@ export default function Dashboard() {
                 return (
                   <Link key={server.id} href={`/servers/${server.id}`}>
                     <div 
-                      className="group rounded-xl bg-white/[0.02] ring-1 ring-white/5 hover:ring-white/10 hover:bg-white/[0.04] transition-all duration-200 p-4 cursor-pointer"
+                      className="group rounded-xl bg-card/50 ring-1 ring-border/50 hover:ring-border hover:bg-card/70 transition-all duration-200 p-4 cursor-pointer"
                       data-testid={`card-server-${server.id}`}
                     >
                       <div className="flex items-center gap-4">
@@ -214,7 +214,7 @@ export default function Dashboard() {
                         {/* Server info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <h3 className="font-medium text-white group-hover:text-primary transition-colors truncate">
+                            <h3 className="font-medium text-foreground group-hover:text-primary transition-colors truncate">
                               {server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
                             </h3>
                             

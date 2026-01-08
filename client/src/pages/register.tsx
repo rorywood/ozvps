@@ -172,14 +172,14 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-white/10">
+      <div className="w-full max-w-lg p-10 relative overflow-hidden rounded-2xl bg-card/50 ring-1 ring-border">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-green-500/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
         
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-8">
             <img src={logo} alt="OzVPS" className="h-16 w-auto mb-5" data-testid="img-logo" />
-            <h1 className="text-2xl font-display font-bold text-white text-center">
+            <h1 className="text-2xl font-display font-bold text-foreground text-center">
               Create Your Account
             </h1>
             <p className="text-muted-foreground text-center mt-2 text-base">
@@ -196,7 +196,7 @@ export default function RegisterPage() {
                   id="name" 
                   type="text"
                   placeholder="Your name" 
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoComplete="name"
@@ -213,7 +213,7 @@ export default function RegisterPage() {
                   id="email" 
                   type="email"
                   placeholder="you@example.com" 
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -230,7 +230,7 @@ export default function RegisterPage() {
                   id="password" 
                   type="password"
                   placeholder="Create a password"
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
@@ -239,7 +239,7 @@ export default function RegisterPage() {
               </div>
               {strength && (
                 <div className="space-y-1">
-                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300`} />
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -257,7 +257,7 @@ export default function RegisterPage() {
                   id="confirmPassword" 
                   type="password"
                   placeholder="Confirm your password"
-                  className="pl-9 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-white placeholder:text-muted-foreground/50"
+                  className="pl-9 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   autoComplete="new-password"
@@ -305,7 +305,7 @@ export default function RegisterPage() {
 
             <Button 
               type="submit" 
-              className="w-full h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)] border-0 mt-2"
+              className="w-full h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-primary-foreground shadow-[0_0_20px_rgba(34,197,94,0.3)] border-0 mt-2"
               disabled={registerMutation.isPending}
               data-testid="button-submit"
             >
