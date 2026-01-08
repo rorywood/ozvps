@@ -21,6 +21,7 @@ import {
   ArrowDownLeft,
   Zap,
   ChevronRight,
+  ChevronLeft,
   FileText,
   Download,
   CheckCircle2,
@@ -412,6 +413,9 @@ export default function BillingPage() {
   const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [paymentFeedback, setPaymentFeedback] = useState<{ type: 'success' | 'error'; message: string; amount?: number } | null>(null);
+  const [transactionsPage, setTransactionsPage] = useState(1);
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
 
   useEffect(() => {
     if (addCardDialogOpen && !stripePromise) {
@@ -497,6 +501,23 @@ export default function BillingPage() {
     queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
   });
+
+  // Clamp pagination when data changes to prevent blank pages
+  useEffect(() => {
+    const txCount = transactionsData?.transactions?.length || 0;
+    const txMaxPage = Math.max(1, Math.ceil(txCount / ITEMS_PER_PAGE));
+    if (transactionsPage > txMaxPage) {
+      setTransactionsPage(txMaxPage);
+    }
+  }, [transactionsData?.transactions?.length, transactionsPage]);
+
+  useEffect(() => {
+    const invCount = invoicesData?.invoices?.length || 0;
+    const invMaxPage = Math.max(1, Math.ceil(invCount / ITEMS_PER_PAGE));
+    if (invoicesPage > invMaxPage) {
+      setInvoicesPage(invMaxPage);
+    }
+  }, [invoicesData?.invoices?.length, invoicesPage]);
 
   const topupMutation = useMutation({
     mutationFn: (amountCents: number) => api.createTopup(amountCents),
@@ -1028,7 +1049,9 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {transactions.slice(0, 10).map((tx) => (
+                  {transactions
+                    .slice((transactionsPage - 1) * ITEMS_PER_PAGE, transactionsPage * ITEMS_PER_PAGE)
+                    .map((tx) => (
                     <div 
                       key={tx.id}
                       className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
@@ -1061,10 +1084,42 @@ export default function BillingPage() {
                       </span>
                     </div>
                   ))}
-                  {transactions.length > 10 && (
-                    <p className="text-center text-sm text-muted-foreground pt-2">
-                      Showing most recent 10 of {transactions.length} transactions
-                    </p>
+                  {/* Pagination Controls */}
+                  {transactions.length > ITEMS_PER_PAGE && (
+                    <div className="flex items-center justify-center gap-2 pt-4">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setTransactionsPage(p => Math.max(1, p - 1))}
+                        disabled={transactionsPage === 1}
+                        data-testid="transactions-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      {Array.from({ length: Math.ceil(transactions.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map(page => (
+                        <Button
+                          key={page}
+                          variant={transactionsPage === page ? "default" : "outline"}
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setTransactionsPage(page)}
+                          data-testid={`transactions-page-${page}`}
+                        >
+                          {page}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setTransactionsPage(p => Math.min(Math.ceil(transactions.length / ITEMS_PER_PAGE), p + 1))}
+                        disabled={transactionsPage === Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                        data-testid="transactions-next-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1096,7 +1151,9 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {invoicesData.invoices.map((invoice) => (
+                  {invoicesData.invoices
+                    .slice((invoicesPage - 1) * ITEMS_PER_PAGE, invoicesPage * ITEMS_PER_PAGE)
+                    .map((invoice) => (
                     <div 
                       key={invoice.id}
                       className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
@@ -1141,6 +1198,43 @@ export default function BillingPage() {
                       </div>
                     </div>
                   ))}
+                  {/* Pagination Controls */}
+                  {invoicesData.invoices.length > ITEMS_PER_PAGE && (
+                    <div className="flex items-center justify-center gap-2 pt-4">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setInvoicesPage(p => Math.max(1, p - 1))}
+                        disabled={invoicesPage === 1}
+                        data-testid="invoices-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      {Array.from({ length: Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map(page => (
+                        <Button
+                          key={page}
+                          variant={invoicesPage === page ? "default" : "outline"}
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setInvoicesPage(page)}
+                          data-testid={`invoices-page-${page}`}
+                        >
+                          {page}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setInvoicesPage(p => Math.min(Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE), p + 1))}
+                        disabled={invoicesPage === Math.ceil(invoicesData.invoices.length / ITEMS_PER_PAGE)}
+                        data-testid="invoices-next-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
