@@ -332,6 +332,20 @@ export const dbStorage = {
     return updated;
   },
 
+  async clearWalletStripeCustomerId(auth0UserId: string): Promise<Wallet | undefined> {
+    const [updated] = await db
+      .update(wallets)
+      .set({ 
+        stripeCustomerId: null, 
+        autoTopupEnabled: false,
+        autoTopupPaymentMethodId: null,
+        updatedAt: new Date() 
+      })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
   async updateWalletVirtFusionUserId(auth0UserId: string, virtFusionUserId: number): Promise<Wallet | undefined> {
     const [updated] = await db
       .update(wallets)

@@ -292,16 +292,10 @@ async function ensureStripeCustomer(
       
       // Check if customer was deleted in Stripe
       if ((customer as any).deleted) {
-        log(`Stripe customer ${wallet.stripeCustomerId} was deleted, will recreate`, 'stripe');
-        // Customer was deleted, need to create a new one
-        if (!options.allowCreate) {
-          throw new StripeCustomerError(
-            'Payment account needs setup. Please complete billing setup.',
-            'NO_CUSTOMER',
-            409
-          );
-        }
-        // Fall through to create a new customer
+        log(`Stripe customer ${wallet.stripeCustomerId} was deleted in Stripe, clearing local reference`, 'stripe');
+        // Clear the invalid stripeCustomerId from the wallet
+        await dbStorage.clearWalletStripeCustomerId(auth0UserId);
+        // Fall through to create a new customer if allowed
       } else {
         // Customer exists and is valid
         return { wallet, stripeCustomerId: wallet.stripeCustomerId };
@@ -309,17 +303,12 @@ async function ensureStripeCustomer(
     } catch (error: any) {
       if (error instanceof StripeCustomerError) throw error;
       
-      // If it's a "resource not found" error, we need to create a new customer
+      // If it's a "resource not found" error, clear the reference
       if (error.type === 'StripeInvalidRequestError' && error.code === 'resource_missing') {
-        log(`Stripe customer ${wallet.stripeCustomerId} not found, will recreate`, 'stripe');
-        if (!options.allowCreate) {
-          throw new StripeCustomerError(
-            'Payment account needs setup. Please complete billing setup.',
-            'NO_CUSTOMER',
-            409
-          );
-        }
-        // Fall through to create a new customer
+        log(`Stripe customer ${wallet.stripeCustomerId} not found in Stripe, clearing local reference`, 'stripe');
+        // Clear the invalid stripeCustomerId from the wallet
+        await dbStorage.clearWalletStripeCustomerId(auth0UserId);
+        // Fall through to create a new customer if allowed
       } else {
         log(`Failed to verify Stripe customer ${wallet.stripeCustomerId}: ${error.message}`, 'stripe');
         throw new StripeCustomerError(
