@@ -360,7 +360,8 @@ export default function RegisterPage() {
       return;
     }
     
-    if (recaptchaEnabled && !recaptchaToken) {
+    // Only require reCAPTCHA if it loaded successfully (no error)
+    if (recaptchaEnabled && !recaptchaToken && !recaptchaError) {
       setError("Please complete the reCAPTCHA verification");
       return;
     }

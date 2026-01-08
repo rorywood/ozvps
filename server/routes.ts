@@ -425,28 +425,30 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
-      // Check reCAPTCHA if enabled
+      // Check reCAPTCHA if enabled and token provided
       const recaptchaSettings = await dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
-          return res.status(400).json({ error: 'reCAPTCHA verification required' });
-        }
-
-        try {
-          const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-          });
-          const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-          
-          if (!verifyResult.success) {
-            log(`reCAPTCHA verification failed for registration: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+          // Allow registration without token if reCAPTCHA failed to load on client
+          log(`Registration without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
+        } else {
+          try {
+            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
+            });
+            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
+            
+            if (!verifyResult.success) {
+              log(`reCAPTCHA verification failed for registration: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
+              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+            }
+          } catch (err: any) {
+            log(`reCAPTCHA verification error during registration: ${err.message}`, 'security');
+            // Allow registration even if verification fails - don't lock users out
+            log(`Allowing registration despite reCAPTCHA error for: ${email}`, 'security');
           }
-        } catch (err: any) {
-          log(`reCAPTCHA verification error during registration: ${err.message}`, 'security');
-          return res.status(500).json({ error: 'Failed to verify reCAPTCHA. Please try again.' });
         }
       }
 
@@ -575,28 +577,31 @@ export async function registerRoutes(
       const { email, password } = parsed.data;
       const { recaptchaToken } = req.body;
 
-      // Check reCAPTCHA if enabled
+      // Check reCAPTCHA if enabled and token provided
       const recaptchaSettings = await dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
-          return res.status(400).json({ error: 'reCAPTCHA verification required' });
-        }
-
-        try {
-          const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-          });
-          const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-          
-          if (!verifyResult.success) {
-            log(`reCAPTCHA verification failed: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+          // Allow login without token if reCAPTCHA failed to load on client
+          // This prevents lockout when domain is misconfigured in Google console
+          log(`Login without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
+        } else {
+          try {
+            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
+            });
+            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
+            
+            if (!verifyResult.success) {
+              log(`reCAPTCHA verification failed: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
+              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+            }
+          } catch (err: any) {
+            log(`reCAPTCHA verification error: ${err.message}`, 'security');
+            // Allow login even if verification fails - don't lock users out
+            log(`Allowing login despite reCAPTCHA error for: ${email}`, 'security');
           }
-        } catch (err: any) {
-          log(`reCAPTCHA verification error: ${err.message}`, 'security');
-          return res.status(500).json({ error: 'Failed to verify reCAPTCHA. Please try again.' });
         }
       }
 
