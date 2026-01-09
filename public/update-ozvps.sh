@@ -377,11 +377,43 @@ if [[ "$SYNC_SUCCESS" != "true" ]]; then
     echo -e "  ${YELLOW}!${NC}  Plan sync may have failed - check VirtFusion API connection"
 fi
 
-# Cleanup old backups (keep last 3)
+# Aggressive cleanup - free up disk space
 (
-    ls -dt ${INSTALL_DIR}.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
+    # Keep only last 2 backups (reduced from 3)
+    ls -dt ${INSTALL_DIR}.backup.* 2>/dev/null | tail -n +3 | xargs rm -rf 2>/dev/null || true
+    
+    # Clean npm cache
+    npm cache clean --force 2>/dev/null || true
+    
+    # Clean old log files (older than 7 days)
+    find /var/log -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
+    find /var/log -name "*.gz" -type f -mtime +7 -delete 2>/dev/null || true
+    
+    # Clean old PM2 logs
+    pm2 flush 2>/dev/null || true
+    find ~/.pm2/logs -name "*.log" -type f -mtime +3 -delete 2>/dev/null || true
+    
+    # Clean old tarballs in temp directories
+    find /tmp -name "ozvps-*.tar.gz" -type f -mtime +1 -delete 2>/dev/null || true
+    find /tmp -name "ozvps-update.*" -type d -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+    
+    # Clean node_modules/.cache if it exists
+    rm -rf "$INSTALL_DIR/node_modules/.cache" 2>/dev/null || true
+    
+    # Clean old drizzle migration artifacts
+    find "$INSTALL_DIR" -name "*.sql.bak" -type f -delete 2>/dev/null || true
+    
+    # Clean journald logs older than 3 days
+    journalctl --vacuum-time=3d 2>/dev/null || true
+    
+    # Clean apt cache (Debian/Ubuntu)
+    apt-get clean 2>/dev/null || true
+    apt-get autoremove -y 2>/dev/null || true
+    
+    # Clean yum cache (RHEL/CentOS)
+    yum clean all 2>/dev/null || true
 ) &
-spinner $! "Cleaning up"
+spinner $! "Cleaning up old files"
 
 echo ""
 echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"

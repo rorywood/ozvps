@@ -52,10 +52,32 @@ case "$1" in
         echo -e "${YELLOW}Starting new containers...${NC}"
         docker compose up -d
         
-        # Clean up old/unused Docker images to free disk space
-        echo -e "${YELLOW}Cleaning up old Docker images...${NC}"
-        docker image prune -af --filter "until=24h" 2>/dev/null || true
-        docker system prune -f --filter "until=24h" 2>/dev/null || true
+        # Aggressive cleanup - free disk space
+        echo -e "${YELLOW}Cleaning up old Docker images and files...${NC}"
+        
+        # Remove ALL unused Docker images (not just 24h old)
+        docker image prune -af 2>/dev/null || true
+        
+        # Remove unused containers, networks, images, and build cache
+        docker system prune -af --volumes 2>/dev/null || true
+        
+        # Clean Docker build cache
+        docker builder prune -af 2>/dev/null || true
+        
+        # Keep only last 5 database backups (reduced from 7)
+        ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm
+        
+        # Clean old log files
+        find /var/log -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
+        find /var/log -name "*.gz" -type f -mtime +7 -delete 2>/dev/null || true
+        
+        # Clean journald logs
+        journalctl --vacuum-time=3d 2>/dev/null || true
+        
+        # Clean apt/yum cache
+        apt-get clean 2>/dev/null || true
+        apt-get autoremove -y 2>/dev/null || true
+        yum clean all 2>/dev/null || true
         
         echo -e "${GREEN}Update complete!${NC}"
         echo "Run './ozvpsctl.sh status' to check the application status."
@@ -169,6 +191,59 @@ case "$1" in
         echo -e "${GREEN}Started!${NC}"
         ;;
         
+    cleanup)
+        echo -e "${BLUE}Cleaning up disk space...${NC}"
+        
+        # Show disk usage before
+        echo ""
+        echo -e "${YELLOW}Current disk usage:${NC}"
+        df -h / | tail -1
+        echo ""
+        
+        # Remove ALL unused Docker images
+        echo "Removing unused Docker images..."
+        docker image prune -af 2>/dev/null || true
+        
+        # Remove unused containers, networks, and build cache
+        echo "Removing unused Docker resources..."
+        docker system prune -af 2>/dev/null || true
+        
+        # Clean Docker build cache
+        echo "Cleaning Docker build cache..."
+        docker builder prune -af 2>/dev/null || true
+        
+        # Clean dangling volumes (be careful - only removes unused)
+        echo "Removing unused volumes..."
+        docker volume prune -f 2>/dev/null || true
+        
+        # Keep only last 3 database backups
+        echo "Removing old database backups..."
+        ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm
+        
+        # Clean old log files (older than 3 days)
+        echo "Cleaning old log files..."
+        find /var/log -name "*.log" -type f -mtime +3 -delete 2>/dev/null || true
+        find /var/log -name "*.gz" -type f -mtime +3 -delete 2>/dev/null || true
+        
+        # Clean journald logs
+        journalctl --vacuum-time=2d 2>/dev/null || true
+        
+        # Clean package manager cache
+        apt-get clean 2>/dev/null || true
+        apt-get autoremove -y 2>/dev/null || true
+        yum clean all 2>/dev/null || true
+        
+        # Clean temp files
+        find /tmp -type f -mtime +1 -delete 2>/dev/null || true
+        find /var/tmp -type f -mtime +7 -delete 2>/dev/null || true
+        
+        echo ""
+        echo -e "${YELLOW}Disk usage after cleanup:${NC}"
+        df -h / | tail -1
+        echo ""
+        echo -e "${GREEN}Cleanup complete!${NC}"
+        ;;
+        
     *)
         echo "OzVPS Panel Control Script"
         echo ""
@@ -184,5 +259,6 @@ case "$1" in
         echo "  restart     Restart all services"
         echo "  start       Start all services"
         echo "  stop        Stop all services"
+        echo "  cleanup     Free up disk space (removes old images, logs, caches)"
         ;;
 esac
