@@ -253,60 +253,80 @@ export function useReinstallTask(serverId: string) {
     lastStatusRef.current = 'idle';
   }, [serverId, stopPolling]);
 
+  // Check build status - used on mount and when tab becomes visible
+  const checkBuildStatus = useCallback(async () => {
+    if (!serverId) return;
+    
+    try {
+      const buildStatus = await api.getBuildStatus(serverId);
+      
+      // If there's an active build but we have no local state, hydrate from backend
+      if (buildStatus.isBuilding && !state.isActive) {
+        const newStatus = mapVirtFusionStatus(buildStatus.phase);
+        const newPercent = STATUS_PERCENT_MAP[newStatus];
+        setState({
+          isActive: true,
+          taskId: null,
+          status: newStatus,
+          percent: newPercent,
+          error: null,
+          timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
+          credentials: null, // No credentials available from other sessions
+        });
+        lastStatusRef.current = newStatus;
+        // Start polling
+        if (!pollRef.current) {
+          pollRef.current = setInterval(poll, 5000);
+        }
+        return;
+      }
+      
+      // If no active build and we have a stored state showing active, reset it
+      if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
+        // Check if the build completed while we were away
+        if (buildStatus.isComplete) {
+          setState(prev => ({
+            ...prev,
+            status: 'complete',
+            percent: 100,
+            isActive: true, // Keep open to show completion
+          }));
+          stopPolling();
+          clearTaskState(serverId);
+        } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
+          // No active task at all - force reset
+          reset();
+        }
+      }
+    } catch (e) {
+      console.error('Failed to verify reinstall task state:', e);
+    }
+  }, [serverId, state.isActive, state.status, poll, reset, stopPolling]);
+
   // On mount, verify if there's actually an active task from VirtFusion
   // This prevents stale UI when user refreshes after reinstall completes
   // Also detects builds started from other sessions/devices
   useEffect(() => {
-    const checkBuildStatus = async () => {
-      if (!serverId) return;
-      
-      try {
-        const buildStatus = await api.getBuildStatus(serverId);
-        
-        // If there's an active build but we have no local state, hydrate from backend
-        if (buildStatus.isBuilding && !state.isActive) {
-          const newStatus = mapVirtFusionStatus(buildStatus.phase);
-          const newPercent = STATUS_PERCENT_MAP[newStatus];
-          setState({
-            isActive: true,
-            taskId: null,
-            status: newStatus,
-            percent: newPercent,
-            error: null,
-            timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
-            credentials: null, // No credentials available from other sessions
-          });
-          lastStatusRef.current = newStatus;
-          // Start polling
-          if (!pollRef.current) {
-            pollRef.current = setInterval(poll, 5000);
-          }
-          return;
-        }
-        
-        // If no active build and we have a stored state showing active, reset it
-        if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
-          // Check if the build completed while we were away
-          if (buildStatus.isComplete) {
-            setState(prev => ({
-              ...prev,
-              status: 'complete',
-              percent: 100,
-              isActive: true, // Keep open to show completion
-            }));
-            clearTaskState(serverId);
-          } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
-            // No active task at all - force reset
-            reset();
-          }
-        }
-      } catch (e) {
-        console.error('Failed to verify reinstall task state:', e);
+    checkBuildStatus();
+  }, [serverId]); // Only run on mount
+
+  // Handle tab visibility changes - immediately check status when user returns to tab
+  // This fixes the issue where browser throttles timers when tab is backgrounded
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
+        // User returned to tab while build is active - immediately check status
+        checkBuildStatus();
       }
     };
 
-    checkBuildStatus();
-  }, [serverId]); // Only run on mount
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [state.isActive, state.status, checkBuildStatus]);
 
   useEffect(() => {
     if (state.isActive && state.status !== 'complete' && state.status !== 'failed' && !pollRef.current) {

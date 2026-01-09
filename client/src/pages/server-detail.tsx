@@ -291,6 +291,15 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.credentials, serverId, savedCredentials]);
   
+  // Refetch server data when build completes to update needsSetup status
+  // This ensures the UI transitions properly after a build finishes (even if tabbed out)
+  useEffect(() => {
+    if (reinstallTask.status === 'complete' && serverId) {
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    }
+  }, [reinstallTask.status, serverId, queryClient]);
+  
   // Track if we've already triggered auto-password-reset to avoid duplicates
   const autoPasswordResetTriggeredRef = useRef(false);
   const autoPasswordResetInProgressRef = useRef(false);
