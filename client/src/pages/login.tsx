@@ -674,6 +674,10 @@ export default function LoginPage() {
           <p className="text-center text-xs text-muted-foreground mt-4">
             Need help? Contact support@ozvps.com
           </p>
+
+          <p className="text-center text-xs text-muted-foreground/60 mt-6">
+            Powered by Australian infrastructure. Built with ❤️ in Queensland.
+          </p>
         </motion.div>
       </div>
     </div>
