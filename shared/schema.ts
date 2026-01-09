@@ -255,17 +255,17 @@ export const serverNameSchema = z.object({
 export const hostnameSchema = z.string()
   .min(1, 'Hostname is required')
   .max(253, 'Hostname must be 253 characters or less')
-  .transform(val => val.toLowerCase().trim())
+  .transform(val => val.trim())
   .refine(val => {
     const labels = val.split('.');
     for (const label of labels) {
       if (label.length === 0) return false;
       if (label.length > 63) return false;
-      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) return false;
-      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) return false;
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) return false;
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) return false;
     }
     return true;
-  }, 'Hostname must be lowercase, start and end with a letter or number, and contain only letters, numbers, hyphens, and dots');
+  }, 'Hostname must start and end with a letter or number, and contain only letters, numbers, hyphens, and dots');
 
 export const reinstallSchema = z.object({
   osId: z.union([z.string(), z.number()]).refine(val => val !== '' && val !== null, 'OS template is required'),

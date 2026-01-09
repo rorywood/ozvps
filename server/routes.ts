@@ -857,7 +857,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id', authMiddleware, async (req, res) => {
     try {
-      const server = await virtfusionClient.getServer(req.params.id);
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       res.json(server);
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
@@ -897,6 +900,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/metrics', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const metrics = await virtfusionClient.getServerStats(req.params.id);
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
@@ -907,6 +914,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/stats', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const stats = await virtfusionClient.getServerLiveStats(req.params.id);
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
     } catch (error: any) {
@@ -917,6 +928,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/traffic', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);
       res.json(traffic || []);
     } catch (error: any) {
@@ -928,6 +943,10 @@ export async function registerRoutes(
   // Real-time traffic statistics for graphing
   app.get('/api/servers/:id/traffic/statistics', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const period = (req.query.period as string) || '30m';
       const validPeriods = ['30m', '1h', '12h', '1d', '1w'];
       if (!validPeriods.includes(period)) {
@@ -1066,6 +1085,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/network', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
       res.json(network || { interfaces: [] });
     } catch (error: any) {
@@ -1076,6 +1099,10 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/os-templates', authMiddleware, async (req, res) => {
     try {
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
       const templates = await virtfusionClient.getOsTemplates(req.params.id);
       res.json(templates || []);
     } catch (error: any) {
@@ -1160,8 +1187,12 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/build-status', authMiddleware, async (req, res) => {
     try {
-      const status = await virtfusionClient.getServerBuildStatus(req.params.id);
-      res.json(status);
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+      res.json(buildStatus);
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch build status' });
@@ -1550,6 +1581,10 @@ export async function registerRoutes(
 
   app.post('/api/admin/block-user', authMiddleware, async (req, res) => {
     try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
       const { auth0UserId, blocked, reason } = req.body;
       
       if (!auth0UserId) {
