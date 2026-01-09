@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2, XCircle, LogOut } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,27 +20,68 @@ interface WelcomeItem {
 const WELCOME_ITEMS: Omit<WelcomeItem, 'completed'>[] = [
   { id: 'auth', label: 'Verifying your credentials' },
   { id: 'session', label: 'Restoring your session' },
+  { id: 'control', label: 'Connecting to control host' },
   { id: 'ready', label: 'All set! Redirecting...' },
 ];
 
-function WelcomeBackScreen({ displayName, onComplete }: { displayName: string; onComplete: () => void }) {
+function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName: string; onComplete: () => void; onLogout: () => void }) {
   const [items, setItems] = useState<WelcomeItem[]>(
     WELCOME_ITEMS.map(item => ({ ...item, completed: false }))
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasCompleted, setHasCompleted] = useState(false);
+  const [controlHostError, setControlHostError] = useState(false);
+  const [hasCheckedHealth, setHasCheckedHealth] = useState(false);
+  const [healthCheckPassed, setHealthCheckPassed] = useState(false);
 
-  // Fallback navigation - ensure redirect happens even if animation is interrupted
+  // Check VirtFusion health when we reach the "control" step
   useEffect(() => {
+    if (currentIndex === 2 && !hasCheckedHealth) {
+      setHasCheckedHealth(true);
+      
+      // Add timeout controller for the health check
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      fetch('/api/health', { signal: controller.signal })
+        .then(res => {
+          clearTimeout(timeoutId);
+          if (!res.ok) {
+            throw new Error('Control host unreachable');
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (data.status !== 'ok') {
+            throw new Error('Control host error');
+          }
+          // Health check passed, mark step complete and continue
+          setHealthCheckPassed(true);
+          setItems(prev => prev.map((item, idx) => 
+            idx === 2 ? { ...item, completed: true } : item
+          ));
+          setCurrentIndex(3);
+        })
+        .catch(() => {
+          clearTimeout(timeoutId);
+          setControlHostError(true);
+        });
+    }
+  }, [currentIndex, hasCheckedHealth]);
+
+  // Fallback navigation - only run if health check passed (prevents redirect during pending/failed health check)
+  useEffect(() => {
+    if (controlHostError || !healthCheckPassed) return;
     const fallbackTimer = setTimeout(() => {
-      if (!hasCompleted) {
+      if (!hasCompleted && !controlHostError) {
         onComplete();
       }
-    }, 5000); // Maximum 5 seconds before forcing redirect
+    }, 5000); // 5 seconds after health check passes
     return () => clearTimeout(fallbackTimer);
-  }, [onComplete, hasCompleted]);
+  }, [onComplete, hasCompleted, controlHostError, healthCheckPassed]);
 
   useEffect(() => {
+    if (controlHostError) return;
     if (currentIndex >= items.length) {
       const timer = setTimeout(() => {
         setHasCompleted(true);
@@ -48,6 +89,9 @@ function WelcomeBackScreen({ displayName, onComplete }: { displayName: string; o
       }, 500);
       return () => clearTimeout(timer);
     }
+
+    // For the "control" step (index 2), we wait for the health check
+    if (currentIndex === 2) return;
 
     const delay = currentIndex === 0 ? 600 : 800 + Math.random() * 400;
     const timer = setTimeout(() => {
@@ -58,7 +102,50 @@ function WelcomeBackScreen({ displayName, onComplete }: { displayName: string; o
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [currentIndex, items.length, onComplete]);
+  }, [currentIndex, items.length, onComplete, controlHostError]);
+
+  // Show error screen if control host is unreachable
+  if (controlHostError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-red-500/10 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-orange-500/10 via-transparent to-transparent" />
+        
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="w-full max-w-md mx-auto px-6 relative z-10"
+        >
+          <div className="text-center mb-8">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-500/20 border border-red-500/30 mb-6"
+            >
+              <XCircle className="w-10 h-10 text-red-500" />
+            </motion.div>
+            <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+              Connection Issue
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              We're currently having an issue contacting the control host. This may be temporary - please try again later.
+            </p>
+            <Button
+              onClick={onLogout}
+              variant="outline"
+              className="gap-2"
+              data-testid="button-logout-error"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -372,12 +459,25 @@ export default function LoginPage() {
     { icon: Globe, title: "99.9% Uptime", description: "Reliable cloud hosting" },
   ];
 
+  // Handle logout from error state
+  const handleErrorLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (e) {
+      // Ignore logout errors
+    }
+    queryClient.clear();
+    setShowWelcome(false);
+    setLocation('/login');
+  };
+
   // Show welcome screen after successful login
   if (showWelcome) {
     return (
       <WelcomeBackScreen 
         displayName={welcomeDisplayName} 
-        onComplete={() => setLocation("/")} 
+        onComplete={() => setLocation("/")}
+        onLogout={handleErrorLogout}
       />
     );
   }
