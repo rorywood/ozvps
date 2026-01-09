@@ -119,7 +119,24 @@ function AddCardFormInner({
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cardReady, setCardReady] = useState(false);
+  const [cardLoadTimeout, setCardLoadTimeout] = useState(false);
   const { toast } = useToast();
+  
+  // Check if Stripe/Elements loaded properly
+  const stripeReady = !!stripe && !!elements;
+  
+  // Timeout for card element loading (10 seconds)
+  useEffect(() => {
+    if (stripeReady && !cardReady) {
+      const timeout = setTimeout(() => {
+        if (!cardReady) {
+          setCardLoadTimeout(true);
+        }
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [stripeReady, cardReady]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,8 +202,42 @@ function AddCardFormInner({
   return (
     <form onSubmit={handleSubmit}>
       <div className="space-y-4">
-        <div className="p-4 rounded-lg bg-zinc-800/50 border border-border min-h-[50px]">
-          <CardElement options={cardElementOptions} />
+        <div className="relative">
+          {cardLoadTimeout && !cardReady ? (
+            <div className="p-4 rounded-lg bg-zinc-800/50 border border-red-500/50 min-h-[50px] text-center">
+              <AlertCircle className="h-6 w-6 mx-auto text-red-500 mb-2" />
+              <p className="text-sm text-red-400 mb-2">Card form failed to load</p>
+              <p className="text-xs text-muted-foreground mb-3">This may be caused by a browser extension blocking Stripe, or a network issue.</p>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setCardLoadTimeout(false);
+                  setCardReady(false);
+                }}
+              >
+                Try Again
+              </Button>
+            </div>
+          ) : (
+            <>
+              {!cardReady && stripeReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800/50 rounded-lg border border-border z-10">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Loading card form...</span>
+                  </div>
+                </div>
+              )}
+              <div className={`p-4 rounded-lg bg-zinc-800/50 border border-border min-h-[50px] ${!cardReady ? 'opacity-0' : 'opacity-100'}`}>
+                <CardElement 
+                  options={cardElementOptions} 
+                  onReady={() => setCardReady(true)}
+                />
+              </div>
+            </>
+          )}
         </div>
         
         {error && (
