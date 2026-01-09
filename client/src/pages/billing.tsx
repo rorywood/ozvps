@@ -26,7 +26,8 @@ import {
   Download,
   CheckCircle2,
   XCircle,
-  X
+  X,
+  AlertCircle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -184,7 +185,7 @@ function AddCardFormInner({
   return (
     <form onSubmit={handleSubmit}>
       <div className="space-y-4">
-        <div className="p-4 rounded-lg bg-card/30 border border-border">
+        <div className="p-4 rounded-lg bg-zinc-800/50 border border-border min-h-[50px]">
           <CardElement options={cardElementOptions} />
         </div>
         
@@ -412,6 +413,7 @@ export default function BillingPage() {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  const [stripeLoadError, setStripeLoadError] = useState<string | null>(null);
   const [paymentFeedback, setPaymentFeedback] = useState<{ type: 'success' | 'error'; message: string; amount?: number } | null>(null);
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [invoicesPage, setInvoicesPage] = useState(1);
@@ -420,18 +422,29 @@ export default function BillingPage() {
   const MAX_INVOICE_PAGES = 5;
 
   useEffect(() => {
-    if (addCardDialogOpen && !stripePromise) {
+    if (addCardDialogOpen && !stripePromise && !stripeLoadError) {
+      setStripeLoadError(null);
       api.getStripePublishableKey()
         .then(data => {
           if (data.publishableKey) {
             setStripePromise(loadStripe(data.publishableKey));
+          } else {
+            setStripeLoadError('Payment system not configured');
           }
         })
         .catch(err => {
           console.error('Failed to load Stripe:', err);
+          setStripeLoadError('Failed to load payment form. Please try again.');
         });
     }
-  }, [addCardDialogOpen, stripePromise]);
+  }, [addCardDialogOpen, stripePromise, stripeLoadError]);
+  
+  // Reset stripe error when dialog closes
+  useEffect(() => {
+    if (!addCardDialogOpen) {
+      setStripeLoadError(null);
+    }
+  }, [addCardDialogOpen]);
 
   const searchParams = new URLSearchParams(search);
   const topupResult = searchParams.get('topup');
@@ -961,7 +974,22 @@ export default function BillingPage() {
                         Add a new card to your account for faster top-ups.
                       </DialogDescription>
                     </DialogHeader>
-                    {stripePromise ? (
+                    {stripeLoadError ? (
+                      <div className="py-8 text-center">
+                        <AlertCircle className="h-8 w-8 mx-auto text-red-500 mb-3" />
+                        <p className="text-red-400 mb-4">{stripeLoadError}</p>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setStripeLoadError(null);
+                            setStripePromise(null);
+                          }}
+                          className="border-border"
+                        >
+                          Try Again
+                        </Button>
+                      </div>
+                    ) : stripePromise ? (
                       <Elements stripe={stripePromise}>
                         <AddCardFormInner
                           onSuccess={() => {
@@ -972,8 +1000,9 @@ export default function BillingPage() {
                         />
                       </Elements>
                     ) : (
-                      <div className="flex items-center justify-center py-8">
+                      <div className="flex flex-col items-center justify-center py-8 gap-2">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Loading payment form...</p>
                       </div>
                     )}
                   </DialogContent>
