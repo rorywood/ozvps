@@ -57,7 +57,10 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action })
     });
-    if (!response.ok) throw new Error('Failed to perform power action');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to perform power action');
+    }
     return response.json();
   }
 

@@ -98,6 +98,7 @@ export default function ServerDetail() {
   // Track if current task is initial setup vs reinstall
   // Persist to sessionStorage to survive page reloads during the process
   const [isSetupMode, setIsSetupMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
     try {
       const stored = sessionStorage.getItem(`setupMode:${serverId}`);
       return stored === 'true';
@@ -130,21 +131,54 @@ export default function ServerDetail() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
   
-  // Persistent setup credentials (survives dialog close)
+  // Persistent setup credentials (survives dialog close and page refreshes)
   const [savedCredentials, setSavedCredentials] = useState<{
     serverIp: string;
     username: string;
     password: string;
-  } | null>(null);
-  const [showSavedCredentials, setShowSavedCredentials] = useState(false);
+  } | null>(() => {
+    // Restore from sessionStorage on mount (guard for SSR)
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = sessionStorage.getItem(`credentials:${serverId}`);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null;
+  });
+  const [showSavedCredentials, setShowSavedCredentials] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return !!sessionStorage.getItem(`credentials:${serverId}`);
+    } catch {
+      return false;
+    }
+  });
   const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
+  
+  // Persist credentials to sessionStorage when they change
+  const updateSavedCredentials = (creds: { serverIp: string; username: string; password: string } | null) => {
+    setSavedCredentials(creds);
+    try {
+      if (creds) {
+        sessionStorage.setItem(`credentials:${serverId}`, JSON.stringify(creds));
+      } else {
+        sessionStorage.removeItem(`credentials:${serverId}`);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  };
   
   // Auto-hide credentials banner after 2 minutes
   useEffect(() => {
     if (showSavedCredentials && savedCredentials) {
       const timer = setTimeout(() => {
         setShowSavedCredentials(false);
-        setSavedCredentials(null);
+        updateSavedCredentials(null);
       }, 2 * 60 * 1000); // 2 minutes
       return () => clearTimeout(timer);
     }
@@ -153,6 +187,7 @@ export default function ServerDetail() {
   
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
     try {
       const stored = sessionStorage.getItem(`setupMinimized:${serverId}`);
       return stored === 'true';
@@ -248,10 +283,10 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, serverId, reinstallTask.isActive]);
   
-  // Set credentials in state when they become available (one-time display only, no persistence)
+  // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
     if (reinstallTask.credentials && serverId && !savedCredentials) {
-      setSavedCredentials(reinstallTask.credentials);
+      updateSavedCredentials(reinstallTask.credentials);
       setShowSavedCredentials(true);
     }
   }, [reinstallTask.credentials, serverId, savedCredentials]);
@@ -288,7 +323,7 @@ export default function ServerDetail() {
                 username: response.username || 'root',
                 password: response.password
               };
-              setSavedCredentials(creds);
+              updateSavedCredentials(creds);
               setShowSavedCredentials(true);
             }
           }).catch(() => {
@@ -366,12 +401,12 @@ export default function ServerDetail() {
         queryClient.invalidateQueries({ queryKey: ['servers'] });
       }, 30000);
     },
-    onError: () => {
+    onError: (error: any) => {
       setPowerActionPending(null);
       if (serverId) clearPending(serverId);
       toast({
         title: "Action Failed",
-        description: "Failed to perform power action. Please try again.",
+        description: error?.message || "Failed to perform power action. Please try again.",
         variant: "destructive",
       });
     }
@@ -404,10 +439,10 @@ export default function ServerDetail() {
         description: "Server is being reinstalled. This may take a few minutes.",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Reinstallation Failed",
-        description: "Failed to start reinstallation. Please try again.",
+        description: error?.message || "Failed to start reinstallation. Please try again.",
         variant: "destructive",
       });
     }
@@ -440,10 +475,10 @@ export default function ServerDetail() {
         description: "Your server is being configured. This may take a few minutes.",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Setup Failed",
-        description: "Failed to start server setup. Please try again.",
+        description: error?.message || "Failed to start server setup. Please try again.",
         variant: "destructive",
       });
     }
@@ -1180,7 +1215,7 @@ export default function ServerDetail() {
                 className="h-8 w-8 text-green-400 hover:bg-green-500/20"
                 onClick={() => {
                   setShowSavedCredentials(false);
-                  setSavedCredentials(null);
+                  updateSavedCredentials(null);
                 }}
                 data-testid="button-close-credentials"
               >
@@ -1248,7 +1283,7 @@ export default function ServerDetail() {
                       toast({ title: "Copied", description: "Password copied to clipboard" });
                       // Dismiss the credentials banner after copying password
                       setShowSavedCredentials(false);
-                      setSavedCredentials(null);
+                      updateSavedCredentials(null);
                     }}
                     data-testid="button-copy-password"
                   >
@@ -2434,7 +2469,7 @@ export default function ServerDetail() {
               onDismiss={() => {
                 // Save credentials before resetting so user can still view them
                 if (reinstallTask.credentials) {
-                  setSavedCredentials(reinstallTask.credentials);
+                  updateSavedCredentials(reinstallTask.credentials);
                   setShowSavedCredentials(true);
                 }
                 reinstallTask.reset();
@@ -2449,7 +2484,7 @@ export default function ServerDetail() {
               onClose={() => {
                 // Save credentials and close dialog without continuing
                 if (reinstallTask.credentials) {
-                  setSavedCredentials(reinstallTask.credentials);
+                  updateSavedCredentials(reinstallTask.credentials);
                   setShowSavedCredentials(true);
                 }
                 reinstallTask.reset();

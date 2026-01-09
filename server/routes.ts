@@ -2417,20 +2417,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Payment method ID is required' });
       }
 
+      // Ensure Stripe customer exists (auto-creates wallet if needed)
+      const { wallet, stripeCustomerId } = await ensureStripeCustomer({
+        auth0UserId: req.userSession!.auth0UserId,
+        email: req.userSession!.email,
+        name: req.userSession!.name,
+        userId: req.userSession!.userId,
+      });
+      
       const stripe = await getUncachableStripeClient();
-      const wallet = await dbStorage.getWallet(auth0UserId);
-      
-      // Check if wallet is frozen (Stripe customer deleted)
-      if (wallet?.deletedAt) {
-        return res.status(403).json({ 
-          error: 'Billing access suspended. Please contact support.',
-          code: 'WALLET_FROZEN'
-        });
-      }
-      
-      if (!wallet?.stripeCustomerId) {
-        return res.status(400).json({ error: 'No Stripe customer found' });
-      }
 
       // Get the new payment method
       const newPaymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
@@ -2442,7 +2437,7 @@ export async function registerRoutes(
 
       // Get existing payment methods for this customer
       const existingPaymentMethods = await stripe.paymentMethods.list({
-        customer: wallet.stripeCustomerId,
+        customer: stripeCustomerId,
         type: 'card',
       });
 
@@ -2468,6 +2463,12 @@ export async function registerRoutes(
       log(`Validated new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
       res.json({ valid: true });
     } catch (error: any) {
+      if (error instanceof StripeCustomerError) {
+        return res.status(error.httpStatus).json({ 
+          error: error.message, 
+          code: error.code 
+        });
+      }
       log(`Error validating payment method: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to validate payment method' });
     }
