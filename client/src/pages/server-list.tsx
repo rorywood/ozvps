@@ -163,7 +163,11 @@ export default function ServerList() {
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {servers?.map((server) => (
+            {servers?.map((server) => {
+              const displayStatus = getDisplayStatus(server.id, server.status);
+              const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
+              
+              return (
               <Link key={server.id} href={`/servers/${server.id}`}>
                 <GlassCard className="p-6 transition-all duration-300 hover:border-primary/30 group cursor-pointer">
                   <div className="flex flex-col lg:flex-row lg:items-center gap-6">
@@ -171,8 +175,6 @@ export default function ServerList() {
                   {/* Status Icon & Basic Info */}
                   <div className="flex items-center gap-4 min-w-[250px]">
                     {(() => {
-                      const displayStatus = getDisplayStatus(server.id, server.status);
-                      const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
                       const needsSetup = server.needsSetup === true;
                       const hasActiveSetup = isServerBuilding(server.id);
                       const building = hasActiveSetup;
@@ -388,7 +390,8 @@ export default function ServerList() {
                 
               </GlassCard>
               </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
