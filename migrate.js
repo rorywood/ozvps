@@ -4,12 +4,12 @@
  * Applies all pending SQL migrations in the migrations directory
  */
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import pg from 'pg';
 import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -19,7 +19,10 @@ if (!DATABASE_URL) {
 }
 
 async function runMigrations() {
-  const sql = postgres(DATABASE_URL, { max: 1 });
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 1,
+  });
 
   try {
     console.log('🔍 Checking for pending migrations...\n');
@@ -32,7 +35,7 @@ async function runMigrations() {
 
     if (files.length === 0) {
       console.log('✅ No SQL migrations found');
-      await sql.end();
+      await pool.end();
       return;
     }
 
@@ -46,7 +49,7 @@ async function runMigrations() {
       const migrationSQL = readFileSync(join(migrationsDir, file), 'utf-8');
 
       try {
-        await sql.unsafe(migrationSQL);
+        await pool.query(migrationSQL);
         console.log(`✅ ${file} completed successfully\n`);
       } catch (error) {
         if (error.message.includes('already exists')) {
@@ -60,9 +63,10 @@ async function runMigrations() {
     console.log('✅ All migrations completed successfully!');
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
+    console.error('Stack:', error.stack);
     process.exit(1);
   } finally {
-    await sql.end();
+    await pool.end();
   }
 }
 

@@ -4,10 +4,11 @@
  * Checks if billing tables exist and shows billing data
  */
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import pg from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { serverBilling, billingLedger } from './shared/schema.js';
-import { sql } from 'drizzle-orm';
+
+const { Pool } = pg;
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -20,15 +21,18 @@ if (!DATABASE_URL) {
 }
 
 async function checkBilling() {
-  const client = postgres(DATABASE_URL, { max: 1 });
-  const db = drizzle(client);
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 1,
+  });
+  const db = drizzle(pool);
 
   try {
     console.log('🔍 Checking billing setup...\n');
 
     // Check if tables exist
     console.log('📋 Step 1: Checking if billing tables exist');
-    const tableCheck = await client`
+    const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables
         WHERE table_schema = 'public'
@@ -39,9 +43,9 @@ async function checkBilling() {
         WHERE table_schema = 'public'
         AND table_name = 'billing_ledger'
       ) as billing_ledger_exists
-    `;
+    `);
 
-    const tables = tableCheck[0];
+    const tables = tableCheck.rows[0];
     console.log(`  server_billing table: ${tables.server_billing_exists ? '✅ EXISTS' : '❌ MISSING'}`);
     console.log(`  billing_ledger table: ${tables.billing_ledger_exists ? '✅ EXISTS' : '❌ MISSING'}`);
     console.log('');
@@ -52,14 +56,14 @@ async function checkBilling() {
       console.log('  1. Run: bash fix-billing-now.sh');
       console.log('  2. Or run: bash public/run-migrations.sh');
       console.log('');
-      await client.end();
+      await pool.end();
       return;
     }
 
     // Count records
     console.log('📊 Step 2: Counting billing records');
-    const countResult = await client`SELECT COUNT(*) as count FROM server_billing`;
-    const count = Number(countResult[0].count);
+    const countResult = await pool.query('SELECT COUNT(*) as count FROM server_billing');
+    const count = Number(countResult.rows[0].count);
     console.log(`  Total billing records: ${count}`);
     console.log('');
 
@@ -96,7 +100,7 @@ async function checkBilling() {
     console.error('❌ Error:', error.message);
     console.log('\nStack:', error.stack);
   } finally {
-    await client.end();
+    await pool.end();
   }
 }
 
