@@ -688,10 +688,12 @@ SSLEOF
         if [[ "$ENVIRONMENT" == "production" ]]; then
             UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-prod.sh"
         else
-            UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-dev.sh"
+            # Use v2 to bypass any GitHub CDN caching issues
+            UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-dev-v2.sh"
         fi
 
-        curl -fsSL "$UPDATE_SCRIPT_URL" -o "/usr/local/bin/$UPDATE_SCRIPT"
+        # Add cache-busting parameter and headers
+        curl -fsSL -H 'Cache-Control: no-cache' "$UPDATE_SCRIPT_URL?t=$(date +%s)" -o "/usr/local/bin/$UPDATE_SCRIPT"
         chmod +x "/usr/local/bin/$UPDATE_SCRIPT"
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing update script"
