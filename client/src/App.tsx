@@ -23,6 +23,8 @@ import Register from "@/pages/register";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
+import Support from "@/pages/support";
+import SupportTicket from "@/pages/support-ticket";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
@@ -135,6 +137,18 @@ function Router() {
         <AuthGuard>
           <Admin />
         </AuthGuard>
+      </Route>
+      <Route path="/support">
+        <AuthGuard>
+          <Support />
+        </AuthGuard>
+      </Route>
+      <Route path="/support/:id">
+        {(params) => (
+          <AuthGuard>
+            <SupportTicket />
+          </AuthGuard>
+        )}
       </Route>
       <Route path="/order">
         <AuthGuard>

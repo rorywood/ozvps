@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  Server, 
+import {
+  LayoutDashboard,
+  Server,
   LogOut,
   Menu,
   ChevronDown,
@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   User,
   Settings,
-  CreditCard
+  CreditCard,
+  MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
   { href: "/billing", icon: Wallet, label: "Billing" },
+  { href: "/support", icon: MessageSquare, label: "Support" },
 ];
 
 const adminNavItems = [
@@ -219,8 +221,16 @@ function DesktopNav() {
     retry: false,
   });
 
+  const { data: supportCounts } = useQuery({
+    queryKey: ['support', 'counts'],
+    queryFn: () => api.getSupportTicketCounts(),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
   const isAdmin = userData?.user?.isAdmin ?? false;
   const balance = walletData?.wallet?.balanceCents;
+  const hasUnreadSupport = (supportCounts?.waitingUser || 0) > 0;
 
   // Check if dev banner is showing
   const isDev = window.location.hostname.includes("dev");
@@ -240,12 +250,13 @@ function DesktopNav() {
             <nav className="flex items-center gap-1">
               {navItems.map((item) => {
                 const isActive = location === item.href || (item.href !== "/dashboard" && location.startsWith(item.href));
+                const showBadge = item.href === "/support" && hasUnreadSupport;
                 return (
                   <Link key={item.href} href={item.href}>
                     <div
                       data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
                       className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                        "relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
                         isActive
                           ? "bg-primary/10 text-primary"
                           : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
@@ -253,6 +264,11 @@ function DesktopNav() {
                     >
                       <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "")} />
                       {item.label}
+                      {showBadge && (
+                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-amber-500 text-[10px] font-bold text-white flex items-center justify-center">
+                          {supportCounts?.waitingUser}
+                        </span>
+                      )}
                     </div>
                   </Link>
                 );
@@ -328,6 +344,13 @@ function MobileNav() {
     retry: false,
   });
 
+  const { data: supportCounts } = useQuery({
+    queryKey: ['support', 'counts'],
+    queryFn: () => api.getSupportTicketCounts(),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: () => {
@@ -342,6 +365,7 @@ function MobileNav() {
   const user = userData?.user;
   const isAdmin = user?.isAdmin ?? false;
   const balance = walletData?.wallet?.balanceCents;
+  const hasUnreadSupport = (supportCounts?.waitingUser || 0) > 0;
 
   const allNavItems = [
     ...navItems,
@@ -398,13 +422,14 @@ function MobileNav() {
                 <div className="flex-1 px-3 py-4 space-y-1">
                   {allNavItems.map((item) => {
                     const isActive = location === item.href || (item.href !== "/dashboard" && location.startsWith(item.href));
+                    const showBadge = item.href === "/support" && hasUnreadSupport;
                     return (
                       <Link key={item.href} href={item.href}>
                         <div
                           onClick={() => setOpen(false)}
                           data-testid={`mobile-nav-${item.label.toLowerCase().replace(' ', '-')}`}
                           className={cn(
-                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                            "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
                             isActive
                               ? "bg-primary/10 text-primary border border-primary/20"
                               : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
@@ -412,6 +437,11 @@ function MobileNav() {
                         >
                           <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "")} />
                           {item.label}
+                          {showBadge && (
+                            <span className="ml-auto h-5 w-5 rounded-full bg-amber-500 text-[10px] font-bold text-white flex items-center justify-center">
+                              {supportCounts?.waitingUser}
+                            </span>
+                          )}
                         </div>
                       </Link>
                     );

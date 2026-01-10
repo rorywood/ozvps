@@ -200,6 +200,60 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Support ticket categories
+export const TICKET_CATEGORIES = [
+  'billing',
+  'server',
+  'network',
+  'panel',
+  'abuse',
+  'general',
+] as const;
+export type TicketCategory = typeof TICKET_CATEGORIES[number];
+
+// Support ticket priorities
+export const TICKET_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+export type TicketPriority = typeof TICKET_PRIORITIES[number];
+
+// Support ticket statuses
+export const TICKET_STATUSES = [
+  'new',
+  'open',
+  'waiting_user',
+  'waiting_admin',
+  'resolved',
+  'closed',
+] as const;
+export type TicketStatus = typeof TICKET_STATUSES[number];
+
+// Support tickets - user support requests
+export const tickets = pgTable("tickets", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("general"), // billing, server, network, panel, abuse, general
+  priority: text("priority").notNull().default("normal"), // low, normal, high, urgent
+  status: text("status").notNull().default("new"), // new, open, waiting_user, waiting_admin, resolved, closed
+  virtfusionServerId: text("virtfusion_server_id"), // nullable - affected server
+  assignedAdminId: text("assigned_admin_id"), // nullable - assigned admin auth0 user id
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  closedAt: timestamp("closed_at"),
+});
+
+// Support ticket messages - conversation thread
+export const ticketMessages = pgTable("ticket_messages", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  ticketId: integer("ticket_id").notNull(),
+  authorType: text("author_type").notNull(), // user, admin
+  authorId: text("author_id").notNull(), // auth0 user id
+  authorEmail: text("author_email").notNull(),
+  authorName: text("author_name"),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const walletsRelations = relations(wallets, ({ many }) => ({
   transactions: many(walletTransactions),
@@ -230,6 +284,8 @@ export const insertServerCancellationSchema = createInsertSchema(serverCancellat
 export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
 export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
+export const insertTicketSchema = createInsertSchema(tickets).omit({ id: true, createdAt: true, updatedAt: true, lastMessageAt: true, closedAt: true });
+export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit({ id: true, createdAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -252,6 +308,10 @@ export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Ticket = typeof tickets.$inferSelect;
+export type InsertTicket = z.infer<typeof insertTicketSchema>;
+export type TicketMessage = typeof ticketMessages.$inferSelect;
+export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -312,3 +372,27 @@ export const SESSION_REVOKE_REASONS = {
 } as const;
 
 export type SessionRevokeReason = typeof SESSION_REVOKE_REASONS[keyof typeof SESSION_REVOKE_REASONS];
+
+// Validation schemas for support tickets
+export const createTicketSchema = z.object({
+  title: z.string().min(3, 'Title must be at least 3 characters').max(200, 'Title must be 200 characters or less'),
+  category: z.enum(TICKET_CATEGORIES),
+  priority: z.enum(TICKET_PRIORITIES).default('normal'),
+  description: z.string().min(10, 'Description must be at least 10 characters').max(10000, 'Description must be 10000 characters or less'),
+  virtfusionServerId: z.string().optional(),
+});
+
+export const ticketMessageSchema = z.object({
+  message: z.string().min(1, 'Message cannot be empty').max(10000, 'Message must be 10000 characters or less'),
+});
+
+export const adminTicketUpdateSchema = z.object({
+  status: z.enum(TICKET_STATUSES).optional(),
+  priority: z.enum(TICKET_PRIORITIES).optional(),
+  category: z.enum(TICKET_CATEGORIES).optional(),
+  assignedAdminId: z.string().nullable().optional(),
+});
+
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+export type TicketMessageInput = z.infer<typeof ticketMessageSchema>;
+export type AdminTicketUpdateInput = z.infer<typeof adminTicketUpdateSchema>;
