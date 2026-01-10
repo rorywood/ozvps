@@ -66,7 +66,7 @@ echo ""
 # Get deployment URLs
 if [ "$SETUP_PROD" = true ]; then
     echo -e "${CYAN}=== Production Configuration ===${NC}"
-    read -p "Production deployment URL (e.g., https://your-app.repl.co): " PROD_URL
+    read -p "Production panel server URL (e.g., https://panel.ozvps.com.au): " PROD_URL
     echo ""
 fi
 
@@ -78,7 +78,7 @@ if [ "$SETUP_DEV" = true ]; then
             DEV_URL="$PROD_URL"
         fi
     else
-        read -p "Development deployment URL (e.g., https://your-dev-app.repl.co): " DEV_URL
+        read -p "Development panel server URL (e.g., https://dev-panel.ozvps.com.au): " DEV_URL
     fi
     echo ""
 fi
@@ -90,7 +90,7 @@ if [ "$SETUP_PROD" = true ]; then
 
     # Create config directory
     mkdir -p /opt/ozvps-panel
-    echo "REPLIT_URL=\"$PROD_URL\"" > /opt/ozvps-panel/.update_config
+    echo "PANEL_URL=\"$PROD_URL\"" > /opt/ozvps-panel/.update_config
     chmod 600 /opt/ozvps-panel/.update_config
 
     # Run update
@@ -110,7 +110,7 @@ if [ "$SETUP_DEV" = true ]; then
 
     # Create config directory
     mkdir -p /opt/ozvps-panel-dev
-    echo "REPLIT_URL=\"$DEV_URL\"" > /opt/ozvps-panel-dev/.update_config
+    echo "PANEL_URL=\"$DEV_URL\"" > /opt/ozvps-panel-dev/.update_config
     chmod 600 /opt/ozvps-panel-dev/.update_config
 
     # Run update

@@ -63,7 +63,7 @@ Email for SSL certificate notifications [admin@app.ozvps.com.au]: admin@ozvps.co
 If you haven't installed production yet:
 
 ```bash
-curl -fsSL https://your-replit-url.repl.co/install.sh | sudo bash
+curl -fsSL https://your-panel-server.com/install.sh | sudo bash
 ```
 
 This creates the production environment in `/opt/ozvps-panel` on port 5000.
@@ -97,7 +97,7 @@ $ sudo update-ozvps dev
   Create new Development environment? (Y/n): y
   ✓  Created /opt/ozvps-panel-dev
 
-  Press Enter to use this or paste new URL: https://your-replit-url.repl.co
+  Press Enter to use this or paste new URL: https://your-panel-server.com
 
   Download and install latest update? (Y/n): y
 ```
@@ -151,7 +151,7 @@ pm2 restart ozvps-panel-dev
 
 ## Typical Workflow
 
-1. **Make changes** in your Replit/development source
+1. **Make changes** in your development environment
 2. **Deploy to dev first:**
    ```bash
    sudo update-ozvps dev

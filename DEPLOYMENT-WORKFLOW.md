@@ -50,8 +50,8 @@ git push origin claude/dev-l5488
 
 ### 2. Deploy to Dev
 
-**On your Replit/deployment platform:**
-- Deploy the `claude/dev-l5488` branch to your dev instance
+**On your hosting platform:**
+- Deploy the `claude/dev-l5488` branch to your dev server
 
 **On your server:**
 ```bash
@@ -69,8 +69,8 @@ git merge claude/dev-l5488
 git push origin main
 ```
 
-**On your Replit/deployment platform:**
-- Deploy the `main` branch to your production instance
+**On your hosting platform:**
+- Deploy the `main` branch to your production server
 
 **On your server:**
 ```bash
@@ -131,11 +131,11 @@ VIRTFUSION_API_KEY=...
 ```
 GitHub
 ├── main (production branch)
-│   └── Deployed to: Production Replit
+│   └── Deployed to: Production Server
 │       └── Updates: app.ozvps.com.au (port 5000)
 │
 └── claude/dev-l5488 (development branch)
-    └── Deployed to: Dev Replit (optional: can be same instance)
+    └── Deployed to: Dev Server (can be same or separate server)
         └── Updates: dev.ozvps.com.au (port 5001)
 ```
 
@@ -148,7 +148,7 @@ If production has issues:
 git revert HEAD
 git push origin main
 
-# Deploy the reverted main branch on Replit
+# Deploy the reverted main branch on your hosting platform
 
 # Update production
 sudo update-ozvps prod

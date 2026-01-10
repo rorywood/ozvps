@@ -22,22 +22,29 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Get deployment URL
-echo ""
-if [[ -n "$OZVPS_URL" ]]; then
-    DEPLOY_URL="$OZVPS_URL"
-    echo "Using URL: $DEPLOY_URL"
-else
-    read -p "Enter your deployment URL (e.g., https://your-app.repl.co): " DEPLOY_URL < /dev/tty
-fi
-
-DEPLOY_URL="${DEPLOY_URL%/}"
-
-if [[ -z "$DEPLOY_URL" ]] || [[ ! "$DEPLOY_URL" =~ ^https:// ]]; then
-    echo -e "${RED}Error: URL must use HTTPS${NC}"
-    echo "Usage: OZVPS_URL=https://your-app.repl.co curl -sSL <url> | sudo -E bash"
+# Get panel server URL from environment variable
+if [[ -z "$OZVPS_URL" ]]; then
+    echo -e "${RED}Error: OZVPS_URL environment variable is required${NC}"
+    echo ""
+    echo "Usage:"
+    echo "  OZVPS_URL=https://your-server.com curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo -E bash"
+    echo ""
+    echo "Example:"
+    echo "  OZVPS_URL=https://panel.ozvps.com.au curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo -E bash"
+    echo ""
     exit 1
 fi
+
+DEPLOY_URL="${OZVPS_URL%/}"
+
+if [[ ! "$DEPLOY_URL" =~ ^https:// ]]; then
+    echo -e "${RED}Error: URL must use HTTPS${NC}"
+    echo "Provided: $DEPLOY_URL"
+    exit 1
+fi
+
+echo "Panel Server: $DEPLOY_URL"
+echo ""
 
 echo ""
 echo -e "${CYAN}Installing...${NC}"
@@ -51,7 +58,7 @@ chmod +x /usr/local/bin/update-ozvps
 echo ""
 echo -e "${BOLD}Setting up Production (app.ozvps.com.au)...${NC}"
 mkdir -p /opt/ozvps-panel
-echo "REPLIT_URL=\"$DEPLOY_URL\"" > /opt/ozvps-panel/.update_config
+echo "PANEL_URL=\"$DEPLOY_URL\"" > /opt/ozvps-panel/.update_config
 chmod 600 /opt/ozvps-panel/.update_config
 
 update-ozvps prod <<EOF
@@ -62,7 +69,7 @@ EOF
 echo ""
 echo -e "${BOLD}Setting up Development (dev.ozvps.com.au)...${NC}"
 mkdir -p /opt/ozvps-panel-dev
-echo "REPLIT_URL=\"$DEPLOY_URL\"" > /opt/ozvps-panel-dev/.update_config
+echo "PANEL_URL=\"$DEPLOY_URL\"" > /opt/ozvps-panel-dev/.update_config
 chmod 600 /opt/ozvps-panel-dev/.update_config
 
 update-ozvps dev <<EOF

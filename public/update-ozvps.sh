@@ -215,25 +215,25 @@ cd "$INSTALL_DIR"
 
 # Load saved URL or detect from production installation
 SAVED_URL=""
-[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" && SAVED_URL="$REPLIT_URL"
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" && SAVED_URL="$PANEL_URL"
 
 # If dev environment and no saved URL, try to get it from production
 if [[ -z "$SAVED_URL" && "$ENVIRONMENT" == "dev" && -f "/opt/ozvps-panel/.update_config" ]]; then
-    source "/opt/ozvps-panel/.update_config" 2>/dev/null && SAVED_URL="$REPLIT_URL"
+    source "/opt/ozvps-panel/.update_config" 2>/dev/null && SAVED_URL="$PANEL_URL"
 fi
 
 # Use saved URL or prompt for new one
 if [[ -n "$SAVED_URL" ]]; then
-    REPLIT_URL="$SAVED_URL"
-    echo -e "  ${DIM}Update source:${NC} ${REPLIT_URL}"
+    PANEL_URL="$SAVED_URL"
+    echo -e "  ${DIM}Update source:${NC} ${PANEL_URL}"
     echo ""
 else
-    read -p "  Enter update server URL: " REPLIT_URL </dev/tty
-    [[ -z "$REPLIT_URL" ]] && error_exit "Update server URL is required"
-    REPLIT_URL="${REPLIT_URL%/}"
-    [[ ! "$REPLIT_URL" =~ ^https:// ]] && error_exit "URL must use HTTPS"
+    read -p "  Enter update server URL: " PANEL_URL </dev/tty
+    [[ -z "$PANEL_URL" ]] && error_exit "Update server URL is required"
+    PANEL_URL="${PANEL_URL%/}"
+    [[ ! "$PANEL_URL" =~ ^https:// ]] && error_exit "URL must use HTTPS"
 
-    echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
+    echo "PANEL_URL=\"$PANEL_URL\"" > "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
     echo ""
 fi
@@ -250,7 +250,7 @@ echo ""
 
 # Download
 ARCHIVE_FILE="$TEMP_DIR/ozvps-update.tar.gz"
-(curl -fsSL "$REPLIT_URL/download.tar.gz" -o "$ARCHIVE_FILE" 2>>"$LOG_FILE") &
+(curl -fsSL "$PANEL_URL/download.tar.gz" -o "$ARCHIVE_FILE" 2>>"$LOG_FILE") &
 spinner $! "Downloading"
 
 # Backup

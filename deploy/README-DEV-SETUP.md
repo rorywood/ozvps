@@ -30,7 +30,7 @@ sudo update-ozvps dev
 
 When prompted:
 - If asked to create new environment: **y**
-- Enter Replit URL: (your Replit URL)
+- Enter panel server URL: (your server URL)
 - Confirm download: **y**
 
 ### Step 3: Configure Environment
