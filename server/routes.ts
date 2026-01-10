@@ -1412,6 +1412,33 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
+      // Auto-initialize billing for servers that don't have records yet
+      try {
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+
+        for (const server of servers) {
+          if (server.plan?.priceMonthly) {
+            const billingStatus = await getServerBillingStatus(server.id);
+
+            if (!billingStatus) {
+              const serverCreatedAt = server.created_at || server.createdAt;
+              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+              await createServerBilling({
+                auth0UserId: session.auth0UserId!,
+                virtfusionServerId: server.id,
+                planId: server.plan.id,
+                monthlyPriceCents: server.plan.priceMonthly,
+                deployedAt,
+              });
+              log(`Auto-initialized billing for server ${server.id}`, 'billing');
+            }
+          }
+        }
+      } catch (initError: any) {
+        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
+      }
+
       // Fetch billing records
       const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
