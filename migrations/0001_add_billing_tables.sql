@@ -2,8 +2,12 @@
 -- Created: 2026-01-10
 -- Description: Creates server_billing and billing_ledger tables for monthly VPS billing
 
+-- Drop existing tables if they exist (clean slate)
+DROP TABLE IF EXISTS "billing_ledger" CASCADE;
+DROP TABLE IF EXISTS "server_billing" CASCADE;
+
 -- Server Billing table
-CREATE TABLE IF NOT EXISTS "server_billing" (
+CREATE TABLE "server_billing" (
   "id" serial PRIMARY KEY NOT NULL,
   "virtfusion_server_id" text NOT NULL UNIQUE,
   "plan_id" integer NOT NULL,
@@ -19,7 +23,7 @@ CREATE TABLE IF NOT EXISTS "server_billing" (
 );
 
 -- Billing Ledger table
-CREATE TABLE IF NOT EXISTS "billing_ledger" (
+CREATE TABLE "billing_ledger" (
   "id" serial PRIMARY KEY NOT NULL,
   "auth0_user_id" text NOT NULL,
   "virtfusion_server_id" text NOT NULL,
@@ -32,9 +36,9 @@ CREATE TABLE IF NOT EXISTS "billing_ledger" (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS "server_billing_auth0_user_id_idx" ON "server_billing" ("auth0_user_id");
-CREATE INDEX IF NOT EXISTS "server_billing_status_idx" ON "server_billing" ("status");
-CREATE INDEX IF NOT EXISTS "server_billing_next_bill_at_idx" ON "server_billing" ("next_bill_at");
-CREATE INDEX IF NOT EXISTS "billing_ledger_auth0_user_id_idx" ON "billing_ledger" ("auth0_user_id");
-CREATE INDEX IF NOT EXISTS "billing_ledger_virtfusion_server_id_idx" ON "billing_ledger" ("virtfusion_server_id");
-CREATE INDEX IF NOT EXISTS "billing_ledger_created_at_idx" ON "billing_ledger" ("created_at");
+CREATE INDEX "server_billing_auth0_user_id_idx" ON "server_billing" ("auth0_user_id");
+CREATE INDEX "server_billing_status_idx" ON "server_billing" ("status");
+CREATE INDEX "server_billing_next_bill_at_idx" ON "server_billing" ("next_bill_at");
+CREATE INDEX "billing_ledger_auth0_user_id_idx" ON "billing_ledger" ("auth0_user_id");
+CREATE INDEX "billing_ledger_virtfusion_server_id_idx" ON "billing_ledger" ("virtfusion_server_id");
+CREATE INDEX "billing_ledger_created_at_idx" ON "billing_ledger" ("created_at");
