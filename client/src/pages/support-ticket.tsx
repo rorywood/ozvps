@@ -230,6 +230,26 @@ export default function SupportTicketPage() {
     },
   });
 
+  const reopenMutation = useMutation({
+    mutationFn: () => api.reopenSupportTicket(ticketId),
+    onSuccess: () => {
+      toast({
+        title: "Ticket Reopened",
+        description: "The ticket has been reopened.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmitReply = (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyMessage.trim()) return;
@@ -288,7 +308,9 @@ export default function SupportTicketPage() {
   }
 
   const { ticket, messages, server } = data;
-  const isClosed = ticket.status === "closed" || ticket.status === "resolved";
+  const isResolved = ticket.status === "resolved";
+  const isClosed = ticket.status === "closed";
+  const isInactive = isResolved || isClosed;
 
   return (
     <AppShell>
@@ -309,7 +331,7 @@ export default function SupportTicketPage() {
               <h1 className="text-xl font-bold text-foreground">{ticket.title}</h1>
             </div>
           </div>
-          {!isClosed && (
+          {!isInactive && (
             <Button
               variant="outline"
               onClick={() => setCloseDialogOpen(true)}
@@ -342,7 +364,7 @@ export default function SupportTicketPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {!isClosed && (
+              {!isInactive && (
                 <div className="p-4 border-t border-border/50">
                   <form onSubmit={handleSubmitReply} className="space-y-3">
                     <Textarea
@@ -371,10 +393,36 @@ export default function SupportTicketPage() {
                 </div>
               )}
 
+              {isResolved && (
+                <div className="p-4 border-t border-border/50 bg-green-500/10">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-green-400">
+                      This ticket is resolved.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => reopenMutation.mutate()}
+                      disabled={reopenMutation.isPending}
+                      className="text-green-400 border-green-500/30 hover:bg-green-500/10"
+                    >
+                      {reopenMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Reopening...
+                        </>
+                      ) : (
+                        "Reopen Ticket"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {isClosed && (
                 <div className="p-4 border-t border-border/50 bg-muted/30">
                   <p className="text-sm text-muted-foreground text-center">
-                    This ticket is {ticket.status}. Reply to reopen it.
+                    This ticket is closed. Please create a new ticket if you need further assistance.
                   </p>
                 </div>
               )}

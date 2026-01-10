@@ -768,6 +768,17 @@ class ApiClient {
     return response.json();
   }
 
+  async reopenSupportTicket(id: number): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/support/tickets/${id}/reopen`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to reopen ticket');
+    }
+    return response.json();
+  }
+
   // ==========================================
   // SUPPORT TICKET ENDPOINTS - ADMIN
   // ==========================================
