@@ -48,43 +48,91 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 echo ""
-echo -e "${CYAN}Installing system dependencies...${NC}"
+echo -e "${CYAN}${BOLD}Checking System Dependencies${NC}"
+echo ""
 
-# Install Node.js 20.x if not present
-if ! command -v node &>/dev/null; then
-    echo "Installing Node.js..."
+# Check and install Node.js 20.x
+if command -v node &>/dev/null; then
+    NODE_VERSION=$(node --version)
+    echo -e "  ${GREEN}✓${NC} Node.js $NODE_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing Node.js 20.x..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
     apt-get install -y nodejs >/dev/null 2>&1
+    NODE_VERSION=$(node --version)
+    echo -e "  ${GREEN}✓${NC} Node.js $NODE_VERSION installed"
 fi
 
-# Install PM2 globally if not present
-if ! command -v pm2 &>/dev/null; then
-    echo "Installing PM2..."
+# Check and install PM2
+if command -v pm2 &>/dev/null; then
+    PM2_VERSION=$(pm2 --version)
+    echo -e "  ${GREEN}✓${NC} PM2 v$PM2_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing PM2..."
     npm install -g pm2 >/dev/null 2>&1
+    PM2_VERSION=$(pm2 --version)
+    echo -e "  ${GREEN}✓${NC} PM2 v$PM2_VERSION installed"
 fi
 
-# Install NGINX if not present
-if ! command -v nginx &>/dev/null; then
-    echo "Installing NGINX..."
+# Check and install NGINX
+if command -v nginx &>/dev/null; then
+    NGINX_VERSION=$(nginx -v 2>&1 | cut -d'/' -f2)
+    echo -e "  ${GREEN}✓${NC} NGINX $NGINX_VERSION (already installed)"
+    # Ensure it's running
+    systemctl start nginx 2>/dev/null || true
+    systemctl enable nginx 2>/dev/null || true
+else
+    echo -e "  ${YELLOW}→${NC} Installing NGINX..."
     apt-get update >/dev/null 2>&1
     apt-get install -y nginx >/dev/null 2>&1
     systemctl start nginx
     systemctl enable nginx
+    NGINX_VERSION=$(nginx -v 2>&1 | cut -d'/' -f2)
+    echo -e "  ${GREEN}✓${NC} NGINX $NGINX_VERSION installed"
 fi
 
-# Install Certbot if not present
-if ! command -v certbot &>/dev/null; then
-    echo "Installing Certbot..."
+# Check and install Certbot
+if command -v certbot &>/dev/null; then
+    CERTBOT_VERSION=$(certbot --version 2>&1 | awk '{print $2}')
+    echo -e "  ${GREEN}✓${NC} Certbot $CERTBOT_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing Certbot..."
     apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1
+    CERTBOT_VERSION=$(certbot --version 2>&1 | awk '{print $2}')
+    echo -e "  ${GREEN}✓${NC} Certbot $CERTBOT_VERSION installed"
 fi
 
-# Install PostgreSQL client if not present
-if ! command -v psql &>/dev/null; then
-    echo "Installing PostgreSQL client..."
+# Check and install PostgreSQL client
+if command -v psql &>/dev/null; then
+    PSQL_VERSION=$(psql --version | awk '{print $3}')
+    echo -e "  ${GREEN}✓${NC} PostgreSQL Client $PSQL_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing PostgreSQL client..."
     apt-get install -y postgresql-client >/dev/null 2>&1
+    PSQL_VERSION=$(psql --version | awk '{print $3}')
+    echo -e "  ${GREEN}✓${NC} PostgreSQL Client $PSQL_VERSION installed"
 fi
 
-echo -e "${GREEN}✓ System dependencies installed${NC}"
+# Check for unzip (needed for extraction)
+if ! command -v unzip &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Installing unzip..."
+    apt-get install -y unzip >/dev/null 2>&1
+    echo -e "  ${GREEN}✓${NC} unzip installed"
+else
+    echo -e "  ${GREEN}✓${NC} unzip (already installed)"
+fi
+
+# Check for rsync (needed for file copying)
+if ! command -v rsync &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Installing rsync..."
+    apt-get install -y rsync >/dev/null 2>&1
+    echo -e "  ${GREEN}✓${NC} rsync installed"
+else
+    echo -e "  ${GREEN}✓${NC} rsync (already installed)"
+fi
+
+echo ""
+echo -e "${GREEN}✓ All system dependencies ready${NC}"
 echo ""
 
 # Check disk space
