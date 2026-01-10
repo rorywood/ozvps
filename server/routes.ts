@@ -1407,7 +1407,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get upcoming charges for the user
+  // Get upcoming charges for the user (with server name enrichment)
   app.get('/api/billing/upcoming', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
