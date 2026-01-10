@@ -59,17 +59,12 @@ echo -e "${CYAN}Checking database...${NC}"
 DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ozvps_dev'" 2>/dev/null || echo "")
 if [ "$DB_EXISTS" != "1" ]; then
     echo -e "${YELLOW}→${NC} Creating database and user..."
-    sudo -u postgres psql <<'SQLEOF' 2>/dev/null
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'ozvps_dev') THEN
-        CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';
-    END IF;
-END
-$$;
-CREATE DATABASE ozvps_dev OWNER ozvps_dev;
-GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;
-SQLEOF
+    # Create user if not exists
+    sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>/dev/null || true
+    # Create database
+    sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>/dev/null || true
+    # Grant privileges
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" 2>/dev/null || true
     echo -e "${GREEN}✓ Database created${NC}"
 
     # Update .env with correct DATABASE_URL
