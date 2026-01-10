@@ -241,7 +241,7 @@ function NewTicketDialog({
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -257,7 +257,7 @@ function NewTicketDialog({
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
                     <SelectItem key={key} value={key}>
                       {label}

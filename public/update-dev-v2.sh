@@ -40,6 +40,48 @@ fi
 
 cd "$INSTALL_DIR"
 
+# Check and install PostgreSQL if needed
+echo -e "${CYAN}Checking PostgreSQL...${NC}"
+if ! command -v psql &>/dev/null; then
+    echo -e "${YELLOW}→${NC} PostgreSQL not found, installing..."
+    apt-get update >/dev/null 2>&1
+    apt-get install -y postgresql postgresql-contrib >/dev/null 2>&1
+    systemctl start postgresql
+    systemctl enable postgresql
+    echo -e "${GREEN}✓ PostgreSQL installed${NC}"
+else
+    echo -e "${GREEN}✓ PostgreSQL already installed${NC}"
+    systemctl start postgresql 2>/dev/null || true
+fi
+
+# Check if database exists, create if not
+echo -e "${CYAN}Checking database...${NC}"
+DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ozvps_dev'" 2>/dev/null || echo "")
+if [ "$DB_EXISTS" != "1" ]; then
+    echo -e "${YELLOW}→${NC} Creating database and user..."
+    sudo -u postgres psql <<'SQLEOF' 2>/dev/null
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'ozvps_dev') THEN
+        CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';
+    END IF;
+END
+$$;
+CREATE DATABASE ozvps_dev OWNER ozvps_dev;
+GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;
+SQLEOF
+    echo -e "${GREEN}✓ Database created${NC}"
+
+    # Update .env with correct DATABASE_URL
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        sed -i 's|DATABASE_URL=.*|DATABASE_URL=postgresql://ozvps_dev:OzVPS_Dev_2024!@localhost:5432/ozvps_dev|' "$INSTALL_DIR/.env"
+        echo -e "${GREEN}✓ Updated DATABASE_URL in .env${NC}"
+    fi
+else
+    echo -e "${GREEN}✓ Database already exists${NC}"
+fi
+echo ""
+
 # Create backup
 printf "${CYAN}[1/7]${NC} Creating backup... "
 BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"

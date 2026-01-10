@@ -94,12 +94,9 @@ read -p "Stripe Webhook Secret (whsec_test_...): " STRIPE_WEBHOOK < /dev/tty
 # Auth0 Configuration
 echo ""
 echo -e "${BOLD}Auth0 Configuration${NC}"
-read -p "Auth0 Secret: " AUTH0_SEC < /dev/tty
-read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER < /dev/tty
-# Add https:// prefix if missing
-if [[ ! "$AUTH0_ISSUER" =~ ^https?:// ]]; then
-    AUTH0_ISSUER="https://${AUTH0_ISSUER}"
-fi
+read -p "Auth0 Domain (e.g. your-tenant.us.auth0.com): " AUTH0_DOMAIN < /dev/tty
+# Remove https:// prefix if user included it
+AUTH0_DOMAIN=$(echo "$AUTH0_DOMAIN" | sed 's|^https://||' | sed 's|/$||')
 read -p "Auth0 Client ID: " AUTH0_CID < /dev/tty
 read -p "Auth0 Client Secret: " AUTH0_CSEC < /dev/tty
 
@@ -305,9 +302,7 @@ STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLIC}
 STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK}
 
 # Auth0 Configuration
-AUTH0_SECRET=${AUTH0_SEC}
-AUTH0_BASE_URL=https://dev.ozvps.com.au
-AUTH0_ISSUER_BASE_URL=${AUTH0_ISSUER}
+AUTH0_DOMAIN=${AUTH0_DOMAIN}
 AUTH0_CLIENT_ID=${AUTH0_CID}
 AUTH0_CLIENT_SECRET=${AUTH0_CSEC}
 
