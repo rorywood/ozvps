@@ -5,8 +5,6 @@
  */
 
 import pg from 'pg';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { serverBilling, billingLedger } from './shared/schema.js';
 
 const { Pool } = pg;
 
@@ -25,7 +23,6 @@ async function checkBilling() {
     connectionString: DATABASE_URL,
     max: 1,
   });
-  const db = drizzle(pool);
 
   try {
     console.log('🔍 Checking billing setup...\n');
@@ -54,7 +51,7 @@ async function checkBilling() {
       console.log('❌ Billing tables are MISSING!');
       console.log('\n💡 Fix:');
       console.log('  1. Run: bash fix-billing-now.sh');
-      console.log('  2. Or run: bash public/run-migrations.sh');
+      console.log('  2. Or run: sudo update-ozvps-dev');
       console.log('');
       await pool.end();
       return;
@@ -76,14 +73,14 @@ async function checkBilling() {
       console.log('   3. View individual servers');
       console.log('');
     } else {
-      // Show sample records
+      // Show sample records using raw SQL
       console.log('📝 Step 3: Sample billing records');
-      const records = await db.select().from(serverBilling).limit(10);
-      records.forEach((r, i) => {
-        console.log(`  ${i + 1}. Server ${r.virtfusionServerId}`);
+      const records = await pool.query('SELECT * FROM server_billing ORDER BY created_at DESC LIMIT 10');
+      records.rows.forEach((r, i) => {
+        console.log(`  ${i + 1}. Server ${r.virtfusion_server_id}`);
         console.log(`     Status: ${r.status}`);
-        console.log(`     Next Bill: ${r.nextBillAt.toLocaleDateString()}`);
-        console.log(`     Monthly Price: $${(r.monthlyPriceCents / 100).toFixed(2)}`);
+        console.log(`     Next Bill: ${new Date(r.next_bill_at).toLocaleDateString()}`);
+        console.log(`     Monthly Price: $${(r.monthly_price_cents / 100).toFixed(2)}`);
         console.log('');
       });
     }
@@ -93,7 +90,7 @@ async function checkBilling() {
     console.log('Next steps:');
     console.log('  1. Restart your application: pm2 restart ozvps-panel');
     console.log('  2. Refresh your dashboard');
-    console.log('  3. Check the billing page');
+    console.log('  3. Next bill dates will appear automatically');
     console.log('');
 
   } catch (error) {
