@@ -158,17 +158,24 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
         throw new Error("Failed to create payment method");
       }
 
-      const response = await api.addPaymentMethod(paymentMethod.id);
+      // Validate payment method (checks for duplicates)
+      const validation = await api.validatePaymentMethod(paymentMethod.id);
 
-      if (response.success) {
-        toast({
-          title: "Success",
-          description: "Payment method added successfully",
-        });
-        onSuccess();
-      } else {
-        throw new Error("Failed to save payment method");
+      if (!validation.valid) {
+        if (validation.duplicate && validation.existingCard) {
+          throw new Error(
+            `This ${validation.existingCard.brand} card ending in ${validation.existingCard.last4} is already saved to your account`
+          );
+        }
+        throw new Error(validation.error || "Failed to validate payment method");
       }
+
+      // If valid, the card is now attached to the customer
+      toast({
+        title: "Success",
+        description: "Payment method added successfully",
+      });
+      onSuccess();
     } catch (err: any) {
       setError(err.message || "Failed to add payment method");
       toast({

@@ -239,7 +239,12 @@ export async function getUpcomingCharges(auth0UserId: string) {
     .where(
       and(
         eq(serverBilling.auth0UserId, auth0UserId),
-        or(eq(serverBilling.status, 'paid'), eq(serverBilling.status, 'unpaid'))
+        // Show active, paid, and unpaid servers (exclude only suspended)
+        or(
+          eq(serverBilling.status, 'active'),
+          eq(serverBilling.status, 'paid'),
+          eq(serverBilling.status, 'unpaid')
+        )
       )
     )
     .orderBy(serverBilling.nextBillAt);
