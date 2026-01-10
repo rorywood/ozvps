@@ -1412,81 +1412,23 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
-      // Fetch servers once and reuse for both initialization and enrichment
-      let servers: any[] = [];
+      // Fetch billing records
+      const billingRecords = await getUpcomingCharges(session.auth0UserId!);
+
+      // Try to enrich with server names
+      let upcoming = billingRecords;
       try {
-        servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+
+        // Add server names to billing records
+        upcoming = billingRecords.map(billing => ({
+          ...billing,
+          serverName: serverMap.get(billing.virtfusionServerId),
+        }));
       } catch (serverError: any) {
-        log(`Warning: Could not fetch servers: ${serverError.message}`, 'billing');
-      }
-
-      // Auto-initialize billing for any servers that don't have records yet
-      // Also clean up billing records for deleted servers
-      if (servers.length > 0) {
-        try {
-          const activeServerIds = new Set(servers.map(s => s.id));
-
-          // Get all billing records for this user
-          const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
-
-          // Remove billing records for servers that no longer exist
-          for (const billing of allBillingRecords) {
-            if (!activeServerIds.has(billing.virtfusionServerId)) {
-              await db.delete(serverBilling)
-                .where(eq(serverBilling.id, billing.id));
-              log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
-            }
-          }
-
-          // Create billing records for new servers
-          for (const server of servers) {
-            if (server.plan?.priceMonthly) {
-              // Check if billing record exists
-              let billingStatus = await getServerBillingStatus(server.id);
-
-              if (!billingStatus) {
-                // Use server's actual creation date for accurate billing
-                const serverCreatedAt = server.created_at || server.createdAt;
-                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-                // Create billing record
-                await createServerBilling({
-                  auth0UserId: session.auth0UserId!,
-                  virtfusionServerId: server.id,
-                  planId: server.plan.id,
-                  monthlyPriceCents: server.plan.priceMonthly,
-                  deployedAt,
-                });
-                log(`Auto-initialized billing for server ${server.id}`, 'billing');
-              }
-            }
-          }
-        } catch (initError: any) {
-          log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
-        }
-      }
-
-      // Fetch upcoming charges
-      let upcoming = [];
-      try {
-        const billingRecords = await getUpcomingCharges(session.auth0UserId!);
-
-        // Enrich with server names if we successfully fetched servers
-        if (servers.length > 0) {
-          const serverMap = new Map(servers.map(s => [s.id, s.name]));
-
-          // Add server names to billing records
-          // Don't filter here - the cleanup at the top already removed deleted servers
-          upcoming = billingRecords.map(billing => ({
-            ...billing,
-            serverName: serverMap.get(billing.virtfusionServerId),
-          }));
-        } else {
-          // If we couldn't fetch servers, show all billing records without server names
-          upcoming = billingRecords;
-        }
-      } catch (billingError: any) {
-        log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
+        log(`Warning: Could not fetch servers for name enrichment: ${serverError.message}`, 'billing');
+        // Continue with billing records without server names
       }
 
       res.json({ upcoming });
