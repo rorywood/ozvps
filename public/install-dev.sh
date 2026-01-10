@@ -65,7 +65,52 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 echo ""
-echo -e "${CYAN}${BOLD}Checking System Dependencies${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 1: Configuration Setup              ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo ""
+echo -e "${YELLOW}Please provide your API keys and credentials FIRST:${NC}"
+echo ""
+
+# Database Configuration
+read -p "PostgreSQL Connection String [postgresql://ozvps_dev:password@localhost:5432/ozvps_dev]: " DB_URL < /dev/tty
+DB_URL=${DB_URL:-postgresql://ozvps_dev:password@localhost:5432/ozvps_dev}
+
+# VirtFusion API
+echo ""
+echo -e "${BOLD}VirtFusion API Configuration${NC}"
+read -p "VirtFusion API Key: " VIRT_API_KEY < /dev/tty
+
+# Stripe Configuration (TEST keys for development)
+echo ""
+echo -e "${BOLD}Stripe Configuration (TEST KEYS FOR DEVELOPMENT)${NC}"
+echo -e "${YELLOW}⚠ Use TEST keys (sk_test_..., pk_test_...) not LIVE keys!${NC}"
+read -p "Stripe Secret Key (sk_test_...): " STRIPE_SECRET < /dev/tty
+read -p "Stripe Publishable Key (pk_test_...): " STRIPE_PUBLIC < /dev/tty
+read -p "Stripe Webhook Secret (whsec_test_...): " STRIPE_WEBHOOK < /dev/tty
+
+# Auth0 Configuration
+echo ""
+echo -e "${BOLD}Auth0 Configuration${NC}"
+read -p "Auth0 Secret: " AUTH0_SEC < /dev/tty
+read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER < /dev/tty
+read -p "Auth0 Client ID: " AUTH0_CID < /dev/tty
+read -p "Auth0 Client Secret: " AUTH0_CSEC < /dev/tty
+
+# SSL Email
+echo ""
+read -p "Enter email for SSL certificate notifications: " SSL_EMAIL < /dev/tty
+if [ -z "$SSL_EMAIL" ]; then
+    SSL_EMAIL="admin@${DOMAIN}"
+fi
+
+echo ""
+echo -e "${GREEN}✓ Configuration collected${NC}"
+echo ""
+
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 2: System Dependencies              ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
 echo ""
 
 # Check and install Node.js 20.x
@@ -171,6 +216,11 @@ if [ "$AVAILABLE_SPACE" -lt 500000 ]; then
     exit 1
 fi
 
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 3: Download & Install Application   ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo ""
+
 # Download application from GitHub
 echo -e "${CYAN}Downloading application from GitHub (${GITHUB_BRANCH} branch)...${NC}"
 mkdir -p "$INSTALL_DIR"
@@ -233,65 +283,8 @@ rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 echo -e "${GREEN}✓ Application downloaded${NC}"
 echo ""
 
-# Change to install directory
-cd "$INSTALL_DIR"
-
-# Install Node.js dependencies
-echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
-if npm install; then
-    echo -e "${GREEN}✓ Dependencies installed${NC}"
-else
-    echo -e "${RED}✗ Failed to install dependencies${NC}"
-    echo "Try running: cd $INSTALL_DIR && npm install"
-    exit 1
-fi
-echo ""
-
-# Build application
-echo -e "${CYAN}Building application (this may take a minute)...${NC}"
-if npm run build; then
-    echo -e "${GREEN}✓ Application built${NC}"
-else
-    echo -e "${RED}✗ Failed to build application${NC}"
-    echo "Try running: cd $INSTALL_DIR && npm run build"
-    exit 1
-fi
-echo ""
-
-# Prompt for configuration
-echo -e "${CYAN}${BOLD}Configuration Setup${NC}"
-echo -e "${YELLOW}Please provide your API keys and credentials:${NC}"
-echo ""
-
-# Database Configuration
-read -p "PostgreSQL Connection String [postgresql://ozvps_dev:password@localhost:5432/ozvps_dev]: " DB_URL
-DB_URL=${DB_URL:-postgresql://ozvps_dev:password@localhost:5432/ozvps_dev}
-
-# VirtFusion API
-echo ""
-echo -e "${BOLD}VirtFusion API Configuration${NC}"
-read -p "VirtFusion API Key: " VIRT_API_KEY
-
-# Stripe Configuration (TEST keys for development)
-echo ""
-echo -e "${BOLD}Stripe Configuration (TEST KEYS FOR DEVELOPMENT)${NC}"
-echo -e "${YELLOW}⚠ Use TEST keys (sk_test_..., pk_test_...) not LIVE keys!${NC}"
-read -p "Stripe Secret Key (sk_test_...): " STRIPE_SECRET
-read -p "Stripe Publishable Key (pk_test_...): " STRIPE_PUBLIC
-read -p "Stripe Webhook Secret (whsec_test_...): " STRIPE_WEBHOOK
-
-# Auth0 Configuration
-echo ""
-echo -e "${BOLD}Auth0 Configuration${NC}"
-read -p "Auth0 Secret: " AUTH0_SEC
-read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER
-read -p "Auth0 Client ID: " AUTH0_CID
-read -p "Auth0 Client Secret: " AUTH0_CSEC
-
-echo ""
+# Create .env file BEFORE npm install/build
 echo -e "${CYAN}Creating configuration file...${NC}"
-
-# Create .env file with provided values
 cat > "$INSTALL_DIR/.env" << ENVEOF
 # Database Configuration
 DATABASE_URL=${DB_URL}
@@ -317,12 +310,48 @@ NODE_ENV=development
 PORT=3000
 ENVEOF
 chmod 600 "$INSTALL_DIR/.env"
-echo -e "${GREEN}✓ Configuration file created${NC}"
+echo -e "${GREEN}✓ Configuration file created (.env)${NC}"
+echo ""
+
+# Change to install directory
+cd "$INSTALL_DIR"
+
+# Install Node.js dependencies
+echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
+if npm install; then
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
+else
+    echo -e "${RED}✗ Failed to install dependencies${NC}"
+    echo "Try running: cd $INSTALL_DIR && npm install"
+    exit 1
+fi
+echo ""
+
+# Build application
+echo -e "${CYAN}Building application (this may take a minute)...${NC}"
+if npm run build; then
+    echo -e "${GREEN}✓ Application built${NC}"
+else
+    echo -e "${RED}✗ Failed to build application${NC}"
+    echo "Try running: cd $INSTALL_DIR && npm run build"
+    exit 1
+fi
+echo ""
+
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 4: Database & Services Setup       ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
 echo ""
 
 # Run database migrations
 echo -e "${CYAN}Running database migrations...${NC}"
 cd "$INSTALL_DIR"
+
+# Load environment for drizzle-kit
+set -a
+source "$INSTALL_DIR/.env"
+set +a
+
 if npx drizzle-kit push --force; then
     echo -e "${GREEN}✓ Database migrations applied${NC}"
 else
@@ -409,13 +438,6 @@ else
     exit 1
 fi
 
-# Obtain SSL certificate
-echo ""
-read -p "Enter email for SSL certificate notifications: " SSL_EMAIL
-if [ -z "$SSL_EMAIL" ]; then
-    SSL_EMAIL="admin@${DOMAIN}"
-fi
-
 echo -e "${CYAN}Obtaining SSL certificate...${NC}"
 if certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${SSL_EMAIL}" --redirect >/dev/null 2>&1; then
     echo -e "${GREEN}✓ SSL certificate obtained${NC}"
@@ -459,12 +481,6 @@ echo -e "${BOLD}Development Environment:${NC}"
 echo -e "  URL:     ${CYAN}https://${DOMAIN}${NC}"
 echo -e "  Port:    ${APP_PORT}"
 echo -e "  Service: ${SERVICE_NAME}"
-echo ""
-echo -e "${YELLOW}${BOLD}⚠ NEXT STEPS:${NC}"
-echo -e "1. Edit configuration: ${BOLD}nano $INSTALL_DIR/.env${NC}"
-echo -e "2. Add your API keys (VirtFusion, Stripe TEST, Auth0)"
-echo -e "3. Use SEPARATE database from production!"
-echo -e "4. Restart application: ${BOLD}pm2 restart ${SERVICE_NAME}${NC}"
 echo ""
 echo -e "${BOLD}Useful Commands:${NC}"
 echo -e "  Update:  ${BOLD}sudo update-ozvps-dev${NC}"
