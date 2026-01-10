@@ -13,6 +13,23 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-01-10",
+    version: "1.0.1-dev",
+    changes: [
+      "Redesigned billing page with tabbed interface for better organization",
+      "Added VirtFusion monthly billing system with automatic server charges",
+      "Added 5-day grace period for unpaid servers before suspension",
+      "Added server suspend/unsuspend integration with VirtFusion API",
+      "Added billing ledger with idempotency protection against double-charging",
+      "Added upcoming server charges display with status badges",
+      "Added auto-reactivation of suspended servers after wallet top-up",
+      "Added bandwidth exceeded badges to server cards",
+      "Fixed shutdown and start power action status flickering",
+      "Fixed server endpoints crashing when billing tables don't exist",
+      "Added database migrations to installer and update scripts",
+    ],
+  },
+  {
+    date: "2026-01-10",
     version: "1.0.0-dev",
     changes: [
       "Added admin registration toggle with database persistence",

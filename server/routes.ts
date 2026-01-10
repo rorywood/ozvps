@@ -3349,8 +3349,9 @@ export async function registerRoutes(
       await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
 
       // Provision server via VirtFusion
+      let serverResult;
       try {
-        const serverResult = await virtfusionClient.provisionServer({
+        serverResult = await virtfusionClient.provisionServer({
           userId: virtFusionUserId,
           packageId: plan.virtfusionPackageId,
           hostname: serverHostname,
@@ -3359,29 +3360,11 @@ export async function registerRoutes(
           hypervisorGroupId,
         });
 
-        // Update order with server ID
-        await dbStorage.updateDeployOrder(order.id, {
-          status: 'active',
-          virtfusionServerId: serverResult.serverId,
-        });
-
-        // Create billing record for the new server
-        await createServerBilling({
-          auth0UserId,
-          virtfusionServerId: serverResult.serverId.toString(),
-          planId,
-          monthlyPriceCents: plan.priceMonthly,
-        });
-
-        res.json({
-          success: true,
-          orderId: order.id,
-          serverId: serverResult.serverId,
-        });
+        log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
       } catch (provisionError: any) {
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
-        
-        // Refund the wallet
+
+        // Refund the wallet - server was never created
         await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
           reason: 'provisioning_failed',
           orderId: order.id,
@@ -3394,6 +3377,36 @@ export async function registerRoutes(
 
         return res.status(500).json({ error: 'Server provisioning failed. Your wallet has been refunded.' });
       }
+
+      // Server was created successfully - DO NOT REFUND FROM THIS POINT FORWARD
+      // Update order with server ID (non-critical, log if it fails)
+      try {
+        await dbStorage.updateDeployOrder(order.id, {
+          status: 'active',
+          virtfusionServerId: serverResult.serverId,
+        });
+      } catch (updateError: any) {
+        log(`Warning: Could not update order ${order.id} with server ID: ${updateError.message}`, 'api');
+      }
+
+      // Create billing record for the new server (non-critical, log if it fails)
+      try {
+        await createServerBilling({
+          auth0UserId,
+          virtfusionServerId: serverResult.serverId.toString(),
+          planId,
+          monthlyPriceCents: plan.priceMonthly,
+        });
+      } catch (billingError: any) {
+        log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
+      }
+
+      // Always return success if server was provisioned
+      res.json({
+        success: true,
+        orderId: order.id,
+        serverId: serverResult.serverId,
+      });
     } catch (error: any) {
       log(`Deploy error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to deploy server' });
