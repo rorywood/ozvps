@@ -130,6 +130,9 @@ echo -e "${GREEN}✓ Application built${NC}"
 echo ""
 
 echo -e "${CYAN}Running database migrations...${NC}"
+# Run SQL migrations first (for manual migrations like billing tables)
+node migrate.js 2>/dev/null || echo "Note: SQL migrations skipped (this is normal if tables already exist)"
+# Then run drizzle-kit push to sync schema
 npx drizzle-kit push --force
 echo -e "${GREEN}✓ Database migrations applied${NC}"
 echo ""

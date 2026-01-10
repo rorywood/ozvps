@@ -869,8 +869,24 @@ export async function registerRoutes(
               bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
             }
 
-            // Fetch billing status
-            const billingStatus = await getServerBillingStatus(server.id);
+            // Fetch billing status, create if doesn't exist (for existing servers)
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            // Auto-initialize billing for existing servers that don't have a record
+            if (!billingStatus && server.plan?.priceMonthly) {
+              try {
+                await createServerBilling({
+                  auth0UserId: req.userSession!.auth0UserId!,
+                  virtfusionServerId: server.id,
+                  planId: server.plan.id,
+                  monthlyPriceCents: server.plan.priceMonthly,
+                });
+                // Fetch the newly created billing record
+                billingStatus = await getServerBillingStatus(server.id);
+              } catch (billingCreateError: any) {
+                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
+              }
+            }
 
             return {
               ...server,
@@ -922,6 +938,22 @@ export async function registerRoutes(
       let billingStatus = null;
       try {
         billingStatus = await getServerBillingStatus(req.params.id);
+
+        // Auto-initialize billing for existing servers that don't have a record
+        if (!billingStatus && server.plan?.priceMonthly) {
+          try {
+            await createServerBilling({
+              auth0UserId: req.userSession!.auth0UserId!,
+              virtfusionServerId: req.params.id,
+              planId: server.plan.id,
+              monthlyPriceCents: server.plan.priceMonthly,
+            });
+            // Fetch the newly created billing record
+            billingStatus = await getServerBillingStatus(req.params.id);
+          } catch (billingCreateError: any) {
+            log(`Could not auto-initialize billing for server ${req.params.id}: ${billingCreateError.message}`, 'api');
+          }
+        }
       } catch (billingError: any) {
         log(`Warning: Could not fetch billing status for server ${req.params.id}: ${billingError.message}`, 'api');
       }
