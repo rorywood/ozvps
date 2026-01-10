@@ -1127,10 +1127,13 @@ export const dbStorage = {
 
     const conditions: any[] = [eq(tickets.auth0UserId, auth0UserId)];
 
-    if (status === 'open') {
-      conditions.push(ne(tickets.status, 'closed'));
-    } else if (status === 'closed') {
+    // "all" and "open" both exclude closed tickets (show active tickets only)
+    // "closed" shows only closed tickets
+    if (status === 'closed') {
       conditions.push(eq(tickets.status, 'closed'));
+    } else {
+      // 'all' and 'open' both show non-closed tickets
+      conditions.push(ne(tickets.status, 'closed'));
     }
 
     const whereClause = and(...conditions);
