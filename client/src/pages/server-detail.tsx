@@ -1463,7 +1463,7 @@ export default function ServerDetail() {
                 <div className="flex items-center gap-2">
                   <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
                   <span className="text-foreground">
-                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
               )}
