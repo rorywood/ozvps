@@ -1402,13 +1402,37 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
-      // Wrap in try-catch to handle case where billing tables don't exist yet
+      // Auto-initialize billing for any servers that don't have records yet
+      try {
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+
+        for (const server of servers) {
+          if (server.plan?.priceMonthly) {
+            // Check if billing record exists
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            if (!billingStatus) {
+              // Create billing record
+              await createServerBilling({
+                auth0UserId: session.auth0UserId!,
+                virtfusionServerId: server.id,
+                planId: server.plan.id,
+                monthlyPriceCents: server.plan.priceMonthly,
+              });
+              log(`Auto-initialized billing for server ${server.id}`, 'billing');
+            }
+          }
+        }
+      } catch (initError: any) {
+        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
+      }
+
+      // Fetch upcoming charges
       let upcoming = [];
       try {
         upcoming = await getUpcomingCharges(session.auth0UserId!);
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
-        // Return empty array instead of failing
       }
 
       res.json({ upcoming });
