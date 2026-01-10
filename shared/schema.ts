@@ -124,11 +124,6 @@ export const serverBilling = pgTable("server_billing", {
   nextBillAt: timestamp("next_bill_at").notNull(),
   suspendAt: timestamp("suspend_at"), // Set when unpaid, null otherwise
 
-  // Legacy fields (keeping for migration)
-  lastBilledAt: timestamp("last_billed_at"),
-  overdueAt: timestamp("overdue_at"),
-  overdueSince: timestamp("overdue_since"),
-
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
