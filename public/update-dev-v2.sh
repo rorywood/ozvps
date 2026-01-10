@@ -51,29 +51,32 @@ if ! command -v psql &>/dev/null; then
     echo -e "${GREEN}✓ PostgreSQL installed${NC}"
 else
     echo -e "${GREEN}✓ PostgreSQL already installed${NC}"
-    systemctl start postgresql 2>/dev/null || true
 fi
+
+# Ensure PostgreSQL is running
+echo -e "${CYAN}Starting PostgreSQL...${NC}"
+systemctl restart postgresql 2>/dev/null || service postgresql restart 2>/dev/null || true
+sleep 2
 
 # Check if database exists, create if not
 echo -e "${CYAN}Checking database...${NC}"
-DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ozvps_dev'" 2>/dev/null || echo "")
-if [ "$DB_EXISTS" != "1" ]; then
+if timeout 5 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ozvps_dev'" 2>/dev/null | grep -q 1; then
+    echo -e "${GREEN}✓ Database already exists${NC}"
+else
     echo -e "${YELLOW}→${NC} Creating database and user..."
     # Create user if not exists
-    sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>/dev/null || true
+    timeout 5 sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>&1 || echo "  (user may already exist)"
     # Create database
-    sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>/dev/null || true
+    timeout 5 sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>&1 || echo "  (database may already exist)"
     # Grant privileges
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" 2>/dev/null || true
-    echo -e "${GREEN}✓ Database created${NC}"
+    timeout 5 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" 2>&1 || true
+    echo -e "${GREEN}✓ Database setup complete${NC}"
 
     # Update .env with correct DATABASE_URL
     if [ -f "$INSTALL_DIR/.env" ]; then
         sed -i 's|DATABASE_URL=.*|DATABASE_URL=postgresql://ozvps_dev:OzVPS_Dev_2024!@localhost:5432/ozvps_dev|' "$INSTALL_DIR/.env"
         echo -e "${GREEN}✓ Updated DATABASE_URL in .env${NC}"
     fi
-else
-    echo -e "${GREEN}✓ Database already exists${NC}"
 fi
 echo ""
 
