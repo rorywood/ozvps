@@ -13,7 +13,7 @@ NC='\033[0m'
 
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
-GITHUB_BRANCH="claude/dev-l5488"
+GITHUB_BRANCH="claude/support-ticket-system-ZXocD"
 GITHUB_REPO="rorywood/ozvps"
 
 echo -e "${CYAN}${BOLD}"
