@@ -898,6 +898,17 @@ class ApiClient {
     return response.json();
   }
 
+  async adminDeleteTicket(id: number): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete ticket');
+    }
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();
