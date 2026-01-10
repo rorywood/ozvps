@@ -479,7 +479,7 @@ EOF
     echo -e "  ${CYAN}Installing npm packages (this may take a few minutes)...${NC}"
     (
         cd "$INSTALL_DIR"
-        npm install --production
+        npm install
     )
     if [ $? -eq 0 ]; then
         echo -e "  ${GREEN}✓${NC}  npm packages installed"
@@ -498,6 +498,19 @@ EOF
         echo -e "  ${GREEN}✓${NC}  Application built"
     else
         error_exit "Build failed"
+    fi
+
+    # Remove dev dependencies after build
+    echo ""
+    echo -e "  ${CYAN}Cleaning up dev dependencies...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npm prune --production
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Dev dependencies removed"
+    else
+        echo -e "  ${YELLOW}!${NC}  Could not remove dev dependencies (non-critical)"
     fi
 
     # Create PM2 ecosystem file

@@ -48,14 +48,19 @@ if [ ! -f "package.json" ]; then
     fi
 fi
 
-echo "Installing npm packages..."
-npm install --production
+echo "Installing npm packages (including dev dependencies for build)..."
+npm install
 echo "✓ Packages installed"
 echo ""
 
 echo "Building application..."
 npm run build
 echo "✓ Build complete"
+echo ""
+
+echo "Removing dev dependencies..."
+npm prune --production
+echo "✓ Dev dependencies removed"
 echo ""
 
 # Create PM2 ecosystem file
