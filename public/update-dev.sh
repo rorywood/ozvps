@@ -89,7 +89,9 @@ if [ -z "$EXTRACTED_DIR" ]; then
     exit 1
 fi
 
-rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+# Use cp -r instead of rsync for more reliable copying
+cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
+cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
 rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 # Restore config files
