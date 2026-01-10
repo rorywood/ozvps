@@ -79,7 +79,9 @@ DB_URL=${DB_URL:-postgresql://ozvps_dev:password@localhost:5432/ozvps_dev}
 # VirtFusion API
 echo ""
 echo -e "${BOLD}VirtFusion API Configuration${NC}"
-read -p "VirtFusion API Key: " VIRT_API_KEY < /dev/tty
+read -p "VirtFusion Panel URL [https://panel.ozvps.com.au]: " VIRT_PANEL_URL < /dev/tty
+VIRT_PANEL_URL=${VIRT_PANEL_URL:-https://panel.ozvps.com.au}
+read -p "VirtFusion API Token: " VIRT_API_TOKEN < /dev/tty
 
 # Stripe Configuration (TEST keys for development)
 echo ""
@@ -94,6 +96,10 @@ echo ""
 echo -e "${BOLD}Auth0 Configuration${NC}"
 read -p "Auth0 Secret: " AUTH0_SEC < /dev/tty
 read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER < /dev/tty
+# Add https:// prefix if missing
+if [[ ! "$AUTH0_ISSUER" =~ ^https?:// ]]; then
+    AUTH0_ISSUER="https://${AUTH0_ISSUER}"
+fi
 read -p "Auth0 Client ID: " AUTH0_CID < /dev/tty
 read -p "Auth0 Client Secret: " AUTH0_CSEC < /dev/tty
 
@@ -289,9 +295,9 @@ cat > "$INSTALL_DIR/.env" << ENVEOF
 # Database Configuration
 DATABASE_URL=${DB_URL}
 
-# VirtFusion API (panel.ozvps.com.au)
-VIRTFUSION_API_URL=https://panel.ozvps.com.au
-VIRTFUSION_API_KEY=${VIRT_API_KEY}
+# VirtFusion API
+VIRTFUSION_PANEL_URL=${VIRT_PANEL_URL}
+VIRTFUSION_API_TOKEN=${VIRT_API_TOKEN}
 
 # Stripe Configuration (TEST KEYS FOR DEVELOPMENT)
 STRIPE_SECRET_KEY=${STRIPE_SECRET}
