@@ -201,15 +201,38 @@ fi
 EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
 if [ -z "$EXTRACTED_DIR" ]; then
     echo -e "${RED}Error: Could not find extracted directory${NC}"
+    echo "Contents of temp extract:"
+    ls -la "$TEMP_EXTRACT"
     rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
     exit 1
 fi
 
-rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+echo "Copying from: $EXTRACTED_DIR"
+echo "Copying to: $INSTALL_DIR"
+
+# Copy files using cp instead of rsync for reliability
+cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/" 2>/dev/null || true
+cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+# Verify package.json was copied
+if [ ! -f "$INSTALL_DIR/package.json" ]; then
+    echo -e "${RED}Error: package.json not found after copy${NC}"
+    echo "Source directory contents:"
+    ls -la "$EXTRACTED_DIR" | head -20
+    echo ""
+    echo "Target directory contents:"
+    ls -la "$INSTALL_DIR" | head -20
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
 rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 echo -e "${GREEN}✓ Application downloaded${NC}"
 echo ""
+
+# Change to install directory
+cd "$INSTALL_DIR"
 
 # Install Node.js dependencies
 echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
