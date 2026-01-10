@@ -117,7 +117,7 @@ export const serverBilling = pgTable("server_billing", {
   // Billing state
   deployedAt: timestamp("deployed_at").notNull(),
   monthlyPriceCents: integer("monthly_price_cents").notNull(),
-  status: text("status").notNull().default("paid"), // paid, unpaid, suspended, cancelled
+  status: text("status").notNull().default("active"), // active, paid, unpaid, suspended, cancelled
   autoRenew: boolean("auto_renew").default(true).notNull(),
 
   // Billing dates

@@ -34,7 +34,7 @@ export async function createServerBilling(params: {
     planId: params.planId,
     deployedAt: now,
     monthlyPriceCents: params.monthlyPriceCents,
-    status: 'paid',
+    status: 'active',
     autoRenew: true,
     nextBillAt,
     suspendAt: null,
