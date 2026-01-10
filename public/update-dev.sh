@@ -13,13 +13,13 @@ NC='\033[0m'
 
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
-GITHUB_BRANCH="dev"
+GITHUB_BRANCH="claude/dev-l5488"
 GITHUB_REPO="rorywood/ozvps"
 
 echo -e "${CYAN}${BOLD}"
 echo "╔════════════════════════════════════════╗"
 echo "║   OzVPS Development Update            ║"
-echo "║   Branch: dev                         ║"
+echo "║   Branch: claude/dev-l5488            ║"
 echo "╚════════════════════════════════════════╝"
 echo -e "${NC}"
 

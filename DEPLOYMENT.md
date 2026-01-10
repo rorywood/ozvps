@@ -6,7 +6,7 @@ Simple deployment workflow for OzVPS Panel - separate production and development
 
 **Two Separate Servers:**
 - **Production Server:** Runs `main` branch at `app.ozvps.com.au`
-- **Development Server:** Runs `dev` branch at `dev.ozvps.com.au`
+- **Development Server:** Runs `claude/dev-l5488` branch at `dev.ozvps.com.au`
 
 **No merging required** - push directly to the branch you want to deploy.
 
@@ -29,12 +29,12 @@ This will:
 ### Development Server
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/dev/public/install-dev.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/install-dev.sh | sudo bash
 ```
 
 This will:
 - ✅ Install Node.js, PM2, NGINX, Certbot
-- ✅ Download code from GitHub `dev` branch
+- ✅ Download code from GitHub `claude/dev-l5488` branch
 - ✅ Set up NGINX + SSL for dev.ozvps.com.au
 - ✅ Create `.env` template
 - ✅ Start PM2 service
@@ -73,11 +73,11 @@ sudo pm2 restart ozvps-panel
 
 **For Development:**
 1. Make your code changes
-2. Push directly to `dev` branch:
+2. Push directly to `claude/dev-l5488` branch:
    ```bash
    git add .
    git commit -m "Your changes"
-   git push origin dev
+   git push origin claude/dev-l5488
    ```
 3. Update dev server:
    ```bash
