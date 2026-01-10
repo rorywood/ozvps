@@ -132,12 +132,35 @@ echo ""
 echo -e "${CYAN}Running database migrations...${NC}"
 # Load environment variables for migrations
 if [ -f "$INSTALL_DIR/.env" ]; then
-  export $(cat "$INSTALL_DIR/.env" | grep -v '^#' | xargs)
+  echo "Loading environment from .env..."
+  set -a
+  source "$INSTALL_DIR/.env"
+  set +a
 fi
-# Run SQL migrations first (for manual migrations like billing tables)
-node migrate.js || echo "Note: SQL migrations may have been skipped"
-# Then run drizzle-kit push to sync schema
-npx drizzle-kit push --force
+
+# Check if DATABASE_URL is set
+if [ -z "$DATABASE_URL" ]; then
+  echo -e "${RED}ERROR: DATABASE_URL not set in .env${NC}"
+  echo "Please check your .env file"
+  exit 1
+fi
+
+echo "Running SQL migrations..."
+if node migrate.js; then
+  echo -e "${GREEN}✓ SQL migrations completed${NC}"
+else
+  echo -e "${YELLOW}⚠ SQL migrations failed or were skipped${NC}"
+  echo "This may be normal if tables already exist"
+fi
+
+echo "Syncing schema with drizzle-kit..."
+if npx drizzle-kit push --force; then
+  echo -e "${GREEN}✓ Schema synchronized${NC}"
+else
+  echo -e "${RED}✗ Schema sync failed${NC}"
+  exit 1
+fi
+
 echo -e "${GREEN}✓ Database migrations applied${NC}"
 echo ""
 
