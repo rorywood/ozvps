@@ -213,11 +213,22 @@ echo ""
 
 # Install Node.js dependencies
 echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
-if npm install --production; then
+if npm install; then
     echo -e "${GREEN}✓ Dependencies installed${NC}"
 else
     echo -e "${RED}✗ Failed to install dependencies${NC}"
     echo "Try running: cd $INSTALL_DIR && npm install"
+    exit 1
+fi
+echo ""
+
+# Build application
+echo -e "${CYAN}Building application (this may take a minute)...${NC}"
+if npm run build; then
+    echo -e "${GREEN}✓ Application built${NC}"
+else
+    echo -e "${RED}✗ Failed to build application${NC}"
+    echo "Try running: cd $INSTALL_DIR && npm run build"
     exit 1
 fi
 echo ""
@@ -390,7 +401,7 @@ fi
 # Install update script
 echo ""
 echo -e "${CYAN}Installing update script...${NC}"
-curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-dev.sh" \
+curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-dev-v2.sh?$(date +%s)" \
     -o /usr/local/bin/update-ozvps-dev
 chmod +x /usr/local/bin/update-ozvps-dev
 echo -e "${GREEN}✓ Update script installed${NC}"
