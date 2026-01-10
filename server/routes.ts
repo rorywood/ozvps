@@ -3745,6 +3745,10 @@ export async function registerRoutes(
       res.json(counts);
     } catch (error: any) {
       log(`Error fetching ticket counts: ${error.message}`, 'api');
+      // Return zeros if tables don't exist yet (graceful fallback)
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        return res.json({ open: 0, waitingUser: 0, total: 0 });
+      }
       res.status(500).json({ error: 'Failed to fetch ticket counts' });
     }
   });
@@ -3765,6 +3769,10 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error fetching user tickets: ${error.message}`, 'api');
+      // Return empty array if tables don't exist yet
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        return res.json({ tickets: [], total: 0 });
+      }
       res.status(500).json({ error: 'Failed to fetch tickets' });
     }
   });
@@ -3815,7 +3823,11 @@ export async function registerRoutes(
       res.status(201).json({ ticket });
     } catch (error: any) {
       log(`Error creating ticket: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to create ticket' });
+      // Return detailed error for debugging - check if it's a DB error
+      const errorMessage = error.message?.includes('relation') || error.message?.includes('does not exist')
+        ? 'Database tables not found. Please run: npm run db:push'
+        : error.message || 'Failed to create ticket';
+      res.status(500).json({ error: errorMessage });
     }
   });
 
