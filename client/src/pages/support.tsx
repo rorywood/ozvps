@@ -151,7 +151,7 @@ function NewTicketDialog({
   const [category, setCategory] = useState<TicketCategory>("general");
   const [priority, setPriority] = useState<TicketPriority>("normal");
   const [description, setDescription] = useState("");
-  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [selectedServer, setSelectedServer] = useState<string>("none");
 
   const { data: serversData } = useQuery({
     queryKey: ["servers"],
@@ -192,7 +192,7 @@ function NewTicketDialog({
       category,
       priority,
       description,
-      virtfusionServerId: selectedServer || undefined,
+      virtfusionServerId: selectedServer === "none" ? undefined : selectedServer,
     });
   };
 
@@ -201,7 +201,7 @@ function NewTicketDialog({
     setCategory("general");
     setPriority("normal");
     setDescription("");
-    setSelectedServer("");
+    setSelectedServer("none");
   };
 
   return (
@@ -275,7 +275,7 @@ function NewTicketDialog({
                 <SelectValue placeholder="Select a server if applicable" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None / General</SelectItem>
+                <SelectItem value="none">None / General</SelectItem>
                 {serversData?.map((server) => (
                   <SelectItem key={server.id} value={server.id}>
                     <span className="flex items-center gap-2">
