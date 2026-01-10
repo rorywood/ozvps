@@ -98,10 +98,20 @@ cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR"
 
-# Update dependencies
-echo -e "${CYAN}Updating dependencies...${NC}"
-npm install --production >/dev/null 2>&1
-echo -e "${GREEN}✓ Dependencies updated${NC}"
+# Update dependencies and build
+echo -e "${CYAN}Installing dependencies...${NC}"
+npm install
+echo -e "${GREEN}✓ Dependencies installed${NC}"
+echo ""
+
+echo -e "${CYAN}Building application...${NC}"
+npm run build
+echo -e "${GREEN}✓ Application built${NC}"
+echo ""
+
+echo -e "${CYAN}Cleaning up dev dependencies...${NC}"
+npm prune --production
+echo -e "${GREEN}✓ Dev dependencies removed${NC}"
 echo ""
 
 # Restart application

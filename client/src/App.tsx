@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
+import { DevBanner } from "@/components/dev-banner";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -184,6 +185,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <PowerActionProvider>
           <TooltipProvider>
+            <DevBanner />
             <Toaster />
             <SessionErrorHandler />
             <SystemHealthCheck>

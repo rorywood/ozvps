@@ -594,9 +594,82 @@ EOF
     spinner $! "Configuring NGINX"
 
     # Setup SSL
-    if [[ "$SETUP_SSL" == "yes" && -n "$SSL_EMAIL" ]]; then
-        (certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect) >>"$LOG_FILE" 2>&1 &
-        spinner $! "Setting up SSL" || echo -e "  ${YELLOW}!${NC}  SSL failed - run manually: certbot --nginx -d $PANEL_DOMAIN"
+    if [[ "$SETUP_SSL" == "yes" ]]; then
+        (
+            set -e
+            # First try certbot if available
+            if command -v certbot &>/dev/null && [[ -n "$SSL_EMAIL" ]]; then
+                certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect 2>&1
+            else
+                # Fall back to self-signed certificate
+                echo "Certbot not available, using self-signed certificate for development..." >&2
+
+                # Create SSL directories
+                mkdir -p /etc/ssl/private /etc/ssl/certs
+                chmod 700 /etc/ssl/private
+
+                # Generate self-signed certificate
+                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                    -keyout "/etc/ssl/private/$PANEL_DOMAIN.key" \
+                    -out "/etc/ssl/certs/$PANEL_DOMAIN.crt" \
+                    -subj "/C=AU/ST=NSW/L=Sydney/O=OzVPS/CN=$PANEL_DOMAIN" 2>&1
+
+                # Update NGINX config with SSL
+                if [[ "$ENVIRONMENT" == "production" ]]; then
+                    NGINX_CONF="ozvps-prod"
+                else
+                    NGINX_CONF="ozvps-dev"
+                fi
+
+                cat > "/etc/nginx/sites-available/$NGINX_CONF" << SSLEOF
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $PANEL_DOMAIN;
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $PANEL_DOMAIN;
+
+    # SSL certificate
+    ssl_certificate /etc/ssl/certs/$PANEL_DOMAIN.crt;
+    ssl_certificate_key /etc/ssl/private/$PANEL_DOMAIN.key;
+
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Proxy to Node.js application
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        client_max_body_size 100M;
+    }
+}
+SSLEOF
+
+                # Reload NGINX
+                nginx -t && systemctl reload nginx
+
+                echo "Self-signed SSL certificate installed. Browser will show security warning." >&2
+            fi
+        ) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Setting up SSL"
     fi
 
     # Start PM2 service
