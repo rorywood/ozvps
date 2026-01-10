@@ -181,8 +181,8 @@ main() {
     echo -e "  ${CYAN}VirtFusion${NC}"
     input_field "Panel URL [https://panel.ozvps.com.au]" VIRTFUSION_PANEL_URL
     [[ -z "$VIRTFUSION_PANEL_URL" ]] && VIRTFUSION_PANEL_URL="https://panel.ozvps.com.au"
-    input_field "API Key" VIRTFUSION_API_KEY yes
-    [[ -z "$VIRTFUSION_API_KEY" ]] && error_exit "VirtFusion API Key is required"
+    input_field "API Token" VIRTFUSION_API_TOKEN yes
+    [[ -z "$VIRTFUSION_API_TOKEN" ]] && error_exit "VirtFusion API Token is required"
     echo ""
 
     echo -e "  ${CYAN}PostgreSQL Database${NC} ${DIM}(for billing & wallets)${NC}"
@@ -221,12 +221,11 @@ main() {
     echo ""
 
     echo -e "  ${CYAN}Auth0 Configuration${NC}"
-    input_field "Auth0 Secret" AUTH0_SECRET yes
-    input_field "Auth0 Issuer Base URL (https://your-tenant.auth0.com)" AUTH0_ISSUER
+    input_field "Auth0 Domain (e.g., your-app.au.auth0.com)" AUTH0_DOMAIN
     input_field "Auth0 Client ID" AUTH0_CLIENT_ID
     input_field "Auth0 Client Secret" AUTH0_CLIENT_SECRET yes
-    [[ -z "$AUTH0_SECRET" ]] && error_exit "Auth0 Secret is required"
-    [[ -z "$AUTH0_ISSUER" ]] && error_exit "Auth0 Issuer is required"
+    input_field "Auth0 Webhook Secret" AUTH0_WEBHOOK_SECRET yes
+    [[ -z "$AUTH0_DOMAIN" ]] && error_exit "Auth0 Domain is required"
     [[ -z "$AUTH0_CLIENT_ID" ]] && error_exit "Auth0 Client ID is required"
     [[ -z "$AUTH0_CLIENT_SECRET" ]] && error_exit "Auth0 Client Secret is required"
     echo ""
@@ -446,8 +445,8 @@ main() {
 DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
 
 # VirtFusion API
-VIRTFUSION_API_URL=$VIRTFUSION_PANEL_URL
-VIRTFUSION_API_KEY=$VIRTFUSION_API_KEY
+VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
+VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
 
 # Stripe Configuration ($STRIPE_MODE KEYS)
 STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
@@ -455,11 +454,10 @@ STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY
 STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
 
 # Auth0 Configuration
-AUTH0_SECRET=$AUTH0_SECRET
-AUTH0_BASE_URL=https://$PANEL_DOMAIN
-AUTH0_ISSUER_BASE_URL=$AUTH0_ISSUER
+AUTH0_DOMAIN=$AUTH0_DOMAIN
 AUTH0_CLIENT_ID=$AUTH0_CLIENT_ID
 AUTH0_CLIENT_SECRET=$AUTH0_CLIENT_SECRET
+AUTH0_WEBHOOK_SECRET=${AUTH0_WEBHOOK_SECRET:-}
 
 # Application Settings
 NODE_ENV=$NODE_ENV
