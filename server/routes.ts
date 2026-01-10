@@ -6,7 +6,7 @@ import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -3726,6 +3726,475 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Webhook error: ${error.message}`, 'webhook');
       res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+  // ==========================================
+  // SUPPORT TICKET ROUTES - USER FACING
+  // ==========================================
+
+  // Get ticket counts for user (for notification badge)
+  app.get('/api/support/counts', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const counts = await dbStorage.getUserTicketCounts(auth0UserId);
+      res.json(counts);
+    } catch (error: any) {
+      log(`Error fetching ticket counts: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket counts' });
+    }
+  });
+
+  // List user's tickets
+  app.get('/api/support/tickets', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const status = req.query.status as 'open' | 'closed' | 'all' | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const result = await dbStorage.getUserTickets(auth0UserId, { status, limit, offset });
+      res.json(result);
+    } catch (error: any) {
+      log(`Error fetching user tickets: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+  });
+
+  // Create a new ticket
+  app.post('/api/support/tickets', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const parseResult = createTicketSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const { title, category, priority, description, virtfusionServerId } = parseResult.data;
+
+      // If a server is specified, verify ownership
+      if (virtfusionServerId) {
+        const isOwner = await verifyServerOwnership(virtfusionServerId, req.userSession!.virtFusionUserId);
+        if (!isOwner) {
+          return res.status(403).json({ error: 'You do not have access to this server' });
+        }
+      }
+
+      // Create the ticket
+      const ticket = await dbStorage.createTicket({
+        auth0UserId,
+        title,
+        category,
+        priority,
+        virtfusionServerId: virtfusionServerId || null,
+      });
+
+      // Create the initial message
+      await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: description,
+      });
+
+      log(`Ticket #${ticket.id} created by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ ticket });
+    } catch (error: any) {
+      log(`Error creating ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to create ticket' });
+    }
+  });
+
+  // Get a specific ticket with messages
+  app.get('/api/support/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const messages = await dbStorage.getTicketMessages(ticketId);
+
+      // Get server info if attached
+      let server = null;
+      if (ticket.virtfusionServerId) {
+        try {
+          server = await virtfusionClient.getServer(ticket.virtfusionServerId);
+        } catch (e) {
+          // Server might be deleted
+        }
+      }
+
+      res.json({ ticket, messages, server });
+    } catch (error: any) {
+      log(`Error fetching ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a ticket (user)
+  app.post('/api/support/tickets/:id/messages', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = ticketMessageSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Create the message
+      const message = await dbStorage.createTicketMessage({
+        ticketId,
+        authorType: 'user',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: parseResult.data.message,
+      });
+
+      // Update ticket status to waiting_admin (user replied)
+      // Also reopen if it was resolved or closed
+      let newStatus: TicketStatus = 'waiting_admin';
+      await dbStorage.updateTicket(ticketId, {
+        status: newStatus,
+        closedAt: null,
+      });
+
+      log(`Reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ message });
+    } catch (error: any) {
+      log(`Error replying to ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  // Close a ticket (user can request close)
+  app.post('/api/support/tickets/:id/close', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const updatedTicket = await dbStorage.closeTicket(ticketId);
+      log(`Ticket #${ticketId} closed by user ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error closing ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // ==========================================
+  // SUPPORT TICKET ROUTES - ADMIN FACING
+  // ==========================================
+
+  // Get admin ticket counts (for notification badge)
+  app.get('/api/admin/tickets/counts', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const counts = await dbStorage.getAdminTicketCounts();
+      res.json(counts);
+    } catch (error: any) {
+      log(`Error fetching admin ticket counts: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket counts' });
+    }
+  });
+
+  // List all tickets (admin)
+  app.get('/api/admin/tickets', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      // Parse query params
+      let status: TicketStatus | TicketStatus[] | undefined;
+      const statusParam = req.query.status as string | undefined;
+      if (statusParam) {
+        if (statusParam.includes(',')) {
+          status = statusParam.split(',') as TicketStatus[];
+        } else {
+          status = statusParam as TicketStatus;
+        }
+      }
+
+      const category = req.query.category as TicketCategory | undefined;
+      const priority = req.query.priority as TicketPriority | undefined;
+      const auth0UserId = req.query.user as string | undefined;
+      const virtfusionServerId = req.query.server as string | undefined;
+      const assignedAdminId = req.query.assigned === 'null' ? null : req.query.assigned as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const sortBy = (req.query.sortBy as 'lastMessageAt' | 'priority' | 'createdAt') || 'lastMessageAt';
+      const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'desc';
+
+      const result = await dbStorage.getAllTickets({
+        status,
+        category,
+        priority,
+        auth0UserId,
+        virtfusionServerId,
+        assignedAdminId,
+        limit,
+        offset,
+        sortBy,
+        sortOrder,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      log(`Error fetching admin tickets: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+  });
+
+  // Get a specific ticket with messages (admin)
+  app.get('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const messages = await dbStorage.getTicketMessages(ticketId);
+
+      // Get server info if attached
+      let server = null;
+      if (ticket.virtfusionServerId) {
+        try {
+          server = await virtfusionClient.getServer(ticket.virtfusionServerId);
+        } catch (e) {
+          // Server might be deleted
+        }
+      }
+
+      // Get user info from wallet
+      const wallet = await dbStorage.getWallet(ticket.auth0UserId);
+
+      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : null });
+    } catch (error: any) {
+      log(`Error fetching ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a ticket (admin) with optional status change
+  app.post('/api/admin/tickets/:id/messages', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = ticketMessageSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Create the message
+      const message = await dbStorage.createTicketMessage({
+        ticketId,
+        authorType: 'admin',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: parseResult.data.message,
+      });
+
+      // Update ticket status - default to waiting_user when admin replies
+      const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
+      await dbStorage.updateTicket(ticketId, { status: newStatus });
+
+      log(`Admin reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ message });
+    } catch (error: any) {
+      log(`Error replying to ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  // Update ticket metadata (admin)
+  app.patch('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = adminTicketUpdateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updates: any = {};
+      if (parseResult.data.status !== undefined) updates.status = parseResult.data.status;
+      if (parseResult.data.priority !== undefined) updates.priority = parseResult.data.priority;
+      if (parseResult.data.category !== undefined) updates.category = parseResult.data.category;
+      if (parseResult.data.assignedAdminId !== undefined) updates.assignedAdminId = parseResult.data.assignedAdminId;
+
+      // Handle closed status
+      if (updates.status === 'closed') {
+        updates.closedAt = new Date();
+      } else if (ticket.status === 'closed' && updates.status && updates.status !== 'closed') {
+        updates.closedAt = null;
+      }
+
+      const updatedTicket = await dbStorage.updateTicket(ticketId, updates);
+      log(`Ticket #${ticketId} updated by admin ${req.userSession!.email}: ${JSON.stringify(updates)}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error updating ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update ticket' });
+    }
+  });
+
+  // Close a ticket (admin)
+  app.post('/api/admin/tickets/:id/close', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updatedTicket = await dbStorage.closeTicket(ticketId);
+      log(`Ticket #${ticketId} closed by admin ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error closing ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // Reopen a ticket (admin)
+  app.post('/api/admin/tickets/:id/reopen', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updatedTicket = await dbStorage.reopenTicket(ticketId);
+      log(`Ticket #${ticketId} reopened by admin ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error reopening ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reopen ticket' });
     }
   });
 
