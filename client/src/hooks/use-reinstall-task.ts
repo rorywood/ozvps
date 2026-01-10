@@ -308,7 +308,7 @@ export function useReinstallTask(serverId: string) {
   // Also detects builds started from other sessions/devices
   useEffect(() => {
     checkBuildStatus();
-  }, [serverId]); // Only run on mount
+  }, [checkBuildStatus]); // Properly include checkBuildStatus to avoid stale closures
 
   // Handle tab visibility changes - immediately check status when user returns to tab
   // This fixes the issue where browser throttles timers when tab is backgrounded
