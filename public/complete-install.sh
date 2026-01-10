@@ -21,12 +21,31 @@ echo "Files in $INSTALL_DIR:"
 ls -la | head -20
 echo ""
 
-# Check if package.json exists
+# Check if package.json exists, if not check subdirectories
 if [ ! -f "package.json" ]; then
-    echo "ERROR: package.json not found. Download may have failed."
-    echo "Files in directory:"
-    ls -la
-    exit 1
+    echo "package.json not found in $INSTALL_DIR"
+    echo "Checking for files in subdirectory..."
+
+    # Look for package.json in subdirectories
+    PKG_JSON=$(find . -maxdepth 2 -name "package.json" -type f | head -1)
+
+    if [ -n "$PKG_JSON" ]; then
+        SUBDIR=$(dirname "$PKG_JSON")
+        echo "Found package.json in: $SUBDIR"
+        echo "Moving files to correct location..."
+
+        # Move all files from subdirectory to parent
+        mv "$SUBDIR"/* . 2>/dev/null || true
+        mv "$SUBDIR"/.[^.]* . 2>/dev/null || true
+        rmdir "$SUBDIR" 2>/dev/null || rm -rf "$SUBDIR"
+
+        echo "✓ Files moved to $INSTALL_DIR"
+    else
+        echo "ERROR: package.json not found anywhere. Download failed."
+        echo "Files in directory:"
+        ls -la
+        exit 1
+    fi
 fi
 
 echo "Installing npm packages..."
