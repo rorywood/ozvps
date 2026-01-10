@@ -284,6 +284,18 @@ chmod 600 "$INSTALL_DIR/.env"
 echo -e "${GREEN}✓ Configuration file created${NC}"
 echo ""
 
+# Run database migrations
+echo -e "${CYAN}Running database migrations...${NC}"
+cd "$INSTALL_DIR"
+if npx drizzle-kit push --force; then
+    echo -e "${GREEN}✓ Database migrations applied${NC}"
+else
+    echo -e "${RED}✗ Database migration failed${NC}"
+    echo "Check your DATABASE_URL and ensure PostgreSQL is accessible"
+    exit 1
+fi
+echo ""
+
 # Create PM2 ecosystem file
 echo -e "${CYAN}Configuring PM2...${NC}"
 cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
