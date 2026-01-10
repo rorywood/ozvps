@@ -355,7 +355,7 @@ export default function Dashboard() {
                                 <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                                 <div className="flex items-center gap-1">
                                   <span className={server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}>
-                                    Next bill: {new Date(server.billing.nextBillAt).toLocaleDateString()}
+                                    Next bill: {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                                   </span>
                                 </div>
                               </>

@@ -1432,7 +1432,7 @@ export default function BillingPage() {
                     variant="outline"
                     size="sm"
                     className="gap-1 border-border text-primary hover:text-primary/80"
-                    onClick={() => window.open('mailto:support@ozvps.au', '_blank')}
+                    onClick={() => navigate('/support')}
                     data-testid="button-contact-support"
                   >
                     Contact Support
