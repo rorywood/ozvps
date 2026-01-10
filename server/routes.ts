@@ -3154,13 +3154,17 @@ export async function registerRoutes(
 
   app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
     try {
+      log(`[Direct Topup] Request received from user ${req.userSession?.auth0UserId}`, 'api');
+
       const result = directChargeSchema.safeParse(req.body);
       if (!result.success) {
+        log(`[Direct Topup] Validation failed: ${JSON.stringify(result.error)}`, 'api');
         return res.status(400).json({ error: 'Invalid request. Amount must be between $5 and $500, and a payment method is required.' });
       }
 
       const { amountCents, paymentMethodId } = result.data;
-      
+      log(`[Direct Topup] Processing $${(amountCents / 100).toFixed(2)} with payment method ${paymentMethodId}`, 'api');
+
       // Ensure Stripe customer exists
       const { stripeCustomerId } = await ensureStripeCustomer({
         auth0UserId: req.userSession!.auth0UserId,
@@ -3168,13 +3172,16 @@ export async function registerRoutes(
         name: req.userSession!.name,
         userId: req.userSession!.userId,
       });
-      
+      log(`[Direct Topup] Stripe customer: ${stripeCustomerId}`, 'api');
+
       const stripe = await getUncachableStripeClient();
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Verify the payment method belongs to this customer
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      log(`[Direct Topup] Payment method retrieved: ${paymentMethod.id}, customer: ${paymentMethod.customer}`, 'api');
       if (paymentMethod.customer !== stripeCustomerId) {
+        log(`[Direct Topup] Payment method customer mismatch`, 'api');
         return res.status(403).json({ error: 'Invalid payment method' });
       }
 
@@ -3183,9 +3190,11 @@ export async function registerRoutes(
       const expYear = paymentMethod.card?.exp_year || 0;
       const expMonth = paymentMethod.card?.exp_month || 0;
       if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+        log(`[Direct Topup] Card expired: ${expMonth}/${expYear}`, 'api');
         return res.status(400).json({ error: 'This card has expired. Please use a different card.' });
       }
 
+      log(`[Direct Topup] Creating payment intent for $${(amountCents / 100).toFixed(2)}`, 'api');
       // Create a payment intent and confirm it immediately
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountCents,
@@ -3202,7 +3211,10 @@ export async function registerRoutes(
         },
       });
 
+      log(`[Direct Topup] Payment intent created: ${paymentIntent.id}, status: ${paymentIntent.status}`, 'api');
+
       if (paymentIntent.status === 'succeeded') {
+        log(`[Direct Topup] Payment succeeded, crediting wallet`, 'api');
         // Add credits to wallet and record transaction in one call
         const updatedWallet = await dbStorage.creditWallet(auth0UserId, amountCents, {
           type: 'credit',
@@ -3210,6 +3222,7 @@ export async function registerRoutes(
           metadata: { source: 'direct_charge' },
         });
 
+        log(`[Direct Topup] Wallet credited. New balance: $${((updatedWallet?.balanceCents || 0) / 100).toFixed(2)}`, 'api');
         log(`Direct charge successful for ${auth0UserId}: $${(amountCents / 100).toFixed(2)} AUD`, 'stripe');
         
         // Create Stripe invoice for the payment (stored in Stripe, not our database)
@@ -3249,47 +3262,54 @@ export async function registerRoutes(
           log(`Stripe invoice created: ${stripeInvoice.number} for $${(amountCents / 100).toFixed(2)} user=${auth0UserId}`, 'billing');
         } catch (invoiceError: any) {
           // Log but don't fail - wallet credit was successful
-          log(`Failed to create Stripe invoice: ${invoiceError.message}`, 'billing');
+          log(`[Direct Topup] Failed to create Stripe invoice: ${invoiceError.message}`, 'billing');
         }
-        
-        res.json({ 
-          success: true, 
+
+        log(`[Direct Topup] Sending success response`, 'api');
+        res.json({
+          success: true,
           newBalanceCents: updatedWallet?.balanceCents || 0,
           chargedAmountCents: amountCents,
         });
       } else if (paymentIntent.status === 'requires_action') {
         // Card requires 3D Secure or additional authentication
         // Return client_secret so frontend can either handle on-session or fallback
-        log(`Direct charge requires action for ${auth0UserId}`, 'stripe');
-        res.status(402).json({ 
+        log(`[Direct Topup] Payment requires action: ${paymentIntent.status}`, 'stripe');
+        res.status(402).json({
           error: 'This card requires additional authentication.',
           requiresAction: true,
           clientSecret: paymentIntent.client_secret,
           paymentIntentId: paymentIntent.id,
         });
       } else {
-        log(`Direct charge failed for ${auth0UserId}: status ${paymentIntent.status}`, 'stripe');
+        log(`[Direct Topup] Payment failed with status: ${paymentIntent.status}`, 'stripe');
         res.status(400).json({ error: 'Payment failed. Please try again or use a different card.' });
       }
     } catch (error: any) {
+      log(`[Direct Topup] Error caught: ${error.message}`, 'api');
+      log(`[Direct Topup] Error type: ${error.type}, code: ${error.code}`, 'api');
+      log(`[Direct Topup] Full error: ${JSON.stringify(error, null, 2)}`, 'api');
+
       // Handle Stripe customer errors
       if (error instanceof StripeCustomerError) {
-        return res.status(error.httpStatus).json({ 
-          error: error.message, 
-          code: error.code 
+        return res.status(error.httpStatus).json({
+          error: error.message,
+          code: error.code
         });
       }
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
-        log(`Card error for direct charge: ${error.message}`, 'stripe');
+        log(`[Direct Topup] Card error: ${error.message}`, 'stripe');
         res.status(400).json({ error: error.message || 'Your card was declined. Please try a different card.' });
       } else if (error.code === 'authentication_required') {
-        res.status(402).json({ 
+        log(`[Direct Topup] Authentication required`, 'stripe');
+        res.status(402).json({
           error: 'This card requires additional authentication. Please use the standard top-up flow.',
           requiresAction: true,
         });
       } else {
-        log(`Error processing direct charge: ${error.message}`, 'api');
+        log(`[Direct Topup] Unhandled error: ${error.message}`, 'api');
+        log(`[Direct Topup] Stack trace: ${error.stack}`, 'api');
         res.status(500).json({ error: 'Failed to process payment. Please try again.' });
       }
     }

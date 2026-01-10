@@ -516,7 +516,7 @@ class ApiClient {
     return data;
   }
 
-  async directTopup(amountCents: number, paymentMethodId: string): Promise<{ 
+  async directTopup(amountCents: number, paymentMethodId: string): Promise<{
     success: boolean;
     newBalanceCents?: number;
     chargedAmountCents?: number;
@@ -525,14 +525,18 @@ class ApiClient {
     clientSecret?: string;
     paymentIntentId?: string;
   }> {
+    console.log(`[API] Direct topup request: $${(amountCents / 100).toFixed(2)}, payment method: ${paymentMethodId}`);
     const response = await fetch(`${this.baseUrl}/wallet/topup/direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountCents, paymentMethodId }),
     });
+    console.log(`[API] Direct topup response status: ${response.status}`);
     const data = await response.json();
+    console.log('[API] Direct topup response data:', data);
     if (!response.ok) {
-      return { success: false, ...data };
+      console.error('[API] Direct topup failed:', data.error);
+      throw new Error(data.error || 'Payment failed');
     }
     return data;
   }

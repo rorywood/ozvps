@@ -594,6 +594,7 @@ export default function BillingPage() {
     mutationFn: ({ amountCents, paymentMethodId }: { amountCents: number; paymentMethodId: string }) =>
       api.directTopup(amountCents, paymentMethodId),
     onSuccess: (data, variables) => {
+      console.log('[Direct Topup] Success response:', data);
       if (data.success) {
         const chargedAmount = (data.chargedAmountCents || 0) / 100;
         setPaymentFeedback({
@@ -609,6 +610,7 @@ export default function BillingPage() {
       }
     },
     onError: (error: any) => {
+      console.error('[Direct Topup] Error:', error);
       setPaymentFeedback({
         type: 'error',
         message: error.message || "Payment failed. Please try again or contact support.",
