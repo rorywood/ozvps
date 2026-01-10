@@ -875,11 +875,16 @@ export async function registerRoutes(
             // Auto-initialize billing for existing servers that don't have a record
             if (!billingStatus && server.plan?.priceMonthly) {
               try {
+                // Use server's actual creation date for accurate billing
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
                 await createServerBilling({
                   auth0UserId: req.userSession!.auth0UserId!,
                   virtfusionServerId: server.id,
                   planId: server.plan.id,
                   monthlyPriceCents: server.plan.priceMonthly,
+                  deployedAt,
                 });
                 // Fetch the newly created billing record
                 billingStatus = await getServerBillingStatus(server.id);
@@ -942,11 +947,16 @@ export async function registerRoutes(
         // Auto-initialize billing for existing servers that don't have a record
         if (!billingStatus && server.plan?.priceMonthly) {
           try {
+            // Use server's actual creation date for accurate billing
+            const serverCreatedAt = server.created_at || server.createdAt;
+            const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
             await createServerBilling({
               auth0UserId: req.userSession!.auth0UserId!,
               virtfusionServerId: req.params.id,
               planId: server.plan.id,
               monthlyPriceCents: server.plan.priceMonthly,
+              deployedAt,
             });
             // Fetch the newly created billing record
             billingStatus = await getServerBillingStatus(req.params.id);
@@ -1412,12 +1422,17 @@ export async function registerRoutes(
             let billingStatus = await getServerBillingStatus(server.id);
 
             if (!billingStatus) {
+              // Use server's actual creation date for accurate billing
+              const serverCreatedAt = server.created_at || server.createdAt;
+              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
               // Create billing record
               await createServerBilling({
                 auth0UserId: session.auth0UserId!,
                 virtfusionServerId: server.id,
                 planId: server.plan.id,
                 monthlyPriceCents: server.plan.priceMonthly,
+                deployedAt,
               });
               log(`Auto-initialized billing for server ${server.id}`, 'billing');
             }

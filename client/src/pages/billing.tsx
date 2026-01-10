@@ -1136,58 +1136,73 @@ export default function BillingPage() {
                           return (
                             <div
                               key={charge.id}
-                              className={`p-4 rounded-xl ring-1 transition-colors ${
+                              className={`p-5 rounded-xl ring-1 transition-all hover:shadow-md ${
                                 charge.status === 'suspended'
-                                  ? 'bg-red-500/10 ring-red-500/30'
+                                  ? 'bg-red-500/5 ring-red-500/20 hover:bg-red-500/10'
                                   : charge.status === 'unpaid'
-                                  ? 'bg-yellow-500/10 ring-yellow-500/30'
-                                  : 'bg-muted/10 ring-border hover:bg-muted/20'
+                                  ? 'bg-yellow-500/5 ring-yellow-500/20 hover:bg-yellow-500/10'
+                                  : 'bg-muted/5 ring-border hover:bg-muted/10 hover:ring-muted-foreground/20'
                               }`}
                               data-testid={`upcoming-charge-${charge.id}`}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-start gap-4 flex-1">
+                                  <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${
                                     charge.status === 'suspended'
-                                      ? 'bg-red-500/20 text-red-500'
+                                      ? 'bg-red-500/10 text-red-500'
                                       : charge.status === 'unpaid'
-                                      ? 'bg-yellow-500/20 text-yellow-500'
-                                      : 'bg-blue-500/20 text-blue-500'
+                                      ? 'bg-yellow-500/10 text-yellow-500'
+                                      : 'bg-blue-500/10 text-blue-500'
                                   }`}>
-                                    <Server className="h-5 w-5" />
+                                    <Server className="h-6 w-6" />
                                   </div>
-                                  <div>
-                                    <div className="font-medium text-foreground">
-                                      Server {charge.virtfusionServerId}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-base font-semibold text-foreground">
+                                        Server #{charge.virtfusionServerId}
+                                      </span>
                                       {charge.status === 'suspended' && (
-                                        <span className="ml-2 text-xs uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 tracking-wide">
                                           SUSPENDED
                                         </span>
                                       )}
                                       {charge.status === 'unpaid' && (
-                                        <span className="ml-2 text-xs uppercase font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 tracking-wide">
                                           UNPAID
                                         </span>
                                       )}
+                                      {charge.status === 'active' && (
+                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 tracking-wide">
+                                          ACTIVE
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="text-sm text-muted-foreground">
+                                    <div className="text-sm text-muted-foreground flex items-center gap-2">
                                       {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
-                                        <span className="text-yellow-400">
-                                          Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - Add funds to prevent suspension
+                                        <span className="text-yellow-400 font-medium">
+                                          ⚠ Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - Add funds to prevent suspension
                                         </span>
                                       ) : charge.status === 'suspended' ? (
-                                        <span className="text-red-400">
-                                          Suspended - Add funds to reactivate
+                                        <span className="text-red-400 font-medium">
+                                          ⛔ Suspended - Add funds to reactivate
                                         </span>
                                       ) : (
-                                        <>Next billing: {formatDate(charge.nextBillAt)} ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})</>
+                                        <>
+                                          <span>Next billing:</span>
+                                          <span className="font-medium text-foreground">{formatDate(charge.nextBillAt)}</span>
+                                          <span className="text-muted-foreground/60">•</span>
+                                          <span>{daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''}</span>
+                                        </>
                                       )}
                                     </div>
                                   </div>
                                 </div>
-                                <span className="font-mono text-lg font-medium text-foreground">
-                                  {formatCurrency(charge.monthlyPriceCents)}/mo
-                                </span>
+                                <div className="text-right shrink-0">
+                                  <div className="font-mono text-xl font-bold text-foreground">
+                                    {formatCurrency(charge.monthlyPriceCents)}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">per month</div>
+                                </div>
                               </div>
                             </div>
                           );

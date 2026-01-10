@@ -24,15 +24,16 @@ export async function createServerBilling(params: {
   virtfusionServerId: string;
   planId: number;
   monthlyPriceCents: number;
+  deployedAt?: Date; // Optional - use server's actual creation date if available
 }): Promise<void> {
-  const now = new Date();
-  const nextBillAt = addMonth(now);
+  const deployedAt = params.deployedAt || new Date();
+  const nextBillAt = addMonth(deployedAt);
 
   const billingRecord: InsertServerBilling = {
     auth0UserId: params.auth0UserId,
     virtfusionServerId: params.virtfusionServerId,
     planId: params.planId,
-    deployedAt: now,
+    deployedAt,
     monthlyPriceCents: params.monthlyPriceCents,
     status: 'active',
     autoRenew: true,
@@ -41,7 +42,7 @@ export async function createServerBilling(params: {
   };
 
   await db.insert(serverBilling).values(billingRecord);
-  log(`Created billing record for server ${params.virtfusionServerId}`, 'billing');
+  log(`Created billing record for server ${params.virtfusionServerId}, next bill: ${nextBillAt.toISOString()}`, 'billing');
 }
 
 // Charge a server's monthly fee
