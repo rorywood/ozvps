@@ -34,17 +34,34 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Check if already installed
+FORCE_REINSTALL=false
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Warning: Installation already exists at $INSTALL_DIR${NC}"
-    read -p "Remove existing installation and reinstall? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}${BOLD}⚠ Warning: Installation already exists at $INSTALL_DIR${NC}"
+    echo ""
+    echo "Options:"
+    echo "  [1] Cancel installation (default)"
+    echo "  [2] Remove and reinstall (quick - keeps system packages)"
+    echo "  [3] Force full reinstall (uninstall and reinstall everything)"
+    echo ""
+    read -p "Choose option [1-3]: " -n 1 -r CHOICE < /dev/tty
+    echo ""
+    echo ""
+
+    if [[ "$CHOICE" == "3" ]]; then
+        FORCE_REINSTALL=true
+        echo -e "${CYAN}${BOLD}Full reinstall selected - will uninstall and reinstall all dependencies${NC}"
+        echo -e "${CYAN}Removing existing installation...${NC}"
+        pm2 delete $SERVICE_NAME 2>/dev/null || true
+        pm2 save --force 2>/dev/null || true
+        rm -rf "$INSTALL_DIR"
+    elif [[ "$CHOICE" == "2" ]]; then
+        echo -e "${CYAN}Removing existing installation...${NC}"
+        pm2 delete $SERVICE_NAME 2>/dev/null || true
+        rm -rf "$INSTALL_DIR"
+    else
         echo "Installation cancelled."
         exit 0
     fi
-    echo -e "${CYAN}Removing existing installation...${NC}"
-    pm2 delete $SERVICE_NAME 2>/dev/null || true
-    rm -rf "$INSTALL_DIR"
 fi
 
 echo ""
@@ -52,7 +69,13 @@ echo -e "${CYAN}${BOLD}Checking System Dependencies${NC}"
 echo ""
 
 # Check and install Node.js 20.x
-if command -v node &>/dev/null; then
+if [ "$FORCE_REINSTALL" = true ] && command -v node &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Uninstalling existing Node.js..."
+    apt-get remove -y nodejs >/dev/null 2>&1
+    apt-get autoremove -y >/dev/null 2>&1
+fi
+
+if command -v node &>/dev/null && [ "$FORCE_REINSTALL" = false ]; then
     NODE_VERSION=$(node --version)
     echo -e "  ${GREEN}✓${NC} Node.js $NODE_VERSION (already installed)"
 else
@@ -64,7 +87,12 @@ else
 fi
 
 # Check and install PM2
-if command -v pm2 &>/dev/null; then
+if [ "$FORCE_REINSTALL" = true ] && command -v pm2 &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Uninstalling existing PM2..."
+    npm uninstall -g pm2 >/dev/null 2>&1
+fi
+
+if command -v pm2 &>/dev/null && [ "$FORCE_REINSTALL" = false ]; then
     PM2_VERSION=$(pm2 --version)
     echo -e "  ${GREEN}✓${NC} PM2 v$PM2_VERSION (already installed)"
 else
