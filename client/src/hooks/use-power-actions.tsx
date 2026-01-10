@@ -165,21 +165,23 @@ export function useSyncPowerActions(servers: Array<{ id: string; status: string 
 
       const timeSinceAction = Date.now() - pending.timestamp;
 
-      // Add 2 second stabilization delay before clearing pending state
-      const STABILIZATION_DELAY = 2000;
-
-      if (pending.action === "reboot" && server.status === "running" && timeSinceAction > (10000 + STABILIZATION_DELAY)) {
+      // For reboot: wait at least 10 seconds AND status is running
+      // (prevents clearing too early when server goes from running -> stopped -> running)
+      if (pending.action === "reboot" && server.status === "running" && timeSinceAction > 10000) {
         clearPending(server.id);
       }
 
-      if (pending.action === "start" && server.status === "running" && timeSinceAction > STABILIZATION_DELAY) {
+      // For start: just check if status is running (no minimum time needed)
+      if (pending.action === "start" && server.status === "running") {
         clearPending(server.id);
       }
 
-      if (pending.action === "shutdown" && server.status === "stopped" && timeSinceAction > STABILIZATION_DELAY) {
+      // For shutdown: just check if status is stopped (no minimum time needed)
+      if (pending.action === "shutdown" && server.status === "stopped") {
         clearPending(server.id);
       }
 
+      // Clear if action takes longer than 5 minutes (failsafe)
       if (timeSinceAction > ACTION_TIMEOUT_MS) {
         clearPending(server.id);
       }
