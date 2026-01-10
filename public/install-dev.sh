@@ -110,38 +110,67 @@ npm install --production >/dev/null 2>&1
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
 
-# Create .env file template if it doesn't exist
-if [ ! -f "$INSTALL_DIR/.env" ]; then
-    echo -e "${CYAN}Creating .env configuration file...${NC}"
-    cat > "$INSTALL_DIR/.env" << 'ENVEOF'
+# Prompt for configuration
+echo -e "${CYAN}${BOLD}Configuration Setup${NC}"
+echo -e "${YELLOW}Please provide your API keys and credentials:${NC}"
+echo ""
+
 # Database Configuration
-DATABASE_URL=postgresql://ozvps_dev:password@localhost:5432/ozvps_dev
+read -p "PostgreSQL Connection String [postgresql://ozvps_dev:password@localhost:5432/ozvps_dev]: " DB_URL
+DB_URL=${DB_URL:-postgresql://ozvps_dev:password@localhost:5432/ozvps_dev}
+
+# VirtFusion API
+echo ""
+echo -e "${BOLD}VirtFusion API Configuration${NC}"
+read -p "VirtFusion API Key: " VIRT_API_KEY
+
+# Stripe Configuration (TEST keys for development)
+echo ""
+echo -e "${BOLD}Stripe Configuration (TEST KEYS FOR DEVELOPMENT)${NC}"
+echo -e "${YELLOW}⚠ Use TEST keys (sk_test_..., pk_test_...) not LIVE keys!${NC}"
+read -p "Stripe Secret Key (sk_test_...): " STRIPE_SECRET
+read -p "Stripe Publishable Key (pk_test_...): " STRIPE_PUBLIC
+read -p "Stripe Webhook Secret (whsec_test_...): " STRIPE_WEBHOOK
+
+# Auth0 Configuration
+echo ""
+echo -e "${BOLD}Auth0 Configuration${NC}"
+read -p "Auth0 Secret: " AUTH0_SEC
+read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER
+read -p "Auth0 Client ID: " AUTH0_CID
+read -p "Auth0 Client Secret: " AUTH0_CSEC
+
+echo ""
+echo -e "${CYAN}Creating configuration file...${NC}"
+
+# Create .env file with provided values
+cat > "$INSTALL_DIR/.env" << ENVEOF
+# Database Configuration
+DATABASE_URL=${DB_URL}
 
 # VirtFusion API (panel.ozvps.com.au)
 VIRTFUSION_API_URL=https://panel.ozvps.com.au
-VIRTFUSION_API_KEY=your_virtfusion_api_key_here
+VIRTFUSION_API_KEY=${VIRT_API_KEY}
 
 # Stripe Configuration (TEST KEYS FOR DEVELOPMENT)
-STRIPE_SECRET_KEY=sk_test_your_key_here
-STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
-STRIPE_WEBHOOK_SECRET=whsec_test_your_webhook_secret_here
+STRIPE_SECRET_KEY=${STRIPE_SECRET}
+STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLIC}
+STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK}
 
 # Auth0 Configuration
-AUTH0_SECRET=your_auth0_secret_here
+AUTH0_SECRET=${AUTH0_SEC}
 AUTH0_BASE_URL=https://dev.ozvps.com.au
-AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
-AUTH0_CLIENT_ID=your_auth0_client_id_here
-AUTH0_CLIENT_SECRET=your_auth0_client_secret_here
+AUTH0_ISSUER_BASE_URL=${AUTH0_ISSUER}
+AUTH0_CLIENT_ID=${AUTH0_CID}
+AUTH0_CLIENT_SECRET=${AUTH0_CSEC}
 
 # Application Settings
 NODE_ENV=development
 PORT=3000
 ENVEOF
-    chmod 600 "$INSTALL_DIR/.env"
-    echo -e "${GREEN}✓ Environment file created${NC}"
-    echo -e "${YELLOW}⚠ IMPORTANT: Edit $INSTALL_DIR/.env with your API keys!${NC}"
-    echo -e "${YELLOW}⚠ Use TEST Stripe keys for development!${NC}"
-fi
+chmod 600 "$INSTALL_DIR/.env"
+echo -e "${GREEN}✓ Configuration file created${NC}"
+echo ""
 
 # Create PM2 ecosystem file
 echo -e "${CYAN}Configuring PM2...${NC}"
