@@ -53,6 +53,11 @@ npm install --production
 echo "✓ Packages installed"
 echo ""
 
+echo "Building application..."
+npm run build
+echo "✓ Build complete"
+echo ""
+
 # Create PM2 ecosystem file
 echo "Creating PM2 config..."
 cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'

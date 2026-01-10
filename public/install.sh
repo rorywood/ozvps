@@ -487,6 +487,19 @@ EOF
         error_exit "npm install failed"
     fi
 
+    # Build application
+    echo ""
+    echo -e "  ${CYAN}Building application...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npm run build
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Application built"
+    else
+        error_exit "Build failed"
+    fi
+
     # Create PM2 ecosystem file
     (
         cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
