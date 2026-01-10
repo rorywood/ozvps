@@ -274,14 +274,14 @@ function NewTicketDialog({
               <SelectTrigger>
                 <SelectValue placeholder="Select a server if applicable" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4}>
                 <SelectItem value="none">None / General</SelectItem>
                 {serversData?.map((server) => (
                   <SelectItem key={server.id} value={server.id}>
-                    <span className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <Server className="h-4 w-4" />
                       {server.name}
-                    </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
