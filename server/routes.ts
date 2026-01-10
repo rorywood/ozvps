@@ -1412,36 +1412,19 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
-      // Auto-initialize billing for any servers that don't have records yet
-      // Also clean up billing records for deleted servers
+      // Auto-initialize billing for servers that don't have records yet
       try {
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const activeServerIds = new Set(servers.map(s => s.id));
 
-        // Get all billing records for this user
-        const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
-
-        // Remove billing records for servers that no longer exist
-        for (const billing of allBillingRecords) {
-          if (!activeServerIds.has(billing.virtfusionServerId)) {
-            await db.delete(serverBilling)
-              .where(eq(serverBilling.id, billing.id));
-            log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
-          }
-        }
-
-        // Create billing records for new servers
         for (const server of servers) {
           if (server.plan?.priceMonthly) {
-            // Check if billing record exists
-            let billingStatus = await getServerBillingStatus(server.id);
+            const billingStatus = await getServerBillingStatus(server.id);
 
             if (!billingStatus) {
-              // Use server's actual creation date for accurate billing
               const serverCreatedAt = server.created_at || server.createdAt;
               const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
 
-              // Create billing record
               await createServerBilling({
                 auth0UserId: session.auth0UserId!,
                 virtfusionServerId: server.id,
@@ -1457,25 +1440,21 @@ export async function registerRoutes(
         log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
       }
 
-      // Fetch upcoming charges
-      let upcoming = [];
-      try {
-        const billingRecords = await getUpcomingCharges(session.auth0UserId!);
+      // Fetch billing records
+      const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
         // Fetch servers to enrich with names and verify they still exist
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
-        // Only include billing records for servers that actually exist
-        // This filters out any orphaned records that haven't been cleaned up yet
-        upcoming = billingRecords
-          .filter(billing => serverMap.has(billing.virtfusionServerId))
-          .map(billing => ({
-            ...billing,
-            serverName: serverMap.get(billing.virtfusionServerId),
-          }));
-      } catch (billingError: any) {
-        log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
+        // Add server names to billing records
+        upcoming = billingRecords.map(billing => ({
+          ...billing,
+          serverName: serverMap.get(billing.virtfusionServerId),
+        }));
+      } catch (serverError: any) {
+        log(`Warning: Could not fetch servers for name enrichment: ${serverError.message}`, 'billing');
+        // Continue with billing records without server names
       }
 
       res.json({ upcoming });
