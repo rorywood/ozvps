@@ -474,18 +474,31 @@ export default function BillingPage() {
 
   useEffect(() => {
     if (addCardDialogOpen && !stripePromise && !stripeLoadError) {
+      console.log('[Billing] Loading Stripe publishable key...');
       setStripeLoadError(null);
       api.getStripePublishableKey()
         .then(data => {
+          console.log('[Billing] Stripe key response:', data);
           if (data.publishableKey) {
-            setStripePromise(loadStripe(data.publishableKey));
+            console.log('[Billing] Loading Stripe.js with key:', data.publishableKey.substring(0, 20) + '...');
+            const promise = loadStripe(data.publishableKey);
+            promise.then(stripe => {
+              if (stripe) {
+                console.log('[Billing] Stripe.js loaded successfully');
+              } else {
+                console.error('[Billing] Stripe.js returned null');
+                setStripeLoadError('Failed to initialize Stripe. Please check your browser settings.');
+              }
+            });
+            setStripePromise(promise);
           } else {
-            setStripeLoadError('Payment system not configured');
+            console.error('[Billing] No publishable key in response');
+            setStripeLoadError('Payment system not configured - missing publishable key');
           }
         })
         .catch(err => {
-          console.error('Failed to load Stripe:', err);
-          setStripeLoadError('Failed to load payment form. Please try again.');
+          console.error('[Billing] Failed to load Stripe:', err);
+          setStripeLoadError(`Failed to load payment form: ${err.message || 'Unknown error'}`);
         });
     }
   }, [addCardDialogOpen, stripePromise, stripeLoadError]);
