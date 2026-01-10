@@ -1,9 +1,26 @@
 #!/bin/bash
 set -e
 
-INSTALL_DIR="/opt/ozvps-panel"
+# Multi-environment support
+# Usage: update-ozvps [dev]
+ENVIRONMENT="${1:-prod}"
+
+if [[ "$ENVIRONMENT" == "dev" ]]; then
+    INSTALL_DIR="/opt/ozvps-panel-dev"
+    SERVICE_NAME="ozvps-panel-dev"
+    APP_PORT="5001"
+    ENV_LABEL="Development"
+elif [[ "$ENVIRONMENT" == "prod" ]]; then
+    INSTALL_DIR="/opt/ozvps-panel"
+    SERVICE_NAME="ozvps-panel"
+    APP_PORT="5000"
+    ENV_LABEL="Production"
+else
+    echo "Error: Invalid environment. Use 'update-ozvps' or 'update-ozvps dev'"
+    exit 1
+fi
+
 CONFIG_FILE="$INSTALL_DIR/.update_config"
-SERVICE_NAME="ozvps-panel"
 
 # Colors
 RED='\033[0;31m'
@@ -32,6 +49,7 @@ show_header() {
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────────┐${NC}"
     echo -e "${CYAN}│${NC}  ${BOLD}OzVPS Panel${NC} ${DIM}Update Tool${NC}                ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${DIM}Environment:${NC} ${BOLD}${ENV_LABEL}${NC}                    ${CYAN}│${NC}"
     echo -e "${CYAN}└─────────────────────────────────────────┘${NC}"
     echo ""
 }
@@ -77,8 +95,121 @@ show_header
 # Root check
 [[ $EUID -ne 0 ]] && error_exit "Please run as root: ${BOLD}sudo update-ozvps${NC}"
 
-# Check installation
-[[ ! -d "$INSTALL_DIR" ]] && error_exit "OzVPS Panel not found. Run the installer first."
+# Function to setup NGINX for this environment if needed
+setup_nginx_if_needed() {
+    local domain=$1
+    local port=$2
+    local config_name=$3
+    local email=$4
+
+    # Check if NGINX config already exists
+    if [[ -f "/etc/nginx/sites-available/${config_name}" ]]; then
+        return 0
+    fi
+
+    echo ""
+    echo -e "  ${YELLOW}!${NC}  NGINX not configured for ${ENV_LABEL} environment"
+    echo -e "  ${DIM}Setting up NGINX and SSL for ${domain}...${NC}"
+    echo ""
+
+    # Install nginx if not present
+    if ! command -v nginx &>/dev/null; then
+        echo -e "  ${CYAN}Installing NGINX...${NC}"
+        apt-get update >/dev/null 2>&1
+        apt-get install -y nginx >/dev/null 2>&1
+        systemctl start nginx
+        systemctl enable nginx
+    fi
+
+    # Install certbot if not present
+    if ! command -v certbot &>/dev/null; then
+        echo -e "  ${CYAN}Installing Certbot...${NC}"
+        apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1
+    fi
+
+    # Create nginx configuration
+    echo -e "  ${CYAN}Creating NGINX configuration for ${domain}...${NC}"
+    cat > /etc/nginx/sites-available/${config_name} << NGINX_CONFIG
+server {
+    listen 80;
+    server_name ${domain};
+
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINX_CONFIG
+
+    # Enable the site
+    ln -sf /etc/nginx/sites-available/${config_name} /etc/nginx/sites-enabled/
+
+    # Test and reload nginx
+    if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx
+        echo -e "  ${GREEN}✓${NC}  NGINX configured"
+    else
+        echo -e "  ${RED}✗${NC}  NGINX configuration error"
+        return 1
+    fi
+
+    # Get SSL certificate
+    echo -e "  ${CYAN}Obtaining SSL certificate for ${domain}...${NC}"
+    if certbot --nginx -d "${domain}" --non-interactive --agree-tos -m "${email}" --redirect >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC}  SSL certificate obtained"
+        echo -e "  ${GREEN}✓${NC}  ${domain} is now ready"
+    else
+        echo -e "  ${YELLOW}!${NC}  SSL setup failed. Run manually: ${BOLD}certbot --nginx -d ${domain}${NC}"
+    fi
+
+    echo ""
+}
+
+# Auto-detect domain and email for NGINX setup
+if [[ "$ENVIRONMENT" == "dev" ]]; then
+    AUTO_DOMAIN="dev.ozvps.com.au"
+    NGINX_CONFIG_NAME="ozvps-dev"
+elif [[ "$ENVIRONMENT" == "prod" ]]; then
+    AUTO_DOMAIN="app.ozvps.com.au"
+    NGINX_CONFIG_NAME="ozvps-prod"
+fi
+
+# Check if we have a saved domain
+DOMAIN_FILE="$INSTALL_DIR/.panel_domain"
+if [[ -f "$DOMAIN_FILE" ]]; then
+    SAVED_DOMAIN=$(cat "$DOMAIN_FILE")
+    AUTO_DOMAIN="${SAVED_DOMAIN}"
+fi
+
+AUTO_EMAIL="admin@${AUTO_DOMAIN}"
+
+# Check installation - create directory if it doesn't exist (for new environments)
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo -e "  ${YELLOW}!${NC}  ${ENV_LABEL} environment not found at $INSTALL_DIR"
+    echo ""
+    if confirm "  Create new ${ENV_LABEL} environment? (Y/n):"; then
+        mkdir -p "$INSTALL_DIR"
+        echo -e "  ${GREEN}✓${NC}  Created $INSTALL_DIR"
+        echo ""
+
+        # Auto-setup NGINX for new environment
+        setup_nginx_if_needed "$AUTO_DOMAIN" "$APP_PORT" "$NGINX_CONFIG_NAME" "$AUTO_EMAIL"
+    else
+        error_exit "Installation cancelled."
+    fi
+else
+    # Check if NGINX is configured even for existing installations
+    setup_nginx_if_needed "$AUTO_DOMAIN" "$APP_PORT" "$NGINX_CONFIG_NAME" "$AUTO_EMAIL"
+fi
 
 cd "$INSTALL_DIR"
 
@@ -147,9 +278,46 @@ spinner $! "Extracting files"
 
 # Restore configs
 cp "$TEMP_DIR/env-backup" "$INSTALL_DIR/.env" 2>/dev/null || true
-cp "$TEMP_DIR/ecosystem-backup" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 cp "$TEMP_DIR/update-config-backup" "$INSTALL_DIR/.update_config" 2>/dev/null || true
 cp "$TEMP_DIR/domain-backup" "$INSTALL_DIR/.panel_domain" 2>/dev/null || true
+
+# Save domain for this environment if not already saved
+if [[ ! -f "$INSTALL_DIR/.panel_domain" ]]; then
+    echo "$AUTO_DOMAIN" > "$INSTALL_DIR/.panel_domain"
+    chmod 600 "$INSTALL_DIR/.panel_domain"
+fi
+
+# Create or update ecosystem.config.cjs with correct service name and port
+cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
+const fs = require('fs');
+const path = require('path');
+const envPath = path.join(__dirname, '.env');
+const envVars = {};
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    line = line.trim();
+    if (line && !line.startsWith('#')) {
+      const [key, ...val] = line.split('=');
+      if (key) envVars[key.trim()] = val.join('=').trim();
+    }
+  });
+}
+module.exports = {
+  apps: [{
+    name: 'SERVICE_NAME_PLACEHOLDER',
+    script: 'npm',
+    args: 'start',
+    cwd: __dirname,
+    env: { NODE_ENV: 'production', PORT: 'PORT_PLACEHOLDER', ...envVars },
+    autorestart: true,
+    max_restarts: 10
+  }]
+};
+PMEOF
+
+# Replace placeholders with actual values
+sed -i "s/SERVICE_NAME_PLACEHOLDER/${SERVICE_NAME}/g" "$INSTALL_DIR/ecosystem.config.cjs"
+sed -i "s/PORT_PLACEHOLDER/${APP_PORT}/g" "$INSTALL_DIR/ecosystem.config.cjs"
 
 # Remove bad-words and install dependencies
 (
@@ -343,7 +511,7 @@ spinner $! "Updating tools"
     
     # Wait for app to be healthy (max 30 seconds)
     for i in {1..30}; do
-        if curl -s http://127.0.0.1:5000/api/health &>/dev/null; then
+        if curl -s http://127.0.0.1:${APP_PORT}/api/health &>/dev/null; then
             echo "App is healthy"
             break
         fi
@@ -356,7 +524,7 @@ spinner $! "Restarting service"
 SYNC_SUCCESS=false
 (
     for i in {1..10}; do
-        SYNC_RESULT=$(curl -s -X POST http://127.0.0.1:5000/api/admin/resync-plans 2>/dev/null)
+        SYNC_RESULT=$(curl -s -X POST http://127.0.0.1:${APP_PORT}/api/admin/resync-plans 2>/dev/null)
         if echo "$SYNC_RESULT" | grep -q '"success":true'; then
             SYNCED=$(echo "$SYNC_RESULT" | grep -o '"synced":[0-9]*' | cut -d: -f2)
             echo "Synced $SYNCED plans from VirtFusion"
