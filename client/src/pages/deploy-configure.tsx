@@ -151,7 +151,7 @@ export default function DeployConfigurePage() {
   const templates = templatesData || [];
 
   const validateHostname = (value: string): boolean => {
-    const trimmed = value.trim().toLowerCase();
+    const trimmed = value.trim();
     if (!trimmed || trimmed.length === 0) {
       setHostnameError("Hostname is required");
       return false;
@@ -170,11 +170,11 @@ export default function DeployConfigurePage() {
         setHostnameError("Each part of the hostname must be 63 characters or less");
         return false;
       }
-      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) {
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) {
         setHostnameError("Single character parts must be a letter or number");
         return false;
       }
-      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) {
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) {
         setHostnameError("Each part must start and end with a letter or number");
         return false;
       }
@@ -184,9 +184,9 @@ export default function DeployConfigurePage() {
   };
 
   const handleHostnameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toLowerCase().trim();
+    const value = e.target.value;
     setHostname(value);
-    if (value) {
+    if (value.trim()) {
       validateHostname(value);
     } else {
       setHostnameError("");

@@ -649,31 +649,30 @@ export default function ServerDetail() {
 
 
   const validateHostname = (value: string): string => {
-    const trimmed = value.trim().toLowerCase();
+    const trimmed = value.trim();
     if (!trimmed) return 'Hostname is required';
     if (trimmed.length > 253) return 'Hostname must be 253 characters or less';
     const labels = trimmed.split('.');
     for (const label of labels) {
       if (label.length === 0) return 'Hostname cannot have empty labels (consecutive dots)';
       if (label.length > 63) return 'Each part of the hostname must be 63 characters or less';
-      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) {
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) {
         return 'Single character parts must be a letter or number';
       }
-      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) {
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) {
         if (label.startsWith('-') || label.endsWith('-')) {
           return 'Hostname parts cannot start or end with a hyphen';
         }
-        return 'Hostname can only contain lowercase letters, numbers, hyphens, and dots';
+        return 'Hostname can only contain letters, numbers, hyphens, and dots';
       }
     }
     return '';
   };
 
   const handleHostnameChange = (value: string) => {
-    const normalizedValue = value.toLowerCase().trim();
-    setHostname(normalizedValue);
-    if (normalizedValue) {
-      setHostnameError(validateHostname(normalizedValue));
+    setHostname(value);
+    if (value.trim()) {
+      setHostnameError(validateHostname(value));
     } else {
       setHostnameError('');
     }
@@ -712,10 +711,9 @@ export default function ServerDetail() {
 
   // Setup wizard handlers
   const handleSetupHostnameChange = (value: string) => {
-    const normalizedValue = value.toLowerCase().trim();
-    setSetupHostname(normalizedValue);
-    if (normalizedValue) {
-      setSetupHostnameError(validateHostname(normalizedValue));
+    setSetupHostname(value);
+    if (value.trim()) {
+      setSetupHostnameError(validateHostname(value));
     } else {
       setSetupHostnameError('');
     }
