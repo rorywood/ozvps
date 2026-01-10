@@ -138,17 +138,17 @@ function Router() {
           <Admin />
         </AuthGuard>
       </Route>
-      <Route path="/support">
-        <AuthGuard>
-          <Support />
-        </AuthGuard>
-      </Route>
       <Route path="/support/:id">
         {(params) => (
           <AuthGuard>
             <SupportTicket />
           </AuthGuard>
         )}
+      </Route>
+      <Route path="/support">
+        <AuthGuard>
+          <Support />
+        </AuthGuard>
       </Route>
       <Route path="/order">
         <AuthGuard>
