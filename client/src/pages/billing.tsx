@@ -193,6 +193,7 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
       <div className="p-4 rounded-lg bg-card/30 border border-border">
         <CardElement
           options={{
+            hidePostalCode: true,
             style: {
               base: {
                 fontSize: '16px',
