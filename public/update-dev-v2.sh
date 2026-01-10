@@ -130,7 +130,28 @@ echo -e "${GREEN}✓ Application built${NC}"
 echo ""
 
 echo -e "${CYAN}Running database migrations...${NC}"
-npx drizzle-kit push --force
+# Load environment variables for migrations
+if [ -f "$INSTALL_DIR/.env" ]; then
+  echo "Loading environment from .env..."
+  set -a
+  source "$INSTALL_DIR/.env"
+  set +a
+fi
+
+# Check if DATABASE_URL is set
+if [ -z "$DATABASE_URL" ]; then
+  echo -e "${RED}ERROR: DATABASE_URL not set in .env${NC}"
+  echo "Please check your .env file"
+  exit 1
+fi
+
+echo "Syncing schema with drizzle-kit..."
+if npx drizzle-kit push --force; then
+  echo -e "${GREEN}✓ Database schema synchronized${NC}"
+else
+  echo -e "${RED}✗ Schema sync failed${NC}"
+  exit 1
+fi
 echo -e "${GREEN}✓ Database migrations applied${NC}"
 echo ""
 
