@@ -1475,17 +1475,14 @@ export async function registerRoutes(
         if (servers.length > 0) {
           const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
-          // Only include billing records for servers that actually exist
-          // This filters out any orphaned records that haven't been cleaned up yet
-          upcoming = billingRecords
-            .filter(billing => serverMap.has(billing.virtfusionServerId))
-            .map(billing => ({
-              ...billing,
-              serverName: serverMap.get(billing.virtfusionServerId),
-            }));
+          // Add server names to billing records
+          // Don't filter here - the cleanup at the top already removed deleted servers
+          upcoming = billingRecords.map(billing => ({
+            ...billing,
+            serverName: serverMap.get(billing.virtfusionServerId),
+          }));
         } else {
-          // If we couldn't fetch servers, show all billing records without filtering
-          // (but they won't have server names)
+          // If we couldn't fetch servers, show all billing records without server names
           upcoming = billingRecords;
         }
       } catch (billingError: any) {
