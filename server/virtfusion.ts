@@ -1836,7 +1836,33 @@ export class VirtFusionClient {
     }
   }
 
-  // Get IP allocations (derived from servers since VirtFusion doesn't have a direct IP list endpoint)
+  // Get individual IP addresses from a block
+  async getIpAddressesFromBlock(blockId: number): Promise<Array<{
+    id: number;
+    address: string;
+    serverId?: number;
+    serverName?: string;
+  }>> {
+    try {
+      // VirtFusion API: /ipAddressBlocks/{id}/addresses
+      const response = await this.request<{ data: any[] }>(`/ipAddressBlocks/${blockId}/addresses?results=500`);
+      const addresses = response.data || [];
+      return addresses.map(ip => ({
+        id: ip.id,
+        address: ip.address || ip.ip || '',
+        serverId: ip.serverId || ip.server_id || undefined,
+        serverName: ip.server?.name || undefined,
+      }));
+    } catch (error: any) {
+      // This endpoint may not exist in all VirtFusion versions
+      if (!error?.message?.includes('404') && !error?.message?.includes('405')) {
+        log(`Failed to fetch IPs from block ${blockId}: ${error}`, 'virtfusion');
+      }
+      return [];
+    }
+  }
+
+  // Get IP allocations - tries VirtFusion API first, falls back to server extraction
   async getIpAllocations(): Promise<Array<{
     id: number;
     address: string;
@@ -1845,12 +1871,11 @@ export class VirtFusionClient {
     serverName?: string;
     userId?: number;
     blockId: number;
+    inUse: boolean;
   }>> {
     try {
-      // Fetch all servers to extract their primary IPs
-      // Note: We only use primary IPs to avoid making sequential API calls per server
-      // which would be slow and risk rate limiting
-      const servers = await this.listServers();
+      // First, try to get IP blocks and their addresses directly
+      const ipBlocks = await this.getIpBlocks();
       const allocations: Array<{
         id: number;
         address: string;
@@ -1859,28 +1884,57 @@ export class VirtFusionClient {
         serverName?: string;
         userId?: number;
         blockId: number;
+        inUse: boolean;
       }> = [];
-      
-      let ipId = 1;
+
+      let globalId = 1;
+
+      // Try to fetch IPs from each block
+      for (const block of ipBlocks) {
+        const blockIps = await this.getIpAddressesFromBlock(block.id);
+        if (blockIps.length > 0) {
+          for (const ip of blockIps) {
+            allocations.push({
+              id: globalId++,
+              address: ip.address,
+              type: block.type,
+              serverId: ip.serverId,
+              serverName: ip.serverName,
+              userId: undefined,
+              blockId: block.id,
+              inUse: !!ip.serverId,
+            });
+          }
+        }
+      }
+
+      // If we got IPs from blocks, return them
+      if (allocations.length > 0) {
+        log(`Fetched ${allocations.length} IP addresses from ${ipBlocks.length} blocks`, 'virtfusion');
+        return allocations;
+      }
+
+      // Fallback: derive from servers if block IP fetch didn't work
+      const servers = await this.listServers();
       for (const server of servers) {
-        // Add primary IP if exists and is not 'N/A'
         if (server.primaryIp && server.primaryIp !== 'N/A') {
           allocations.push({
-            id: ipId++,
+            id: globalId++,
             address: server.primaryIp,
             type: server.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
             serverId: parseInt(server.id) || undefined,
             serverName: server.name,
             userId: server.userId,
             blockId: 0,
+            inUse: true,
           });
         }
       }
-      
+
       log(`Derived ${allocations.length} IP allocations from ${servers.length} servers`, 'virtfusion');
       return allocations;
     } catch (error) {
-      log(`Failed to derive IP allocations: ${error}`, 'virtfusion');
+      log(`Failed to fetch IP allocations: ${error}`, 'virtfusion');
       return [];
     }
   }
