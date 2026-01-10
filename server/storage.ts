@@ -1297,6 +1297,15 @@ export const dbStorage = {
     return updated;
   },
 
+  // Delete a ticket and its messages (admin only)
+  async deleteTicket(id: number): Promise<boolean> {
+    // First delete all messages for this ticket
+    await db.delete(ticketMessages).where(eq(ticketMessages.ticketId, id));
+    // Then delete the ticket itself
+    const result = await db.delete(tickets).where(eq(tickets.id, id));
+    return true;
+  },
+
   // Create a ticket message
   async createTicketMessage(data: InsertTicketMessage): Promise<TicketMessage> {
     const [message] = await db.insert(ticketMessages).values(data).returning();

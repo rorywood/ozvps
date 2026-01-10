@@ -4264,5 +4264,31 @@ export async function registerRoutes(
     }
   });
 
+  // Delete a ticket (admin)
+  app.delete('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      await dbStorage.deleteTicket(ticketId);
+      log(`Ticket #${ticketId} deleted by admin ${req.userSession!.email}`, 'support');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error deleting ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to delete ticket' });
+    }
+  });
+
   return httpServer;
 }

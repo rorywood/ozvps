@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Button } from "@/components/ui/button";
@@ -1139,9 +1139,10 @@ export default function BillingPage() {
                           const daysUntilSuspension = suspendDate ? Math.ceil((suspendDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
                           return (
-                            <div
+                            <Link
                               key={charge.id}
-                              className={`p-5 rounded-xl ring-1 transition-all hover:shadow-md ${
+                              href={`/servers/${charge.virtfusionServerId}`}
+                              className={`block p-5 rounded-xl ring-1 transition-all hover:shadow-md cursor-pointer ${
                                 charge.status === 'suspended'
                                   ? 'bg-red-500/5 ring-red-500/20 hover:bg-red-500/10'
                                   : charge.status === 'unpaid'
@@ -1209,7 +1210,7 @@ export default function BillingPage() {
                                   <div className="text-xs text-muted-foreground mt-0.5">per month</div>
                                 </div>
                               </div>
-                            </div>
+                            </Link>
                           );
                         })}
                       </div>
@@ -1431,7 +1432,7 @@ export default function BillingPage() {
                     variant="outline"
                     size="sm"
                     className="gap-1 border-border text-primary hover:text-primary/80"
-                    onClick={() => window.open('mailto:support@ozvps.au', '_blank')}
+                    onClick={() => navigate('/support')}
                     data-testid="button-contact-support"
                   >
                     Contact Support
