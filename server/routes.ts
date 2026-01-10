@@ -904,8 +904,13 @@ export async function registerRoutes(
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
 
-      // Fetch billing status for this server
-      const billingStatus = await getServerBillingStatus(req.params.id);
+      // Fetch billing status for this server (non-critical, don't fail if it errors)
+      let billingStatus = null;
+      try {
+        billingStatus = await getServerBillingStatus(req.params.id);
+      } catch (billingError: any) {
+        log(`Warning: Could not fetch billing status for server ${req.params.id}: ${billingError.message}`, 'api');
+      }
 
       res.json({
         ...server,
