@@ -198,7 +198,8 @@ if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
 fi
 
 # Find the extracted directory (GitHub creates ozvps-<branch> with slashes replaced by dashes in extraction)
-EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
+# Use -mindepth 1 to exclude the temp extract directory itself from matching
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
 if [ -z "$EXTRACTED_DIR" ]; then
     echo -e "${RED}Error: Could not find extracted directory${NC}"
     echo "Contents of temp extract:"
