@@ -1412,49 +1412,58 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
+      // Fetch servers once and reuse for both initialization and enrichment
+      let servers: any[] = [];
+      try {
+        servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+      } catch (serverError: any) {
+        log(`Warning: Could not fetch servers: ${serverError.message}`, 'billing');
+      }
+
       // Auto-initialize billing for any servers that don't have records yet
       // Also clean up billing records for deleted servers
-      try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
-        const activeServerIds = new Set(servers.map(s => s.id));
+      if (servers.length > 0) {
+        try {
+          const activeServerIds = new Set(servers.map(s => s.id));
 
-        // Get all billing records for this user
-        const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
+          // Get all billing records for this user
+          const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
 
-        // Remove billing records for servers that no longer exist
-        for (const billing of allBillingRecords) {
-          if (!activeServerIds.has(billing.virtfusionServerId)) {
-            await db.delete(serverBilling)
-              .where(eq(serverBilling.id, billing.id));
-            log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
-          }
-        }
-
-        // Create billing records for new servers
-        for (const server of servers) {
-          if (server.plan?.priceMonthly) {
-            // Check if billing record exists
-            let billingStatus = await getServerBillingStatus(server.id);
-
-            if (!billingStatus) {
-              // Use server's actual creation date for accurate billing
-              const serverCreatedAt = server.created_at || server.createdAt;
-              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-              // Create billing record
-              await createServerBilling({
-                auth0UserId: session.auth0UserId!,
-                virtfusionServerId: server.id,
-                planId: server.plan.id,
-                monthlyPriceCents: server.plan.priceMonthly,
-                deployedAt,
-              });
-              log(`Auto-initialized billing for server ${server.id}`, 'billing');
+          // Remove billing records for servers that no longer exist
+          for (const billing of allBillingRecords) {
+            if (!activeServerIds.has(billing.virtfusionServerId)) {
+              await db.delete(serverBilling)
+                .where(eq(serverBilling.id, billing.id));
+              log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
             }
           }
+
+          // Create billing records for new servers
+          for (const server of servers) {
+            if (server.plan?.priceMonthly) {
+              // Check if billing record exists
+              let billingStatus = await getServerBillingStatus(server.id);
+
+              if (!billingStatus) {
+                // Use server's actual creation date for accurate billing
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                // Create billing record
+                await createServerBilling({
+                  auth0UserId: session.auth0UserId!,
+                  virtfusionServerId: server.id,
+                  planId: server.plan.id,
+                  monthlyPriceCents: server.plan.priceMonthly,
+                  deployedAt,
+                });
+                log(`Auto-initialized billing for server ${server.id}`, 'billing');
+              }
+            }
+          }
+        } catch (initError: any) {
+          log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
         }
-      } catch (initError: any) {
-        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
       }
 
       // Fetch upcoming charges
@@ -1462,8 +1471,7 @@ export async function registerRoutes(
       try {
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
-        // Fetch servers to enrich with names and verify they still exist
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        // Reuse the servers list to enrich with names
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
         // Only include billing records for servers that actually exist
