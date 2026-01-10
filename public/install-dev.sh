@@ -179,7 +179,8 @@ cd "$INSTALL_DIR"
 # Create safe filename (replace / with -)
 SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
 TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
-TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
+# Use a name that doesn't start with "ozvps-" to avoid matching the find pattern
+TEMP_EXTRACT="/tmp/install-${SAFE_BRANCH}-extract"
 
 # Download zip
 if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
