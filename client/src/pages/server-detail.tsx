@@ -1802,7 +1802,7 @@ export default function ServerDetail() {
                           <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
                           <div className="flex-1">
                             <p className="text-xs text-foreground font-semibold">Bandwidth Limit Exceeded</p>
-                            <p className="text-[10px] text-muted-foreground">Network speeds may be reduced</p>
+                            <p className="text-[10px] text-muted-foreground">Bandwidth has been shaped to 1Mbps Download and 1Mbps Upload.</p>
                           </div>
                         </div>
                       </div>
