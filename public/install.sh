@@ -392,21 +392,44 @@ main() {
     (
         set -e
         mkdir -p "$INSTALL_DIR"
-        cd "$INSTALL_DIR"
 
         SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
         TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
         TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
 
+        echo "Downloading from https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" >&2
         curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
 
+        if [ ! -f "$TEMP_ZIP" ]; then
+            echo "ERROR: Failed to download zip file" >&2
+            exit 1
+        fi
+
+        echo "Downloaded $(stat -c%s "$TEMP_ZIP" 2>/dev/null || stat -f%z "$TEMP_ZIP" 2>/dev/null) bytes" >&2
+
+        rm -rf "$TEMP_EXTRACT"
         mkdir -p "$TEMP_EXTRACT"
         unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
         EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
-        [[ -z "$EXTRACTED_DIR" ]] && exit 1
+        if [[ -z "$EXTRACTED_DIR" ]]; then
+            echo "ERROR: Could not find extracted directory" >&2
+            ls -la "$TEMP_EXTRACT" >&2
+            exit 1
+        fi
 
+        echo "Extracted to: $EXTRACTED_DIR" >&2
+        echo "Copying files to $INSTALL_DIR" >&2
         rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+
+        # Verify copy worked
+        if [ ! -f "$INSTALL_DIR/package.json" ]; then
+            echo "ERROR: package.json not found after copy" >&2
+            ls -la "$INSTALL_DIR" >&2
+            exit 1
+        fi
+
+        echo "Files copied successfully" >&2
         rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Downloading from GitHub ($GITHUB_BRANCH)"
@@ -441,12 +464,23 @@ EOF
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Writing configuration"
 
-    # Install npm dependencies
+    # Verify files were downloaded
+    if [ ! -f "$INSTALL_DIR/package.json" ]; then
+        error_exit "Download failed - package.json not found in $INSTALL_DIR"
+    fi
+
+    # Install npm dependencies (show output so we can see progress)
+    echo ""
+    echo -e "  ${CYAN}Installing npm packages (this may take a few minutes)...${NC}"
     (
         cd "$INSTALL_DIR"
         npm install --production
-    ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing npm packages"
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  npm packages installed"
+    else
+        error_exit "npm install failed"
+    fi
 
     # Create PM2 ecosystem file
     (
