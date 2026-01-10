@@ -420,11 +420,16 @@ main() {
 
         echo "Extracted to: $EXTRACTED_DIR" >&2
         echo "Copying files to $INSTALL_DIR" >&2
-        rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+
+        # Use cp -r instead of rsync for more reliable copying
+        cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
+        cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
 
         # Verify copy worked
         if [ ! -f "$INSTALL_DIR/package.json" ]; then
             echo "ERROR: package.json not found after copy" >&2
+            echo "Checking if files are in a subdirectory..." >&2
+            find "$INSTALL_DIR" -name "package.json" -type f >&2
             ls -la "$INSTALL_DIR" >&2
             exit 1
         fi
