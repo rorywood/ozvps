@@ -548,6 +548,7 @@ export default function BillingPage() {
     nextBillAt: string;
     suspendAt: string | null;
     autoRenew: boolean;
+    serverName?: string;
   }> }>({
     queryKey: ['upcoming-charges'],
     queryFn: () => api.getUpcomingCharges(),
@@ -1163,7 +1164,7 @@ export default function BillingPage() {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                       <span className="text-base font-semibold text-foreground">
-                                        Server #{charge.virtfusionServerId}
+                                        {charge.serverName || `Server #${charge.virtfusionServerId}`}
                                       </span>
                                       {charge.status === 'suspended' && (
                                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 tracking-wide">

@@ -1460,7 +1460,20 @@ export async function registerRoutes(
       // Fetch upcoming charges
       let upcoming = [];
       try {
-        upcoming = await getUpcomingCharges(session.auth0UserId!);
+        const billingRecords = await getUpcomingCharges(session.auth0UserId!);
+
+        // Fetch servers to enrich with names and verify they still exist
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+
+        // Only include billing records for servers that actually exist
+        // This filters out any orphaned records that haven't been cleaned up yet
+        upcoming = billingRecords
+          .filter(billing => serverMap.has(billing.virtfusionServerId))
+          .map(billing => ({
+            ...billing,
+            serverName: serverMap.get(billing.virtfusionServerId),
+          }));
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }
