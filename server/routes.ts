@@ -1415,7 +1415,7 @@ export async function registerRoutes(
       // Auto-initialize billing for any servers that don't have records yet
       // Also clean up billing records for deleted servers
       try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const activeServerIds = new Set(servers.map(s => s.id));
 
         // Get all billing records for this user
@@ -1463,7 +1463,7 @@ export async function registerRoutes(
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
         // Fetch servers to enrich with names and verify they still exist
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
         // Only include billing records for servers that actually exist
