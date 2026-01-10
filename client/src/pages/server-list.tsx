@@ -239,6 +239,24 @@ export default function ServerList() {
                                   BANDWIDTH EXCEEDED
                                 </span>
                               )}
+                              {server.billing?.status === 'unpaid' && (
+                                <span
+                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-yellow-500/20 border-yellow-500/30 text-yellow-400 flex items-center gap-1"
+                                  data-testid={`badge-unpaid-${server.id}`}
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  UNPAID
+                                </span>
+                              )}
+                              {server.billing?.status === 'suspended' && (
+                                <span
+                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400 flex items-center gap-1"
+                                  data-testid={`badge-suspended-billing-${server.id}`}
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  SUSPENDED
+                                </span>
+                              )}
                               {serverBillingStatuses[server.id]?.status === 'overdue' && (
                                 <span
                                   className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-amber-500/20 border-amber-500/30 text-amber-400 flex items-center gap-1"
@@ -284,7 +302,7 @@ export default function ServerList() {
                   </div>
 
                   {/* Specs Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-2 flex-1 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-x-4 sm:gap-x-8 gap-y-2 flex-1 text-sm">
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Location</div>
                       <div className="text-foreground font-medium flex items-center gap-2">
@@ -307,9 +325,9 @@ export default function ServerList() {
                           <span className="text-blue-400 italic text-sm">No OS installed</span>
                         ) : (
                           <>
-                            <img 
-                              src={getOsLogoUrlFromServer(server.image)} 
-                              alt="" 
+                            <img
+                              src={getOsLogoUrlFromServer(server.image)}
+                              alt=""
                               className="h-5 w-5 object-contain"
                               loading="lazy"
                               onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
@@ -319,6 +337,14 @@ export default function ServerList() {
                         )}
                       </div>
                     </div>
+                    {server.billing && (
+                      <div className="col-span-2 sm:col-span-1">
+                        <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Next Bill</div>
+                        <div className={`text-foreground font-medium ${server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}`}>
+                          {new Date(server.billing.nextBillAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}

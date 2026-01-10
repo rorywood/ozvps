@@ -855,31 +855,42 @@ export async function registerRoutes(
       }
       const servers = await virtfusionClient.listServersWithStats(userId);
 
-      // Fetch bandwidth status for each server in parallel
-      const serversWithBandwidth = await Promise.all(
+      // Fetch bandwidth status and billing info for each server in parallel
+      const serversWithBandwidthAndBilling = await Promise.all(
         servers.map(async (server) => {
           try {
+            // Fetch bandwidth status
             const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            let bandwidthExceeded = false;
             if (traffic?.current) {
               const usedBytes = traffic.current.total || 0;
               const limitGB = traffic.current.limit || 0;
               const usedGB = usedBytes / (1024 * 1024 * 1024);
-              const bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
-
-              return {
-                ...server,
-                bandwidthExceeded,
-              };
+              bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
             }
-            return { ...server, bandwidthExceeded: false };
+
+            // Fetch billing status
+            const billingStatus = await getServerBillingStatus(server.id);
+
+            return {
+              ...server,
+              bandwidthExceeded,
+              billing: billingStatus ? {
+                status: billingStatus.status,
+                nextBillAt: billingStatus.nextBillAt,
+                suspendAt: billingStatus.suspendAt,
+                monthlyPriceCents: billingStatus.monthlyPriceCents,
+                autoRenew: billingStatus.autoRenew,
+              } : null,
+            };
           } catch (error) {
-            // If bandwidth fetch fails, assume not exceeded
-            return { ...server, bandwidthExceeded: false };
+            // If fetch fails, return server without extras
+            return { ...server, bandwidthExceeded: false, billing: null };
           }
         })
       );
 
-      res.json(serversWithBandwidth);
+      res.json(serversWithBandwidthAndBilling);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
       return handleApiError(res, error, 'Failed to fetch servers');
@@ -892,7 +903,21 @@ export async function registerRoutes(
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
-      res.json(server);
+
+      // Fetch billing status for this server
+      const billingStatus = await getServerBillingStatus(req.params.id);
+
+      res.json({
+        ...server,
+        billing: billingStatus ? {
+          status: billingStatus.status,
+          nextBillAt: billingStatus.nextBillAt,
+          suspendAt: billingStatus.suspendAt,
+          monthlyPriceCents: billingStatus.monthlyPriceCents,
+          autoRenew: billingStatus.autoRenew,
+          deployedAt: billingStatus.deployedAt,
+        } : null,
+      });
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
       return handleApiError(res, error, 'Failed to fetch server');

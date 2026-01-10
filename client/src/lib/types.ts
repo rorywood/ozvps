@@ -36,6 +36,14 @@ export interface Server {
     net_in: number;
     net_out: number;
   };
+  billing?: {
+    status: string; // 'paid' | 'unpaid' | 'suspended' | 'cancelled'
+    nextBillAt: string;
+    suspendAt: string | null;
+    monthlyPriceCents: number;
+    autoRenew: boolean;
+    deployedAt?: string;
+  } | null;
   created_at: string;
 }
 

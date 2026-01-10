@@ -264,6 +264,26 @@ export default function Dashboard() {
                               </span>
                             )}
 
+                            {server.billing?.status === 'unpaid' && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center gap-1"
+                                data-testid={`badge-unpaid-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                UNPAID
+                              </span>
+                            )}
+
+                            {server.billing?.status === 'suspended' && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 flex items-center gap-1"
+                                data-testid={`badge-suspended-billing-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                SUSPENDED
+                              </span>
+                            )}
+
                             {billingStatus?.status === 'overdue' && (
                               <span
                                 className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 flex items-center gap-1"
@@ -330,6 +350,16 @@ export default function Dashboard() {
                                 </>
                               )}
                             </div>
+                            {server.billing && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <div className="flex items-center gap-1">
+                                  <span className={server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}>
+                                    Next bill: {new Date(server.billing.nextBillAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 
