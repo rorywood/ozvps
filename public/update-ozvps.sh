@@ -213,32 +213,29 @@ fi
 
 cd "$INSTALL_DIR"
 
-# Load saved URL
+# Load saved URL or detect from production installation
 SAVED_URL=""
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" && SAVED_URL="$REPLIT_URL"
 
-# Get Replit URL
-if [[ -n "$SAVED_URL" ]]; then
-    echo -e "  ${DIM}Server:${NC} ${SAVED_URL}"
-    echo ""
-    read -p "  Press Enter to use this or paste new URL: " NEW_URL </dev/tty
-    [[ -n "$NEW_URL" ]] && REPLIT_URL="$NEW_URL" || REPLIT_URL="$SAVED_URL"
-else
-    read -p "  Enter Replit URL: " REPLIT_URL </dev/tty
+# If dev environment and no saved URL, try to get it from production
+if [[ -z "$SAVED_URL" && "$ENVIRONMENT" == "dev" && -f "/opt/ozvps-panel/.update_config" ]]; then
+    source "/opt/ozvps-panel/.update_config" 2>/dev/null && SAVED_URL="$REPLIT_URL"
 fi
 
-[[ -z "$REPLIT_URL" ]] && error_exit "Replit URL is required"
-REPLIT_URL="${REPLIT_URL%/}"
-[[ ! "$REPLIT_URL" =~ ^https:// ]] && error_exit "URL must use HTTPS"
+# Use saved URL or prompt for new one
+if [[ -n "$SAVED_URL" ]]; then
+    REPLIT_URL="$SAVED_URL"
+    echo -e "  ${DIM}Update source:${NC} ${REPLIT_URL}"
+    echo ""
+else
+    read -p "  Enter update server URL: " REPLIT_URL </dev/tty
+    [[ -z "$REPLIT_URL" ]] && error_exit "Update server URL is required"
+    REPLIT_URL="${REPLIT_URL%/}"
+    [[ ! "$REPLIT_URL" =~ ^https:// ]] && error_exit "URL must use HTTPS"
 
-echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
-chmod 600 "$CONFIG_FILE"
-
-echo ""
-
-# Check server is reachable
-if ! curl -fsSL "$REPLIT_URL/api/health" &>/dev/null; then
-    error_exit "Could not connect to server. Is your Replit app running?"
+    echo "REPLIT_URL=\"$REPLIT_URL\"" > "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+    echo ""
 fi
 
 # Ask to proceed
