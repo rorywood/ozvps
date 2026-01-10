@@ -164,12 +164,12 @@ fi
 echo -e "${GREEN}✓ Database migrations applied${NC}"
 echo ""
 
-# Initialize billing for existing servers (if any don't have billing records)
-echo -e "${CYAN}Initializing billing for existing servers...${NC}"
-if node initialize-all-billing.js; then
-  echo -e "${GREEN}✓ Billing initialization completed${NC}"
+# Reset billing records to ensure correct dates (they'll be auto-recreated)
+echo -e "${CYAN}Resetting billing records...${NC}"
+if node reset-billing.js; then
+  echo -e "${GREEN}✓ Billing records reset (will be recreated with correct dates)${NC}"
 else
-  echo -e "${YELLOW}⚠ Billing initialization skipped (may already be done)${NC}"
+  echo -e "${YELLOW}⚠ Billing reset skipped${NC}"
 fi
 echo ""
 

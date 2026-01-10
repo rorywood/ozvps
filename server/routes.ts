@@ -1413,9 +1413,24 @@ export async function registerRoutes(
       const session = req.userSession!;
 
       // Auto-initialize billing for any servers that don't have records yet
+      // Also clean up billing records for deleted servers
       try {
         const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const activeServerIds = new Set(servers.map(s => s.id));
 
+        // Get all billing records for this user
+        const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
+
+        // Remove billing records for servers that no longer exist
+        for (const billing of allBillingRecords) {
+          if (!activeServerIds.has(billing.virtfusionServerId)) {
+            await db.delete(serverBilling)
+              .where(eq(serverBilling.id, billing.id));
+            log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
+          }
+        }
+
+        // Create billing records for new servers
         for (const server of servers) {
           if (server.plan?.priceMonthly) {
             // Check if billing record exists
