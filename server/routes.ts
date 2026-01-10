@@ -3826,7 +3826,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid ticket ID' });
       }
 
-      const ticket = await dbStorage.getTicketById(ticketId);
+      let ticket = await dbStorage.getTicketById(ticketId);
       if (!ticket) {
         return res.status(404).json({ error: 'Ticket not found' });
       }
@@ -3834,6 +3834,17 @@ export async function registerRoutes(
       // Verify ownership
       if (ticket.auth0UserId !== auth0UserId) {
         return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Auto-close resolved tickets older than 7 days
+      if (ticket.status === 'resolved' && ticket.resolvedAt) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        if (new Date(ticket.resolvedAt) < sevenDaysAgo) {
+          ticket = await dbStorage.closeTicket(ticketId) || ticket;
+          log(`Ticket #${ticketId} auto-closed (resolved > 7 days ago)`, 'support');
+        }
       }
 
       const messages = await dbStorage.getTicketMessages(ticketId);
@@ -3938,6 +3949,59 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error closing ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // Reopen a resolved ticket (user)
+  app.post('/api/support/tickets/:id/reopen', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Only resolved tickets can be reopened by users
+      if (ticket.status !== 'resolved') {
+        return res.status(400).json({ error: 'Only resolved tickets can be reopened. Please create a new ticket.' });
+      }
+
+      // Check if ticket was resolved more than 7 days ago
+      if (ticket.resolvedAt) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        if (new Date(ticket.resolvedAt) < sevenDaysAgo) {
+          // Auto-close the ticket since it's been resolved for more than 7 days
+          await dbStorage.closeTicket(ticketId);
+          log(`Ticket #${ticketId} auto-closed (resolved > 7 days ago)`, 'support');
+          return res.status(400).json({
+            error: 'This ticket was resolved more than 7 days ago and has been closed. Please create a new ticket.',
+            autoClosedTicket: true
+          });
+        }
+      }
+
+      const updatedTicket = await dbStorage.reopenTicket(ticketId);
+      log(`Ticket #${ticketId} reopened by user ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error reopening ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reopen ticket' });
     }
   });
 
@@ -4123,6 +4187,14 @@ export async function registerRoutes(
       if (parseResult.data.priority !== undefined) updates.priority = parseResult.data.priority;
       if (parseResult.data.category !== undefined) updates.category = parseResult.data.category;
       if (parseResult.data.assignedAdminId !== undefined) updates.assignedAdminId = parseResult.data.assignedAdminId;
+
+      // Handle resolved status - set resolvedAt for 7-day auto-close tracking
+      if (updates.status === 'resolved' && ticket.status !== 'resolved') {
+        updates.resolvedAt = new Date();
+      } else if (updates.status && updates.status !== 'resolved' && ticket.status === 'resolved') {
+        // Clearing resolved status, clear resolvedAt
+        updates.resolvedAt = null;
+      }
 
       // Handle closed status
       if (updates.status === 'closed') {

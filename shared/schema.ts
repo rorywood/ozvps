@@ -239,6 +239,7 @@ export const tickets = pgTable("tickets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"), // when ticket was marked as resolved (for 7-day auto-close)
   closedAt: timestamp("closed_at"),
 });
 

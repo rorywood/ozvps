@@ -1253,6 +1253,7 @@ export const dbStorage = {
     priority: TicketPriority;
     category: TicketCategory;
     assignedAdminId: string | null;
+    resolvedAt: Date | null;
     closedAt: Date | null;
   }>): Promise<Ticket | undefined> {
     const [updated] = await db
@@ -1287,7 +1288,7 @@ export const dbStorage = {
   async reopenTicket(id: number): Promise<Ticket | undefined> {
     const [updated] = await db
       .update(tickets)
-      .set({ status: 'waiting_admin', closedAt: null, updatedAt: new Date() })
+      .set({ status: 'waiting_admin', resolvedAt: null, closedAt: null, updatedAt: new Date() })
       .where(eq(tickets.id, id))
       .returning();
     return updated;
