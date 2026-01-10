@@ -384,20 +384,33 @@ export default function ServerDetail() {
         consoleLock.startLock(action);
       }
       
-      // Poll for status updates
+      // Poll for status updates with stabilization delay
+      let completionDetectedAt: number | null = null;
       const pollInterval = setInterval(async () => {
         await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         const updatedServer = queryClient.getQueryData(['server', serverId]) as any;
         if (updatedServer) {
-          const isComplete = 
+          const isComplete =
             (action === 'boot' && updatedServer.status === 'running') ||
             ((action === 'shutdown' || action === 'poweroff') && updatedServer.status === 'stopped') ||
             (action === 'reboot' && updatedServer.status === 'running');
+
           if (isComplete) {
-            clearInterval(pollInterval);
-            setPowerActionPending(null);
-            if (serverId) clearPending(serverId);
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            // Mark when we first detected completion
+            if (!completionDetectedAt) {
+              completionDetectedAt = Date.now();
+            }
+
+            // Wait 2 seconds after detection to ensure status is stable
+            if (Date.now() - completionDetectedAt >= 2000) {
+              clearInterval(pollInterval);
+              setPowerActionPending(null);
+              if (serverId) clearPending(serverId);
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+            }
+          } else {
+            // Reset if status changed back (shouldn't happen but just in case)
+            completionDetectedAt = null;
           }
         }
       }, 2000);
