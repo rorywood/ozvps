@@ -587,6 +587,21 @@ export default function BillingPage() {
     enabled: stripeConfigured,
   });
 
+  const { data: upcomingChargesData, isLoading: loadingUpcomingCharges } = useQuery<{ upcoming: Array<{
+    id: number;
+    virtfusionServerId: string;
+    planId: number;
+    monthlyPriceCents: number;
+    status: string;
+    nextBillAt: string;
+    suspendAt: string | null;
+    autoRenew: boolean;
+  }> }>({
+    queryKey: ['upcoming-charges'],
+    queryFn: () => api.getUpcomingCharges(),
+    enabled: stripeConfigured,
+  });
+
   // Clamp pagination when data changes to prevent blank pages
   useEffect(() => {
     const txCount = transactionsData?.transactions?.length || 0;
@@ -1123,6 +1138,96 @@ export default function BillingPage() {
 
             {/* Auto Top-Up */}
             <AutoTopupSection paymentMethods={paymentMethods} />
+
+            {/* Upcoming Server Charges */}
+            {upcomingChargesData && upcomingChargesData.upcoming.length > 0 && (
+              <div data-testid="upcoming-charges-section">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-foreground">Upcoming Server Charges</h2>
+                    <p className="text-sm text-muted-foreground">Monthly billing for your servers</p>
+                  </div>
+                </div>
+
+                {loadingUpcomingCharges ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {upcomingChargesData.upcoming.map((charge) => {
+                      const nextBillDate = new Date(charge.nextBillAt);
+                      const now = new Date();
+                      const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      const suspendDate = charge.suspendAt ? new Date(charge.suspendAt) : null;
+                      const daysUntilSuspension = suspendDate ? Math.ceil((suspendDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+                      return (
+                        <div
+                          key={charge.id}
+                          className={`p-4 rounded-xl ring-1 transition-colors ${
+                            charge.status === 'suspended'
+                              ? 'bg-red-500/10 ring-red-500/30'
+                              : charge.status === 'unpaid'
+                              ? 'bg-yellow-500/10 ring-yellow-500/30'
+                              : 'bg-muted/10 ring-border hover:bg-muted/20'
+                          }`}
+                          data-testid={`upcoming-charge-${charge.id}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                                charge.status === 'suspended'
+                                  ? 'bg-red-500/20 text-red-500'
+                                  : charge.status === 'unpaid'
+                                  ? 'bg-yellow-500/20 text-yellow-500'
+                                  : 'bg-blue-500/20 text-blue-500'
+                              }`}>
+                                <History className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <div className="font-medium text-foreground">
+                                  Server {charge.virtfusionServerId}
+                                  {charge.status === 'suspended' && (
+                                    <span className="ml-2 text-xs uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                                      SUSPENDED
+                                    </span>
+                                  )}
+                                  {charge.status === 'unpaid' && (
+                                    <span className="ml-2 text-xs uppercase font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                                      UNPAID
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
+                                    <span className="text-yellow-400">
+                                      Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - Add funds to prevent suspension
+                                    </span>
+                                  ) : charge.status === 'suspended' ? (
+                                    <span className="text-red-400">
+                                      Suspended - Add funds to reactivate
+                                    </span>
+                                  ) : (
+                                    <>Next billing: {formatDate(charge.nextBillAt)} ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})</>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="font-mono text-lg font-medium text-foreground">
+                              {formatCurrency(charge.monthlyPriceCents)}/mo
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Transaction History */}
             <div data-testid="transactions-section">

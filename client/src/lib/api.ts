@@ -586,6 +586,21 @@ class ApiClient {
     return response.json();
   }
 
+  async getUpcomingCharges(): Promise<{ upcoming: Array<{
+    id: number;
+    virtfusionServerId: string;
+    planId: number;
+    monthlyPriceCents: number;
+    status: string;
+    nextBillAt: string;
+    suspendAt: string | null;
+    autoRenew: boolean;
+  }> }> {
+    const response = await fetch(`${this.baseUrl}/billing/upcoming`);
+    if (!response.ok) throw new Error('Failed to fetch upcoming charges');
+    return response.json();
+  }
+
   async downloadInvoice(invoiceId: number): Promise<Blob> {
     const response = await fetch(`${this.baseUrl}/billing/invoices/${invoiceId}/download`);
     if (!response.ok) throw new Error('Failed to download invoice');
