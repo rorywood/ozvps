@@ -135,25 +135,74 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="text-2xl font-bold text-foreground font-display" data-testid="text-bandwidth">
-              {bandwidthData ? 
+              {bandwidthData ?
                 (() => {
                   const bytes = bandwidthData.totalBandwidth;
                   const gb = bytes / (1024 * 1024 * 1024);
-                  if (gb >= 1) {
+                  if (gb >= 1000) {
+                    const tb = gb / 1024;
+                    return `${tb.toFixed(2)} TB`;
+                  } else if (gb >= 1) {
                     return `${gb.toFixed(2)} GB`;
                   } else {
                     const mb = bytes / (1024 * 1024);
                     return `${mb.toFixed(2)} MB`;
                   }
-                })() : 
+                })() :
                 '—'
               }
             </div>
             <div className="text-xs text-muted-foreground">
-              Total Bandwidth Used{bandwidthData?.totalLimit ? ` / ${bandwidthData.totalLimit} GB` : ''}
+              Total Bandwidth Used{bandwidthData?.totalLimit ?
+                (bandwidthData.totalLimit >= 1000
+                  ? ` / ${(bandwidthData.totalLimit / 1024).toFixed(2)} TB`
+                  : ` / ${bandwidthData.totalLimit} GB`)
+                : ''}
             </div>
           </div>
         </div>
+
+        {/* Bandwidth Exceeded Warning */}
+        {bandwidthData && bandwidthData.totalLimit > 0 && (
+          (() => {
+            const bytes = bandwidthData.totalBandwidth;
+            const limitBytes = bandwidthData.totalLimit * 1024 * 1024 * 1024;
+            const usagePercent = (bytes / limitBytes) * 100;
+
+            if (usagePercent >= 100) {
+              return (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground mb-1">Bandwidth Limit Exceeded</h3>
+                      <p className="text-sm text-muted-foreground">
+                        You have exceeded your total bandwidth allowance ({usagePercent.toFixed(1)}% used).
+                        Your servers may experience reduced network speeds or service interruption.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            } else if (usagePercent >= 80) {
+              return (
+                <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground mb-1">Bandwidth Warning</h3>
+                      <p className="text-sm text-muted-foreground">
+                        You are approaching your bandwidth limit ({usagePercent.toFixed(1)}% used).
+                        Consider monitoring your usage to avoid service disruption.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()
+        )}
 
         {/* Servers Section */}
         <div className="space-y-4">

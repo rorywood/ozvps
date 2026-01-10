@@ -381,7 +381,7 @@ export default function ServerDetail() {
       
       // Start console lock for boot/reboot actions
       if (action === 'boot' || action === 'reboot') {
-        consoleLock.startLock();
+        consoleLock.startLock(action);
       }
       
       // Poll for status updates
@@ -439,9 +439,9 @@ export default function ServerDetail() {
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
-      
+
       // Start console lock (server will reboot after reinstall)
-      consoleLock.startLock();
+      consoleLock.startLock('reinstall');
       
       toast({
         title: "Reinstallation Started",
@@ -1386,7 +1386,10 @@ export default function ServerDetail() {
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
                   <span className="text-xs text-orange-400 font-medium">
-                    {consoleLock.isLocked ? 'Rebooting...' :
+                    {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reboot' ? 'Rebooting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Rebooting...' :
+                     consoleLock.isLocked ? 'Rebooting...' :
                      displayStatus === 'starting' ? 'Starting...' :
                      displayStatus === 'rebooting' ? 'Rebooting...' :
                      displayStatus === 'stopping' ? 'Stopping...' :
@@ -1457,7 +1460,8 @@ export default function ServerDetail() {
               ) : consoleLock.isLocked ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  Restarting...
+                  {consoleLock.action === 'boot' ? 'Starting...' :
+                   consoleLock.action === 'reinstall' ? 'Rebuilding...' : 'Restarting...'}
                 </>
               ) : (
                 <>
@@ -1484,7 +1488,10 @@ export default function ServerDetail() {
                   ) : (
                     <Power className="h-4 w-4 mr-2" />
                   )}
-                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") : consoleLock.isLocked ? "Restarting..." : "Power Options"}
+                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") :
+                   consoleLock.isLocked && consoleLock.action === 'boot' ? "Starting..." :
+                   consoleLock.isLocked && consoleLock.action === 'reinstall' ? "Rebuilding..." :
+                   consoleLock.isLocked ? "Restarting..." : "Power Options"}
                   {!consoleLock.isLocked && !reinstallTask.isActive && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
@@ -1736,6 +1743,10 @@ export default function ServerDetail() {
                 const formatBytes = (bytes: number): string => {
                   if (bytes === 0) return '0 MB';
                   const gb = bytes / (1024 * 1024 * 1024);
+                  if (gb >= 1000) {
+                    const tb = gb / 1024;
+                    return `${tb.toFixed(2)} TB`;
+                  }
                   if (gb >= 1) {
                     return `${gb.toFixed(2)} GB`;
                   }
@@ -1762,10 +1773,34 @@ export default function ServerDetail() {
                 
                 return (
                   <div className="space-y-2">
+                    {/* Bandwidth Exceeded Warning */}
+                    {usagePercent >= 100 && (
+                      <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Bandwidth Limit Exceeded</p>
+                            <p className="text-[10px] text-muted-foreground">Network speeds may be reduced</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {usagePercent >= 80 && usagePercent < 100 && (
+                      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Approaching Bandwidth Limit</p>
+                            <p className="text-[10px] text-muted-foreground">{usagePercent.toFixed(1)}% of allowance used</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1024).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
                       </span>
                       {remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">

@@ -88,6 +88,13 @@ export default function ServerList() {
   
   const serverBillingStatuses = billingData?.billing || {};
 
+  // Fetch total bandwidth usage
+  const { data: bandwidthData } = useQuery({
+    queryKey: ['total-bandwidth'],
+    queryFn: () => api.getTotalBandwidth(),
+    refetchInterval: 60000,
+  });
+
   useSyncPowerActions(servers);
 
   const powerMutation = useMutation({
@@ -134,6 +141,48 @@ export default function ServerList() {
               </Button>
           </div>
         </div>
+
+        {/* Bandwidth Exceeded Warning */}
+        {bandwidthData && bandwidthData.totalLimit > 0 && (
+          (() => {
+            const bytes = bandwidthData.totalBandwidth;
+            const limitBytes = bandwidthData.totalLimit * 1024 * 1024 * 1024;
+            const usagePercent = (bytes / limitBytes) * 100;
+
+            if (usagePercent >= 100) {
+              return (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground mb-1">Bandwidth Limit Exceeded</h3>
+                      <p className="text-sm text-muted-foreground">
+                        You have exceeded your total bandwidth allowance ({usagePercent.toFixed(1)}% used).
+                        Your servers may experience reduced network speeds or service interruption.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            } else if (usagePercent >= 80) {
+              return (
+                <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground mb-1">Bandwidth Warning</h3>
+                      <p className="text-sm text-muted-foreground">
+                        You are approaching your bandwidth limit ({usagePercent.toFixed(1)}% used).
+                        Consider monitoring your usage to avoid service disruption.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()
+        )}
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
