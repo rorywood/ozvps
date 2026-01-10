@@ -212,9 +212,14 @@ echo -e "${GREEN}✓ Application downloaded${NC}"
 echo ""
 
 # Install Node.js dependencies
-echo -e "${CYAN}Installing application dependencies...${NC}"
-npm install --production >/dev/null 2>&1
-echo -e "${GREEN}✓ Dependencies installed${NC}"
+echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
+if npm install --production; then
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
+else
+    echo -e "${RED}✗ Failed to install dependencies${NC}"
+    echo "Try running: cd $INSTALL_DIR && npm install"
+    exit 1
+fi
 echo ""
 
 # Prompt for configuration
