@@ -1,7 +1,7 @@
 import { db } from './db';
 import { serverBilling, billingLedger, wallets, type InsertServerBilling, type InsertBillingLedger } from '../shared/schema';
 import { eq, and, lte, isNull, or } from 'drizzle-orm';
-import { log } from './vite';
+import { log } from './index';
 import { virtfusionClient } from './virtfusion';
 
 // Add 1 calendar month to a date (handles month-end cases)

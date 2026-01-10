@@ -1943,44 +1943,6 @@ export class VirtFusionClient {
     }
   }
 
-  // Suspend server
-  async suspendServer(serverId: number): Promise<boolean> {
-    try {
-      log(`Suspending server ${serverId}`, 'virtfusion');
-      await this.request(`/servers/${serverId}/suspend`, {
-        method: 'POST',
-      });
-      
-      // Invalidate cache since server state has changed
-      this.invalidateServerCache(String(serverId));
-      
-      log(`Successfully suspended server ${serverId}`, 'virtfusion');
-      return true;
-    } catch (error) {
-      log(`Failed to suspend server ${serverId}: ${error}`, 'virtfusion');
-      return false;
-    }
-  }
-
-  // Unsuspend server
-  async unsuspendServer(serverId: number): Promise<boolean> {
-    try {
-      log(`Unsuspending server ${serverId}`, 'virtfusion');
-      await this.request(`/servers/${serverId}/unsuspend`, {
-        method: 'POST',
-      });
-      
-      // Invalidate cache since server state has changed
-      this.invalidateServerCache(String(serverId));
-      
-      log(`Successfully unsuspended server ${serverId}`, 'virtfusion');
-      return true;
-    } catch (error) {
-      log(`Failed to unsuspend server ${serverId}: ${error}`, 'virtfusion');
-      return false;
-    }
-  }
-
   // Get all users (paginated) - Admin only
   async getAllUsers(page: number = 1, limit: number = 50): Promise<{
     users: Array<{
