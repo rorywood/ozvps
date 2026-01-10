@@ -640,6 +640,26 @@ class ApiClient {
     return response.json();
   }
 
+  // Admin Settings
+  async getRegistrationSetting(): Promise<{ enabled: boolean }> {
+    const response = await fetch(`${this.baseUrl}/admin/settings/registration`);
+    if (!response.ok) throw new Error('Failed to fetch registration setting');
+    return response.json();
+  }
+
+  async updateRegistrationSetting(enabled: boolean): Promise<{ enabled: boolean }> {
+    const response = await fetch(`${this.baseUrl}/admin/settings/registration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update registration setting');
+    }
+    return response.json();
+  }
+
 }
 
 export const api = new ApiClient();

@@ -413,8 +413,13 @@ export async function registerRoutes(
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
     try {
-      // Check if registration is disabled
-      if (process.env.REGISTRATION_DISABLED === 'true') {
+      // Check if registration is disabled (database setting takes precedence)
+      const registrationSetting = await dbStorage.getSecuritySetting('registration_enabled');
+      const isRegistrationEnabled = registrationSetting
+        ? registrationSetting.enabled
+        : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      if (!isRegistrationEnabled) {
         return res.status(403).json({ error: 'Registration is currently disabled. Please contact support.' });
       }
 
@@ -1856,10 +1861,19 @@ export async function registerRoutes(
   });
 
   // Check if registration is enabled (public)
-  app.get('/api/auth/registration-status', (req, res) => {
-    res.json({
-      enabled: process.env.REGISTRATION_DISABLED !== 'true',
-    });
+  app.get('/api/auth/registration-status', async (req, res) => {
+    try {
+      // Check database setting first, fall back to env variable
+      const setting = await dbStorage.getSecuritySetting('registration_enabled');
+      const enabled = setting ? setting.enabled : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      res.json({ enabled });
+    } catch (error) {
+      // Fall back to env variable if database query fails
+      res.json({
+        enabled: process.env.REGISTRATION_DISABLED !== 'true',
+      });
+    }
   });
 
   // ================== Admin VirtFusion Management Routes ==================
@@ -2272,6 +2286,61 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Admin: Error fetching stats: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
+  // ================== Admin Settings Routes ==================
+
+  // Admin: Get registration setting
+  app.get('/api/admin/settings/registration', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const setting = await dbStorage.getSecuritySetting('registration_enabled');
+      const enabled = setting ? setting.enabled : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      res.json({ enabled });
+    } catch (error: any) {
+      log(`Admin: Error fetching registration setting: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch registration setting' });
+    }
+  });
+
+  // Admin: Update registration setting
+  app.put('/api/admin/settings/registration', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { enabled } = req.body;
+
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'Invalid enabled value' });
+      }
+
+      // Upsert the setting
+      await dbStorage.upsertSecuritySetting('registration_enabled', null, enabled);
+
+      // Audit log
+      await auditLog(
+        req,
+        'settings.registration.update',
+        'security_setting',
+        'registration_enabled',
+        null,
+        { enabled },
+        'success'
+      );
+
+      res.json({ enabled });
+    } catch (error: any) {
+      log(`Admin: Error updating registration setting: ${error.message}`, 'admin');
+      await auditLog(
+        req,
+        'settings.registration.update',
+        'security_setting',
+        'registration_enabled',
+        null,
+        { enabled: req.body.enabled },
+        'failure',
+        error.message
+      );
+      res.status(500).json({ error: 'Failed to update registration setting' });
     }
   });
 

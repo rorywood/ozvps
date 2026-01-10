@@ -510,6 +510,10 @@ export default function AdminPage() {
                 <FileText className="h-4 w-4" />
                 Audit Log
               </TabsTrigger>
+              <TabsTrigger value="settings" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-settings">
+                <Shield className="h-4 w-4" />
+                Settings
+              </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -1231,6 +1235,11 @@ export default function AdminPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* Settings Tab */}
+            <TabsContent value="settings" className="space-y-6">
+              <SettingsPanel />
+            </TabsContent>
           </Tabs>
 
       {/* Server Action Dialog */}
@@ -1472,5 +1481,82 @@ export default function AdminPage() {
       </Dialog>
       </div>
     </AppShell>
+  );
+}
+
+// Settings Panel Component
+function SettingsPanel() {
+  const queryClient = useQueryClient();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { data: registrationData, isLoading } = useQuery({
+    queryKey: ['admin-registration-setting'],
+    queryFn: () => api.getRegistrationSetting(),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.updateRegistrationSetting(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-registration-setting'] });
+      toast.success('Registration setting updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update registration setting');
+    },
+  });
+
+  const handleToggleRegistration = async (enabled: boolean) => {
+    setIsSaving(true);
+    try {
+      await updateMutation.mutateAsync(enabled);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">System Settings</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure system-wide settings and security options
+        </p>
+      </div>
+
+      {/* Registration Toggle */}
+      <div className="rounded-xl bg-muted/20 ring-1 ring-border p-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              <h4 className="font-semibold text-foreground">New User Registration</h4>
+            </div>
+            <p className="text-sm text-muted-foreground max-w-lg">
+              Allow new users to create accounts. When disabled, only existing users can log in.
+              This setting is stored in the database and persists across restarts.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <Switch
+                  checked={registrationData?.enabled || false}
+                  onCheckedChange={handleToggleRegistration}
+                  disabled={isSaving}
+                  className="data-[state=checked]:bg-primary"
+                />
+                <span className={`text-sm font-medium ${
+                  registrationData?.enabled ? 'text-green-400' : 'text-muted-foreground'
+                }`}>
+                  {registrationData?.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
