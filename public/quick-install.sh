@@ -24,11 +24,18 @@ fi
 
 # Get deployment URL
 echo ""
-read -p "Enter your deployment URL (e.g., https://your-app.repl.co): " DEPLOY_URL
+if [[ -n "$OZVPS_URL" ]]; then
+    DEPLOY_URL="$OZVPS_URL"
+    echo "Using URL: $DEPLOY_URL"
+else
+    read -p "Enter your deployment URL (e.g., https://your-app.repl.co): " DEPLOY_URL < /dev/tty
+fi
+
 DEPLOY_URL="${DEPLOY_URL%/}"
 
-if [[ ! "$DEPLOY_URL" =~ ^https:// ]]; then
-    echo -e "${RED}URL must use HTTPS${NC}"
+if [[ -z "$DEPLOY_URL" ]] || [[ ! "$DEPLOY_URL" =~ ^https:// ]]; then
+    echo -e "${RED}Error: URL must use HTTPS${NC}"
+    echo "Usage: OZVPS_URL=https://your-app.repl.co curl -sSL <url> | sudo -E bash"
     exit 1
 fi
 
