@@ -498,6 +498,19 @@ EOF
         error_exit "Build failed"
     fi
 
+    # Run database migrations
+    echo ""
+    echo -e "  ${CYAN}Running database migrations...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npx drizzle-kit push --force
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Database migrations applied"
+    else
+        echo -e "  ${YELLOW}!${NC}  Database migration failed (may need manual intervention)"
+    fi
+
     # Remove dev dependencies after build
     echo ""
     echo -e "  ${CYAN}Cleaning up dev dependencies...${NC}"

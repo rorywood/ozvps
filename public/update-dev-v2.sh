@@ -129,6 +129,11 @@ npm run build
 echo -e "${GREEN}✓ Application built${NC}"
 echo ""
 
+echo -e "${CYAN}Running database migrations...${NC}"
+npx drizzle-kit push --force
+echo -e "${GREEN}✓ Database migrations applied${NC}"
+echo ""
+
 echo -e "${CYAN}Cleaning up dev dependencies...${NC}"
 npm prune --production
 echo -e "${GREEN}✓ Dev dependencies removed${NC}"
