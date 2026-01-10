@@ -40,52 +40,60 @@ fi
 
 cd "$INSTALL_DIR"
 
-# Check and install PostgreSQL if needed
-echo -e "${CYAN}Checking PostgreSQL...${NC}"
+# ============================================
+# STEP 1: Install PostgreSQL
+# ============================================
+echo ""
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 1: PostgreSQL Installation          ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo ""
+
 if ! command -v psql &>/dev/null; then
     echo -e "${YELLOW}→${NC} PostgreSQL not found, installing..."
-    apt-get update >/dev/null 2>&1
-    apt-get install -y postgresql postgresql-contrib >/dev/null 2>&1
-    systemctl start postgresql
-    systemctl enable postgresql
+    apt-get update
+    apt-get install -y postgresql postgresql-contrib
     echo -e "${GREEN}✓ PostgreSQL installed${NC}"
 else
     echo -e "${GREEN}✓ PostgreSQL already installed${NC}"
 fi
 
-# Ensure PostgreSQL is running
-echo -e "${CYAN}Starting PostgreSQL...${NC}"
-systemctl restart postgresql 2>/dev/null || service postgresql restart 2>/dev/null || true
+# Start PostgreSQL
+echo -e "${CYAN}Starting PostgreSQL service...${NC}"
+systemctl start postgresql || service postgresql start
+systemctl enable postgresql || true
 sleep 2
 
-# Setup database in background with timeout
-echo -e "${CYAN}Setting up database (5 second timeout)...${NC}"
-(
-    # Create user
-    sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>/dev/null
-    # Create database
-    sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>/dev/null
-    # Grant privileges
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" 2>/dev/null
-) &
-DB_PID=$!
-sleep 5
-kill $DB_PID 2>/dev/null || true
-wait $DB_PID 2>/dev/null || true
-echo -e "${GREEN}✓ Database setup attempted${NC}"
+# Verify PostgreSQL is running
+if systemctl is-active --quiet postgresql; then
+    echo -e "${GREEN}✓ PostgreSQL is running${NC}"
+else
+    echo -e "${RED}PostgreSQL failed to start, trying again...${NC}"
+    systemctl restart postgresql
+    sleep 3
+fi
+
+# Create database and user
+echo ""
+echo -e "${CYAN}Setting up database...${NC}"
+sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>&1 || echo "  (user already exists)"
+sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>&1 || echo "  (database already exists)"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" 2>&1 || true
+echo -e "${GREEN}✓ Database ready${NC}"
 
 # Update .env with correct DATABASE_URL
 if [ -f "$INSTALL_DIR/.env" ]; then
     sed -i 's|DATABASE_URL=.*|DATABASE_URL=postgresql://ozvps_dev:OzVPS_Dev_2024!@localhost:5432/ozvps_dev|' "$INSTALL_DIR/.env"
     echo -e "${GREEN}✓ Updated DATABASE_URL in .env${NC}"
 fi
-echo ""
 
-# Create backup
-echo -e "${CYAN}Creating backup...${NC}"
-BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-cp -r "$INSTALL_DIR" "$BACKUP_DIR"
-echo -e "${GREEN}✓ Backup created at $BACKUP_DIR${NC}"
+# ============================================
+# STEP 2: Download Latest Code
+# ============================================
+echo ""
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 2: Download Latest Code             ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
 echo ""
 
 # Backup config files
@@ -95,15 +103,13 @@ cp "$INSTALL_DIR/.env" "$TEMP_DIR/.env" 2>/dev/null || true
 cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem.config.cjs" 2>/dev/null || true
 
 # Download latest code
-echo -e "${CYAN}Downloading latest code from GitHub (${GITHUB_BRANCH} branch)...${NC}"
+echo -e "${CYAN}Downloading from GitHub (${GITHUB_BRANCH} branch)...${NC}"
 SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
 TEMP_ZIP="/tmp/ozvps-update-${SAFE_BRANCH}.zip"
 TEMP_EXTRACT="/tmp/ozvps-update-${SAFE_BRANCH}-extract"
 
-if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
-    echo -e "${RED}Error: Failed to download from GitHub${NC}"
-    exit 1
-fi
+curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+echo -e "${GREEN}✓ Downloaded${NC}"
 
 # Clear old files (except node_modules, .env, backups)
 echo -e "${CYAN}Removing old files...${NC}"
@@ -116,99 +122,95 @@ find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
 
 # Extract new code
 echo -e "${CYAN}Extracting new code...${NC}"
+rm -rf "$TEMP_EXTRACT"
 mkdir -p "$TEMP_EXTRACT"
-if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
-    echo -e "${RED}Error: Failed to extract zip file${NC}"
-    rm -f "$TEMP_ZIP"
-    exit 1
-fi
+unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
 EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
 if [ -z "$EXTRACTED_DIR" ]; then
     echo -e "${RED}Error: Could not find extracted directory${NC}"
-    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
     exit 1
 fi
 
-echo -e "${CYAN}Copying files from extracted directory...${NC}"
-echo "Source: $EXTRACTED_DIR"
-echo "Target: $INSTALL_DIR"
-
-# Use cp -r instead of rsync for more reliable copying
+# Copy files
 cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
 cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
-
-# Verify package.json was copied
-if [ ! -f "$INSTALL_DIR/package.json" ]; then
-    echo -e "${RED}Error: package.json not found after copy${NC}"
-    echo "Checking what was extracted..."
-    ls -la "$EXTRACTED_DIR" | head -20
-    echo ""
-    echo "Checking install directory..."
-    ls -la "$INSTALL_DIR" | head -20
-    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
-    exit 1
-fi
-
-echo -e "${GREEN}✓ Files copied successfully${NC}"
-rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+echo -e "${GREEN}✓ Files copied${NC}"
 
 # Restore config files
-echo -e "${CYAN}Restoring configuration...${NC}"
 cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
-rm -rf "$TEMP_DIR"
+rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
 
-# Update dependencies and build
+# Verify package.json exists
+if [ ! -f "$INSTALL_DIR/package.json" ]; then
+    echo -e "${RED}Error: package.json not found${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Code updated${NC}"
+
+# ============================================
+# STEP 3: Build Application
+# ============================================
+echo ""
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 3: Build Application                ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo ""
+
+cd "$INSTALL_DIR"
+
 echo -e "${CYAN}Installing dependencies...${NC}"
 npm install
 echo -e "${GREEN}✓ Dependencies installed${NC}"
-echo ""
 
+echo ""
 echo -e "${CYAN}Building application...${NC}"
 npm run build
 echo -e "${GREEN}✓ Application built${NC}"
+
+# Verify build output
+if [ ! -f "$INSTALL_DIR/dist/public/index.html" ]; then
+    echo -e "${RED}Error: Build failed - dist/public/index.html not found${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Build verified${NC}"
+
+# ============================================
+# STEP 4: Database Migrations
+# ============================================
+echo ""
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 4: Database Migrations              ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
 echo ""
 
-echo -e "${CYAN}Running database migrations...${NC}"
-# Load environment variables for migrations
-if [ -f "$INSTALL_DIR/.env" ]; then
-  echo "Loading environment from .env..."
-  set -a
-  source "$INSTALL_DIR/.env"
-  set +a
-fi
+# Load environment variables
+echo -e "${CYAN}Loading environment...${NC}"
+set -a
+source "$INSTALL_DIR/.env"
+set +a
 
-# Check if DATABASE_URL is set
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}ERROR: DATABASE_URL not set in .env${NC}"
-  echo "Please check your .env file"
-  exit 1
-fi
+echo -e "${CYAN}Running migrations...${NC}"
+npx drizzle-kit push --force
+echo -e "${GREEN}✓ Migrations complete${NC}"
 
-echo "Syncing schema with drizzle-kit..."
-if npx drizzle-kit push --force; then
-  echo -e "${GREEN}✓ Database schema synchronized${NC}"
-else
-  echo -e "${RED}✗ Schema sync failed${NC}"
-  exit 1
-fi
-echo -e "${GREEN}✓ Database migrations applied${NC}"
+# ============================================
+# STEP 5: Restart Application
+# ============================================
+echo ""
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
+echo -e "${CYAN}${BOLD}  STEP 5: Restart Application              ${NC}"
+echo -e "${CYAN}${BOLD}═══════════════════════════════════════════${NC}"
 echo ""
 
-echo -e "${CYAN}Cleaning up dev dependencies...${NC}"
-npm prune --production
-echo -e "${GREEN}✓ Dev dependencies removed${NC}"
-echo ""
-
-# Restart application
-echo -e "${CYAN}Restarting application...${NC}"
+echo -e "${CYAN}Restarting PM2...${NC}"
 pm2 delete "$SERVICE_NAME" 2>/dev/null || true
 pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
 pm2 save --force
 
 # Wait for app to be healthy
-echo "Waiting for application to start..."
+echo -e "${CYAN}Waiting for application to start...${NC}"
 sleep 3
 APP_PORT=$(grep "PORT" "$INSTALL_DIR/.env" | cut -d'=' -f2 | tr -d ' ' || echo "3000")
 for i in {1..30}; do
@@ -228,6 +230,4 @@ echo -e "${BOLD}Useful Commands:${NC}"
 echo -e "  Status:  ${BOLD}pm2 status${NC}"
 echo -e "  Logs:    ${BOLD}pm2 logs ${SERVICE_NAME}${NC}"
 echo -e "  Restart: ${BOLD}pm2 restart ${SERVICE_NAME}${NC}"
-echo ""
-echo -e "${YELLOW}Backup location: ${BACKUP_DIR}${NC}"
 echo ""
