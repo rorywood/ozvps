@@ -1471,17 +1471,23 @@ export async function registerRoutes(
       try {
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
-        // Reuse the servers list to enrich with names
-        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+        // Enrich with server names if we successfully fetched servers
+        if (servers.length > 0) {
+          const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
-        // Only include billing records for servers that actually exist
-        // This filters out any orphaned records that haven't been cleaned up yet
-        upcoming = billingRecords
-          .filter(billing => serverMap.has(billing.virtfusionServerId))
-          .map(billing => ({
-            ...billing,
-            serverName: serverMap.get(billing.virtfusionServerId),
-          }));
+          // Only include billing records for servers that actually exist
+          // This filters out any orphaned records that haven't been cleaned up yet
+          upcoming = billingRecords
+            .filter(billing => serverMap.has(billing.virtfusionServerId))
+            .map(billing => ({
+              ...billing,
+              serverName: serverMap.get(billing.virtfusionServerId),
+            }));
+        } else {
+          // If we couldn't fetch servers, show all billing records without filtering
+          // (but they won't have server names)
+          upcoming = billingRecords;
+        }
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }
