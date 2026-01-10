@@ -1,4 +1,4 @@
-import { Server } from "./types";
+import { Server, SupportTicket, TicketMessage } from "./types";
 
 export interface NetworkInterface {
   name: string;
@@ -516,7 +516,7 @@ class ApiClient {
     return data;
   }
 
-  async directTopup(amountCents: number, paymentMethodId: string): Promise<{ 
+  async directTopup(amountCents: number, paymentMethodId: string): Promise<{
     success: boolean;
     newBalanceCents?: number;
     chargedAmountCents?: number;
@@ -525,14 +525,18 @@ class ApiClient {
     clientSecret?: string;
     paymentIntentId?: string;
   }> {
+    console.log(`[API] Direct topup request: $${(amountCents / 100).toFixed(2)}, payment method: ${paymentMethodId}`);
     const response = await fetch(`${this.baseUrl}/wallet/topup/direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountCents, paymentMethodId }),
     });
+    console.log(`[API] Direct topup response status: ${response.status}`);
     const data = await response.json();
+    console.log('[API] Direct topup response data:', data);
     if (!response.ok) {
-      return { success: false, ...data };
+      console.error('[API] Direct topup failed:', data.error);
+      throw new Error(data.error || 'Payment failed');
     }
     return data;
   }
@@ -583,6 +587,21 @@ class ApiClient {
   }> }> {
     const response = await fetch(`${this.baseUrl}/billing/invoices`);
     if (!response.ok) throw new Error('Failed to fetch invoices');
+    return response.json();
+  }
+
+  async getUpcomingCharges(): Promise<{ upcoming: Array<{
+    id: number;
+    virtfusionServerId: string;
+    planId: number;
+    monthlyPriceCents: number;
+    status: string;
+    nextBillAt: string;
+    suspendAt: string | null;
+    autoRenew: boolean;
+  }> }> {
+    const response = await fetch(`${this.baseUrl}/billing/upcoming`);
+    if (!response.ok) throw new Error('Failed to fetch upcoming charges');
     return response.json();
   }
 
@@ -637,6 +656,234 @@ class ApiClient {
   }> {
     const response = await fetch(`${this.baseUrl}/billing/servers`);
     if (!response.ok) throw new Error('Failed to fetch server billing statuses');
+    return response.json();
+  }
+
+  // Admin Settings
+  async getRegistrationSetting(): Promise<{ enabled: boolean }> {
+    const response = await fetch(`${this.baseUrl}/admin/settings/registration`);
+    if (!response.ok) throw new Error('Failed to fetch registration setting');
+    return response.json();
+  }
+
+  async updateRegistrationSetting(enabled: boolean): Promise<{ enabled: boolean }> {
+    const response = await fetch(`${this.baseUrl}/admin/settings/registration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update registration setting');
+    }
+    return response.json();
+  }
+
+  // ==========================================
+  // SUPPORT TICKET ENDPOINTS - USER
+  // ==========================================
+
+  async getSupportTicketCounts(): Promise<{
+    open: number;
+    waitingUser: number;
+    total: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/support/counts`);
+    if (!response.ok) throw new Error('Failed to fetch ticket counts');
+    return response.json();
+  }
+
+  async getSupportTickets(options?: {
+    status?: 'open' | 'closed' | 'all';
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    tickets: SupportTicket[];
+    total: number;
+  }> {
+    const params = new URLSearchParams();
+    if (options?.status) params.append('status', options.status);
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+
+    const url = `${this.baseUrl}/support/tickets${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch tickets');
+    return response.json();
+  }
+
+  async createSupportTicket(data: {
+    title: string;
+    category: string;
+    priority: string;
+    description: string;
+    virtfusionServerId?: string;
+  }): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/support/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create ticket');
+    }
+    return response.json();
+  }
+
+  async getSupportTicket(id: number): Promise<{
+    ticket: SupportTicket;
+    messages: TicketMessage[];
+    server: any | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/support/tickets/${id}`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to fetch ticket');
+    }
+    return response.json();
+  }
+
+  async replyToSupportTicket(id: number, message: string): Promise<{ message: TicketMessage }> {
+    const response = await fetch(`${this.baseUrl}/support/tickets/${id}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to send reply');
+    }
+    return response.json();
+  }
+
+  async closeSupportTicket(id: number): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/support/tickets/${id}/close`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to close ticket');
+    }
+    return response.json();
+  }
+
+  // ==========================================
+  // SUPPORT TICKET ENDPOINTS - ADMIN
+  // ==========================================
+
+  async getAdminTicketCounts(): Promise<{
+    new: number;
+    waitingAdmin: number;
+    open: number;
+    total: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/counts`);
+    if (!response.ok) throw new Error('Failed to fetch admin ticket counts');
+    return response.json();
+  }
+
+  async getAdminTickets(options?: {
+    status?: string | string[];
+    category?: string;
+    priority?: string;
+    user?: string;
+    server?: string;
+    assigned?: string | null;
+    limit?: number;
+    offset?: number;
+    sortBy?: 'lastMessageAt' | 'priority' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<{
+    tickets: SupportTicket[];
+    total: number;
+  }> {
+    const params = new URLSearchParams();
+    if (options?.status) {
+      params.append('status', Array.isArray(options.status) ? options.status.join(',') : options.status);
+    }
+    if (options?.category) params.append('category', options.category);
+    if (options?.priority) params.append('priority', options.priority);
+    if (options?.user) params.append('user', options.user);
+    if (options?.server) params.append('server', options.server);
+    if (options?.assigned !== undefined) {
+      params.append('assigned', options.assigned === null ? 'null' : options.assigned);
+    }
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+    if (options?.sortBy) params.append('sortBy', options.sortBy);
+    if (options?.sortOrder) params.append('sortOrder', options.sortOrder);
+
+    const url = `${this.baseUrl}/admin/tickets${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch admin tickets');
+    return response.json();
+  }
+
+  async getAdminTicket(id: number): Promise<{
+    ticket: SupportTicket;
+    messages: TicketMessage[];
+    server: any | null;
+    user: any | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to fetch ticket');
+    }
+    return response.json();
+  }
+
+  async adminReplyToTicket(id: number, message: string, status?: string): Promise<{ message: TicketMessage }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, status }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to send reply');
+    }
+    return response.json();
+  }
+
+  async updateAdminTicket(id: number, updates: {
+    status?: string;
+    priority?: string;
+    category?: string;
+    assignedAdminId?: string | null;
+  }): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update ticket');
+    }
+    return response.json();
+  }
+
+  async adminCloseTicket(id: number): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/close`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to close ticket');
+    }
+    return response.json();
+  }
+
+  async adminReopenTicket(id: number): Promise<{ ticket: SupportTicket }> {
+    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/reopen`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to reopen ticket');
+    }
     return response.json();
   }
 

@@ -18,7 +18,7 @@ GITHUB_REPO="rorywood/ozvps"
 
 echo -e "${CYAN}${BOLD}"
 echo "╔════════════════════════════════════════╗"
-echo "║   OzVPS Development Update            ║"
+echo "║   OzVPS Development Update v2         ║"
 echo "║   Branch: claude/dev-l5488            ║"
 echo "╚════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -130,47 +130,8 @@ echo -e "${GREEN}✓ Application built${NC}"
 echo ""
 
 echo -e "${CYAN}Running database migrations...${NC}"
-# Load environment variables for migrations
-if [ -f "$INSTALL_DIR/.env" ]; then
-  echo "Loading environment from .env..."
-  set -a
-  source "$INSTALL_DIR/.env"
-  set +a
-fi
-
-# Check if DATABASE_URL is set
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}ERROR: DATABASE_URL not set in .env${NC}"
-  echo "Please check your .env file"
-  exit 1
-fi
-
-echo "Running SQL migrations..."
-if node migrate.js; then
-  echo -e "${GREEN}✓ SQL migrations completed${NC}"
-else
-  echo -e "${YELLOW}⚠ SQL migrations failed or were skipped${NC}"
-  echo "This may be normal if tables already exist"
-fi
-
-echo "Syncing schema with drizzle-kit..."
-if npx drizzle-kit push --force; then
-  echo -e "${GREEN}✓ Schema synchronized${NC}"
-else
-  echo -e "${RED}✗ Schema sync failed${NC}"
-  exit 1
-fi
-
+npx drizzle-kit push --force
 echo -e "${GREEN}✓ Database migrations applied${NC}"
-echo ""
-
-# Reset billing records to ensure correct dates (they'll be auto-recreated)
-echo -e "${CYAN}Resetting billing records...${NC}"
-if node reset-billing.js; then
-  echo -e "${GREEN}✓ Billing records reset (will be recreated with correct dates)${NC}"
-else
-  echo -e "${YELLOW}⚠ Billing reset skipped${NC}"
-fi
 echo ""
 
 echo -e "${CYAN}Cleaning up dev dependencies...${NC}"

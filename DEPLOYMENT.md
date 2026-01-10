@@ -12,43 +12,52 @@ Simple deployment workflow for OzVPS Panel - separate production and development
 
 ## Initial Installation
 
-### Production Server
+### Quick Start (Recommended)
 
+Use the **unified installer** that works for both production and development:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/main/public/install.sh | sudo bash
+```
+
+The installer will:
+1. Ask which environment (Production or Development)
+2. Collect all configuration upfront (API keys, database, SSL, etc.)
+3. Show a summary and confirm
+4. Install everything automatically with progress indicators
+
+**What it installs:**
+- ✅ Node.js 20.x
+- ✅ PM2 process manager
+- ✅ NGINX + SSL (optional)
+- ✅ PostgreSQL database
+- ✅ Downloads code from appropriate GitHub branch
+- ✅ Configures all services
+- ✅ Installs update command
+
+### Alternative: Environment-Specific Installers
+
+If you prefer separate installers:
+
+**Production Server:**
 ```bash
 curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/main/public/install-prod.sh | sudo bash
 ```
 
-This will:
-- ✅ Install Node.js, PM2, NGINX, Certbot
-- ✅ Download code from GitHub `main` branch
-- ✅ Set up NGINX + SSL for app.ozvps.com.au
-- ✅ Create `.env` template
-- ✅ Start PM2 service
-- ✅ Install `update-ozvps-prod` command
-
-### Development Server
-
+**Development Server:**
 ```bash
 curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/install-dev.sh | sudo bash
 ```
 
-This will:
-- ✅ Install Node.js, PM2, NGINX, Certbot
-- ✅ Download code from GitHub `claude/dev-l5488` branch
-- ✅ Set up NGINX + SSL for dev.ozvps.com.au
-- ✅ Create `.env` template
-- ✅ Start PM2 service
-- ✅ Install `update-ozvps-dev` command
-
 ## Configuration
 
-After installation, edit the `.env` file on each server:
+The unified installer collects all configuration during setup, so manual editing is **optional**. However, if you need to update settings later:
 
 ```bash
 sudo nano /opt/ozvps-panel/.env
 ```
 
-**Required Configuration:**
+**Configuration Variables:**
 - `DATABASE_URL` - PostgreSQL connection string
 - `VIRTFUSION_API_URL` - https://panel.ozvps.com.au
 - `VIRTFUSION_API_KEY` - Your VirtFusion API key

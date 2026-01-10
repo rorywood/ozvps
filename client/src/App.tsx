@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
+import { DevBanner } from "@/components/dev-banner";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -22,6 +23,8 @@ import Register from "@/pages/register";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
+import Support from "@/pages/support";
+import SupportTicket from "@/pages/support-ticket";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
@@ -135,6 +138,18 @@ function Router() {
           <Admin />
         </AuthGuard>
       </Route>
+      <Route path="/support">
+        <AuthGuard>
+          <Support />
+        </AuthGuard>
+      </Route>
+      <Route path="/support/:id">
+        {(params) => (
+          <AuthGuard>
+            <SupportTicket />
+          </AuthGuard>
+        )}
+      </Route>
       <Route path="/order">
         <AuthGuard>
           <Order />
@@ -184,6 +199,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <PowerActionProvider>
           <TooltipProvider>
+            <DevBanner />
             <Toaster />
             <SessionErrorHandler />
             <SystemHealthCheck>

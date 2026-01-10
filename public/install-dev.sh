@@ -34,114 +34,267 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Check if already installed
+FORCE_REINSTALL=false
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Warning: Installation already exists at $INSTALL_DIR${NC}"
-    read -p "Remove existing installation and reinstall? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}${BOLD}⚠ Warning: Installation already exists at $INSTALL_DIR${NC}"
+    echo ""
+    echo "Options:"
+    echo "  [1] Cancel installation (default)"
+    echo "  [2] Remove and reinstall (quick - keeps system packages)"
+    echo "  [3] Force full reinstall (uninstall and reinstall everything)"
+    echo ""
+    read -p "Choose option [1-3]: " -n 1 -r CHOICE < /dev/tty
+    echo ""
+    echo ""
+
+    if [[ "$CHOICE" == "3" ]]; then
+        FORCE_REINSTALL=true
+        echo -e "${CYAN}${BOLD}Full reinstall selected - will uninstall and reinstall all dependencies${NC}"
+        echo -e "${CYAN}Removing existing installation...${NC}"
+        pm2 delete $SERVICE_NAME 2>/dev/null || true
+        pm2 save --force 2>/dev/null || true
+        rm -rf "$INSTALL_DIR"
+    elif [[ "$CHOICE" == "2" ]]; then
+        echo -e "${CYAN}Removing existing installation...${NC}"
+        pm2 delete $SERVICE_NAME 2>/dev/null || true
+        rm -rf "$INSTALL_DIR"
+    else
         echo "Installation cancelled."
         exit 0
     fi
-    echo -e "${CYAN}Removing existing installation...${NC}"
-    pm2 delete $SERVICE_NAME 2>/dev/null || true
-    rm -rf "$INSTALL_DIR"
 fi
 
 echo ""
-echo -e "${CYAN}Installing system dependencies...${NC}"
+echo -e "${CYAN}${BOLD}Checking System Dependencies${NC}"
+echo ""
 
-# Install Node.js 20.x if not present
-if ! command -v node &>/dev/null; then
-    echo "Installing Node.js..."
+# Check and install Node.js 20.x
+if [ "$FORCE_REINSTALL" = true ] && command -v node &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Uninstalling existing Node.js..."
+    apt-get remove -y nodejs >/dev/null 2>&1
+    apt-get autoremove -y >/dev/null 2>&1
+fi
+
+if command -v node &>/dev/null && [ "$FORCE_REINSTALL" = false ]; then
+    NODE_VERSION=$(node --version)
+    echo -e "  ${GREEN}✓${NC} Node.js $NODE_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing Node.js 20.x..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
     apt-get install -y nodejs >/dev/null 2>&1
+    NODE_VERSION=$(node --version)
+    echo -e "  ${GREEN}✓${NC} Node.js $NODE_VERSION installed"
 fi
 
-# Install PM2 globally if not present
-if ! command -v pm2 &>/dev/null; then
-    echo "Installing PM2..."
+# Check and install PM2
+if [ "$FORCE_REINSTALL" = true ] && command -v pm2 &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Uninstalling existing PM2..."
+    npm uninstall -g pm2 >/dev/null 2>&1
+fi
+
+if command -v pm2 &>/dev/null && [ "$FORCE_REINSTALL" = false ]; then
+    PM2_VERSION=$(pm2 --version)
+    echo -e "  ${GREEN}✓${NC} PM2 v$PM2_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing PM2..."
     npm install -g pm2 >/dev/null 2>&1
+    PM2_VERSION=$(pm2 --version)
+    echo -e "  ${GREEN}✓${NC} PM2 v$PM2_VERSION installed"
 fi
 
-# Install NGINX if not present
-if ! command -v nginx &>/dev/null; then
-    echo "Installing NGINX..."
+# Check and install NGINX
+if command -v nginx &>/dev/null; then
+    NGINX_VERSION=$(nginx -v 2>&1 | cut -d'/' -f2)
+    echo -e "  ${GREEN}✓${NC} NGINX $NGINX_VERSION (already installed)"
+    # Ensure it's running
+    systemctl start nginx 2>/dev/null || true
+    systemctl enable nginx 2>/dev/null || true
+else
+    echo -e "  ${YELLOW}→${NC} Installing NGINX..."
     apt-get update >/dev/null 2>&1
     apt-get install -y nginx >/dev/null 2>&1
     systemctl start nginx
     systemctl enable nginx
+    NGINX_VERSION=$(nginx -v 2>&1 | cut -d'/' -f2)
+    echo -e "  ${GREEN}✓${NC} NGINX $NGINX_VERSION installed"
 fi
 
-# Install Certbot if not present
-if ! command -v certbot &>/dev/null; then
-    echo "Installing Certbot..."
+# Check and install Certbot
+if command -v certbot &>/dev/null; then
+    CERTBOT_VERSION=$(certbot --version 2>&1 | awk '{print $2}')
+    echo -e "  ${GREEN}✓${NC} Certbot $CERTBOT_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing Certbot..."
     apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1
+    CERTBOT_VERSION=$(certbot --version 2>&1 | awk '{print $2}')
+    echo -e "  ${GREEN}✓${NC} Certbot $CERTBOT_VERSION installed"
 fi
 
-# Install PostgreSQL client if not present
-if ! command -v psql &>/dev/null; then
-    echo "Installing PostgreSQL client..."
+# Check and install PostgreSQL client
+if command -v psql &>/dev/null; then
+    PSQL_VERSION=$(psql --version | awk '{print $3}')
+    echo -e "  ${GREEN}✓${NC} PostgreSQL Client $PSQL_VERSION (already installed)"
+else
+    echo -e "  ${YELLOW}→${NC} Installing PostgreSQL client..."
     apt-get install -y postgresql-client >/dev/null 2>&1
+    PSQL_VERSION=$(psql --version | awk '{print $3}')
+    echo -e "  ${GREEN}✓${NC} PostgreSQL Client $PSQL_VERSION installed"
 fi
 
-echo -e "${GREEN}✓ System dependencies installed${NC}"
+# Check for unzip (needed for extraction)
+if ! command -v unzip &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Installing unzip..."
+    apt-get install -y unzip >/dev/null 2>&1
+    echo -e "  ${GREEN}✓${NC} unzip installed"
+else
+    echo -e "  ${GREEN}✓${NC} unzip (already installed)"
+fi
+
+# Check for rsync (needed for file copying)
+if ! command -v rsync &>/dev/null; then
+    echo -e "  ${YELLOW}→${NC} Installing rsync..."
+    apt-get install -y rsync >/dev/null 2>&1
+    echo -e "  ${GREEN}✓${NC} rsync installed"
+else
+    echo -e "  ${GREEN}✓${NC} rsync (already installed)"
+fi
+
 echo ""
+echo -e "${GREEN}✓ All system dependencies ready${NC}"
+echo ""
+
+# Check disk space
+AVAILABLE_SPACE=$(df /tmp | tail -1 | awk '{print $4}')
+if [ "$AVAILABLE_SPACE" -lt 500000 ]; then
+    echo -e "${RED}Error: Insufficient disk space in /tmp${NC}"
+    echo "Available: ${AVAILABLE_SPACE}KB, Required: ~500MB"
+    exit 1
+fi
 
 # Download application from GitHub
 echo -e "${CYAN}Downloading application from GitHub (${GITHUB_BRANCH} branch)...${NC}"
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-# Download as zip and extract
-TEMP_ZIP="/tmp/ozvps-${GITHUB_BRANCH}.zip"
-curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+# Create safe filename (replace / with -)
+SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
+TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
 
-# Extract and move files to install directory
-unzip -q "$TEMP_ZIP" -d /tmp/
-rsync -a "/tmp/ozvps-${GITHUB_BRANCH}/" "$INSTALL_DIR/"
-rm -rf "/tmp/ozvps-${GITHUB_BRANCH}" "$TEMP_ZIP"
+# Download zip
+if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
+    echo -e "${RED}Error: Failed to download from GitHub${NC}"
+    echo "URL: https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip"
+    exit 1
+fi
+
+# Extract and move files
+echo -e "${CYAN}Extracting files...${NC}"
+mkdir -p "$TEMP_EXTRACT"
+if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
+    echo -e "${RED}Error: Failed to extract zip file${NC}"
+    rm -f "$TEMP_ZIP"
+    exit 1
+fi
+
+# Find the extracted directory (GitHub creates ozvps-<branch> with slashes replaced by dashes in extraction)
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
+if [ -z "$EXTRACTED_DIR" ]; then
+    echo -e "${RED}Error: Could not find extracted directory${NC}"
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 echo -e "${GREEN}✓ Application downloaded${NC}"
 echo ""
 
 # Install Node.js dependencies
-echo -e "${CYAN}Installing application dependencies...${NC}"
-npm install --production >/dev/null 2>&1
-echo -e "${GREEN}✓ Dependencies installed${NC}"
+echo -e "${CYAN}Installing application dependencies (this may take a few minutes)...${NC}"
+if npm install --production; then
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
+else
+    echo -e "${RED}✗ Failed to install dependencies${NC}"
+    echo "Try running: cd $INSTALL_DIR && npm install"
+    exit 1
+fi
 echo ""
 
-# Create .env file template if it doesn't exist
-if [ ! -f "$INSTALL_DIR/.env" ]; then
-    echo -e "${CYAN}Creating .env configuration file...${NC}"
-    cat > "$INSTALL_DIR/.env" << 'ENVEOF'
+# Prompt for configuration
+echo -e "${CYAN}${BOLD}Configuration Setup${NC}"
+echo -e "${YELLOW}Please provide your API keys and credentials:${NC}"
+echo ""
+
 # Database Configuration
-DATABASE_URL=postgresql://ozvps_dev:password@localhost:5432/ozvps_dev
+read -p "PostgreSQL Connection String [postgresql://ozvps_dev:password@localhost:5432/ozvps_dev]: " DB_URL
+DB_URL=${DB_URL:-postgresql://ozvps_dev:password@localhost:5432/ozvps_dev}
+
+# VirtFusion API
+echo ""
+echo -e "${BOLD}VirtFusion API Configuration${NC}"
+read -p "VirtFusion API Key: " VIRT_API_KEY
+
+# Stripe Configuration (TEST keys for development)
+echo ""
+echo -e "${BOLD}Stripe Configuration (TEST KEYS FOR DEVELOPMENT)${NC}"
+echo -e "${YELLOW}⚠ Use TEST keys (sk_test_..., pk_test_...) not LIVE keys!${NC}"
+read -p "Stripe Secret Key (sk_test_...): " STRIPE_SECRET
+read -p "Stripe Publishable Key (pk_test_...): " STRIPE_PUBLIC
+read -p "Stripe Webhook Secret (whsec_test_...): " STRIPE_WEBHOOK
+
+# Auth0 Configuration
+echo ""
+echo -e "${BOLD}Auth0 Configuration${NC}"
+read -p "Auth0 Secret: " AUTH0_SEC
+read -p "Auth0 Issuer Base URL (https://your-tenant.auth0.com): " AUTH0_ISSUER
+read -p "Auth0 Client ID: " AUTH0_CID
+read -p "Auth0 Client Secret: " AUTH0_CSEC
+
+echo ""
+echo -e "${CYAN}Creating configuration file...${NC}"
+
+# Create .env file with provided values
+cat > "$INSTALL_DIR/.env" << ENVEOF
+# Database Configuration
+DATABASE_URL=${DB_URL}
 
 # VirtFusion API (panel.ozvps.com.au)
 VIRTFUSION_API_URL=https://panel.ozvps.com.au
-VIRTFUSION_API_KEY=your_virtfusion_api_key_here
+VIRTFUSION_API_KEY=${VIRT_API_KEY}
 
 # Stripe Configuration (TEST KEYS FOR DEVELOPMENT)
-STRIPE_SECRET_KEY=sk_test_your_key_here
-STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
-STRIPE_WEBHOOK_SECRET=whsec_test_your_webhook_secret_here
+STRIPE_SECRET_KEY=${STRIPE_SECRET}
+STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLIC}
+STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK}
 
 # Auth0 Configuration
-AUTH0_SECRET=your_auth0_secret_here
+AUTH0_SECRET=${AUTH0_SEC}
 AUTH0_BASE_URL=https://dev.ozvps.com.au
-AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
-AUTH0_CLIENT_ID=your_auth0_client_id_here
-AUTH0_CLIENT_SECRET=your_auth0_client_secret_here
+AUTH0_ISSUER_BASE_URL=${AUTH0_ISSUER}
+AUTH0_CLIENT_ID=${AUTH0_CID}
+AUTH0_CLIENT_SECRET=${AUTH0_CSEC}
 
 # Application Settings
 NODE_ENV=development
 PORT=3000
 ENVEOF
-    chmod 600 "$INSTALL_DIR/.env"
-    echo -e "${GREEN}✓ Environment file created${NC}"
-    echo -e "${YELLOW}⚠ IMPORTANT: Edit $INSTALL_DIR/.env with your API keys!${NC}"
-    echo -e "${YELLOW}⚠ Use TEST Stripe keys for development!${NC}"
+chmod 600 "$INSTALL_DIR/.env"
+echo -e "${GREEN}✓ Configuration file created${NC}"
+echo ""
+
+# Run database migrations
+echo -e "${CYAN}Running database migrations...${NC}"
+cd "$INSTALL_DIR"
+if npx drizzle-kit push --force; then
+    echo -e "${GREEN}✓ Database migrations applied${NC}"
+else
+    echo -e "${RED}✗ Database migration failed${NC}"
+    echo "Check your DATABASE_URL and ensure PostgreSQL is accessible"
+    exit 1
 fi
+echo ""
 
 # Create PM2 ecosystem file
 echo -e "${CYAN}Configuring PM2...${NC}"

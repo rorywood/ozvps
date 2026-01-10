@@ -381,36 +381,61 @@ export default function ServerDetail() {
       
       // Start console lock for boot/reboot actions
       if (action === 'boot' || action === 'reboot') {
-        consoleLock.startLock();
+        consoleLock.startLock(action);
       }
       
-      // Poll for status updates
+      // Poll for status updates with stabilization delay
+      let completionDetectedAt: number | null = null;
       const pollInterval = setInterval(async () => {
         await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         const updatedServer = queryClient.getQueryData(['server', serverId]) as any;
         if (updatedServer) {
-          const isComplete = 
+          const isComplete =
             (action === 'boot' && updatedServer.status === 'running') ||
             ((action === 'shutdown' || action === 'poweroff') && updatedServer.status === 'stopped') ||
             (action === 'reboot' && updatedServer.status === 'running');
+
           if (isComplete) {
-            clearInterval(pollInterval);
-            setPowerActionPending(null);
-            if (serverId) clearPending(serverId);
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            // Mark when we first detected completion
+            if (!completionDetectedAt) {
+              completionDetectedAt = Date.now();
+            }
+
+            // Wait longer for shutdown/poweroff to ensure server is fully stopped
+            // Boot/reboot can be faster (2s), but shutdown needs more time (4s)
+            const stabilizationDelay = (action === 'shutdown' || action === 'poweroff') ? 4000 : 2000;
+
+            if (Date.now() - completionDetectedAt >= stabilizationDelay) {
+              clearInterval(pollInterval);
+              // Refetch status FIRST before clearing pending state
+              await queryClient.refetchQueries({ queryKey: ['server', serverId] });
+              await queryClient.refetchQueries({ queryKey: ['servers'] });
+              // Now clear pending state after fresh data is loaded
+              setPowerActionPending(null);
+              if (serverId) clearPending(serverId);
+            }
+          } else {
+            // Reset if status changed back (shouldn't happen but just in case)
+            completionDetectedAt = null;
           }
         }
       }, 2000);
-      // Clear after 30 seconds regardless
-      setTimeout(() => {
+      // Clear after 60 seconds regardless (reboots can take a while)
+      setTimeout(async () => {
         clearInterval(pollInterval);
+        // Refetch current status FIRST before clearing pending state
+        await queryClient.refetchQueries({ queryKey: ['server', serverId] });
+        await queryClient.refetchQueries({ queryKey: ['servers'] });
+        // Now clear pending state after status is updated
         setPowerActionPending(null);
         if (serverId) clearPending(serverId);
-        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        queryClient.invalidateQueries({ queryKey: ['servers'] });
-      }, 30000);
+      }, 60000);
     },
-    onError: (error: any) => {
+    onError: async (error: any) => {
+      // Refetch current status FIRST before clearing pending state
+      await queryClient.refetchQueries({ queryKey: ['server', serverId] });
+      await queryClient.refetchQueries({ queryKey: ['servers'] });
+      // Now clear pending state
       setPowerActionPending(null);
       if (serverId) clearPending(serverId);
       toast({
@@ -439,9 +464,9 @@ export default function ServerDetail() {
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
-      
+
       // Start console lock (server will reboot after reinstall)
-      consoleLock.startLock();
+      consoleLock.startLock('reinstall');
       
       toast({
         title: "Reinstallation Started",
@@ -624,31 +649,30 @@ export default function ServerDetail() {
 
 
   const validateHostname = (value: string): string => {
-    const trimmed = value.trim().toLowerCase();
+    const trimmed = value.trim();
     if (!trimmed) return 'Hostname is required';
     if (trimmed.length > 253) return 'Hostname must be 253 characters or less';
     const labels = trimmed.split('.');
     for (const label of labels) {
       if (label.length === 0) return 'Hostname cannot have empty labels (consecutive dots)';
       if (label.length > 63) return 'Each part of the hostname must be 63 characters or less';
-      if (label.length === 1 && !/^[a-z0-9]$/.test(label)) {
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) {
         return 'Single character parts must be a letter or number';
       }
-      if (label.length > 1 && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label)) {
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) {
         if (label.startsWith('-') || label.endsWith('-')) {
           return 'Hostname parts cannot start or end with a hyphen';
         }
-        return 'Hostname can only contain lowercase letters, numbers, hyphens, and dots';
+        return 'Hostname can only contain letters, numbers, hyphens, and dots';
       }
     }
     return '';
   };
 
   const handleHostnameChange = (value: string) => {
-    const normalizedValue = value.toLowerCase().trim();
-    setHostname(normalizedValue);
-    if (normalizedValue) {
-      setHostnameError(validateHostname(normalizedValue));
+    setHostname(value);
+    if (value.trim()) {
+      setHostnameError(validateHostname(value));
     } else {
       setHostnameError('');
     }
@@ -687,10 +711,9 @@ export default function ServerDetail() {
 
   // Setup wizard handlers
   const handleSetupHostnameChange = (value: string) => {
-    const normalizedValue = value.toLowerCase().trim();
-    setSetupHostname(normalizedValue);
-    if (normalizedValue) {
-      setSetupHostnameError(validateHostname(normalizedValue));
+    setSetupHostname(value);
+    if (value.trim()) {
+      setSetupHostnameError(validateHostname(value));
     } else {
       setSetupHostnameError('');
     }
@@ -1175,8 +1198,8 @@ export default function ServerDetail() {
     <AppShell>
       <div className="space-y-6 pb-20">
         
-        {/* Building Banner - Shown when setup is minimized */}
-        {reinstallTask.isActive && isSetupMode && setupMinimized && (
+        {/* Building Banner - Shown when setup is minimized (but not when complete) */}
+        {reinstallTask.isActive && isSetupMode && setupMinimized && reinstallTask.status !== 'complete' && (
           <div 
             className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/30 transition-colors" 
             data-testid="banner-building"
@@ -1206,7 +1229,7 @@ export default function ServerDetail() {
         )}
         
         {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
-        {showSavedCredentials && savedCredentials && !reinstallTask.isActive && (
+        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
           <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
@@ -1386,7 +1409,10 @@ export default function ServerDetail() {
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
                   <span className="text-xs text-orange-400 font-medium">
-                    {consoleLock.isLocked ? 'Rebooting...' :
+                    {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reboot' ? 'Rebooting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Rebooting...' :
+                     consoleLock.isLocked ? 'Rebooting...' :
                      displayStatus === 'starting' ? 'Starting...' :
                      displayStatus === 'rebooting' ? 'Rebooting...' :
                      displayStatus === 'stopping' ? 'Stopping...' :
@@ -1424,13 +1450,21 @@ export default function ServerDetail() {
               </div>
               {server.image && (
                 <div className="flex items-center gap-2">
-                  <img 
+                  <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
                     alt={server.image.name}
                     className="h-4 w-4 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
                   <span className="text-foreground">{server.image.name}</span>
+                </div>
+              )}
+              {server.billing?.nextBillAt && (
+                <div className="flex items-center gap-2">
+                  <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
+                  <span className="text-foreground">
+                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
                 </div>
               )}
             </div>
@@ -1457,7 +1491,8 @@ export default function ServerDetail() {
               ) : consoleLock.isLocked ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  Restarting...
+                  {consoleLock.action === 'boot' ? 'Starting...' :
+                   consoleLock.action === 'reinstall' ? 'Rebuilding...' : 'Restarting...'}
                 </>
               ) : (
                 <>
@@ -1484,7 +1519,10 @@ export default function ServerDetail() {
                   ) : (
                     <Power className="h-4 w-4 mr-2" />
                   )}
-                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") : consoleLock.isLocked ? "Restarting..." : "Power Options"}
+                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") :
+                   consoleLock.isLocked && consoleLock.action === 'boot' ? "Starting..." :
+                   consoleLock.isLocked && consoleLock.action === 'reinstall' ? "Rebuilding..." :
+                   consoleLock.isLocked ? "Restarting..." : "Power Options"}
                   {!consoleLock.isLocked && !reinstallTask.isActive && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
                 </Button>
               </DropdownMenuTrigger>
@@ -1736,6 +1774,10 @@ export default function ServerDetail() {
                 const formatBytes = (bytes: number): string => {
                   if (bytes === 0) return '0 MB';
                   const gb = bytes / (1024 * 1024 * 1024);
+                  if (gb >= 1000) {
+                    const tb = gb / 1024;
+                    return `${tb.toFixed(2)} TB`;
+                  }
                   if (gb >= 1) {
                     return `${gb.toFixed(2)} GB`;
                   }
@@ -1762,10 +1804,34 @@ export default function ServerDetail() {
                 
                 return (
                   <div className="space-y-2">
+                    {/* Bandwidth Exceeded Warning */}
+                    {usagePercent >= 100 && (
+                      <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Bandwidth Limit Exceeded</p>
+                            <p className="text-[10px] text-muted-foreground">Bandwidth has been shaped to 1Mbps Download and 1Mbps Upload.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {usagePercent >= 80 && usagePercent < 100 && (
+                      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Approaching Bandwidth Limit</p>
+                            <p className="text-[10px] text-muted-foreground">{usagePercent.toFixed(1)}% of allowance used</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? `${limitGB} GB` : '∞'}</span>
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1024).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
                       </span>
                       {remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">

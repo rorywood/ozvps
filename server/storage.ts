@@ -1,8 +1,8 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
-import { eq, desc, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, inArray, or, isNull, ne } from "drizzle-orm";
 
 export interface Session {
   id: string;
@@ -1101,5 +1101,290 @@ export const dbStorage = {
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  },
+
+  // ========== SUPPORT TICKETS ==========
+
+  // Create a new ticket
+  async createTicket(data: InsertTicket): Promise<Ticket> {
+    const [ticket] = await db.insert(tickets).values(data).returning();
+    return ticket;
+  },
+
+  // Get a ticket by ID
+  async getTicketById(id: number): Promise<Ticket | undefined> {
+    const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
+    return ticket;
+  },
+
+  // Get tickets for a user
+  async getUserTickets(auth0UserId: string, options: {
+    status?: 'open' | 'closed' | 'all';
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ tickets: Ticket[]; total: number }> {
+    const { status = 'all', limit = 50, offset = 0 } = options;
+
+    const conditions: any[] = [eq(tickets.auth0UserId, auth0UserId)];
+
+    if (status === 'open') {
+      conditions.push(ne(tickets.status, 'closed'));
+    } else if (status === 'closed') {
+      conditions.push(eq(tickets.status, 'closed'));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [ticketList, countResult] = await Promise.all([
+      db.select()
+        .from(tickets)
+        .where(whereClause)
+        .orderBy(desc(tickets.lastMessageAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(tickets)
+        .where(whereClause),
+    ]);
+
+    return {
+      tickets: ticketList,
+      total: countResult[0]?.count || 0,
+    };
+  },
+
+  // Get all tickets (for admin)
+  async getAllTickets(options: {
+    status?: TicketStatus | TicketStatus[];
+    category?: TicketCategory;
+    priority?: TicketPriority;
+    auth0UserId?: string;
+    virtfusionServerId?: string;
+    assignedAdminId?: string | null;
+    limit?: number;
+    offset?: number;
+    sortBy?: 'lastMessageAt' | 'priority' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+  } = {}): Promise<{ tickets: Ticket[]; total: number }> {
+    const {
+      status,
+      category,
+      priority,
+      auth0UserId,
+      virtfusionServerId,
+      assignedAdminId,
+      limit = 50,
+      offset = 0,
+      sortBy = 'lastMessageAt',
+      sortOrder = 'desc',
+    } = options;
+
+    const conditions: any[] = [];
+
+    if (status) {
+      if (Array.isArray(status)) {
+        conditions.push(inArray(tickets.status, status));
+      } else {
+        conditions.push(eq(tickets.status, status));
+      }
+    }
+    if (category) {
+      conditions.push(eq(tickets.category, category));
+    }
+    if (priority) {
+      conditions.push(eq(tickets.priority, priority));
+    }
+    if (auth0UserId) {
+      conditions.push(eq(tickets.auth0UserId, auth0UserId));
+    }
+    if (virtfusionServerId) {
+      conditions.push(eq(tickets.virtfusionServerId, virtfusionServerId));
+    }
+    if (assignedAdminId !== undefined) {
+      if (assignedAdminId === null) {
+        conditions.push(isNull(tickets.assignedAdminId));
+      } else {
+        conditions.push(eq(tickets.assignedAdminId, assignedAdminId));
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Build order by clause
+    let orderByColumn: any;
+    switch (sortBy) {
+      case 'priority':
+        // Priority order: urgent > high > normal > low
+        orderByColumn = sql`CASE ${tickets.priority}
+          WHEN 'urgent' THEN 1
+          WHEN 'high' THEN 2
+          WHEN 'normal' THEN 3
+          WHEN 'low' THEN 4
+          ELSE 5 END`;
+        break;
+      case 'createdAt':
+        orderByColumn = tickets.createdAt;
+        break;
+      default:
+        orderByColumn = tickets.lastMessageAt;
+    }
+
+    const [ticketList, countResult] = await Promise.all([
+      db.select()
+        .from(tickets)
+        .where(whereClause)
+        .orderBy(sortOrder === 'asc' ? orderByColumn : desc(orderByColumn))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(tickets)
+        .where(whereClause),
+    ]);
+
+    return {
+      tickets: ticketList,
+      total: countResult[0]?.count || 0,
+    };
+  },
+
+  // Update a ticket
+  async updateTicket(id: number, updates: Partial<{
+    status: TicketStatus;
+    priority: TicketPriority;
+    category: TicketCategory;
+    assignedAdminId: string | null;
+    closedAt: Date | null;
+  }>): Promise<Ticket | undefined> {
+    const [updated] = await db
+      .update(tickets)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tickets.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Update last message timestamp
+  async updateTicketLastMessage(id: number): Promise<Ticket | undefined> {
+    const [updated] = await db
+      .update(tickets)
+      .set({ lastMessageAt: new Date(), updatedAt: new Date() })
+      .where(eq(tickets.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Close a ticket
+  async closeTicket(id: number): Promise<Ticket | undefined> {
+    const [updated] = await db
+      .update(tickets)
+      .set({ status: 'closed', closedAt: new Date(), updatedAt: new Date() })
+      .where(eq(tickets.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Reopen a ticket
+  async reopenTicket(id: number): Promise<Ticket | undefined> {
+    const [updated] = await db
+      .update(tickets)
+      .set({ status: 'waiting_admin', closedAt: null, updatedAt: new Date() })
+      .where(eq(tickets.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Create a ticket message
+  async createTicketMessage(data: InsertTicketMessage): Promise<TicketMessage> {
+    const [message] = await db.insert(ticketMessages).values(data).returning();
+    // Update ticket last message time
+    await this.updateTicketLastMessage(data.ticketId);
+    return message;
+  },
+
+  // Get messages for a ticket
+  async getTicketMessages(ticketId: number): Promise<TicketMessage[]> {
+    return db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, ticketId))
+      .orderBy(ticketMessages.createdAt);
+  },
+
+  // Count tickets needing admin attention (new or waiting_admin)
+  async getAdminTicketCounts(): Promise<{
+    new: number;
+    waitingAdmin: number;
+    open: number;
+    total: number;
+  }> {
+    const [newCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(eq(tickets.status, 'new'));
+
+    const [waitingAdminCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(eq(tickets.status, 'waiting_admin'));
+
+    const [openCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(
+        and(
+          ne(tickets.status, 'closed'),
+          ne(tickets.status, 'resolved')
+        )
+      );
+
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets);
+
+    return {
+      new: newCount?.count || 0,
+      waitingAdmin: waitingAdminCount?.count || 0,
+      open: openCount?.count || 0,
+      total: totalCount?.count || 0,
+    };
+  },
+
+  // Count tickets with unread admin replies for a user
+  async getUserTicketCounts(auth0UserId: string): Promise<{
+    open: number;
+    waitingUser: number;
+    total: number;
+  }> {
+    const [openCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.auth0UserId, auth0UserId),
+          ne(tickets.status, 'closed'),
+          ne(tickets.status, 'resolved')
+        )
+      );
+
+    const [waitingUserCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.auth0UserId, auth0UserId),
+          eq(tickets.status, 'waiting_user')
+        )
+      );
+
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(eq(tickets.auth0UserId, auth0UserId));
+
+    return {
+      open: openCount?.count || 0,
+      waitingUser: waitingUserCount?.count || 0,
+      total: totalCount?.count || 0,
+    };
   },
 };

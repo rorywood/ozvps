@@ -1,6 +1,9 @@
 import { dbStorage } from "./storage";
 import { virtfusionClient } from "./virtfusion";
 import { log } from "./index";
+import { db } from "./db";
+import { serverBilling } from "../shared/schema";
+import { eq } from "drizzle-orm";
 
 const PROCESSING_INTERVAL_MS = 30 * 1000; // Check every 30 seconds for faster cleanup
 
@@ -34,6 +37,16 @@ async function processPendingCancellations(): Promise<{ submitted: number; error
           // Server already gone from VirtFusion, mark complete immediately
           await dbStorage.completeCancellation(cancellation.id);
           log(`Server ${cancellation.virtfusionServerId} already deleted in VirtFusion, marked complete`, 'cancellation');
+
+          // Clean up billing record for deleted server
+          try {
+            await db.delete(serverBilling)
+              .where(eq(serverBilling.virtfusionServerId, cancellation.virtfusionServerId));
+            log(`Removed billing record for deleted server ${cancellation.virtfusionServerId}`, 'billing');
+          } catch (billingError: any) {
+            log(`Warning: Could not remove billing record for server ${cancellation.virtfusionServerId}: ${billingError.message}`, 'billing');
+          }
+
           submitted++;
           continue;
         }
@@ -50,6 +63,16 @@ async function processPendingCancellations(): Promise<{ submitted: number; error
         if (error.message?.includes('404')) {
           await dbStorage.completeCancellation(cancellation.id);
           log(`Server ${cancellation.virtfusionServerId} already deleted in VirtFusion, marked complete`, 'cancellation');
+
+          // Clean up billing record for deleted server
+          try {
+            await db.delete(serverBilling)
+              .where(eq(serverBilling.virtfusionServerId, cancellation.virtfusionServerId));
+            log(`Removed billing record for deleted server ${cancellation.virtfusionServerId}`, 'billing');
+          } catch (billingError: any) {
+            log(`Warning: Could not remove billing record for server ${cancellation.virtfusionServerId}: ${billingError.message}`, 'billing');
+          }
+
           submitted++;
         } else {
           const errorMessage = error.message || 'Unknown error';
@@ -88,6 +111,16 @@ async function checkProcessingCancellations(): Promise<{ completed: number; stil
         // Server is gone from VirtFusion, mark as completed
         await dbStorage.completeCancellation(cancellation.id);
         log(`Server ${cancellation.virtfusionServerId} confirmed deleted from VirtFusion`, 'cancellation');
+
+        // Clean up billing record for deleted server
+        try {
+          await db.delete(serverBilling)
+            .where(eq(serverBilling.virtfusionServerId, cancellation.virtfusionServerId));
+          log(`Removed billing record for deleted server ${cancellation.virtfusionServerId}`, 'billing');
+        } catch (billingError: any) {
+          log(`Warning: Could not remove billing record for server ${cancellation.virtfusionServerId}: ${billingError.message}`, 'billing');
+        }
+
         completed++;
       } else {
         // Server still exists, keep waiting

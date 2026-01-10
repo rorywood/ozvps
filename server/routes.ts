@@ -4,8 +4,9 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
+import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -413,8 +414,13 @@ export async function registerRoutes(
   // Auth endpoints (public)
   app.post('/api/auth/register', async (req, res) => {
     try {
-      // Check if registration is disabled
-      if (process.env.REGISTRATION_DISABLED === 'true') {
+      // Check if registration is disabled (database setting takes precedence)
+      const registrationSetting = await dbStorage.getSecuritySetting('registration_enabled');
+      const isRegistrationEnabled = registrationSetting
+        ? registrationSetting.enabled
+        : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      if (!isRegistrationEnabled) {
         return res.status(403).json({ error: 'Registration is currently disabled. Please contact support.' });
       }
 
@@ -848,7 +854,64 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'VirtFusion account not linked' });
       }
       const servers = await virtfusionClient.listServersWithStats(userId);
-      res.json(servers);
+
+      // Fetch bandwidth status and billing info for each server in parallel
+      const serversWithBandwidthAndBilling = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            // Fetch bandwidth status
+            const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            let bandwidthExceeded = false;
+            if (traffic?.current) {
+              const usedBytes = traffic.current.total || 0;
+              const limitGB = traffic.current.limit || 0;
+              const usedGB = usedBytes / (1024 * 1024 * 1024);
+              bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+            }
+
+            // Fetch billing status, create if doesn't exist (for existing servers)
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            // Auto-initialize billing for existing servers that don't have a record
+            if (!billingStatus && server.plan?.priceMonthly) {
+              try {
+                // Use server's actual creation date for accurate billing
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                await createServerBilling({
+                  auth0UserId: req.userSession!.auth0UserId!,
+                  virtfusionServerId: server.id,
+                  planId: server.plan.id,
+                  monthlyPriceCents: server.plan.priceMonthly,
+                  deployedAt,
+                });
+                // Fetch the newly created billing record
+                billingStatus = await getServerBillingStatus(server.id);
+              } catch (billingCreateError: any) {
+                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
+              }
+            }
+
+            return {
+              ...server,
+              bandwidthExceeded,
+              billing: billingStatus ? {
+                status: billingStatus.status,
+                nextBillAt: billingStatus.nextBillAt,
+                suspendAt: billingStatus.suspendAt,
+                monthlyPriceCents: billingStatus.monthlyPriceCents,
+                autoRenew: billingStatus.autoRenew,
+              } : null,
+            };
+          } catch (error) {
+            // If fetch fails, return server without extras
+            return { ...server, bandwidthExceeded: false, billing: null };
+          }
+        })
+      );
+
+      res.json(serversWithBandwidthAndBilling);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
       return handleApiError(res, error, 'Failed to fetch servers');
@@ -861,7 +924,62 @@ export async function registerRoutes(
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
-      res.json(server);
+
+      // Fetch bandwidth status (non-critical, don't fail if it errors)
+      let bandwidthExceeded = false;
+      try {
+        const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);
+        if (traffic?.current) {
+          const usedBytes = traffic.current.total || 0;
+          const limitGB = traffic.current.limit || 0;
+          const usedGB = usedBytes / (1024 * 1024 * 1024);
+          bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+        }
+      } catch (bandwidthError: any) {
+        log(`Warning: Could not fetch bandwidth for server ${req.params.id}: ${bandwidthError.message}`, 'api');
+      }
+
+      // Fetch billing status for this server (non-critical, don't fail if it errors)
+      let billingStatus = null;
+      try {
+        billingStatus = await getServerBillingStatus(req.params.id);
+
+        // Auto-initialize billing for existing servers that don't have a record
+        if (!billingStatus && server.plan?.priceMonthly) {
+          try {
+            // Use server's actual creation date for accurate billing
+            const serverCreatedAt = server.created_at || server.createdAt;
+            const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+            await createServerBilling({
+              auth0UserId: req.userSession!.auth0UserId!,
+              virtfusionServerId: req.params.id,
+              planId: server.plan.id,
+              monthlyPriceCents: server.plan.priceMonthly,
+              deployedAt,
+            });
+            // Fetch the newly created billing record
+            billingStatus = await getServerBillingStatus(req.params.id);
+          } catch (billingCreateError: any) {
+            log(`Could not auto-initialize billing for server ${req.params.id}: ${billingCreateError.message}`, 'api');
+          }
+        }
+      } catch (billingError: any) {
+        log(`Warning: Could not fetch billing status for server ${req.params.id}: ${billingError.message}`, 'api');
+      }
+
+      res.json({
+        ...server,
+        bandwidthExceeded,
+        billing: billingStatus ? {
+          status: billingStatus.status,
+          nextBillAt: billingStatus.nextBillAt,
+          suspendAt: billingStatus.suspendAt,
+          monthlyPriceCents: billingStatus.monthlyPriceCents,
+          autoRenew: billingStatus.autoRenew,
+          deployedAt: billingStatus.deployedAt,
+        } : null,
+      });
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
       return handleApiError(res, error, 'Failed to fetch server');
@@ -1265,20 +1383,118 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
       const billingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
-      
+
       // Return as a map of serverId -> billing status
-      const billingMap: Record<string, { status: string; overdueSince: Date | null }> = {};
+      const billingMap: Record<string, {
+        status: string;
+        nextBillAt?: Date;
+        suspendAt?: Date | null;
+        monthlyPriceCents?: number;
+      }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
-          overdueSince: b.overdueSince,
+          nextBillAt: b.nextBillAt,
+          suspendAt: b.suspendAt,
+          monthlyPriceCents: b.monthlyPriceCents,
         };
       }
-      
+
       res.json({ billing: billingMap });
     } catch (error: any) {
       log(`Error fetching server billing statuses: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch billing statuses' });
+    }
+  });
+
+  // Get upcoming charges for the user
+  app.get('/api/billing/upcoming', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      // Auto-initialize billing for any servers that don't have records yet
+      // Also clean up billing records for deleted servers
+      try {
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const activeServerIds = new Set(servers.map(s => s.id));
+
+        // Get all billing records for this user
+        const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
+
+        // Remove billing records for servers that no longer exist
+        for (const billing of allBillingRecords) {
+          if (!activeServerIds.has(billing.virtfusionServerId)) {
+            await db.delete(serverBilling)
+              .where(eq(serverBilling.id, billing.id));
+            log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
+          }
+        }
+
+        // Create billing records for new servers
+        for (const server of servers) {
+          if (server.plan?.priceMonthly) {
+            // Check if billing record exists
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            if (!billingStatus) {
+              // Use server's actual creation date for accurate billing
+              const serverCreatedAt = server.created_at || server.createdAt;
+              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+              // Create billing record
+              await createServerBilling({
+                auth0UserId: session.auth0UserId!,
+                virtfusionServerId: server.id,
+                planId: server.plan.id,
+                monthlyPriceCents: server.plan.priceMonthly,
+                deployedAt,
+              });
+              log(`Auto-initialized billing for server ${server.id}`, 'billing');
+            }
+          }
+        }
+      } catch (initError: any) {
+        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
+      }
+
+      // Fetch upcoming charges
+      let upcoming = [];
+      try {
+        const billingRecords = await getUpcomingCharges(session.auth0UserId!);
+
+        // Fetch servers to enrich with names and verify they still exist
+        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+
+        // Only include billing records for servers that actually exist
+        // This filters out any orphaned records that haven't been cleaned up yet
+        upcoming = billingRecords
+          .filter(billing => serverMap.has(billing.virtfusionServerId))
+          .map(billing => ({
+            ...billing,
+            serverName: serverMap.get(billing.virtfusionServerId),
+          }));
+      } catch (billingError: any) {
+        log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
+      }
+
+      res.json({ upcoming });
+    } catch (error: any) {
+      log(`Error in billing/upcoming endpoint: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch upcoming charges' });
+    }
+  });
+
+  // Get billing ledger for the user
+  app.get('/api/billing/ledger', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const ledger = await getBillingLedger(session.auth0UserId!);
+
+      res.json({ ledger });
+    } catch (error: any) {
+      log(`Error fetching billing ledger: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch billing ledger' });
     }
   });
   
@@ -1856,10 +2072,19 @@ export async function registerRoutes(
   });
 
   // Check if registration is enabled (public)
-  app.get('/api/auth/registration-status', (req, res) => {
-    res.json({
-      enabled: process.env.REGISTRATION_DISABLED !== 'true',
-    });
+  app.get('/api/auth/registration-status', async (req, res) => {
+    try {
+      // Check database setting first, fall back to env variable
+      const setting = await dbStorage.getSecuritySetting('registration_enabled');
+      const enabled = setting ? setting.enabled : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      res.json({ enabled });
+    } catch (error) {
+      // Fall back to env variable if database query fails
+      res.json({
+        enabled: process.env.REGISTRATION_DISABLED !== 'true',
+      });
+    }
   });
 
   // ================== Admin VirtFusion Management Routes ==================
@@ -2275,6 +2500,61 @@ export async function registerRoutes(
     }
   });
 
+  // ================== Admin Settings Routes ==================
+
+  // Admin: Get registration setting
+  app.get('/api/admin/settings/registration', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const setting = await dbStorage.getSecuritySetting('registration_enabled');
+      const enabled = setting ? setting.enabled : (process.env.REGISTRATION_DISABLED !== 'true');
+
+      res.json({ enabled });
+    } catch (error: any) {
+      log(`Admin: Error fetching registration setting: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch registration setting' });
+    }
+  });
+
+  // Admin: Update registration setting
+  app.put('/api/admin/settings/registration', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { enabled } = req.body;
+
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'Invalid enabled value' });
+      }
+
+      // Upsert the setting
+      await dbStorage.upsertSecuritySetting('registration_enabled', null, enabled);
+
+      // Audit log
+      await auditLog(
+        req,
+        'settings.registration.update',
+        'security_setting',
+        'registration_enabled',
+        null,
+        { enabled },
+        'success'
+      );
+
+      res.json({ enabled });
+    } catch (error: any) {
+      log(`Admin: Error updating registration setting: ${error.message}`, 'admin');
+      await auditLog(
+        req,
+        'settings.registration.update',
+        'security_setting',
+        'registration_enabled',
+        null,
+        { enabled: req.body.enabled },
+        'failure',
+        error.message
+      );
+      res.status(500).json({ error: 'Failed to update registration setting' });
+    }
+  });
+
   // ================== Wallet & Deploy Routes ==================
 
   // Location to hypervisor GROUP mapping
@@ -2349,7 +2629,7 @@ export async function registerRoutes(
       const publishableKey = await getStripePublishableKey();
       res.json({
         configured: !!publishableKey,
-        publishableKey: publishableKey ? publishableKey.substring(0, 12) + '...' : null,
+        publishableKey: publishableKey, // Return full key for frontend to use
       });
     } catch (error: any) {
       log(`Stripe not configured: ${error.message}`, 'api');
@@ -2450,7 +2730,7 @@ export async function registerRoutes(
         // Detach the duplicate payment method
         await stripe.paymentMethods.detach(paymentMethodId);
         log(`Rejected duplicate card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: 'This card is already saved to your account',
           duplicate: true,
           existingCard: {
@@ -2460,7 +2740,12 @@ export async function registerRoutes(
         });
       }
 
-      log(`Validated new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+      // Attach the payment method to the customer
+      await stripe.paymentMethods.attach(paymentMethodId, {
+        customer: stripeCustomerId,
+      });
+
+      log(`Validated and attached new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
       res.json({ valid: true });
     } catch (error: any) {
       if (error instanceof StripeCustomerError) {
@@ -2939,13 +3224,17 @@ export async function registerRoutes(
 
   app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
     try {
+      log(`[Direct Topup] Request received from user ${req.userSession?.auth0UserId}`, 'api');
+
       const result = directChargeSchema.safeParse(req.body);
       if (!result.success) {
+        log(`[Direct Topup] Validation failed: ${JSON.stringify(result.error)}`, 'api');
         return res.status(400).json({ error: 'Invalid request. Amount must be between $5 and $500, and a payment method is required.' });
       }
 
       const { amountCents, paymentMethodId } = result.data;
-      
+      log(`[Direct Topup] Processing $${(amountCents / 100).toFixed(2)} with payment method ${paymentMethodId}`, 'api');
+
       // Ensure Stripe customer exists
       const { stripeCustomerId } = await ensureStripeCustomer({
         auth0UserId: req.userSession!.auth0UserId,
@@ -2953,13 +3242,16 @@ export async function registerRoutes(
         name: req.userSession!.name,
         userId: req.userSession!.userId,
       });
-      
+      log(`[Direct Topup] Stripe customer: ${stripeCustomerId}`, 'api');
+
       const stripe = await getUncachableStripeClient();
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Verify the payment method belongs to this customer
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      log(`[Direct Topup] Payment method retrieved: ${paymentMethod.id}, customer: ${paymentMethod.customer}`, 'api');
       if (paymentMethod.customer !== stripeCustomerId) {
+        log(`[Direct Topup] Payment method customer mismatch`, 'api');
         return res.status(403).json({ error: 'Invalid payment method' });
       }
 
@@ -2968,9 +3260,11 @@ export async function registerRoutes(
       const expYear = paymentMethod.card?.exp_year || 0;
       const expMonth = paymentMethod.card?.exp_month || 0;
       if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+        log(`[Direct Topup] Card expired: ${expMonth}/${expYear}`, 'api');
         return res.status(400).json({ error: 'This card has expired. Please use a different card.' });
       }
 
+      log(`[Direct Topup] Creating payment intent for $${(amountCents / 100).toFixed(2)}`, 'api');
       // Create a payment intent and confirm it immediately
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountCents,
@@ -2987,7 +3281,10 @@ export async function registerRoutes(
         },
       });
 
+      log(`[Direct Topup] Payment intent created: ${paymentIntent.id}, status: ${paymentIntent.status}`, 'api');
+
       if (paymentIntent.status === 'succeeded') {
+        log(`[Direct Topup] Payment succeeded, crediting wallet`, 'api');
         // Add credits to wallet and record transaction in one call
         const updatedWallet = await dbStorage.creditWallet(auth0UserId, amountCents, {
           type: 'credit',
@@ -2995,6 +3292,7 @@ export async function registerRoutes(
           metadata: { source: 'direct_charge' },
         });
 
+        log(`[Direct Topup] Wallet credited. New balance: $${((updatedWallet?.balanceCents || 0) / 100).toFixed(2)}`, 'api');
         log(`Direct charge successful for ${auth0UserId}: $${(amountCents / 100).toFixed(2)} AUD`, 'stripe');
         
         // Create Stripe invoice for the payment (stored in Stripe, not our database)
@@ -3034,47 +3332,54 @@ export async function registerRoutes(
           log(`Stripe invoice created: ${stripeInvoice.number} for $${(amountCents / 100).toFixed(2)} user=${auth0UserId}`, 'billing');
         } catch (invoiceError: any) {
           // Log but don't fail - wallet credit was successful
-          log(`Failed to create Stripe invoice: ${invoiceError.message}`, 'billing');
+          log(`[Direct Topup] Failed to create Stripe invoice: ${invoiceError.message}`, 'billing');
         }
-        
-        res.json({ 
-          success: true, 
+
+        log(`[Direct Topup] Sending success response`, 'api');
+        res.json({
+          success: true,
           newBalanceCents: updatedWallet?.balanceCents || 0,
           chargedAmountCents: amountCents,
         });
       } else if (paymentIntent.status === 'requires_action') {
         // Card requires 3D Secure or additional authentication
         // Return client_secret so frontend can either handle on-session or fallback
-        log(`Direct charge requires action for ${auth0UserId}`, 'stripe');
-        res.status(402).json({ 
+        log(`[Direct Topup] Payment requires action: ${paymentIntent.status}`, 'stripe');
+        res.status(402).json({
           error: 'This card requires additional authentication.',
           requiresAction: true,
           clientSecret: paymentIntent.client_secret,
           paymentIntentId: paymentIntent.id,
         });
       } else {
-        log(`Direct charge failed for ${auth0UserId}: status ${paymentIntent.status}`, 'stripe');
+        log(`[Direct Topup] Payment failed with status: ${paymentIntent.status}`, 'stripe');
         res.status(400).json({ error: 'Payment failed. Please try again or use a different card.' });
       }
     } catch (error: any) {
+      log(`[Direct Topup] Error caught: ${error.message}`, 'api');
+      log(`[Direct Topup] Error type: ${error.type}, code: ${error.code}`, 'api');
+      log(`[Direct Topup] Full error: ${JSON.stringify(error, null, 2)}`, 'api');
+
       // Handle Stripe customer errors
       if (error instanceof StripeCustomerError) {
-        return res.status(error.httpStatus).json({ 
-          error: error.message, 
-          code: error.code 
+        return res.status(error.httpStatus).json({
+          error: error.message,
+          code: error.code
         });
       }
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
-        log(`Card error for direct charge: ${error.message}`, 'stripe');
+        log(`[Direct Topup] Card error: ${error.message}`, 'stripe');
         res.status(400).json({ error: error.message || 'Your card was declined. Please try a different card.' });
       } else if (error.code === 'authentication_required') {
-        res.status(402).json({ 
+        log(`[Direct Topup] Authentication required`, 'stripe');
+        res.status(402).json({
           error: 'This card requires additional authentication. Please use the standard top-up flow.',
           requiresAction: true,
         });
       } else {
-        log(`Error processing direct charge: ${error.message}`, 'api');
+        log(`[Direct Topup] Unhandled error: ${error.message}`, 'api');
+        log(`[Direct Topup] Stack trace: ${error.stack}`, 'api');
         res.status(500).json({ error: 'Failed to process payment. Please try again.' });
       }
     }
@@ -3189,8 +3494,9 @@ export async function registerRoutes(
       await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
 
       // Provision server via VirtFusion
+      let serverResult;
       try {
-        const serverResult = await virtfusionClient.provisionServer({
+        serverResult = await virtfusionClient.provisionServer({
           userId: virtFusionUserId,
           packageId: plan.virtfusionPackageId,
           hostname: serverHostname,
@@ -3199,21 +3505,11 @@ export async function registerRoutes(
           hypervisorGroupId,
         });
 
-        // Update order with server ID
-        await dbStorage.updateDeployOrder(order.id, {
-          status: 'active',
-          virtfusionServerId: serverResult.serverId,
-        });
-
-        res.json({
-          success: true,
-          orderId: order.id,
-          serverId: serverResult.serverId,
-        });
+        log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
       } catch (provisionError: any) {
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
-        
-        // Refund the wallet
+
+        // Refund the wallet - server was never created
         await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
           reason: 'provisioning_failed',
           orderId: order.id,
@@ -3226,6 +3522,36 @@ export async function registerRoutes(
 
         return res.status(500).json({ error: 'Server provisioning failed. Your wallet has been refunded.' });
       }
+
+      // Server was created successfully - DO NOT REFUND FROM THIS POINT FORWARD
+      // Update order with server ID (non-critical, log if it fails)
+      try {
+        await dbStorage.updateDeployOrder(order.id, {
+          status: 'active',
+          virtfusionServerId: serverResult.serverId,
+        });
+      } catch (updateError: any) {
+        log(`Warning: Could not update order ${order.id} with server ID: ${updateError.message}`, 'api');
+      }
+
+      // Create billing record for the new server (non-critical, log if it fails)
+      try {
+        await createServerBilling({
+          auth0UserId,
+          virtfusionServerId: serverResult.serverId.toString(),
+          planId,
+          monthlyPriceCents: plan.priceMonthly,
+        });
+      } catch (billingError: any) {
+        log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
+      }
+
+      // Always return success if server was provisioned
+      res.json({
+        success: true,
+        orderId: order.id,
+        serverId: serverResult.serverId,
+      });
     } catch (error: any) {
       log(`Deploy error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to deploy server' });
@@ -3400,6 +3726,475 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Webhook error: ${error.message}`, 'webhook');
       res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+  // ==========================================
+  // SUPPORT TICKET ROUTES - USER FACING
+  // ==========================================
+
+  // Get ticket counts for user (for notification badge)
+  app.get('/api/support/counts', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const counts = await dbStorage.getUserTicketCounts(auth0UserId);
+      res.json(counts);
+    } catch (error: any) {
+      log(`Error fetching ticket counts: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket counts' });
+    }
+  });
+
+  // List user's tickets
+  app.get('/api/support/tickets', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const status = req.query.status as 'open' | 'closed' | 'all' | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const result = await dbStorage.getUserTickets(auth0UserId, { status, limit, offset });
+      res.json(result);
+    } catch (error: any) {
+      log(`Error fetching user tickets: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+  });
+
+  // Create a new ticket
+  app.post('/api/support/tickets', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const parseResult = createTicketSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const { title, category, priority, description, virtfusionServerId } = parseResult.data;
+
+      // If a server is specified, verify ownership
+      if (virtfusionServerId) {
+        const isOwner = await verifyServerOwnership(virtfusionServerId, req.userSession!.virtFusionUserId);
+        if (!isOwner) {
+          return res.status(403).json({ error: 'You do not have access to this server' });
+        }
+      }
+
+      // Create the ticket
+      const ticket = await dbStorage.createTicket({
+        auth0UserId,
+        title,
+        category,
+        priority,
+        virtfusionServerId: virtfusionServerId || null,
+      });
+
+      // Create the initial message
+      await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: description,
+      });
+
+      log(`Ticket #${ticket.id} created by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ ticket });
+    } catch (error: any) {
+      log(`Error creating ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to create ticket' });
+    }
+  });
+
+  // Get a specific ticket with messages
+  app.get('/api/support/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const messages = await dbStorage.getTicketMessages(ticketId);
+
+      // Get server info if attached
+      let server = null;
+      if (ticket.virtfusionServerId) {
+        try {
+          server = await virtfusionClient.getServer(ticket.virtfusionServerId);
+        } catch (e) {
+          // Server might be deleted
+        }
+      }
+
+      res.json({ ticket, messages, server });
+    } catch (error: any) {
+      log(`Error fetching ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a ticket (user)
+  app.post('/api/support/tickets/:id/messages', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = ticketMessageSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Create the message
+      const message = await dbStorage.createTicketMessage({
+        ticketId,
+        authorType: 'user',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: parseResult.data.message,
+      });
+
+      // Update ticket status to waiting_admin (user replied)
+      // Also reopen if it was resolved or closed
+      let newStatus: TicketStatus = 'waiting_admin';
+      await dbStorage.updateTicket(ticketId, {
+        status: newStatus,
+        closedAt: null,
+      });
+
+      log(`Reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ message });
+    } catch (error: any) {
+      log(`Error replying to ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  // Close a ticket (user can request close)
+  app.post('/api/support/tickets/:id/close', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const updatedTicket = await dbStorage.closeTicket(ticketId);
+      log(`Ticket #${ticketId} closed by user ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error closing ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // ==========================================
+  // SUPPORT TICKET ROUTES - ADMIN FACING
+  // ==========================================
+
+  // Get admin ticket counts (for notification badge)
+  app.get('/api/admin/tickets/counts', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const counts = await dbStorage.getAdminTicketCounts();
+      res.json(counts);
+    } catch (error: any) {
+      log(`Error fetching admin ticket counts: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket counts' });
+    }
+  });
+
+  // List all tickets (admin)
+  app.get('/api/admin/tickets', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      // Parse query params
+      let status: TicketStatus | TicketStatus[] | undefined;
+      const statusParam = req.query.status as string | undefined;
+      if (statusParam) {
+        if (statusParam.includes(',')) {
+          status = statusParam.split(',') as TicketStatus[];
+        } else {
+          status = statusParam as TicketStatus;
+        }
+      }
+
+      const category = req.query.category as TicketCategory | undefined;
+      const priority = req.query.priority as TicketPriority | undefined;
+      const auth0UserId = req.query.user as string | undefined;
+      const virtfusionServerId = req.query.server as string | undefined;
+      const assignedAdminId = req.query.assigned === 'null' ? null : req.query.assigned as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const sortBy = (req.query.sortBy as 'lastMessageAt' | 'priority' | 'createdAt') || 'lastMessageAt';
+      const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'desc';
+
+      const result = await dbStorage.getAllTickets({
+        status,
+        category,
+        priority,
+        auth0UserId,
+        virtfusionServerId,
+        assignedAdminId,
+        limit,
+        offset,
+        sortBy,
+        sortOrder,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      log(`Error fetching admin tickets: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+  });
+
+  // Get a specific ticket with messages (admin)
+  app.get('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const messages = await dbStorage.getTicketMessages(ticketId);
+
+      // Get server info if attached
+      let server = null;
+      if (ticket.virtfusionServerId) {
+        try {
+          server = await virtfusionClient.getServer(ticket.virtfusionServerId);
+        } catch (e) {
+          // Server might be deleted
+        }
+      }
+
+      // Get user info from wallet
+      const wallet = await dbStorage.getWallet(ticket.auth0UserId);
+
+      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : null });
+    } catch (error: any) {
+      log(`Error fetching ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a ticket (admin) with optional status change
+  app.post('/api/admin/tickets/:id/messages', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = ticketMessageSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Create the message
+      const message = await dbStorage.createTicketMessage({
+        ticketId,
+        authorType: 'admin',
+        authorId: auth0UserId,
+        authorEmail: req.userSession!.email,
+        authorName: req.userSession!.name || null,
+        message: parseResult.data.message,
+      });
+
+      // Update ticket status - default to waiting_user when admin replies
+      const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
+      await dbStorage.updateTicket(ticketId, { status: newStatus });
+
+      log(`Admin reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
+      res.status(201).json({ message });
+    } catch (error: any) {
+      log(`Error replying to ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  // Update ticket metadata (admin)
+  app.patch('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const parseResult = adminTicketUpdateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updates: any = {};
+      if (parseResult.data.status !== undefined) updates.status = parseResult.data.status;
+      if (parseResult.data.priority !== undefined) updates.priority = parseResult.data.priority;
+      if (parseResult.data.category !== undefined) updates.category = parseResult.data.category;
+      if (parseResult.data.assignedAdminId !== undefined) updates.assignedAdminId = parseResult.data.assignedAdminId;
+
+      // Handle closed status
+      if (updates.status === 'closed') {
+        updates.closedAt = new Date();
+      } else if (ticket.status === 'closed' && updates.status && updates.status !== 'closed') {
+        updates.closedAt = null;
+      }
+
+      const updatedTicket = await dbStorage.updateTicket(ticketId, updates);
+      log(`Ticket #${ticketId} updated by admin ${req.userSession!.email}: ${JSON.stringify(updates)}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error updating ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to update ticket' });
+    }
+  });
+
+  // Close a ticket (admin)
+  app.post('/api/admin/tickets/:id/close', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updatedTicket = await dbStorage.closeTicket(ticketId);
+      log(`Ticket #${ticketId} closed by admin ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error closing ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // Reopen a ticket (admin)
+  app.post('/api/admin/tickets/:id/reopen', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const updatedTicket = await dbStorage.reopenTicket(ticketId);
+      log(`Ticket #${ticketId} reopened by admin ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error reopening ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reopen ticket' });
     }
   });
 

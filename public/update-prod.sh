@@ -55,8 +55,14 @@ cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem.config.cjs" 2>/dev/n
 
 # Download latest code
 echo -e "${CYAN}Downloading latest code from GitHub (${GITHUB_BRANCH} branch)...${NC}"
-TEMP_ZIP="/tmp/ozvps-update-${GITHUB_BRANCH}.zip"
-curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+TEMP_ZIP="/tmp/ozvps-update-${SAFE_BRANCH}.zip"
+TEMP_EXTRACT="/tmp/ozvps-update-${SAFE_BRANCH}-extract"
+
+if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
+    echo -e "${RED}Error: Failed to download from GitHub${NC}"
+    exit 1
+fi
 
 # Clear old files (except node_modules, .env, backups)
 echo -e "${CYAN}Removing old files...${NC}"
@@ -69,9 +75,42 @@ find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
 
 # Extract new code
 echo -e "${CYAN}Extracting new code...${NC}"
-unzip -q "$TEMP_ZIP" -d /tmp/
-rsync -a "/tmp/ozvps-${GITHUB_BRANCH}/" "$INSTALL_DIR/"
-rm -rf "/tmp/ozvps-${GITHUB_BRANCH}" "$TEMP_ZIP"
+mkdir -p "$TEMP_EXTRACT"
+if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
+    echo -e "${RED}Error: Failed to extract zip file${NC}"
+    rm -f "$TEMP_ZIP"
+    exit 1
+fi
+
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
+if [ -z "$EXTRACTED_DIR" ]; then
+    echo -e "${RED}Error: Could not find extracted directory${NC}"
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+echo -e "${CYAN}Copying files from extracted directory...${NC}"
+echo "Source: $EXTRACTED_DIR"
+echo "Target: $INSTALL_DIR"
+
+# Use cp -r instead of rsync for more reliable copying
+cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
+cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+# Verify package.json was copied
+if [ ! -f "$INSTALL_DIR/package.json" ]; then
+    echo -e "${RED}Error: package.json not found after copy${NC}"
+    echo "Checking what was extracted..."
+    ls -la "$EXTRACTED_DIR" | head -20
+    echo ""
+    echo "Checking install directory..."
+    ls -la "$INSTALL_DIR" | head -20
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Files copied successfully${NC}"
+rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 # Restore config files
 echo -e "${CYAN}Restoring configuration...${NC}"
@@ -79,10 +118,64 @@ cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR"
 
-# Update dependencies
-echo -e "${CYAN}Updating dependencies...${NC}"
-npm install --production >/dev/null 2>&1
-echo -e "${GREEN}✓ Dependencies updated${NC}"
+# Update dependencies and build
+echo -e "${CYAN}Installing dependencies...${NC}"
+npm install
+echo -e "${GREEN}✓ Dependencies installed${NC}"
+echo ""
+
+echo -e "${CYAN}Building application...${NC}"
+npm run build
+echo -e "${GREEN}✓ Application built${NC}"
+echo ""
+
+echo -e "${CYAN}Running database migrations...${NC}"
+# Load environment variables for migrations
+if [ -f "$INSTALL_DIR/.env" ]; then
+  echo "Loading environment from .env..."
+  set -a
+  source "$INSTALL_DIR/.env"
+  set +a
+fi
+
+# Check if DATABASE_URL is set
+if [ -z "$DATABASE_URL" ]; then
+  echo -e "${RED}ERROR: DATABASE_URL not set in .env${NC}"
+  echo "Please check your .env file"
+  exit 1
+fi
+
+echo "Running SQL migrations..."
+if node migrate.js; then
+  echo -e "${GREEN}✓ SQL migrations completed${NC}"
+else
+  echo -e "${YELLOW}⚠ SQL migrations failed or were skipped${NC}"
+  echo "This may be normal if tables already exist"
+fi
+
+echo "Syncing schema with drizzle-kit..."
+if npx drizzle-kit push --force; then
+  echo -e "${GREEN}✓ Schema synchronized${NC}"
+else
+  echo -e "${RED}✗ Schema sync failed${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}✓ Database migrations applied${NC}"
+echo ""
+
+# Reset billing records to ensure correct dates (they'll be auto-recreated)
+echo -e "${CYAN}Resetting billing records...${NC}"
+if node reset-billing.js; then
+  echo -e "${GREEN}✓ Billing records reset (will be recreated with correct dates)${NC}"
+else
+  echo -e "${YELLOW}⚠ Billing reset skipped${NC}"
+fi
+echo ""
+
+echo -e "${CYAN}Cleaning up dev dependencies...${NC}"
+npm prune --production
+echo -e "${GREEN}✓ Dev dependencies removed${NC}"
 echo ""
 
 # Restart application

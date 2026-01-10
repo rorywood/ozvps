@@ -165,18 +165,25 @@ export function useSyncPowerActions(servers: Array<{ id: string; status: string 
 
       const timeSinceAction = Date.now() - pending.timestamp;
 
+      // For reboot: wait at least 10 seconds AND status is running
+      // (prevents clearing too early when server goes from running -> stopped -> running)
       if (pending.action === "reboot" && server.status === "running" && timeSinceAction > 10000) {
         clearPending(server.id);
       }
 
-      if (pending.action === "start" && server.status === "running") {
+      // For start: wait at least 4 seconds AND status is running
+      // (gives time for status to stabilize)
+      if (pending.action === "start" && server.status === "running" && timeSinceAction > 4000) {
         clearPending(server.id);
       }
 
-      if (pending.action === "shutdown" && server.status === "stopped") {
+      // For shutdown: wait at least 4 seconds AND status is stopped
+      // (gives time for status to stabilize and prevents flickering)
+      if (pending.action === "shutdown" && server.status === "stopped" && timeSinceAction > 4000) {
         clearPending(server.id);
       }
 
+      // Clear if action takes longer than 5 minutes (failsafe)
       if (timeSinceAction > ACTION_TIMEOUT_MS) {
         clearPending(server.id);
       }

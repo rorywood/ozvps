@@ -3,12 +3,14 @@ set -e
 set -u
 set -o pipefail
 
-DOWNLOAD_URL="${OZVPS_DOWNLOAD_URL:-}"
-PRECONFIGURED_VIRTFUSION_URL=""
+# OzVPS Unified Installer
+# Supports both Production and Development environments
+
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 NODE_VERSION="20"
 LOG_FILE="/tmp/ozvps-install.log"
+GITHUB_REPO="rorywood/ozvps"
 
 # Colors
 RED='\033[0;31m'
@@ -95,66 +97,161 @@ main() {
     echo -e "  ${DIM}Detected:${NC} $PRETTY_NAME"
     echo ""
 
+    # Check if already installed
+    if [ -d "$INSTALL_DIR" ]; then
+        echo -e "${YELLOW}${BOLD}⚠ Warning: Installation already exists at $INSTALL_DIR${NC}"
+        echo ""
+        echo "  Options:"
+        echo "    [1] Cancel installation (default)"
+        echo "    [2] Remove and reinstall (quick - keeps system packages)"
+        echo "    [3] Force full reinstall (uninstall and reinstall everything)"
+        echo ""
+        read -p "  Choose option [1-3]: " -n 1 -r CHOICE < /dev/tty
+        echo ""
+        echo ""
+
+        if [[ "$CHOICE" == "3" ]]; then
+            FORCE_REINSTALL=true
+            echo -e "${CYAN}${BOLD}Full reinstall selected - will uninstall and reinstall all dependencies${NC}"
+            echo ""
+        elif [[ "$CHOICE" == "2" ]]; then
+            FORCE_REINSTALL=false
+            echo -e "${CYAN}Quick reinstall selected${NC}"
+            echo ""
+        else
+            echo "  Installation cancelled."
+            exit 0
+        fi
+
+        # Stop and remove existing service
+        (
+            pm2 delete $SERVICE_NAME 2>/dev/null || true
+            pm2 save --force 2>/dev/null || true
+            rm -rf "$INSTALL_DIR"
+        ) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Removing existing installation"
+        echo ""
+    else
+        FORCE_REINSTALL=false
+    fi
+
+    # Ask for environment FIRST
+    echo -e "${BOLD}  Environment${NC}"
+    echo -e "  ${DIM}─────────────────────────────────────${NC}"
+    echo ""
+    echo "  Which environment are you setting up?"
+    echo "    [1] Production  (app.ozvps.com.au - LIVE Stripe keys)"
+    echo "    [2] Development (dev.ozvps.com.au - TEST Stripe keys)"
+    echo ""
+    read -p "  Choose [1-2]: " -n 1 -r ENV_CHOICE < /dev/tty
+    echo ""
+    echo ""
+
+    if [[ "$ENV_CHOICE" == "1" ]]; then
+        ENVIRONMENT="production"
+        GITHUB_BRANCH="main"
+        DEFAULT_DOMAIN="app.ozvps.com.au"
+        STRIPE_MODE="LIVE"
+        NODE_ENV="production"
+        UPDATE_SCRIPT="update-ozvps-prod"
+        echo -e "  ${GREEN}✓${NC} Selected: ${BOLD}Production${NC} environment"
+    elif [[ "$ENV_CHOICE" == "2" ]]; then
+        ENVIRONMENT="development"
+        GITHUB_BRANCH="claude/dev-l5488"
+        DEFAULT_DOMAIN="dev.ozvps.com.au"
+        STRIPE_MODE="TEST"
+        NODE_ENV="development"
+        UPDATE_SCRIPT="update-ozvps-dev"
+        echo -e "  ${GREEN}✓${NC} Selected: ${BOLD}Development${NC} environment"
+    else
+        error_exit "Invalid choice. Run installer again."
+    fi
+    echo ""
+
+    # Collect ALL configuration
     echo -e "${BOLD}  Configuration${NC}"
     echo -e "  ${DIM}─────────────────────────────────────${NC}"
     echo ""
-    
-    echo -e "  ${CYAN}Panel Domain${NC} ${DIM}(where your panel will be accessible)${NC}"
-    input_field "Domain" PANEL_DOMAIN
-    [[ -z "$PANEL_DOMAIN" ]] && error_exit "Domain is required"
-    echo ""
 
-    echo -e "  ${CYAN}Auth0${NC} ${DIM}(from manage.auth0.com)${NC}"
-    input_field "Domain" AUTH0_DOMAIN
-    input_field "Client ID" AUTH0_CLIENT_ID
-    input_field "Client Secret" AUTH0_CLIENT_SECRET yes
+    echo -e "  ${CYAN}Panel Domain${NC} ${DIM}(where your panel will be accessible)${NC}"
+    input_field "Domain [$DEFAULT_DOMAIN]" PANEL_DOMAIN
+    [[ -z "$PANEL_DOMAIN" ]] && PANEL_DOMAIN="$DEFAULT_DOMAIN"
     echo ""
 
     echo -e "  ${CYAN}VirtFusion${NC}"
-    if [[ -n "$PRECONFIGURED_VIRTFUSION_URL" ]]; then
-        echo -e "  ${DIM}Panel URL:${NC} $PRECONFIGURED_VIRTFUSION_URL"
-        VIRTFUSION_PANEL_URL="$PRECONFIGURED_VIRTFUSION_URL"
-    else
-        input_field "Panel URL" VIRTFUSION_PANEL_URL
-    fi
+    input_field "Panel URL [https://panel.ozvps.com.au]" VIRTFUSION_PANEL_URL
+    [[ -z "$VIRTFUSION_PANEL_URL" ]] && VIRTFUSION_PANEL_URL="https://panel.ozvps.com.au"
     input_field "API Token" VIRTFUSION_API_TOKEN yes
+    [[ -z "$VIRTFUSION_API_TOKEN" ]] && error_exit "VirtFusion API Token is required"
     echo ""
 
     echo -e "  ${CYAN}PostgreSQL Database${NC} ${DIM}(for billing & wallets)${NC}"
-    echo -e "  ${DIM}Leave blank to auto-generate secure password${NC}"
-    input_field "Database Name (default: ozvps)" DB_NAME
-    [[ -z "$DB_NAME" ]] && DB_NAME="ozvps"
-    input_field "Database User (default: ozvps)" DB_USER
-    [[ -z "$DB_USER" ]] && DB_USER="ozvps"
-    input_field "Database Password" DB_PASS yes
+    if [[ "$ENVIRONMENT" == "production" ]]; then
+        DEFAULT_DB_NAME="ozvps"
+        DEFAULT_DB_USER="ozvps"
+    else
+        DEFAULT_DB_NAME="ozvps_dev"
+        DEFAULT_DB_USER="ozvps_dev"
+    fi
+    input_field "Database Name [$DEFAULT_DB_NAME]" DB_NAME
+    [[ -z "$DB_NAME" ]] && DB_NAME="$DEFAULT_DB_NAME"
+    input_field "Database User [$DEFAULT_DB_USER]" DB_USER
+    [[ -z "$DB_USER" ]] && DB_USER="$DEFAULT_DB_USER"
+    input_field "Database Password (leave blank to auto-generate)" DB_PASS yes
     if [[ -z "$DB_PASS" ]]; then
         DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
-        echo -e "  ${DIM}Generated secure password${NC}"
+        echo -e "  ${DIM}Generated secure password: ${DB_PASS}${NC}"
     fi
     echo ""
 
-    echo -e "  ${CYAN}Stripe Payments${NC} ${DIM}(for wallet top-ups)${NC}"
-    echo -e "  ${DIM}Get keys from dashboard.stripe.com/apikeys${NC}"
-    input_field "Publishable Key (pk_...)" STRIPE_PUBLISHABLE_KEY
-    input_field "Secret Key (sk_...)" STRIPE_SECRET_KEY yes
+    echo -e "  ${CYAN}Stripe Payments${NC} ${DIM}(${STRIPE_MODE} keys for ${ENVIRONMENT})${NC}"
+    if [[ "$STRIPE_MODE" == "TEST" ]]; then
+        echo -e "  ${YELLOW}⚠ Use TEST keys (sk_test_..., pk_test_...) not LIVE keys!${NC}"
+        input_field "Secret Key (sk_test_...)" STRIPE_SECRET_KEY yes
+        input_field "Publishable Key (pk_test_...)" STRIPE_PUBLISHABLE_KEY
+        input_field "Webhook Secret (whsec_...)" STRIPE_WEBHOOK_SECRET yes
+    else
+        echo -e "  ${YELLOW}⚠ Use LIVE keys (sk_live_..., pk_live_...) for production!${NC}"
+        input_field "Secret Key (sk_live_...)" STRIPE_SECRET_KEY yes
+        input_field "Publishable Key (pk_live_...)" STRIPE_PUBLISHABLE_KEY
+        input_field "Webhook Secret (whsec_...)" STRIPE_WEBHOOK_SECRET yes
+    fi
+    [[ -z "$STRIPE_SECRET_KEY" ]] && error_exit "Stripe Secret Key is required"
+    [[ -z "$STRIPE_PUBLISHABLE_KEY" ]] && error_exit "Stripe Publishable Key is required"
+    echo ""
+
+    echo -e "  ${CYAN}Auth0 Configuration${NC}"
+    input_field "Auth0 Domain (e.g., your-app.au.auth0.com)" AUTH0_DOMAIN
+    input_field "Auth0 Client ID" AUTH0_CLIENT_ID
+    input_field "Auth0 Client Secret" AUTH0_CLIENT_SECRET yes
+    input_field "Auth0 Webhook Secret" AUTH0_WEBHOOK_SECRET yes
+    [[ -z "$AUTH0_DOMAIN" ]] && error_exit "Auth0 Domain is required"
+    [[ -z "$AUTH0_CLIENT_ID" ]] && error_exit "Auth0 Client ID is required"
+    [[ -z "$AUTH0_CLIENT_SECRET" ]] && error_exit "Auth0 Client Secret is required"
     echo ""
 
     echo -e "  ${CYAN}SSL Certificate${NC}"
     if confirm "Setup SSL with Let's Encrypt? (Y/n):"; then
         SETUP_SSL="yes"
-        input_field "Email for SSL" SSL_EMAIL
+        input_field "Email for SSL notifications" SSL_EMAIL
+        [[ -z "$SSL_EMAIL" ]] && SSL_EMAIL="admin@${PANEL_DOMAIN}"
     else
         SETUP_SSL="no"
         SSL_EMAIL=""
     fi
     echo ""
 
+    # Show summary
     echo -e "  ${DIM}─────────────────────────────────────${NC}"
-    echo -e "  ${DIM}Domain:${NC}      $PANEL_DOMAIN"
-    echo -e "  ${DIM}Auth0:${NC}       $AUTH0_DOMAIN"
-    echo -e "  ${DIM}VirtFusion:${NC}  $VIRTFUSION_PANEL_URL"
-    echo -e "  ${DIM}Database:${NC}    $DB_NAME (user: $DB_USER)"
-    echo -e "  ${DIM}SSL:${NC}         $SETUP_SSL"
+    echo -e "  ${BOLD}Summary:${NC}"
+    echo -e "  ${DIM}Environment:${NC}  $ENVIRONMENT"
+    echo -e "  ${DIM}Branch:${NC}       $GITHUB_BRANCH"
+    echo -e "  ${DIM}Domain:${NC}       $PANEL_DOMAIN"
+    echo -e "  ${DIM}VirtFusion:${NC}   $VIRTFUSION_PANEL_URL"
+    echo -e "  ${DIM}Database:${NC}     $DB_NAME (user: $DB_USER)"
+    echo -e "  ${DIM}Stripe:${NC}       $STRIPE_MODE keys"
+    echo -e "  ${DIM}SSL:${NC}          $SETUP_SSL"
+    echo -e "  ${DIM}─────────────────────────────────────${NC}"
     echo ""
 
     if ! confirm "Continue with installation? (Y/n):"; then
@@ -166,55 +263,82 @@ main() {
     echo -e "${BOLD}  Installing...${NC}"
     echo ""
 
-    # Node.js
-    (
-        if command -v node &> /dev/null; then
-            CURRENT=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-            [[ "$CURRENT" -ge "$NODE_VERSION" ]] && exit 0
-        fi
-        case "$OS" in
-            ubuntu|debian)
-                curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
-                apt-get install -y nodejs
-                ;;
-            centos|rhel|rocky|almalinux)
-                curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash -
-                yum install -y nodejs
-                ;;
-        esac
-    ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing Node.js"
+    # Install/Check Node.js
+    if [[ "$FORCE_REINSTALL" == "true" ]] && command -v node &>/dev/null; then
+        (
+            case "$OS" in
+                ubuntu|debian)
+                    apt-get remove -y nodejs
+                    apt-get autoremove -y
+                    ;;
+                centos|rhel|rocky|almalinux)
+                    yum remove -y nodejs
+                    ;;
+            esac
+        ) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Uninstalling existing Node.js"
+    fi
 
-    # Dependencies (including PostgreSQL)
+    if command -v node &>/dev/null && [[ "$FORCE_REINSTALL" != "true" ]]; then
+        NODE_VERSION_CURRENT=$(node --version)
+        echo -e "  ${GREEN}✓${NC}  Node.js $NODE_VERSION_CURRENT (already installed)"
+    else
+        (
+            case "$OS" in
+                ubuntu|debian)
+                    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+                    apt-get install -y nodejs
+                    ;;
+                centos|rhel|rocky|almalinux)
+                    curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash -
+                    yum install -y nodejs
+                    ;;
+            esac
+        ) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Installing Node.js"
+    fi
+
+    # Install/Check PM2
+    if [[ "$FORCE_REINSTALL" == "true" ]] && command -v pm2 &>/dev/null; then
+        (npm uninstall -g pm2) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Uninstalling existing PM2"
+    fi
+
+    if command -v pm2 &>/dev/null && [[ "$FORCE_REINSTALL" != "true" ]]; then
+        PM2_VERSION=$(pm2 --version)
+        echo -e "  ${GREEN}✓${NC}  PM2 v$PM2_VERSION (already installed)"
+    else
+        (npm install -g pm2) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Installing PM2"
+    fi
+
+    # Install system dependencies
     (
         case "$OS" in
             ubuntu|debian)
                 apt-get update
-                apt-get install -y git curl nginx certbot python3-certbot-nginx postgresql postgresql-contrib
+                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib unzip rsync
                 ;;
             centos|rhel|rocky|almalinux)
-                yum install -y git curl nginx certbot python3-certbot-nginx epel-release postgresql-server postgresql-contrib
+                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib unzip rsync
                 postgresql-setup --initdb 2>/dev/null || true
                 ;;
         esac
-        npm install -g pm2
+        systemctl start nginx 2>/dev/null || true
+        systemctl enable nginx 2>/dev/null || true
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing dependencies"
+    spinner $! "Installing system dependencies"
 
-    # PostgreSQL setup
+    # Configure PostgreSQL
     (
         set -e
-        
-        # On Debian/Ubuntu, the 'postgresql' service is a wrapper that manages all clusters
-        # On RHEL/CentOS, 'postgresql' is the main service (may need initdb first)
-        
-        # Try to start postgresql service (works on most systems)
+
         if ! systemctl is-active postgresql &>/dev/null; then
             systemctl start postgresql 2>/dev/null || true
         fi
         systemctl enable postgresql 2>/dev/null || true
-        
-        # Wait for PostgreSQL to be ready (max 30 seconds)
+
+        # Wait for PostgreSQL to be ready
         PG_READY=false
         for i in {1..30}; do
             if sudo -u postgres psql -c "SELECT 1" &>/dev/null; then
@@ -223,25 +347,21 @@ main() {
             fi
             sleep 1
         done
-        
-        if [[ "$PG_READY" != "true" ]]; then
-            echo "ERROR: PostgreSQL failed to start after 30 seconds" >&2
-            exit 1
-        fi
-        
+
+        [[ "$PG_READY" != "true" ]] && exit 1
+
         # Create database user and database
         sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null || \
             sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';"
         sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || true
         sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
-        
+
         # Allow password auth for local connections
         PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" 2>/dev/null | tr -d ' ')
         if [[ -n "$PG_HBA" && -f "$PG_HBA" ]]; then
             if ! grep -q "host.*$DB_NAME.*$DB_USER" "$PG_HBA"; then
                 echo "host    $DB_NAME    $DB_USER    127.0.0.1/32    md5" >> "$PG_HBA"
                 echo "host    $DB_NAME    $DB_USER    ::1/128         md5" >> "$PG_HBA"
-                # Reload PostgreSQL to apply pg_hba changes
                 sudo -u postgres pg_ctl reload -D "$(sudo -u postgres psql -t -c "SHOW data_directory;" | tr -d ' ')" 2>/dev/null || \
                     systemctl reload postgresql 2>/dev/null || true
             fi
@@ -249,7 +369,7 @@ main() {
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Configuring PostgreSQL"
 
-    # Firewall
+    # Configure firewall
     (
         if command -v ufw &> /dev/null; then
             ufw --force enable 2>/dev/null || true
@@ -267,85 +387,198 @@ main() {
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Configuring firewall"
 
-    [[ -z "$DOWNLOAD_URL" ]] && error_exit "No download URL. Run from your Replit app."
-
-    mkdir -p "$INSTALL_DIR"
-    
-    # Download
+    # Download from GitHub
     (
-        curl -fsSL "$DOWNLOAD_URL" -o /tmp/ozvps-panel.tar.gz
-        tar -xzf /tmp/ozvps-panel.tar.gz -C "$INSTALL_DIR"
-        rm -f /tmp/ozvps-panel.tar.gz
-    ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Downloading OzVPS Panel"
+        set -e
+        mkdir -p "$INSTALL_DIR"
 
-    # Config
+        SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+        TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
+        TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
+
+        echo "Downloading from https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" >&2
+        curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+
+        if [ ! -f "$TEMP_ZIP" ]; then
+            echo "ERROR: Failed to download zip file" >&2
+            exit 1
+        fi
+
+        echo "Downloaded $(stat -c%s "$TEMP_ZIP" 2>/dev/null || stat -f%z "$TEMP_ZIP" 2>/dev/null) bytes" >&2
+
+        rm -rf "$TEMP_EXTRACT"
+        mkdir -p "$TEMP_EXTRACT"
+        unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
+
+        EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
+        if [[ -z "$EXTRACTED_DIR" ]]; then
+            echo "ERROR: Could not find extracted directory" >&2
+            ls -la "$TEMP_EXTRACT" >&2
+            exit 1
+        fi
+
+        echo "Extracted to: $EXTRACTED_DIR" >&2
+        echo "Copying files to $INSTALL_DIR" >&2
+
+        # Use cp -r instead of rsync for more reliable copying
+        cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
+        cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+        # Verify copy worked
+        if [ ! -f "$INSTALL_DIR/package.json" ]; then
+            echo "ERROR: package.json not found after copy" >&2
+            echo "Checking if files are in a subdirectory..." >&2
+            find "$INSTALL_DIR" -name "package.json" -type f >&2
+            ls -la "$INSTALL_DIR" >&2
+            exit 1
+        fi
+
+        echo "Files copied successfully" >&2
+        rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Downloading from GitHub ($GITHUB_BRANCH)"
+
+    # Create configuration file
     (
         cat > "$INSTALL_DIR/.env" << EOF
+# Database Configuration
+DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
+
+# VirtFusion API
+VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
+VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
+
+# Stripe Configuration ($STRIPE_MODE KEYS)
+STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
+STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY
+STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+
+# Auth0 Configuration
 AUTH0_DOMAIN=$AUTH0_DOMAIN
 AUTH0_CLIENT_ID=$AUTH0_CLIENT_ID
 AUTH0_CLIENT_SECRET=$AUTH0_CLIENT_SECRET
-VIRTFUSION_PANEL_URL=$VIRTFUSION_PANEL_URL
-VIRTFUSION_API_TOKEN=$VIRTFUSION_API_TOKEN
-DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
-STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY
-STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
-NODE_ENV=production
-PORT=5000
+AUTH0_WEBHOOK_SECRET=${AUTH0_WEBHOOK_SECRET:-}
+
+# Application Settings
+NODE_ENV=$NODE_ENV
+PORT=3000
 EOF
         chmod 600 "$INSTALL_DIR/.env"
-        echo "$PANEL_DOMAIN" > "$INSTALL_DIR/.panel_domain"
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Writing configuration"
 
-    # NPM install
+    # Verify files were downloaded
+    if [ ! -f "$INSTALL_DIR/package.json" ]; then
+        error_exit "Download failed - package.json not found in $INSTALL_DIR"
+    fi
+
+    # Install npm dependencies (show output so we can see progress)
+    echo ""
+    echo -e "  ${CYAN}Installing npm packages (this may take a few minutes)...${NC}"
     (
         cd "$INSTALL_DIR"
-        if grep -q '"bad-words"' "$INSTALL_DIR/package.json" 2>/dev/null; then
-            npm uninstall bad-words 2>/dev/null || true
-        fi
         npm install
-    ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing packages"
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  npm packages installed"
+    else
+        error_exit "npm install failed"
+    fi
 
-    # Database migrations
+    # Build application
+    echo ""
+    echo -e "  ${CYAN}Building application...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npm run build
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Application built"
+    else
+        error_exit "Build failed"
+    fi
+
+    # Run database migrations
+    echo ""
+    echo -e "  ${CYAN}Running database migrations...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npx drizzle-kit push --force
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Database migrations applied"
+    else
+        echo -e "  ${YELLOW}!${NC}  Database migration failed (may need manual intervention)"
+    fi
+
+    # Remove dev dependencies after build
+    echo ""
+    echo -e "  ${CYAN}Cleaning up dev dependencies...${NC}"
+    (
+        cd "$INSTALL_DIR"
+        npm prune --production
+    )
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC}  Dev dependencies removed"
+    else
+        echo -e "  ${YELLOW}!${NC}  Could not remove dev dependencies (non-critical)"
+    fi
+
+    # Create PM2 ecosystem file
+    (
+        cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
+const fs = require('fs');
+const path = require('path');
+const envPath = path.join(__dirname, '.env');
+const envVars = {};
+
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    line = line.trim();
+    if (line && !line.startsWith('#')) {
+      const [key, ...val] = line.split('=');
+      if (key) envVars[key.trim()] = val.join('=').trim();
+    }
+  });
+}
+
+module.exports = {
+  apps: [{
+    name: 'ozvps-panel',
+    script: 'npm',
+    args: 'start',
+    cwd: __dirname,
+    env: {
+      NODE_ENV: 'production',
+      PORT: '3000',
+      ...envVars
+    },
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '10s',
+    max_memory_restart: '500M'
+  }]
+};
+PMEOF
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Configuring PM2"
+
+    # Configure NGINX
     (
         set -e
-        cd "$INSTALL_DIR"
-        export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
-        
-        # Verify database connection before migration
-        DB_READY=false
-        for i in {1..15}; do
-            if PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" &>/dev/null; then
-                DB_READY=true
-                break
-            fi
-            sleep 1
-        done
-        
-        if [[ "$DB_READY" != "true" ]]; then
-            echo "ERROR: Cannot connect to database after 15 seconds" >&2
-            exit 1
+        if [[ "$ENVIRONMENT" == "production" ]]; then
+            NGINX_CONF="ozvps-prod"
+        else
+            NGINX_CONF="ozvps-dev"
         fi
-        
-        npx drizzle-kit push --force
-    ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Setting up database schema"
 
-    # Build
-    (cd "$INSTALL_DIR" && npm run build) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Building application"
-
-    # Nginx
-    (
-        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-        cat > "/etc/nginx/sites-available/$SERVICE_NAME" << EOF
+        cat > "/etc/nginx/sites-available/$NGINX_CONF" << EOF
 server {
     listen 80;
     server_name $PANEL_DOMAIN;
+
     location / {
-        proxy_pass http://127.0.0.1:5000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -356,95 +589,160 @@ server {
         proxy_cache_bypass \$http_upgrade;
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
+        client_max_body_size 100M;
     }
 }
 EOF
-        ln -sf "/etc/nginx/sites-available/$SERVICE_NAME" /etc/nginx/sites-enabled/
-        rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+        ln -sf "/etc/nginx/sites-available/$NGINX_CONF" /etc/nginx/sites-enabled/
+
         if [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
             grep -q "sites-enabled" /etc/nginx/nginx.conf || sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
         fi
+
         nginx -t
         systemctl reload nginx
-        systemctl enable nginx
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Configuring Nginx"
+    spinner $! "Configuring NGINX"
 
-    # SSL
-    if [[ "$SETUP_SSL" == "yes" && -n "$SSL_EMAIL" ]]; then
-        (certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL") >>"$LOG_FILE" 2>&1 &
-        spinner $! "Setting up SSL" || echo -e "  ${YELLOW}!${NC}  SSL failed - run manually: certbot --nginx -d $PANEL_DOMAIN"
+    # Setup SSL
+    if [[ "$SETUP_SSL" == "yes" ]]; then
+        (
+            set -e
+            # First try certbot if available
+            if command -v certbot &>/dev/null && [[ -n "$SSL_EMAIL" ]]; then
+                certbot --nginx -d "$PANEL_DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect 2>&1
+            else
+                # Fall back to self-signed certificate
+                echo "Certbot not available, using self-signed certificate for development..." >&2
+
+                # Create SSL directories
+                mkdir -p /etc/ssl/private /etc/ssl/certs
+                chmod 700 /etc/ssl/private
+
+                # Generate self-signed certificate
+                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                    -keyout "/etc/ssl/private/$PANEL_DOMAIN.key" \
+                    -out "/etc/ssl/certs/$PANEL_DOMAIN.crt" \
+                    -subj "/C=AU/ST=NSW/L=Sydney/O=OzVPS/CN=$PANEL_DOMAIN" 2>&1
+
+                # Update NGINX config with SSL
+                if [[ "$ENVIRONMENT" == "production" ]]; then
+                    NGINX_CONF="ozvps-prod"
+                else
+                    NGINX_CONF="ozvps-dev"
+                fi
+
+                cat > "/etc/nginx/sites-available/$NGINX_CONF" << SSLEOF
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $PANEL_DOMAIN;
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $PANEL_DOMAIN;
+
+    # SSL certificate
+    ssl_certificate /etc/ssl/certs/$PANEL_DOMAIN.crt;
+    ssl_certificate_key /etc/ssl/private/$PANEL_DOMAIN.key;
+
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Proxy to Node.js application
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        client_max_body_size 100M;
+    }
+}
+SSLEOF
+
+                # Reload NGINX
+                nginx -t && systemctl reload nginx
+
+                echo "Self-signed SSL certificate installed. Browser will show security warning." >&2
+            fi
+        ) >>"$LOG_FILE" 2>&1 &
+        spinner $! "Setting up SSL"
     fi
 
-    # PM2
+    # Start PM2 service
     (
         cd "$INSTALL_DIR"
         pm2 delete "$SERVICE_NAME" 2>/dev/null || true
-        cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'PMEOF'
-const fs = require('fs');
-const path = require('path');
-const envPath = path.join(__dirname, '.env');
-const envVars = {};
-if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-    line = line.trim();
-    if (line && !line.startsWith('#')) {
-      const [key, ...val] = line.split('=');
-      if (key) envVars[key.trim()] = val.join('=').trim();
-    }
-  });
-}
-module.exports = {
-  apps: [{
-    name: 'ozvps-panel',
-    script: 'npm',
-    args: 'start',
-    cwd: __dirname,
-    env: { NODE_ENV: 'production', ...envVars },
-    autorestart: true,
-    max_restarts: 10
-  }]
-};
-PMEOF
-        pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
-        pm2 save
+        pm2 start ecosystem.config.cjs
+        pm2 save --force
         pm2 startup systemd -u root --hp /root 2>/dev/null || true
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Starting service"
+    spinner $! "Starting application"
 
-    # Update command and CLI tools
+    # Install update script
     (
-        UPDATE_URL="${DOWNLOAD_URL%/download.tar.gz}/update-ozvps.sh"
-        curl -fsSL "$UPDATE_URL" -o /usr/local/bin/update-ozvps 2>/dev/null || exit 0
-        chmod +x /usr/local/bin/update-ozvps
-        REPLIT_BASE="${DOWNLOAD_URL%/download.tar.gz}"
-        echo "REPLIT_URL=\"$REPLIT_BASE\"" > "$INSTALL_DIR/.update_config"
-        chmod 600 "$INSTALL_DIR/.update_config"
-        
-        # Install ozvpsctl CLI
-        if [[ -f "$INSTALL_DIR/script/ozvpsctl.sh" ]]; then
-            cp "$INSTALL_DIR/script/ozvpsctl.sh" /usr/local/bin/ozvpsctl
-            chmod +x /usr/local/bin/ozvpsctl
+        set -e
+        if [[ "$ENVIRONMENT" == "production" ]]; then
+            UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-prod.sh"
+        else
+            # Use v2 to bypass any GitHub CDN caching issues
+            UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/public/update-dev-v2.sh"
         fi
+
+        # Add cache-busting parameter and headers
+        curl -fsSL -H 'Cache-Control: no-cache' "$UPDATE_SCRIPT_URL?t=$(date +%s)" -o "/usr/local/bin/$UPDATE_SCRIPT"
+        chmod +x "/usr/local/bin/$UPDATE_SCRIPT"
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing tools"
+    spinner $! "Installing update script"
+
+    # Wait for application to be ready
+    echo ""
+    echo -e "  ${DIM}Waiting for application to start...${NC}"
+    sleep 3
+    for i in {1..30}; do
+        if curl -s http://127.0.0.1:3000/api/health &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC}  Application is running"
+            break
+        fi
+        sleep 1
+    done
 
     echo ""
     echo -e "${GREEN}┌─────────────────────────────────────────┐${NC}"
-    echo -e "${GREEN}│${NC}  ${BOLD}Installation Complete${NC}                  ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  ${BOLD}Installation Complete!${NC}                 ${GREEN}│${NC}"
     echo -e "${GREEN}└─────────────────────────────────────────┘${NC}"
     echo ""
+    echo -e "  ${BOLD}Environment:${NC} $ENVIRONMENT"
     if [[ "$SETUP_SSL" == "yes" ]]; then
-        echo -e "  ${BOLD}Panel:${NC}  https://$PANEL_DOMAIN"
+        echo -e "  ${BOLD}Panel URL:${NC}   https://$PANEL_DOMAIN"
     else
-        echo -e "  ${BOLD}Panel:${NC}  http://$PANEL_DOMAIN"
+        echo -e "  ${BOLD}Panel URL:${NC}   http://$PANEL_DOMAIN"
     fi
     echo ""
     echo -e "  ${DIM}Commands:${NC}"
-    echo -e "    ${DIM}update-ozvps${NC}  - Update to latest version"
-    echo -e "    ${DIM}ozvpsctl${NC}      - Admin management tool"
-    echo -e "    ${DIM}pm2 logs${NC}      - View application logs"
-    echo -e "    ${DIM}pm2 status${NC}    - Check service status"
+    echo -e "    ${BOLD}$UPDATE_SCRIPT${NC}  - Update to latest version"
+    echo -e "    ${BOLD}pm2 status${NC}              - Check service status"
+    echo -e "    ${BOLD}pm2 logs $SERVICE_NAME${NC}  - View application logs"
+    echo -e "    ${BOLD}pm2 restart $SERVICE_NAME${NC} - Restart application"
+    echo ""
+    echo -e "  ${YELLOW}Database Password:${NC} $DB_PASS"
+    echo -e "  ${DIM}(save this password securely)${NC}"
     echo ""
 }
 

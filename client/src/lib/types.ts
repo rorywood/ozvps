@@ -5,6 +5,7 @@ export interface Server {
   status: 'running' | 'stopped' | 'provisioning' | 'error';
   suspended: boolean;
   needsSetup?: boolean;
+  bandwidthExceeded?: boolean;
   primaryIp: string;
   location: {
     id: string;
@@ -35,6 +36,14 @@ export interface Server {
     net_in: number;
     net_out: number;
   };
+  billing?: {
+    status: string; // 'paid' | 'unpaid' | 'suspended' | 'cancelled'
+    nextBillAt: string;
+    suspendAt: string | null;
+    monthlyPriceCents: number;
+    autoRenew: boolean;
+    deployedAt?: string;
+  } | null;
   created_at: string;
 }
 
@@ -76,4 +85,34 @@ export interface IpAddress {
   netmask: string;
   reverse_dns: string | null;
   server_id: string | null;
+}
+
+export type TicketCategory = 'billing' | 'server' | 'network' | 'panel' | 'abuse' | 'general';
+export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TicketStatus = 'new' | 'open' | 'waiting_user' | 'waiting_admin' | 'resolved' | 'closed';
+
+export interface SupportTicket {
+  id: number;
+  auth0UserId: string;
+  title: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+  status: TicketStatus;
+  virtfusionServerId: string | null;
+  assignedAdminId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string;
+  closedAt: string | null;
+}
+
+export interface TicketMessage {
+  id: number;
+  ticketId: number;
+  authorType: 'user' | 'admin';
+  authorId: string;
+  authorEmail: string;
+  authorName: string | null;
+  message: string;
+  createdAt: string;
 }

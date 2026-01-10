@@ -135,22 +135,29 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="text-2xl font-bold text-foreground font-display" data-testid="text-bandwidth">
-              {bandwidthData ? 
+              {bandwidthData ?
                 (() => {
                   const bytes = bandwidthData.totalBandwidth;
                   const gb = bytes / (1024 * 1024 * 1024);
-                  if (gb >= 1) {
+                  if (gb >= 1000) {
+                    const tb = gb / 1024;
+                    return `${tb.toFixed(2)} TB`;
+                  } else if (gb >= 1) {
                     return `${gb.toFixed(2)} GB`;
                   } else {
                     const mb = bytes / (1024 * 1024);
                     return `${mb.toFixed(2)} MB`;
                   }
-                })() : 
+                })() :
                 '—'
               }
             </div>
             <div className="text-xs text-muted-foreground">
-              Total Bandwidth Used{bandwidthData?.totalLimit ? ` / ${bandwidthData.totalLimit} GB` : ''}
+              Total Bandwidth Used{bandwidthData?.totalLimit ?
+                (bandwidthData.totalLimit >= 1000
+                  ? ` / ${(bandwidthData.totalLimit / 1024).toFixed(2)} TB`
+                  : ` / ${bandwidthData.totalLimit} GB`)
+                : ''}
             </div>
           </div>
         </div>
@@ -245,10 +252,40 @@ export default function Dashboard() {
                                 NEEDS SETUP
                               </span>
                             )}
-                            
+
                             {/* Status badges */}
+                            {server.bandwidthExceeded && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 flex items-center gap-1"
+                                data-testid={`badge-bandwidth-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                BANDWIDTH EXCEEDED
+                              </span>
+                            )}
+
+                            {server.billing?.status === 'unpaid' && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center gap-1"
+                                data-testid={`badge-unpaid-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                UNPAID
+                              </span>
+                            )}
+
+                            {server.billing?.status === 'suspended' && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 flex items-center gap-1"
+                                data-testid={`badge-suspended-billing-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                SUSPENDED
+                              </span>
+                            )}
+
                             {billingStatus?.status === 'overdue' && (
-                              <span 
+                              <span
                                 className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 flex items-center gap-1"
                                 data-testid={`badge-overdue-${server.id}`}
                               >
@@ -313,6 +350,16 @@ export default function Dashboard() {
                                 </>
                               )}
                             </div>
+                            {server.billing && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <div className="flex items-center gap-1">
+                                  <span className={server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}>
+                                    Next bill: {new Date(server.billing.nextBillAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 
