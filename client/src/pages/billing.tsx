@@ -197,13 +197,17 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
             style: {
               base: {
                 fontSize: '16px',
-                color: 'hsl(var(--foreground))',
+                color: '#ffffff',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 '::placeholder': {
-                  color: 'hsl(var(--muted-foreground))',
+                  color: '#9ca3af',
                 },
               },
               invalid: {
                 color: '#ef4444',
+              },
+              complete: {
+                color: '#10b981',
               },
             },
           }}

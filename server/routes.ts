@@ -2616,7 +2616,7 @@ export async function registerRoutes(
       const publishableKey = await getStripePublishableKey();
       res.json({
         configured: !!publishableKey,
-        publishableKey: publishableKey ? publishableKey.substring(0, 12) + '...' : null,
+        publishableKey: publishableKey, // Return full key for frontend to use
       });
     } catch (error: any) {
       log(`Stripe not configured: ${error.message}`, 'api');
