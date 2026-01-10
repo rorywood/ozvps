@@ -81,7 +81,7 @@ echo ""
 echo -e "${BOLD}VirtFusion API Configuration${NC}"
 read -p "VirtFusion Panel URL [https://panel.ozvps.com.au]: " VIRT_PANEL_URL < /dev/tty
 VIRT_PANEL_URL=${VIRT_PANEL_URL:-https://panel.ozvps.com.au}
-read -p "VirtFusion API Key: " VIRT_API_KEY < /dev/tty
+read -p "VirtFusion API Token: " VIRT_API_TOKEN < /dev/tty
 
 # Stripe Configuration (TEST keys for development)
 echo ""
@@ -297,7 +297,7 @@ DATABASE_URL=${DB_URL}
 
 # VirtFusion API
 VIRTFUSION_PANEL_URL=${VIRT_PANEL_URL}
-VIRTFUSION_API_KEY=${VIRT_API_KEY}
+VIRTFUSION_API_TOKEN=${VIRT_API_TOKEN}
 
 # Stripe Configuration (TEST KEYS FOR DEVELOPMENT)
 STRIPE_SECRET_KEY=${STRIPE_SECRET}
