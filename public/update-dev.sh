@@ -55,8 +55,14 @@ cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem.config.cjs" 2>/dev/n
 
 # Download latest code
 echo -e "${CYAN}Downloading latest code from GitHub (${GITHUB_BRANCH} branch)...${NC}"
-TEMP_ZIP="/tmp/ozvps-update-${GITHUB_BRANCH}.zip"
-curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+TEMP_ZIP="/tmp/ozvps-update-${SAFE_BRANCH}.zip"
+TEMP_EXTRACT="/tmp/ozvps-update-${SAFE_BRANCH}-extract"
+
+if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
+    echo -e "${RED}Error: Failed to download from GitHub${NC}"
+    exit 1
+fi
 
 # Clear old files (except node_modules, .env, backups)
 echo -e "${CYAN}Removing old files...${NC}"
@@ -69,9 +75,22 @@ find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
 
 # Extract new code
 echo -e "${CYAN}Extracting new code...${NC}"
-unzip -q "$TEMP_ZIP" -d /tmp/
-rsync -a "/tmp/ozvps-${GITHUB_BRANCH}/" "$INSTALL_DIR/"
-rm -rf "/tmp/ozvps-${GITHUB_BRANCH}" "$TEMP_ZIP"
+mkdir -p "$TEMP_EXTRACT"
+if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
+    echo -e "${RED}Error: Failed to extract zip file${NC}"
+    rm -f "$TEMP_ZIP"
+    exit 1
+fi
+
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
+if [ -z "$EXTRACTED_DIR" ]; then
+    echo -e "${RED}Error: Could not find extracted directory${NC}"
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 # Restore config files
 echo -e "${CYAN}Restoring configuration...${NC}"

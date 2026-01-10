@@ -87,19 +87,50 @@ fi
 echo -e "${GREEN}✓ System dependencies installed${NC}"
 echo ""
 
+# Check disk space
+AVAILABLE_SPACE=$(df /tmp | tail -1 | awk '{print $4}')
+if [ "$AVAILABLE_SPACE" -lt 500000 ]; then
+    echo -e "${RED}Error: Insufficient disk space in /tmp${NC}"
+    echo "Available: ${AVAILABLE_SPACE}KB, Required: ~500MB"
+    exit 1
+fi
+
 # Download application from GitHub
 echo -e "${CYAN}Downloading application from GitHub (${GITHUB_BRANCH} branch)...${NC}"
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-# Download as zip and extract
-TEMP_ZIP="/tmp/ozvps-${GITHUB_BRANCH}.zip"
-curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+# Create safe filename (replace / with -)
+SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
+TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
 
-# Extract and move files to install directory
-unzip -q "$TEMP_ZIP" -d /tmp/
-rsync -a "/tmp/ozvps-${GITHUB_BRANCH}/" "$INSTALL_DIR/"
-rm -rf "/tmp/ozvps-${GITHUB_BRANCH}" "$TEMP_ZIP"
+# Download zip
+if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
+    echo -e "${RED}Error: Failed to download from GitHub${NC}"
+    echo "URL: https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip"
+    exit 1
+fi
+
+# Extract and move files
+echo -e "${CYAN}Extracting files...${NC}"
+mkdir -p "$TEMP_EXTRACT"
+if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
+    echo -e "${RED}Error: Failed to extract zip file${NC}"
+    rm -f "$TEMP_ZIP"
+    exit 1
+fi
+
+# Find the extracted directory (GitHub creates ozvps-<branch> with slashes replaced by dashes in extraction)
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
+if [ -z "$EXTRACTED_DIR" ]; then
+    echo -e "${RED}Error: Could not find extracted directory${NC}"
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+rsync -a "${EXTRACTED_DIR}/" "$INSTALL_DIR/"
+rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 echo -e "${GREEN}✓ Application downloaded${NC}"
 echo ""
