@@ -164,6 +164,15 @@ fi
 echo -e "${GREEN}✓ Database migrations applied${NC}"
 echo ""
 
+# Initialize billing for existing servers (if any don't have billing records)
+echo -e "${CYAN}Initializing billing for existing servers...${NC}"
+if node initialize-all-billing.js; then
+  echo -e "${GREEN}✓ Billing initialization completed${NC}"
+else
+  echo -e "${YELLOW}⚠ Billing initialization skipped (may already be done)${NC}"
+fi
+echo ""
+
 echo -e "${CYAN}Cleaning up dev dependencies...${NC}"
 npm prune --production
 echo -e "${GREEN}✓ Dev dependencies removed${NC}"
