@@ -528,18 +528,52 @@ export class VirtFusionClient {
   async powerAction(serverId: string, action: 'start' | 'stop' | 'restart' | 'poweroff') {
     // Map action to VirtFusion endpoint
     // VirtFusion has: boot, shutdown (graceful), restart, poweroff (hard)
-    const endpoint = action === 'start' ? 'boot' : 
-                     action === 'stop' ? 'shutdown' : 
+    const endpoint = action === 'start' ? 'boot' :
+                     action === 'stop' ? 'shutdown' :
                      action === 'poweroff' ? 'poweroff' :
                      'restart';
     await this.request(`/servers/${serverId}/power/${endpoint}`, {
       method: 'POST',
     });
-    
+
     // Invalidate cache since server state has changed
     this.invalidateServerCache(serverId);
-    
+
     return { success: true };
+  }
+
+  async suspendServer(serverId: string) {
+    try {
+      await this.request(`/servers/${serverId}/suspend`, {
+        method: 'POST',
+      });
+
+      // Invalidate cache since server state has changed
+      this.invalidateServerCache(serverId);
+
+      log(`Server ${serverId} suspended successfully`, 'virtfusion');
+      return { success: true };
+    } catch (error: any) {
+      log(`Failed to suspend server ${serverId}: ${error.message}`, 'virtfusion');
+      throw error;
+    }
+  }
+
+  async unsuspendServer(serverId: string) {
+    try {
+      await this.request(`/servers/${serverId}/unsuspend`, {
+        method: 'POST',
+      });
+
+      // Invalidate cache since server state has changed
+      this.invalidateServerCache(serverId);
+
+      log(`Server ${serverId} unsuspended successfully`, 'virtfusion');
+      return { success: true };
+    } catch (error: any) {
+      log(`Failed to unsuspend server ${serverId}: ${error.message}`, 'virtfusion');
+      throw error;
+    }
   }
 
   async getServerStats(serverId: string) {

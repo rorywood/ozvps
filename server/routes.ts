@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
+import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS } from "@shared/schema";
 import { log } from "./index";
@@ -1295,20 +1296,55 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
       const billingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
-      
+
       // Return as a map of serverId -> billing status
-      const billingMap: Record<string, { status: string; overdueSince: Date | null }> = {};
+      const billingMap: Record<string, {
+        status: string;
+        overdueSince: Date | null;
+        nextBillAt?: Date;
+        suspendAt?: Date | null;
+        monthlyPriceCents?: number;
+      }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
           overdueSince: b.overdueSince,
+          nextBillAt: b.nextBillAt,
+          suspendAt: b.suspendAt,
+          monthlyPriceCents: b.monthlyPriceCents,
         };
       }
-      
+
       res.json({ billing: billingMap });
     } catch (error: any) {
       log(`Error fetching server billing statuses: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch billing statuses' });
+    }
+  });
+
+  // Get upcoming charges for the user
+  app.get('/api/billing/upcoming', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const upcoming = await getUpcomingCharges(session.auth0UserId!);
+
+      res.json({ upcoming });
+    } catch (error: any) {
+      log(`Error fetching upcoming charges: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch upcoming charges' });
+    }
+  });
+
+  // Get billing ledger for the user
+  app.get('/api/billing/ledger', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const ledger = await getBillingLedger(session.auth0UserId!);
+
+      res.json({ ledger });
+    } catch (error: any) {
+      log(`Error fetching billing ledger: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch billing ledger' });
     }
   });
   
@@ -3297,6 +3333,14 @@ export async function registerRoutes(
         await dbStorage.updateDeployOrder(order.id, {
           status: 'active',
           virtfusionServerId: serverResult.serverId,
+        });
+
+        // Create billing record for the new server
+        await createServerBilling({
+          auth0UserId,
+          virtfusionServerId: serverResult.serverId.toString(),
+          planId,
+          monthlyPriceCents: plan.priceMonthly,
         });
 
         res.json({

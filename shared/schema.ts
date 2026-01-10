@@ -113,13 +113,35 @@ export const serverBilling = pgTable("server_billing", {
   auth0UserId: text("auth0_user_id").notNull(),
   virtfusionServerId: text("virtfusion_server_id").notNull().unique(),
   planId: integer("plan_id").notNull(),
-  status: text("status").notNull().default("active"), // active, overdue, suspended, cancelled
+
+  // Billing state
+  deployedAt: timestamp("deployed_at").notNull(),
+  monthlyPriceCents: integer("monthly_price_cents").notNull(),
+  status: text("status").notNull().default("paid"), // paid, unpaid, suspended, cancelled
+  autoRenew: boolean("auto_renew").default(true).notNull(),
+
+  // Billing dates
+  nextBillAt: timestamp("next_bill_at").notNull(),
+  suspendAt: timestamp("suspend_at"), // Set when unpaid, null otherwise
+
+  // Legacy fields (keeping for migration)
   lastBilledAt: timestamp("last_billed_at"),
-  nextBillingAt: timestamp("next_billing_at").notNull(),
   overdueAt: timestamp("overdue_at"),
   overdueSince: timestamp("overdue_since"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Billing ledger - tracks all charges with idempotency
+export const billingLedger = pgTable("billing_ledger", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  virtfusionServerId: text("virtfusion_server_id"),
+  amountCents: integer("amount_cents").notNull(),
+  description: text("description").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Security settings - admin-configurable security options including reCAPTCHA
@@ -208,6 +230,7 @@ export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, c
 export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
 export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBillingLedgerSchema = createInsertSchema(billingLedger).omit({ id: true, createdAt: true });
 export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
 export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
 export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
@@ -224,6 +247,8 @@ export type DeployOrder = typeof deployOrders.$inferSelect;
 export type InsertDeployOrder = z.infer<typeof insertDeployOrderSchema>;
 export type ServerBilling = typeof serverBilling.$inferSelect;
 export type InsertServerBilling = z.infer<typeof insertServerBillingSchema>;
+export type BillingLedger = typeof billingLedger.$inferSelect;
+export type InsertBillingLedger = z.infer<typeof insertBillingLedgerSchema>;
 export type ServerCancellation = typeof serverCancellations.$inferSelect;
 export type InsertServerCancellation = z.infer<typeof insertServerCancellationSchema>;
 export type SecuritySetting = typeof securitySettings.$inferSelect;
