@@ -1377,7 +1377,6 @@ export async function registerRoutes(
       // Return as a map of serverId -> billing status
       const billingMap: Record<string, {
         status: string;
-        overdueSince: Date | null;
         nextBillAt?: Date;
         suspendAt?: Date | null;
         monthlyPriceCents?: number;
@@ -1385,7 +1384,6 @@ export async function registerRoutes(
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
-          overdueSince: b.overdueSince,
           nextBillAt: b.nextBillAt,
           suspendAt: b.suspendAt,
           monthlyPriceCents: b.monthlyPriceCents,
