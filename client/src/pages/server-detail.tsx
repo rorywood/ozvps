@@ -401,8 +401,11 @@ export default function ServerDetail() {
               completionDetectedAt = Date.now();
             }
 
-            // Wait 2 seconds after detection to ensure status is stable
-            if (Date.now() - completionDetectedAt >= 2000) {
+            // Wait longer for shutdown/poweroff to ensure server is fully stopped
+            // Boot/reboot can be faster (2s), but shutdown needs more time (4s)
+            const stabilizationDelay = (action === 'shutdown' || action === 'poweroff') ? 4000 : 2000;
+
+            if (Date.now() - completionDetectedAt >= stabilizationDelay) {
               clearInterval(pollInterval);
               // Refetch status FIRST before clearing pending state
               await queryClient.refetchQueries({ queryKey: ['server', serverId] });

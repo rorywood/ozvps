@@ -171,13 +171,15 @@ export function useSyncPowerActions(servers: Array<{ id: string; status: string 
         clearPending(server.id);
       }
 
-      // For start: just check if status is running (no minimum time needed)
-      if (pending.action === "start" && server.status === "running") {
+      // For start: wait at least 4 seconds AND status is running
+      // (gives time for status to stabilize)
+      if (pending.action === "start" && server.status === "running" && timeSinceAction > 4000) {
         clearPending(server.id);
       }
 
-      // For shutdown: just check if status is stopped (no minimum time needed)
-      if (pending.action === "shutdown" && server.status === "stopped") {
+      // For shutdown: wait at least 4 seconds AND status is stopped
+      // (gives time for status to stabilize and prevents flickering)
+      if (pending.action === "shutdown" && server.status === "stopped" && timeSinceAction > 4000) {
         clearPending(server.id);
       }
 
