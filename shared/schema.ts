@@ -200,14 +200,12 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Support ticket categories
+// Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
-  'billing',
-  'server',
-  'network',
-  'panel',
+  'sales',
+  'accounts',
+  'support',
   'abuse',
-  'general',
 ] as const;
 export type TicketCategory = typeof TICKET_CATEGORIES[number];
 
@@ -231,7 +229,7 @@ export const tickets = pgTable("tickets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull(),
   title: text("title").notNull(),
-  category: text("category").notNull().default("general"), // billing, server, network, panel, abuse, general
+  category: text("category").notNull().default("support"), // sales, accounts, support, abuse
   priority: text("priority").notNull().default("normal"), // low, normal, high, urgent
   status: text("status").notNull().default("new"), // new, open, waiting_user, waiting_admin, resolved, closed
   virtfusionServerId: text("virtfusion_server_id"), // nullable - affected server

@@ -1568,12 +1568,10 @@ function AdminTicketsPanel() {
   };
 
   const categoryLabels: Record<string, string> = {
-    billing: "Billing",
-    server: "Server / VM",
-    network: "Network",
-    panel: "Panel / Login",
+    sales: "Sales",
+    accounts: "Accounts",
+    support: "Support",
     abuse: "Abuse",
-    general: "General",
   };
 
   const priorityLabels: Record<string, string> = {

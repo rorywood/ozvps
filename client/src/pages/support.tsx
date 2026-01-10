@@ -42,12 +42,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  billing: "Billing",
-  server: "Server / VM",
-  network: "Network",
-  panel: "Panel / Login",
+  sales: "Sales",
+  accounts: "Accounts",
+  support: "Support",
   abuse: "Abuse",
-  general: "General",
 };
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
@@ -148,7 +146,7 @@ function NewTicketDialog({
   const { toast } = useToast();
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<TicketCategory>("general");
+  const [category, setCategory] = useState<TicketCategory>("support");
   const [priority, setPriority] = useState<TicketPriority>("normal");
   const [description, setDescription] = useState("");
   const [selectedServer, setSelectedServer] = useState<string>("none");
@@ -198,7 +196,7 @@ function NewTicketDialog({
 
   const resetForm = () => {
     setTitle("");
-    setCategory("general");
+    setCategory("support");
     setPriority("normal");
     setDescription("");
     setSelectedServer("none");

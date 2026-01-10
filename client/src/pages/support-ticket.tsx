@@ -38,12 +38,10 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  billing: "Billing",
-  server: "Server / VM",
-  network: "Network",
-  panel: "Panel / Login",
+  sales: "Sales",
+  accounts: "Accounts",
+  support: "Support",
   abuse: "Abuse",
-  general: "General",
 };
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
@@ -176,7 +174,7 @@ export default function SupportTicketPage() {
     queryKey: ["support", "ticket", ticketId],
     queryFn: () => api.getSupportTicket(ticketId),
     enabled: ticketId > 0,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds for real-time updates
   });
 
   useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id}` : "Support Ticket");
