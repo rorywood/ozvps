@@ -203,7 +203,7 @@ function ProfileDropdown() {
 
 function DesktopNav() {
   const [location] = useLocation();
-  
+
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
     queryFn: () => api.getCurrentUser(),
@@ -222,8 +222,14 @@ function DesktopNav() {
   const isAdmin = userData?.user?.isAdmin ?? false;
   const balance = walletData?.wallet?.balanceCents;
 
+  // Check if dev banner is showing
+  const isDev = window.location.hostname.includes("dev");
+
   return (
-    <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border/50">
+    <header className={cn(
+      "hidden lg:block fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      isDev ? "top-14" : "top-0"
+    )}>
       <div className="container mx-auto max-w-7xl px-6">
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-8">
@@ -342,8 +348,14 @@ function MobileNav() {
     { href: "/account", icon: Settings, label: "Account" },
   ];
 
+  // Check if dev banner is showing
+  const isDev = window.location.hostname.includes("dev");
+
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border/50">
+    <header className={cn(
+      "lg:hidden fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      isDev ? "top-14" : "top-0"
+    )}>
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
           <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo-mobile" />
