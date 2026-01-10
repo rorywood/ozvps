@@ -1414,7 +1414,8 @@ export async function registerRoutes(
 
       // Auto-initialize billing for servers that don't have records yet
       try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
+        const activeServerIds = new Set(servers.map(s => s.id));
 
         for (const server of servers) {
           if (server.plan?.priceMonthly) {
@@ -1442,10 +1443,8 @@ export async function registerRoutes(
       // Fetch billing records
       const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
-      // Try to enrich with server names
-      let upcoming = billingRecords;
-      try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
+        // Fetch servers to enrich with names and verify they still exist
+        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
         // Add server names to billing records
