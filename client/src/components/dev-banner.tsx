@@ -1,5 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DevChangelog } from "./dev-changelog";
 
 export function DevBanner() {
   const version = import.meta.env.VITE_APP_VERSION || "1.0.0-dev";
@@ -23,9 +24,12 @@ export function DevBanner() {
         <span className="font-semibold">
           ⚠️ Development Environment - Not for production use
         </span>
-        <span className="text-xs opacity-75 font-mono">
-          v{version} • {buildDate}
-        </span>
+        <div className="flex items-center gap-3">
+          <DevChangelog />
+          <span className="text-xs opacity-75 font-mono">
+            v{version} • {buildDate}
+          </span>
+        </div>
       </AlertDescription>
     </Alert>
   );
