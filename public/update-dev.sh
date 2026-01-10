@@ -82,7 +82,7 @@ if ! unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"; then
     exit 1
 fi
 
-EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -maxdepth 1 -type d -name "ozvps-*" | head -1)
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
 if [ -z "$EXTRACTED_DIR" ]; then
     echo -e "${RED}Error: Could not find extracted directory${NC}"
     rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
