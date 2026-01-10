@@ -406,7 +406,9 @@ export default function ServerDetail() {
               clearInterval(pollInterval);
               setPowerActionPending(null);
               if (serverId) clearPending(serverId);
-              queryClient.invalidateQueries({ queryKey: ['servers'] });
+              // Force immediate refetch to ensure UI shows correct status
+              queryClient.refetchQueries({ queryKey: ['server', serverId] });
+              queryClient.refetchQueries({ queryKey: ['servers'] });
             }
           } else {
             // Reset if status changed back (shouldn't happen but just in case)
@@ -415,17 +417,21 @@ export default function ServerDetail() {
         }
       }, 2000);
       // Clear after 30 seconds regardless
-      setTimeout(() => {
+      setTimeout(async () => {
         clearInterval(pollInterval);
         setPowerActionPending(null);
         if (serverId) clearPending(serverId);
-        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        queryClient.invalidateQueries({ queryKey: ['servers'] });
+        // Force immediate refetch to get current status
+        await queryClient.refetchQueries({ queryKey: ['server', serverId] });
+        await queryClient.refetchQueries({ queryKey: ['servers'] });
       }, 30000);
     },
     onError: (error: any) => {
       setPowerActionPending(null);
       if (serverId) clearPending(serverId);
+      // Force immediate refetch to show current status
+      queryClient.refetchQueries({ queryKey: ['server', serverId] });
+      queryClient.refetchQueries({ queryKey: ['servers'] });
       toast({
         title: "Action Failed",
         description: error?.message || "Failed to perform power action. Please try again.",
