@@ -230,8 +230,17 @@ export default function ServerList() {
                                   {displayStatus}
                                 </span>
                               )}
+                              {server.bandwidthExceeded && (
+                                <span
+                                  className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/20 border-red-500/30 text-red-400 flex items-center gap-1"
+                                  data-testid={`badge-bandwidth-${server.id}`}
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  BANDWIDTH EXCEEDED
+                                </span>
+                              )}
                               {serverBillingStatuses[server.id]?.status === 'overdue' && (
-                                <span 
+                                <span
                                   className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-amber-500/20 border-amber-500/30 text-amber-400 flex items-center gap-1"
                                   data-testid={`badge-overdue-${server.id}`}
                                 >

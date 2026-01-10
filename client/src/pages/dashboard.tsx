@@ -252,10 +252,20 @@ export default function Dashboard() {
                                 NEEDS SETUP
                               </span>
                             )}
-                            
+
                             {/* Status badges */}
+                            {server.bandwidthExceeded && (
+                              <span
+                                className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 flex items-center gap-1"
+                                data-testid={`badge-bandwidth-${server.id}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                BANDWIDTH EXCEEDED
+                              </span>
+                            )}
+
                             {billingStatus?.status === 'overdue' && (
-                              <span 
+                              <span
                                 className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 flex items-center gap-1"
                                 data-testid={`badge-overdue-${server.id}`}
                               >

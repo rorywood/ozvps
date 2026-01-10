@@ -853,7 +853,32 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'VirtFusion account not linked' });
       }
       const servers = await virtfusionClient.listServersWithStats(userId);
-      res.json(servers);
+
+      // Fetch bandwidth status for each server in parallel
+      const serversWithBandwidth = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            if (traffic?.current) {
+              const usedBytes = traffic.current.total || 0;
+              const limitGB = traffic.current.limit || 0;
+              const usedGB = usedBytes / (1024 * 1024 * 1024);
+              const bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+
+              return {
+                ...server,
+                bandwidthExceeded,
+              };
+            }
+            return { ...server, bandwidthExceeded: false };
+          } catch (error) {
+            // If bandwidth fetch fails, assume not exceeded
+            return { ...server, bandwidthExceeded: false };
+          }
+        })
+      );
+
+      res.json(serversWithBandwidth);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
       return handleApiError(res, error, 'Failed to fetch servers');

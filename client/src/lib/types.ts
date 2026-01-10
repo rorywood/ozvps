@@ -5,6 +5,7 @@ export interface Server {
   status: 'running' | 'stopped' | 'provisioning' | 'error';
   suspended: boolean;
   needsSetup?: boolean;
+  bandwidthExceeded?: boolean;
   primaryIp: string;
   location: {
     id: string;
