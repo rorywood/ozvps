@@ -130,8 +130,12 @@ echo -e "${GREEN}✓ Application built${NC}"
 echo ""
 
 echo -e "${CYAN}Running database migrations...${NC}"
+# Load environment variables for migrations
+if [ -f "$INSTALL_DIR/.env" ]; then
+  export $(cat "$INSTALL_DIR/.env" | grep -v '^#' | xargs)
+fi
 # Run SQL migrations first (for manual migrations like billing tables)
-node migrate.js 2>/dev/null || echo "Note: SQL migrations skipped (this is normal if tables already exist)"
+node migrate.js || echo "Note: SQL migrations may have been skipped"
 # Then run drizzle-kit push to sync schema
 npx drizzle-kit push --force
 echo -e "${GREEN}✓ Database migrations applied${NC}"

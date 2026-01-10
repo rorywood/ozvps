@@ -542,6 +542,13 @@ export default function BillingPage() {
     // Server billing is independent of Stripe, so always fetch
   });
 
+  // Auto-select first payment method when payment methods are loaded
+  useEffect(() => {
+    if (paymentMethodsData?.paymentMethods && paymentMethodsData.paymentMethods.length > 0 && !selectedPaymentMethodId) {
+      setSelectedPaymentMethodId(paymentMethodsData.paymentMethods[0].id);
+    }
+  }, [paymentMethodsData, selectedPaymentMethodId]);
+
   // Clamp pagination when data changes to prevent blank pages
   useEffect(() => {
     const txCount = transactionsData?.transactions?.length || 0;
