@@ -302,23 +302,23 @@ export default function ServerList() {
                   </div>
 
                   {/* Specs Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-x-4 sm:gap-x-8 gap-y-2 flex-1 text-sm">
-                    <div>
+                  <div className="flex flex-wrap gap-x-6 lg:gap-x-10 gap-y-3 flex-1 text-sm">
+                    <div className="min-w-[100px]">
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Location</div>
                       <div className="text-foreground font-medium flex items-center gap-2">
                         <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
                         {server.location.name}
                       </div>
                     </div>
-                    <div>
+                    <div className="min-w-[90px]">
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Specs</div>
-                      <div className="text-foreground font-medium">{server.plan.specs.vcpu} vCPU / {server.plan.specs.ram / 1024}GB</div>
+                      <div className="text-foreground font-medium whitespace-nowrap">{server.plan.specs.vcpu} vCPU / {server.plan.specs.ram / 1024}GB</div>
                     </div>
-                     <div>
+                    <div className="min-w-[80px]">
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Disk</div>
-                      <div className="text-foreground font-medium">{server.plan.specs.disk}GB NVMe</div>
+                      <div className="text-foreground font-medium whitespace-nowrap">{server.plan.specs.disk}GB NVMe</div>
                     </div>
-                    <div>
+                    <div className="min-w-[100px]">
                       <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Image</div>
                       <div className="text-foreground font-medium flex items-center gap-2">
                         {server.needsSetup ? (
@@ -332,16 +332,16 @@ export default function ServerList() {
                               loading="lazy"
                               onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                             />
-                            <span className="truncate max-w-[100px]">{server.image?.name || 'Unknown'}</span>
+                            <span className="truncate max-w-[120px]">{server.image?.name || 'Unknown'}</span>
                           </>
                         )}
                       </div>
                     </div>
                     {server.billing && (
-                      <div className="col-span-2 sm:col-span-1">
+                      <div className="min-w-[90px]">
                         <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Next Bill</div>
-                        <div className={`text-foreground font-medium ${server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}`}>
-                          {new Date(server.billing.nextBillAt).toLocaleDateString()}
+                        <div className={`text-foreground font-medium whitespace-nowrap ${server.billing.status === 'unpaid' ? 'text-yellow-400' : server.billing.status === 'suspended' ? 'text-red-400' : ''}`}>
+                          {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </div>
                       </div>
                     )}

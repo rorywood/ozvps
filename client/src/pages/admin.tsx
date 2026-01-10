@@ -81,6 +81,7 @@ interface IpAllocation {
   serverName?: string;
   userId?: number;
   blockId: number;
+  inUse?: boolean;
 }
 
 interface VFUser {
@@ -172,6 +173,12 @@ export default function AdminPage() {
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [oldExtRelationId, setOldExtRelationId] = useState("");
+
+  // Inline user credit adjustment state
+  const [inlineAdjustUser, setInlineAdjustUser] = useState<VFUser | null>(null);
+  const [inlineAdjustType, setInlineAdjustType] = useState<"add" | "remove">("add");
+  const [inlineAdjustAmount, setInlineAdjustAmount] = useState("");
+  const [inlineAdjustReason, setInlineAdjustReason] = useState("");
   
   
   // Server action state
@@ -305,6 +312,48 @@ export default function AdminPage() {
       toast.error(error.message);
     },
   });
+
+  // Inline credit adjustment mutation
+  const inlineAdjustMutation = useMutation({
+    mutationFn: async (data: { auth0UserId: string; amountCents: number; reason: string }) => {
+      const response = await fetch('/api/admin/wallet/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Adjustment failed');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setInlineAdjustUser(null);
+      setInlineAdjustAmount("");
+      setInlineAdjustReason("");
+      toast.success('Credit adjustment applied');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Handle inline adjustment submit
+  const handleInlineAdjust = () => {
+    if (!inlineAdjustUser || !inlineAdjustAmount || !inlineAdjustReason) return;
+    const amountCents = Math.round(parseFloat(inlineAdjustAmount) * 100);
+    if (isNaN(amountCents) || amountCents <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    inlineAdjustMutation.mutate({
+      auth0UserId: inlineAdjustUser.auth0UserId,
+      amountCents: inlineAdjustType === 'remove' ? -amountCents : amountCents,
+      reason: inlineAdjustReason,
+    });
+  };
 
   const linkMutation = useMutation({
     mutationFn: async (data: { auth0UserId: string; oldExtRelationId: string }) => {
@@ -933,9 +982,9 @@ export default function AdminPage() {
                             </td>
                             <td className="p-4">
                               <span className={`text-xs px-2 py-0.5 rounded ${
-                                ip.serverId ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                                ip.inUse || ip.serverId ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
                               }`}>
-                                {ip.serverId ? 'In Use' : 'Available'}
+                                {ip.inUse || ip.serverId ? 'In Use' : 'Available'}
                               </span>
                             </td>
                           </tr>
