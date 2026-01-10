@@ -1200,8 +1200,8 @@ export default function ServerDetail() {
     <AppShell>
       <div className="space-y-6 pb-20">
         
-        {/* Building Banner - Shown when setup is minimized */}
-        {reinstallTask.isActive && isSetupMode && setupMinimized && (
+        {/* Building Banner - Shown when setup is minimized (but not when complete) */}
+        {reinstallTask.isActive && isSetupMode && setupMinimized && reinstallTask.status !== 'complete' && (
           <div 
             className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/30 transition-colors" 
             data-testid="banner-building"
@@ -1231,7 +1231,7 @@ export default function ServerDetail() {
         )}
         
         {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
-        {showSavedCredentials && savedCredentials && !reinstallTask.isActive && (
+        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
           <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
@@ -1452,13 +1452,21 @@ export default function ServerDetail() {
               </div>
               {server.image && (
                 <div className="flex items-center gap-2">
-                  <img 
+                  <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
                     alt={server.image.name}
                     className="h-4 w-4 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
                   <span className="text-foreground">{server.image.name}</span>
+                </div>
+              )}
+              {server.billing?.nextBillAt && (
+                <div className="flex items-center gap-2">
+                  <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
+                  <span className="text-foreground">
+                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
                 </div>
               )}
             </div>

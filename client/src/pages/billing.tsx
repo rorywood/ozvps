@@ -539,7 +539,7 @@ export default function BillingPage() {
   }> }>({
     queryKey: ['upcoming-charges'],
     queryFn: () => api.getUpcomingCharges(),
-    enabled: stripeConfigured,
+    // Server billing is independent of Stripe, so always fetch
   });
 
   // Clamp pagination when data changes to prevent blank pages

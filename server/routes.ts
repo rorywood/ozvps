@@ -904,6 +904,20 @@ export async function registerRoutes(
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
 
+      // Fetch bandwidth status (non-critical, don't fail if it errors)
+      let bandwidthExceeded = false;
+      try {
+        const traffic = await virtfusionClient.getServerTrafficHistory(req.params.id);
+        if (traffic?.current) {
+          const usedBytes = traffic.current.total || 0;
+          const limitGB = traffic.current.limit || 0;
+          const usedGB = usedBytes / (1024 * 1024 * 1024);
+          bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+        }
+      } catch (bandwidthError: any) {
+        log(`Warning: Could not fetch bandwidth for server ${req.params.id}: ${bandwidthError.message}`, 'api');
+      }
+
       // Fetch billing status for this server (non-critical, don't fail if it errors)
       let billingStatus = null;
       try {
@@ -914,6 +928,7 @@ export async function registerRoutes(
 
       res.json({
         ...server,
+        bandwidthExceeded,
         billing: billingStatus ? {
           status: billingStatus.status,
           nextBillAt: billingStatus.nextBillAt,
@@ -1356,11 +1371,19 @@ export async function registerRoutes(
   app.get('/api/billing/upcoming', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
-      const upcoming = await getUpcomingCharges(session.auth0UserId!);
+
+      // Wrap in try-catch to handle case where billing tables don't exist yet
+      let upcoming = [];
+      try {
+        upcoming = await getUpcomingCharges(session.auth0UserId!);
+      } catch (billingError: any) {
+        log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
+        // Return empty array instead of failing
+      }
 
       res.json({ upcoming });
     } catch (error: any) {
-      log(`Error fetching upcoming charges: ${error.message}`, 'api');
+      log(`Error in billing/upcoming endpoint: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch upcoming charges' });
     }
   });
