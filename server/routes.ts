@@ -1440,21 +1440,24 @@ export async function registerRoutes(
         log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
       }
 
-      // Fetch billing records
-      const billingRecords = await getUpcomingCharges(session.auth0UserId!);
+      // Fetch upcoming charges
+      let upcoming = [];
+      try {
+        const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
         // Fetch servers to enrich with names and verify they still exist
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
-        // Add server names to billing records
-        upcoming = billingRecords.map(billing => ({
-          ...billing,
-          serverName: serverMap.get(billing.virtfusionServerId),
-        }));
-      } catch (serverError: any) {
-        log(`Warning: Could not fetch servers for name enrichment: ${serverError.message}`, 'billing');
-        // Continue with billing records without server names
+        // Only include billing records for servers that actually exist
+        upcoming = billingRecords
+          .filter(billing => serverMap.has(billing.virtfusionServerId))
+          .map(billing => ({
+            ...billing,
+            serverName: serverMap.get(billing.virtfusionServerId),
+          }));
+      } catch (billingError: any) {
+        log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }
 
       res.json({ upcoming });
