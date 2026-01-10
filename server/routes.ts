@@ -2717,7 +2717,7 @@ export async function registerRoutes(
         // Detach the duplicate payment method
         await stripe.paymentMethods.detach(paymentMethodId);
         log(`Rejected duplicate card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: 'This card is already saved to your account',
           duplicate: true,
           existingCard: {
@@ -2727,7 +2727,12 @@ export async function registerRoutes(
         });
       }
 
-      log(`Validated new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+      // Attach the payment method to the customer
+      await stripe.paymentMethods.attach(paymentMethodId, {
+        customer: stripeCustomerId,
+      });
+
+      log(`Validated and attached new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
       res.json({ valid: true });
     } catch (error: any) {
       if (error instanceof StripeCustomerError) {
