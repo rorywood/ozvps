@@ -203,14 +203,20 @@ function AddCardFormInner({
     <form onSubmit={handleSubmit}>
       <div className="space-y-4">
         <div className="relative">
-          {cardLoadTimeout && !cardReady ? (
+          {!stripeReady ? (
+            <div className="p-4 rounded-lg bg-zinc-800/50 border border-yellow-500/50 min-h-[50px] text-center">
+              <AlertCircle className="h-6 w-6 mx-auto text-yellow-500 mb-2" />
+              <p className="text-sm text-yellow-400 mb-2">Payment system initializing...</p>
+              <p className="text-xs text-muted-foreground">If this persists, check browser console for errors or try refreshing.</p>
+            </div>
+          ) : cardLoadTimeout && !cardReady ? (
             <div className="p-4 rounded-lg bg-zinc-800/50 border border-red-500/50 min-h-[50px] text-center">
               <AlertCircle className="h-6 w-6 mx-auto text-red-500 mb-2" />
               <p className="text-sm text-red-400 mb-2">Card form failed to load</p>
               <p className="text-xs text-muted-foreground mb-3">This may be caused by a browser extension blocking Stripe, or a network issue.</p>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setCardLoadTimeout(false);
@@ -231,8 +237,8 @@ function AddCardFormInner({
                 </div>
               )}
               <div className={`p-4 rounded-lg bg-zinc-800/50 border border-border min-h-[50px] ${!cardReady ? 'opacity-0' : 'opacity-100'}`}>
-                <CardElement 
-                  options={cardElementOptions} 
+                <CardElement
+                  options={cardElementOptions}
                   onReady={() => setCardReady(true)}
                 />
               </div>
