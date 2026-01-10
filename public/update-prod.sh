@@ -89,9 +89,27 @@ if [ -z "$EXTRACTED_DIR" ]; then
     exit 1
 fi
 
+echo -e "${CYAN}Copying files from extracted directory...${NC}"
+echo "Source: $EXTRACTED_DIR"
+echo "Target: $INSTALL_DIR"
+
 # Use cp -r instead of rsync for more reliable copying
 cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
 cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+# Verify package.json was copied
+if [ ! -f "$INSTALL_DIR/package.json" ]; then
+    echo -e "${RED}Error: package.json not found after copy${NC}"
+    echo "Checking what was extracted..."
+    ls -la "$EXTRACTED_DIR" | head -20
+    echo ""
+    echo "Checking install directory..."
+    ls -la "$INSTALL_DIR" | head -20
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Files copied successfully${NC}"
 rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 # Restore config files
