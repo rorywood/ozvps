@@ -22,20 +22,24 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Get panel server URL from environment variable
-if [[ -z "$OZVPS_URL" ]]; then
-    echo -e "${RED}Error: OZVPS_URL environment variable is required${NC}"
+# Get panel server URL from argument or environment variable
+if [[ -n "$1" ]]; then
+    DEPLOY_URL="$1"
+elif [[ -n "$OZVPS_URL" ]]; then
+    DEPLOY_URL="$OZVPS_URL"
+else
+    echo -e "${RED}Error: Panel server URL is required${NC}"
     echo ""
     echo "Usage:"
-    echo "  OZVPS_URL=https://your-server.com curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo -E bash"
+    echo "  curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo bash -s -- https://your-server.com"
     echo ""
     echo "Example:"
-    echo "  OZVPS_URL=https://panel.ozvps.com.au curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo -E bash"
+    echo "  curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/quick-install.sh | sudo bash -s -- https://panel.ozvps.com.au"
     echo ""
     exit 1
 fi
 
-DEPLOY_URL="${OZVPS_URL%/}"
+DEPLOY_URL="${DEPLOY_URL%/}"
 
 if [[ ! "$DEPLOY_URL" =~ ^https:// ]]; then
     echo -e "${RED}Error: URL must use HTTPS${NC}"
