@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction, RequestHandler } from "e
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
@@ -11,6 +12,7 @@ import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked } from "./security";
+import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
@@ -113,24 +115,24 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { generateSecret as otplibGenerateSecret, generateURI, verify as otplibVerify } from 'otplib';
+import { totp } from 'otplib';
 
 function totpGenerateSecret(): string {
-  return otplibGenerateSecret();
+  return totp.generateSecret();
 }
 
-async function totpVerify(token: string, secret: string): Promise<boolean> {
+function totpVerify(token: string, secret: string): boolean {
   try {
-    const result = await otplibVerify({ token, secret });
-    // otplib returns VerifyResult which can be { delta: number } or null/undefined
-    return result !== null && result !== undefined && typeof result === 'object' && 'delta' in result;
+    // Set a window of 1 to allow for slight time drift (30 seconds before/after)
+    totp.options = { window: 1 };
+    return totp.verify({ token, secret });
   } catch {
     return false;
   }
 }
 
 function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
-  return generateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
+  return totp.keyuri(email, issuer, secret);
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
@@ -541,6 +543,30 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Rate limiters for sensitive endpoints
+  const mfaRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // 10 attempts per window
+    message: { error: 'Too many 2FA attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      // Rate limit by IP + user ID if available
+      const ip = getClientIp(req);
+      const userId = (req as any).userSession?.auth0UserId || '';
+      return `${ip}:${userId}`;
+    },
+  });
+
+  const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 login attempts per window
+    message: { error: 'Too many login attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -737,7 +763,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -835,26 +861,46 @@ export async function registerRoutes(
           });
         }
 
-        const crypto = await import('crypto');
         let tfaValid = false;
+
+        // Decrypt the secret for TOTP verification
+        const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
 
         // Try TOTP token first
         if (totpToken) {
-          tfaValid = await totpVerify(totpToken, tfa.secret);
+          tfaValid = totpVerify(totpToken, plaintextSecret);
         }
 
         // If TOTP failed, try backup code
         if (!tfaValid && backupCode) {
           const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
-          const hashedInput = crypto.createHash('sha256').update(backupCode.toUpperCase()).digest('hex');
-          const codeIndex = backupCodes.indexOf(hashedInput);
 
-          if (codeIndex !== -1) {
-            tfaValid = true;
-            // Remove used backup code
-            backupCodes.splice(codeIndex, 1);
-            await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
-            log(`Backup code used for 2FA login: ${email}`, 'security');
+          // Check each backup code with argon2 (or fallback to sha256 for legacy codes)
+          for (let i = 0; i < backupCodes.length; i++) {
+            const storedHash = backupCodes[i];
+            // Check if it's an argon2 hash (starts with $argon2)
+            if (storedHash.startsWith('$argon2')) {
+              if (await verifyBackupCode(backupCode, storedHash)) {
+                tfaValid = true;
+                // Remove used backup code
+                backupCodes.splice(i, 1);
+                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                log(`Backup code used for 2FA login: ${email}`, 'security');
+                break;
+              }
+            } else {
+              // Legacy sha256 hash - check and migrate if valid
+              const crypto = await import('crypto');
+              const hashedInput = crypto.createHash('sha256').update(backupCode.toUpperCase()).digest('hex');
+              if (hashedInput === storedHash) {
+                tfaValid = true;
+                // Remove used backup code
+                backupCodes.splice(i, 1);
+                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                log(`Legacy backup code used for 2FA login: ${email}`, 'security');
+                break;
+              }
+            }
           }
         }
 
@@ -2148,7 +2194,7 @@ export async function registerRoutes(
   });
 
   // Begin 2FA setup - generate secret and QR code
-  app.post('/api/user/2fa/setup', authMiddleware, async (req, res) => {
+  app.post('/api/user/2fa/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
     try {
       const session = req.userSession!;
       if (!session.auth0UserId) {
@@ -2165,25 +2211,29 @@ export async function registerRoutes(
       }
 
       // Generate a new secret
-      const secret = totpGenerateSecret();
+      const plaintextSecret = totpGenerateSecret();
+      // Encrypt the secret for storage
+      const encryptedSecret = encryptSecret(plaintextSecret);
 
-      // Create or update the 2FA record
+      // Create or update the 2FA record with encrypted secret
       if (existing) {
-        await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret, enabled: false });
+        await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret: encryptedSecret, enabled: false });
       } else {
         await dbStorage.createTwoFactorAuth({
           auth0UserId: session.auth0UserId,
-          secret,
+          secret: encryptedSecret,
           enabled: false,
         });
       }
 
-      // Generate QR code URL
-      const otpAuthUrl = totpGenerateURI(session.email, secret);
+      // Generate QR code URL using plaintext secret (user needs to scan it)
+      const otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
       const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
 
+      log(`2FA setup initiated for user ${session.email}`, 'security');
+
       res.json({
-        secret,
+        secret: plaintextSecret, // Show plaintext to user for manual entry
         qrCode: qrCodeDataUrl,
         otpAuthUrl,
       });
@@ -2194,7 +2244,7 @@ export async function registerRoutes(
   });
 
   // Enable 2FA after verifying token
-  app.post('/api/user/2fa/enable', authMiddleware, async (req, res) => {
+  app.post('/api/user/2fa/enable', authMiddleware, mfaRateLimiter, async (req, res) => {
     try {
       const session = req.userSession!;
       if (!session.auth0UserId) {
@@ -2206,8 +2256,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Verification token is required' });
       }
 
-      const crypto = await import('crypto');
-
       // Get the pending 2FA setup
       const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
       if (!tfa) {
@@ -2218,22 +2266,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: '2FA is already enabled' });
       }
 
+      // Decrypt the secret for verification
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+
       // Verify the token
-      const isValid = await totpVerify(token, tfa.secret);
+      const isValid = totpVerify(token, plaintextSecret);
       if (!isValid) {
         return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
       }
 
-      // Generate backup codes (10 codes, 8 characters each)
-      const backupCodes: string[] = [];
-      const hashedBackupCodes: string[] = [];
-      for (let i = 0; i < 10; i++) {
-        const code = crypto.randomBytes(4).toString('hex').toUpperCase();
-        backupCodes.push(code);
-        // Hash the backup codes for storage
-        const hash = crypto.createHash('sha256').update(code).digest('hex');
-        hashedBackupCodes.push(hash);
-      }
+      // Generate backup codes with argon2 hashing
+      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
 
       // Enable 2FA with backup codes
       await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
@@ -2252,7 +2295,7 @@ export async function registerRoutes(
   });
 
   // Disable 2FA
-  app.post('/api/user/2fa/disable', authMiddleware, async (req, res) => {
+  app.post('/api/user/2fa/disable', authMiddleware, mfaRateLimiter, async (req, res) => {
     try {
       const session = req.userSession!;
       if (!session.auth0UserId) {
@@ -2271,9 +2314,12 @@ export async function registerRoutes(
         return res.status(400).json({ error: '2FA is not enabled' });
       }
 
+      // Decrypt the secret for verification
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+
       // If token is provided, verify it
       if (token) {
-        const isValid = await totpVerify(token, tfa.secret);
+        const isValid = totpVerify(token, plaintextSecret);
         if (!isValid) {
           return res.status(400).json({ error: 'Invalid verification code' });
         }
@@ -2296,7 +2342,7 @@ export async function registerRoutes(
   });
 
   // Generate new backup codes
-  app.post('/api/user/2fa/backup-codes', authMiddleware, async (req, res) => {
+  app.post('/api/user/2fa/backup-codes', authMiddleware, mfaRateLimiter, async (req, res) => {
     try {
       const session = req.userSession!;
       if (!session.auth0UserId) {
@@ -2313,22 +2359,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: '2FA is not enabled' });
       }
 
+      // Decrypt the secret for verification
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+
       // Verify the token
-      const isValid = await totpVerify(token, tfa.secret);
+      const isValid = totpVerify(token, plaintextSecret);
       if (!isValid) {
         return res.status(400).json({ error: 'Invalid verification code' });
       }
 
-      // Generate new backup codes
-      const crypto = await import('crypto');
-      const backupCodes: string[] = [];
-      const hashedBackupCodes: string[] = [];
-      for (let i = 0; i < 10; i++) {
-        const code = crypto.randomBytes(4).toString('hex').toUpperCase();
-        backupCodes.push(code);
-        const hash = crypto.createHash('sha256').update(code).digest('hex');
-        hashedBackupCodes.push(hash);
-      }
+      // Generate new backup codes with argon2 hashing
+      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
 
       await dbStorage.updateTwoFactorBackupCodes(session.auth0UserId, hashedBackupCodes);
       log(`New backup codes generated for user ${session.email}`, 'security');
