@@ -115,10 +115,7 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { TOTP, generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI } from 'otplib';
-
-// Create TOTP instance with window of 1 to allow for slight time drift
-const totpInstance = new TOTP({ window: 1 });
+import { generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI, verifySync as otplibVerifySync } from 'otplib';
 
 function totpGenerateSecret(): string {
   return otplibGenerateSecret();
@@ -126,8 +123,11 @@ function totpGenerateSecret(): string {
 
 function totpVerify(token: string, secret: string): boolean {
   try {
-    return totpInstance.verify({ token, secret });
-  } catch {
+    // verifySync returns { valid: boolean, delta?: number, epoch?: number }
+    const result = otplibVerifySync({ token, secret, window: 1 });
+    return result?.valid === true;
+  } catch (error) {
+    console.error('TOTP verification error:', error);
     return false;
   }
 }
@@ -2268,10 +2268,19 @@ export async function registerRoutes(
       }
 
       // Decrypt the secret for verification
-      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+      let plaintextSecret: string;
+      try {
+        plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+        log(`2FA enable: decrypted secret length=${plaintextSecret.length}, encrypted=${isEncrypted(tfa.secret)}`, 'security');
+      } catch (decryptError: any) {
+        log(`2FA enable: failed to decrypt secret: ${decryptError.message}`, 'security');
+        return res.status(500).json({ error: 'Failed to verify 2FA. Please try setting up again.' });
+      }
 
       // Verify the token
+      log(`2FA enable: verifying token ${token} against secret`, 'security');
       const isValid = totpVerify(token, plaintextSecret);
+      log(`2FA enable: verification result=${isValid}`, 'security');
       if (!isValid) {
         return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
       }
