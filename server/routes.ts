@@ -113,24 +113,24 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { generateSecret as otplibGenerateSecret, generateURI, verify as otplibVerify } from 'otplib';
+import { totp } from 'otplib';
 
 function totpGenerateSecret(): string {
-  return otplibGenerateSecret();
+  return totp.generateSecret();
 }
 
-async function totpVerify(token: string, secret: string): Promise<boolean> {
+function totpVerify(token: string, secret: string): boolean {
   try {
-    const result = await otplibVerify({ token, secret });
-    // otplib returns VerifyResult which can be { delta: number } or null/undefined
-    return result !== null && result !== undefined && typeof result === 'object' && 'delta' in result;
+    // Set a window of 1 to allow for slight time drift (30 seconds before/after)
+    totp.options = { window: 1 };
+    return totp.verify({ token, secret });
   } catch {
     return false;
   }
 }
 
 function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
-  return generateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
+  return totp.keyuri(email, issuer, secret);
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
@@ -840,7 +840,7 @@ export async function registerRoutes(
 
         // Try TOTP token first
         if (totpToken) {
-          tfaValid = await totpVerify(totpToken, tfa.secret);
+          tfaValid = totpVerify(totpToken, tfa.secret);
         }
 
         // If TOTP failed, try backup code
@@ -2219,7 +2219,7 @@ export async function registerRoutes(
       }
 
       // Verify the token
-      const isValid = await totpVerify(token, tfa.secret);
+      const isValid = totpVerify(token, tfa.secret);
       if (!isValid) {
         return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
       }
@@ -2273,7 +2273,7 @@ export async function registerRoutes(
 
       // If token is provided, verify it
       if (token) {
-        const isValid = await totpVerify(token, tfa.secret);
+        const isValid = totpVerify(token, tfa.secret);
         if (!isValid) {
           return res.status(400).json({ error: 'Invalid verification code' });
         }
@@ -2314,7 +2314,7 @@ export async function registerRoutes(
       }
 
       // Verify the token
-      const isValid = await totpVerify(token, tfa.secret);
+      const isValid = totpVerify(token, tfa.secret);
       if (!isValid) {
         return res.status(400).json({ error: 'Invalid verification code' });
       }
