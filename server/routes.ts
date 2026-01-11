@@ -115,24 +115,25 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { totp } from 'otplib';
+import { TOTP, generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI } from 'otplib';
+
+// Create TOTP instance with window of 1 to allow for slight time drift
+const totpInstance = new TOTP({ window: 1 });
 
 function totpGenerateSecret(): string {
-  return totp.generateSecret();
+  return otplibGenerateSecret();
 }
 
 function totpVerify(token: string, secret: string): boolean {
   try {
-    // Set a window of 1 to allow for slight time drift (30 seconds before/after)
-    totp.options = { window: 1 };
-    return totp.verify({ token, secret });
+    return totpInstance.verify({ token, secret });
   } catch {
     return false;
   }
 }
 
 function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
-  return totp.keyuri(email, issuer, secret);
+  return otplibGenerateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
