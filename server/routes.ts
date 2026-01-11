@@ -2170,7 +2170,7 @@ export async function registerRoutes(
 
       const schema = z.object({
         siteKey: z.string().min(1, 'Site key is required'),
-        secretKey: z.string().min(1, 'Secret key is required'),
+        secretKey: z.string().optional(), // Optional - keep existing if not provided
         enabled: z.boolean(),
         version: z.enum(['v2', 'v3']).default('v3'),
         minScore: z.number().min(0).max(1).default(0.5),
@@ -2183,15 +2183,26 @@ export async function registerRoutes(
 
       const { siteKey, secretKey, enabled, version, minScore } = parsed.data;
 
-      // Validate key format
-      const validation = await dbStorage.testRecaptchaConfig(siteKey, secretKey);
-      if (!validation.valid) {
-        return res.status(400).json({ error: validation.error });
+      // Get existing settings to preserve secret key if not provided
+      const existingSettings = await dbStorage.getRecaptchaSettingsAsync();
+      const finalSecretKey = (secretKey && secretKey.trim()) ? secretKey : existingSettings.secretKey;
+
+      // Require secret key if none exists
+      if (!finalSecretKey) {
+        return res.status(400).json({ error: 'Secret key is required' });
+      }
+
+      // Validate key format (only if new secret key provided)
+      if (secretKey && secretKey.trim()) {
+        const validation = await dbStorage.testRecaptchaConfig(siteKey, secretKey);
+        if (!validation.valid) {
+          return res.status(400).json({ error: validation.error });
+        }
       }
 
       await dbStorage.updateRecaptchaSettings({
         siteKey,
-        secretKey,
+        secretKey: finalSecretKey,
         enabled,
         version,
         minScore,
