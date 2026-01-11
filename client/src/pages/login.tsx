@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2, XCircle, LogOut } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Info, Server, Shield, Zap, Globe, CheckCircle2, XCircle, LogOut, Smartphone, ArrowLeft } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -257,6 +257,12 @@ export default function LoginPage() {
   const [honeypot, setHoneypot] = useState("");
   const { toast } = useToast();
 
+  // 2FA State
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [twoFAToken, setTwoFAToken] = useState("");
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const [savedRecaptchaToken, setSavedRecaptchaToken] = useState<string | undefined>(undefined);
+
   const formatDisplayName = (name?: string, email?: string): string => {
     if (name) {
       return name
@@ -411,8 +417,16 @@ export default function LoginPage() {
   }, []);
 
   const loginMutation = useMutation({
-    mutationFn: (token?: string) => api.login(email, password, token),
+    mutationFn: (params: { recaptchaToken?: string; totpToken?: string; backupCode?: string }) =>
+      api.login(email, password, params.recaptchaToken, params.totpToken, params.backupCode),
     onSuccess: (data) => {
+      // Check if 2FA is required
+      if (data.requires2FA) {
+        setRequires2FA(true);
+        setError("");
+        return;
+      }
+
       const displayName = formatDisplayName(data.user?.name, data.user?.email);
       queryClient.clear();
       // Toast for accessibility (screen readers)
@@ -422,10 +436,16 @@ export default function LoginPage() {
       });
       setWelcomeDisplayName(displayName);
       setShowWelcome(true);
+      // Reset 2FA state
+      setRequires2FA(false);
+      setTwoFAToken("");
+      setUseBackupCode(false);
     },
     onError: (err: any) => {
       setError(err.message || "Invalid email or password");
       setRecaptchaToken(null);
+      // Reset 2FA token on error
+      setTwoFAToken("");
       // Reset v2 widget if applicable
       if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
         window.grecaptcha.reset(widgetIdRef.current);
@@ -453,12 +473,13 @@ export default function LoginPage() {
         // v3: Get token right before submitting
         try {
           const token = await window.grecaptcha.execute(recaptchaConfig!.siteKey!, { action: 'login' });
-          loginMutation.mutate(token);
+          setSavedRecaptchaToken(token);
+          loginMutation.mutate({ recaptchaToken: token });
           return;
         } catch (err) {
           console.error('reCAPTCHA v3 execute error:', err);
           // Allow login anyway if reCAPTCHA fails
-          loginMutation.mutate(undefined);
+          loginMutation.mutate({});
           return;
         }
       } else {
@@ -467,13 +488,44 @@ export default function LoginPage() {
           setError("Please complete the reCAPTCHA verification");
           return;
         }
-        loginMutation.mutate(recaptchaToken);
+        setSavedRecaptchaToken(recaptchaToken);
+        loginMutation.mutate({ recaptchaToken });
         return;
       }
     }
 
     // No reCAPTCHA or error loading
-    loginMutation.mutate(undefined);
+    loginMutation.mutate({});
+  };
+
+  const handle2FASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!twoFAToken.trim()) {
+      setError("Please enter your verification code");
+      return;
+    }
+
+    // Submit with 2FA token
+    if (useBackupCode) {
+      loginMutation.mutate({
+        recaptchaToken: savedRecaptchaToken,
+        backupCode: twoFAToken,
+      });
+    } else {
+      loginMutation.mutate({
+        recaptchaToken: savedRecaptchaToken,
+        totpToken: twoFAToken,
+      });
+    }
+  };
+
+  const handleBack2FA = () => {
+    setRequires2FA(false);
+    setTwoFAToken("");
+    setUseBackupCode(false);
+    setError("");
   };
 
   const features = [
@@ -575,115 +627,196 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="email" 
-                  type="email"
-                  placeholder="you@example.com" 
-                  className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  data-testid="input-email"
-                />
+          {!requires2FA ? (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    data-testid="input-email"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="password" 
-                  type="password"
-                  placeholder="Enter your password"
-                  className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  data-testid="input-password"
-                />
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    data-testid="input-password"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Only show widget for v2 - v3 is invisible */}
-            {recaptchaEnabled && !recaptchaError && !isV3 && (
-              <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
-                <div ref={recaptchaRef} />
-                {!recaptchaLoaded && (
-                  <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Loading verification...
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
-              <Label htmlFor="website">Website</Label>
-              <Input 
-                id="website" 
-                type="text"
-                tabIndex={-1}
-                autoComplete="off"
-                value={honeypot}
-                onChange={(e) => setHoneypot(e.target.value)}
-              />
-            </div>
-
-            {sessionMessage && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3"
-                data-testid="text-session-message"
-              >
-                <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <span>{sessionMessage.error}</span>
-              </motion.div>
-            )}
-
-            {error && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3"
-                data-testid="text-error"
-              >
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span>{error}</span>
-              </motion.div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
-              disabled={loginMutation.isPending}
-              data-testid="button-submit"
-            >
-              {loginMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
+              {/* Only show widget for v2 - v3 is invisible */}
+              {recaptchaEnabled && !recaptchaError && !isV3 && (
+                <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
+                  <div ref={recaptchaRef} />
+                  {!recaptchaLoaded && (
+                    <div className="flex items-center justify-center p-4 text-muted-foreground text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Loading verification...
+                    </div>
+                  )}
+                </div>
               )}
-            </Button>
 
-            {recaptchaEnabled && (
-              <p className="text-[10px] text-muted-foreground/60 text-center mt-3">
-                Protected by reCAPTCHA.{' '}
-                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Privacy</a>
-                {' '}&{' '}
-                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Terms</a>
-              </p>
-            )}
-          </form>
+              <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
+                <Label htmlFor="website">Website</Label>
+                <Input
+                  id="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+
+              {sessionMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3"
+                  data-testid="text-session-message"
+                >
+                  <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <span>{sessionMessage.error}</span>
+                </motion.div>
+              )}
+
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3"
+                  data-testid="text-error"
+                >
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
+                disabled={loginMutation.isPending}
+                data-testid="button-submit"
+              >
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </Button>
+
+              {recaptchaEnabled && (
+                <p className="text-[10px] text-muted-foreground/60 text-center mt-3">
+                  Protected by reCAPTCHA.{' '}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Privacy</a>
+                  {' '}&{' '}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Terms</a>
+                </p>
+              )}
+            </form>
+          ) : (
+            /* 2FA Verification Form */
+            <form onSubmit={handle2FASubmit} className="space-y-5">
+              <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                <Smartphone className="h-8 w-8 text-primary" />
+                <div>
+                  <h3 className="font-medium text-foreground">Two-Factor Authentication</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {useBackupCode
+                      ? "Enter one of your backup codes"
+                      : "Enter the code from your authenticator app"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="twofa-code" className="text-sm font-medium">
+                  {useBackupCode ? "Backup Code" : "Verification Code"}
+                </Label>
+                <Input
+                  id="twofa-code"
+                  type="text"
+                  placeholder={useBackupCode ? "Enter backup code" : "000000"}
+                  className="h-14 text-center text-2xl tracking-widest font-mono bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
+                  value={twoFAToken}
+                  onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={useBackupCode ? 8 : 6}
+                  autoFocus
+                  autoComplete="one-time-code"
+                  data-testid="input-2fa-code"
+                />
+              </div>
+
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3"
+                  data-testid="text-2fa-error"
+                >
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
+                disabled={loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
+                data-testid="button-verify-2fa"
+              >
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify"
+                )}
+              </Button>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setUseBackupCode(!useBackupCode)}
+                  className="text-sm text-primary hover:text-primary/80 text-center"
+                >
+                  {useBackupCode ? "Use authenticator app instead" : "Use a backup code instead"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBack2FA}
+                  className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to login
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="mt-8 text-center">
             <p className="text-muted-foreground text-sm">
