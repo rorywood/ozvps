@@ -973,6 +973,125 @@ export async function registerRoutes(
     }
   });
 
+  // Combined dashboard endpoint - reduces 4 API calls to 1
+  // Returns servers, cancellations, billing statuses, and total bandwidth in a single request
+  app.get('/api/dashboard/overview', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const userId = session.virtFusionUserId;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'VirtFusion account not linked' });
+      }
+
+      // Fetch all data in parallel
+      const [servers, cancellations, billingRecords] = await Promise.all([
+        virtfusionClient.listServersWithStats(userId),
+        dbStorage.getUserCancellations(session.auth0UserId!),
+        dbStorage.getServerBillingByUser(session.auth0UserId!),
+      ]);
+
+      // Build cancellation map
+      const activeCancellations = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
+      for (const c of activeCancellations) {
+        cancellationMap[c.virtfusionServerId] = {
+          scheduledDeletionAt: c.scheduledDeletionAt,
+          reason: c.reason,
+          mode: c.mode || 'grace',
+          status: c.status,
+        };
+      }
+
+      // Build billing map
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number }> = {};
+      for (const b of billingRecords) {
+        billingMap[b.virtfusionServerId] = {
+          status: b.status,
+          nextBillAt: b.nextBillAt,
+          suspendAt: b.suspendAt,
+          monthlyPriceCents: b.monthlyPriceCents,
+        };
+      }
+
+      // Track total bandwidth while processing servers
+      let totalBandwidth = 0;
+      let totalBandwidthLimit = 0;
+
+      // Fetch bandwidth and billing for each server in parallel (with traffic data reuse)
+      const serversWithData = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            // Fetch bandwidth status
+            const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            let bandwidthExceeded = false;
+
+            if (traffic?.current) {
+              const usedBytes = traffic.current.total || 0;
+              const limitGB = traffic.current.limit || 0;
+              const usedGB = usedBytes / (1024 * 1024 * 1024);
+              bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+
+              // Accumulate for total bandwidth calculation
+              totalBandwidth += usedBytes;
+              totalBandwidthLimit += limitGB;
+            }
+
+            // Fetch billing status, create if doesn't exist (for existing servers)
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            // Auto-initialize billing for existing servers that don't have a record
+            if (!billingStatus && server.plan?.priceMonthly) {
+              try {
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                await createServerBilling({
+                  auth0UserId: session.auth0UserId!,
+                  virtfusionServerId: server.id,
+                  planId: server.plan.id,
+                  monthlyPriceCents: server.plan.priceMonthly,
+                  deployedAt,
+                });
+                billingStatus = await getServerBillingStatus(server.id);
+              } catch (billingCreateError: any) {
+                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
+              }
+            }
+
+            return {
+              ...server,
+              bandwidthExceeded,
+              billing: billingStatus ? {
+                status: billingStatus.status,
+                nextBillAt: billingStatus.nextBillAt,
+                suspendAt: billingStatus.suspendAt,
+                monthlyPriceCents: billingStatus.monthlyPriceCents,
+                autoRenew: billingStatus.autoRenew,
+              } : null,
+            };
+          } catch (error) {
+            return { ...server, bandwidthExceeded: false, billing: null };
+          }
+        })
+      );
+
+      res.json({
+        servers: serversWithData,
+        cancellations: cancellationMap,
+        billingStatuses: billingMap,
+        bandwidth: {
+          totalBandwidth,
+          totalLimit: totalBandwidthLimit,
+          serverCount: servers.length,
+        },
+      });
+    } catch (error: any) {
+      log(`Error fetching dashboard overview: ${error.message}`, 'api');
+      return handleApiError(res, error, 'Failed to fetch dashboard data');
+    }
+  });
+
   app.get('/api/servers/:id', authMiddleware, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);

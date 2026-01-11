@@ -152,6 +152,18 @@ class ApiClient {
     return response.json();
   }
 
+  // Combined dashboard endpoint - reduces 4 API calls to 1
+  async getDashboardOverview(): Promise<{
+    servers: Server[];
+    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: string; status: string }>;
+    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number }>;
+    bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
+  }> {
+    const response = await fetch(`${this.baseUrl}/dashboard/overview`);
+    if (!response.ok) throw new Error('Failed to fetch dashboard overview');
+    return response.json();
+  }
+
   async getNetworkInfo(id: string): Promise<{ interfaces: NetworkInterface[] }> {
     const response = await fetch(`${this.baseUrl}/servers/${id}/network`);
     if (!response.ok) throw new Error('Failed to fetch network info');
