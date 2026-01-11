@@ -30,7 +30,8 @@ import {
   AlertCircle,
   Server,
   Receipt,
-  Settings
+  Settings,
+  Shield
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -99,23 +100,41 @@ function formatCardBrand(brand: string): string {
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
-function getTransactionIcon(type: string, metadata?: any) {
+function getTransactionIcon(type: string, metadata?: any, amountCents?: number) {
+  if (type === 'admin_adjustment') {
+    return <Shield className="h-4 w-4" />;
+  }
   if (type === 'credit') {
     if (metadata?.source === 'auto_topup') return <Zap className="h-4 w-4" />;
+    return <ArrowDownLeft className="h-4 w-4" />;
+  }
+  if (type === 'refund') {
     return <ArrowDownLeft className="h-4 w-4" />;
   }
   return <ArrowUpRight className="h-4 w-4" />;
 }
 
-function getTransactionType(type: string, metadata?: any): string {
+function getTransactionType(type: string, metadata?: any, amountCents?: number): string {
+  if (type === 'admin_adjustment') {
+    return amountCents !== undefined && amountCents >= 0 ? 'Admin Credit' : 'Admin Debit';
+  }
   if (type === 'credit') {
     if (metadata?.auto_topup) return 'Auto Top-Up';
     if (metadata?.source === 'auto_topup') return 'Auto Top-Up';
     return 'Credit';
   }
   if (type === 'debit') return 'Debit';
+  if (type === 'refund') return 'Refund';
   if (type === 'auto_topup') return 'Auto Top-Up';
-  return type;
+  return type.replace(/_/g, ' ');
+}
+
+function getTransactionColor(type: string, amountCents: number): { bg: string; text: string } {
+  // Use amount sign to determine color - positive is green, negative is red
+  if (amountCents >= 0) {
+    return { bg: 'bg-green-500/20', text: 'text-green-500' };
+  }
+  return { bg: 'bg-red-500/20', text: 'text-red-500' };
 }
 
 // Card Form Component
@@ -503,6 +522,8 @@ export default function BillingPage() {
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchOnWindowFocus: true,
   });
 
   const { data: stripeStatus } = useQuery({
@@ -523,6 +544,8 @@ export default function BillingPage() {
     queryKey: ['transactions'],
     queryFn: () => api.getTransactions(),
     enabled: stripeConfigured,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchOnWindowFocus: true,
   });
 
   const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Array<{
@@ -1244,37 +1267,42 @@ export default function BillingPage() {
                   ) : (
                     <>
                       <div className="space-y-2">
-                        {paginatedTransactions.map((tx) => (
-                          <div
-                            key={tx.id}
-                            className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
-                            data-testid={`transaction-${tx.id}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                                  tx.type === 'credit' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
-                                }`}>
-                                  {getTransactionIcon(tx.type, tx.metadata)}
-                                </div>
-                                <div>
-                                  <div className="font-medium text-foreground">
-                                    {getTransactionType(tx.type, tx.metadata)}
+                        {paginatedTransactions.map((tx) => {
+                          const colors = getTransactionColor(tx.type, tx.amountCents);
+                          return (
+                            <div
+                              key={tx.id}
+                              className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                              data-testid={`transaction-${tx.id}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={`h-10 w-10 rounded-full flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                                    {getTransactionIcon(tx.type, tx.metadata, tx.amountCents)}
                                   </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {formatDate(tx.createdAt)}
-                                    {tx.description && <> · {tx.description}</>}
+                                  <div>
+                                    <div className="font-medium text-foreground">
+                                      {getTransactionType(tx.type, tx.metadata, tx.amountCents)}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {formatDate(tx.createdAt)}
+                                      {tx.description && <> · {tx.description}</>}
+                                    </div>
+                                    {/* Show admin reason for admin adjustments */}
+                                    {tx.type === 'admin_adjustment' && tx.metadata?.reason && (
+                                      <div className="text-sm text-muted-foreground mt-1">
+                                        <span className="text-primary/70">Reason:</span> {tx.metadata.reason}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
+                                <span className={`font-mono text-lg font-medium ${colors.text}`}>
+                                  {tx.amountCents >= 0 ? '+' : ''}{formatCurrency(tx.amountCents)}
+                                </span>
                               </div>
-                              <span className={`font-mono text-lg font-medium ${
-                                tx.type === 'credit' ? 'text-green-500' : 'text-red-500'
-                              }`}>
-                                {tx.type === 'credit' ? '+' : '-'}{formatCurrency(Math.abs(tx.amountCents))}
-                              </span>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {transactionsTotalPages > 1 && (
