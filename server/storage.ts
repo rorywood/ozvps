@@ -389,7 +389,7 @@ export const dbStorage = {
   },
 
   async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
-    // Check for idempotency using stripeEventId
+    // SECURITY: Check for idempotency using stripeEventId to prevent duplicate credits
     if (transaction.stripeEventId) {
       const [existing] = await db
         .select()
@@ -397,6 +397,7 @@ export const dbStorage = {
         .where(eq(walletTransactions.stripeEventId, transaction.stripeEventId));
       if (existing) {
         // Already processed, return current wallet
+        log(`Duplicate credit attempt blocked for stripeEventId: ${transaction.stripeEventId}`, 'security');
         return await this.getOrCreateWallet(auth0UserId);
       }
     }
@@ -404,14 +405,8 @@ export const dbStorage = {
     // Create wallet if doesn't exist
     await this.getOrCreateWallet(auth0UserId);
 
-    // Insert transaction
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      amountCents,
-      ...transaction,
-    });
-
-    // Update wallet balance
+    // SECURITY: Update balance FIRST, then record transaction
+    // This ensures if balance update fails, no orphaned transaction record is created
     const [updated] = await db
       .update(wallets)
       .set({
@@ -420,6 +415,17 @@ export const dbStorage = {
       })
       .where(eq(wallets.auth0UserId, auth0UserId))
       .returning();
+
+    if (!updated) {
+      throw new Error('Failed to update wallet balance');
+    }
+
+    // Insert transaction after successful balance update
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      amountCents,
+      ...transaction,
+    });
 
     return updated;
   },
@@ -466,13 +472,8 @@ export const dbStorage = {
   async refundToWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<Wallet> {
     await this.getOrCreateWallet(auth0UserId);
 
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'refund',
-      amountCents,
-      metadata: metadata || null,
-    });
-
+    // SECURITY: Update balance FIRST, then record transaction
+    // This ensures if balance update fails, no orphaned transaction record is created
     const [updated] = await db
       .update(wallets)
       .set({
@@ -481,6 +482,18 @@ export const dbStorage = {
       })
       .where(eq(wallets.auth0UserId, auth0UserId))
       .returning();
+
+    if (!updated) {
+      throw new Error('Failed to update wallet balance');
+    }
+
+    // Record transaction after successful balance update
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'refund',
+      amountCents,
+      metadata: metadata || null,
+    });
 
     return updated;
   },

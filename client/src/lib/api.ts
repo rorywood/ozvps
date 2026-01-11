@@ -343,13 +343,16 @@ class ApiClient {
     return response.json();
   }
 
-  async changePassword(newPassword: string): Promise<{ success: boolean; message: string }> {
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${this.baseUrl}/user/password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newPassword })
+      body: JSON.stringify({ currentPassword, newPassword })
     });
-    if (!response.ok) throw new Error('Failed to change password');
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to change password');
+    }
     return response.json();
   }
 

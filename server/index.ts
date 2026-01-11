@@ -86,9 +86,20 @@ const apiLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
+// SECURITY: Stricter rate limiting for wallet/payment operations
+const walletLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 payment attempts per minute per IP
+  message: { error: 'Too many payment attempts. Please wait a moment before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/wallet/topup', walletLimiter);
 app.use('/api/', apiLimiter);
 app.use('/install.sh', apiLimiter);
 app.use('/update-ozvps.sh', apiLimiter);

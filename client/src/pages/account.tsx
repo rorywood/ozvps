@@ -27,6 +27,7 @@ export default function Account() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -73,12 +74,14 @@ export default function Account() {
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: (password: string) => api.changePassword(password),
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      api.changePassword(data.currentPassword, data.newPassword),
     onSuccess: () => {
       toast({
         title: "Password Changed",
         description: "Your password has been updated successfully.",
       });
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     },
@@ -96,6 +99,14 @@ export default function Account() {
   };
 
   const handleChangePassword = () => {
+    if (!currentPassword) {
+      toast({
+        title: "Current Password Required",
+        description: "Please enter your current password.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast({
         title: "Password Mismatch",
@@ -112,7 +123,7 @@ export default function Account() {
       });
       return;
     }
-    changePasswordMutation.mutate(newPassword);
+    changePasswordMutation.mutate({ currentPassword, newPassword });
   };
 
   return (
@@ -268,6 +279,19 @@ export default function Account() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
+                  <Label htmlFor="currentPassword" className="text-muted-foreground">Current Password</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
+                    data-testid="input-current-password"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="newPassword" className="text-muted-foreground">New Password</Label>
                   <div className="relative">
                     <Input
@@ -290,7 +314,7 @@ export default function Account() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-muted-foreground">Confirm Password</Label>
+                  <Label htmlFor="confirmPassword" className="text-muted-foreground">Confirm New Password</Label>
                   <Input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
@@ -304,7 +328,7 @@ export default function Account() {
 
                 <Button
                   onClick={handleChangePassword}
-                  disabled={changePasswordMutation.isPending || !newPassword || !confirmPassword}
+                  disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || !confirmPassword}
                   className="w-full bg-green-600 hover:bg-green-700"
                   data-testid="button-change-password"
                 >
