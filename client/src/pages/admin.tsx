@@ -1944,17 +1944,22 @@ function SettingsPanel() {
 
     setRecaptchaSaving(true);
     try {
+      // Only include secretKey if user entered a new one
+      const payload: Record<string, unknown> = {
+        siteKey: recaptchaSiteKey,
+        enabled: recaptchaEnabled,
+        version: recaptchaVersion,
+        minScore: recaptchaMinScore,
+      };
+      if (recaptchaSecretKey.trim()) {
+        payload.secretKey = recaptchaSecretKey;
+      }
+
       const res = await fetch('/api/admin/security/recaptcha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          siteKey: recaptchaSiteKey,
-          secretKey: recaptchaSecretKey || recaptchaData?.secretKey?.replace(/\*/g, '') || '',
-          enabled: recaptchaEnabled,
-          version: recaptchaVersion,
-          minScore: recaptchaMinScore,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json();
