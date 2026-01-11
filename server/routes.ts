@@ -124,7 +124,9 @@ function totpGenerateSecret(): string {
 function totpVerify(token: string, secret: string): boolean {
   try {
     // verifySync returns { valid: boolean, delta?: number, epoch?: number }
-    const result = otplibVerifySync({ token, secret, window: 1 });
+    // window: 2 allows codes from 60 seconds before/after to handle time drift
+    const result = otplibVerifySync({ token, secret, window: 2 });
+    console.log('TOTP verify result:', JSON.stringify(result));
     return result?.valid === true;
   } catch (error) {
     console.error('TOTP verification error:', error);
@@ -865,11 +867,20 @@ export async function registerRoutes(
         let tfaValid = false;
 
         // Decrypt the secret for TOTP verification
-        const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+        let plaintextSecret: string;
+        try {
+          plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+          log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
+        } catch (decryptError: any) {
+          log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
+          return res.status(500).json({ error: 'Authentication error. Please contact support.' });
+        }
 
         // Try TOTP token first
         if (totpToken) {
+          log(`Login 2FA: verifying TOTP token ${totpToken}`, 'security');
           tfaValid = totpVerify(totpToken, plaintextSecret);
+          log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
         }
 
         // If TOTP failed, try backup code
