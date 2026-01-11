@@ -14,20 +14,123 @@ import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDe
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-         req.headers['x-real-ip'] || 
-         req.socket?.remoteAddress || 
-         req.ip || 
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+         req.headers['x-real-ip'] ||
+         req.socket?.remoteAddress ||
+         req.ip ||
          'unknown';
 }
 
-// Helper to handle API errors with proper status codes
-function handleApiError(res: Response, error: any, defaultMessage: string = 'Internal server error') {
+// Error codes for consistent error handling
+const ErrorCodes = {
+  // Client errors (4xx)
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  AUTHENTICATION_REQUIRED: 'AUTHENTICATION_REQUIRED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCESS_DENIED: 'ACCESS_DENIED',
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  RESOURCE_CONFLICT: 'RESOURCE_CONFLICT',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  SERVER_SUSPENDED: 'SERVER_SUSPENDED',
+
+  // Server errors (5xx)
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
+  EXTERNAL_SERVICE_TIMEOUT: 'EXTERNAL_SERVICE_TIMEOUT',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+} as const;
+
+type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
+
+interface ApiErrorResponse {
+  error: string;
+  code: ErrorCode;
+  details?: string;
+}
+
+// Helper to handle API errors with proper status codes and error codes
+function handleApiError(
+  res: Response,
+  error: any,
+  defaultMessage: string = 'An unexpected error occurred',
+  context?: string
+): Response<ApiErrorResponse> {
+  // Handle VirtFusion timeout specifically
   if (error instanceof VirtFusionTimeoutError) {
-    return res.status(504).json({ error: 'The server management service is taking too long to respond. Please try again.' });
+    log(`VirtFusion timeout${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(504).json({
+      error: 'The server management service is taking too long to respond. Please try again in a moment.',
+      code: ErrorCodes.EXTERNAL_SERVICE_TIMEOUT,
+    });
   }
-  log(`API Error: ${error.message}`, 'routes');
-  return res.status(500).json({ error: defaultMessage });
+
+  // Handle VirtFusion connection errors
+  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+    log(`VirtFusion connection error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(503).json({
+      error: 'Unable to connect to the server management service. Please try again later.',
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+    });
+  }
+
+  // Handle VirtFusion API errors (often contain status codes)
+  if (error.message?.includes('VirtFusion API error') || error.message?.includes('status')) {
+    log(`VirtFusion API error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(502).json({
+      error: 'The server management service returned an error. Please try again.',
+      code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+    });
+  }
+
+  // Handle database errors
+  if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
+    log(`Database constraint error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(409).json({
+      error: 'This resource already exists or conflicts with existing data.',
+      code: ErrorCodes.RESOURCE_CONFLICT,
+    });
+  }
+
+  if (error.code?.startsWith('2') || error.code?.startsWith('SQLITE')) {
+    log(`Database error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(500).json({
+      error: 'A database error occurred. Please try again later.',
+      code: ErrorCodes.DATABASE_ERROR,
+    });
+  }
+
+  // Log the error for debugging
+  log(`API Error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+
+  // Return generic error with default message
+  return res.status(500).json({
+    error: defaultMessage,
+    code: ErrorCodes.INTERNAL_ERROR,
+  });
+}
+
+// TOTP helper functions using otplib
+import { generateSecret as otplibGenerateSecret, generateURI, verify as otplibVerify } from 'otplib';
+
+function totpGenerateSecret(): string {
+  return otplibGenerateSecret();
+}
+
+async function totpVerify(token: string, secret: string): Promise<boolean> {
+  try {
+    const result = await otplibVerify({ token, secret });
+    // otplib returns VerifyResult which can be { delta: number } or null/undefined
+    return result !== null && result !== undefined && typeof result === 'object' && 'delta' in result;
+  } catch {
+    return false;
+  }
+}
+
+function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
+  return generateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
@@ -711,10 +814,57 @@ export async function registerRoutes(
       const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
       if (userFlags?.blocked) {
         log(`Blocked user attempted login: ${email}`, 'auth');
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: 'Your account has been suspended. Please contact support.',
           code: 'USER_BLOCKED'
         });
+      }
+
+      // Check if 2FA is enabled for this user
+      const tfa = await dbStorage.getTwoFactorAuth(auth0Result.user.user_id);
+      if (tfa?.enabled) {
+        // 2FA required - check if token was provided
+        const { totpToken, backupCode } = req.body;
+
+        if (!totpToken && !backupCode) {
+          // Return 2FA required status - client should prompt for code
+          log(`2FA required for user: ${email}`, 'auth');
+          return res.status(200).json({
+            requires2FA: true,
+            message: 'Two-factor authentication required',
+          });
+        }
+
+        const crypto = await import('crypto');
+        let tfaValid = false;
+
+        // Try TOTP token first
+        if (totpToken) {
+          tfaValid = await totpVerify(totpToken, tfa.secret);
+        }
+
+        // If TOTP failed, try backup code
+        if (!tfaValid && backupCode) {
+          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+          const hashedInput = crypto.createHash('sha256').update(backupCode.toUpperCase()).digest('hex');
+          const codeIndex = backupCodes.indexOf(hashedInput);
+
+          if (codeIndex !== -1) {
+            tfaValid = true;
+            // Remove used backup code
+            backupCodes.splice(codeIndex, 1);
+            await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+            log(`Backup code used for 2FA login: ${email}`, 'security');
+          }
+        }
+
+        if (!tfaValid) {
+          recordFailedLogin(email, clientIp);
+          return res.status(401).json({ error: 'Invalid two-factor authentication code' });
+        }
+
+        // Update last used timestamp
+        await dbStorage.updateTwoFactorLastUsed(auth0Result.user.user_id);
       }
 
       // Revoke any idle sessions first (sessions that exceeded 15 min idle timeout)
@@ -969,7 +1119,126 @@ export async function registerRoutes(
       res.json(serversWithBandwidthAndBilling);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch servers');
+      return handleApiError(res, error, 'Unable to retrieve your servers. Please try again.', 'listServers');
+    }
+  });
+
+  // Combined dashboard endpoint - reduces 4 API calls to 1
+  // Returns servers, cancellations, billing statuses, and total bandwidth in a single request
+  app.get('/api/dashboard/overview', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const userId = session.virtFusionUserId;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'VirtFusion account not linked' });
+      }
+
+      // Fetch all data in parallel
+      const [servers, cancellations, billingRecords] = await Promise.all([
+        virtfusionClient.listServersWithStats(userId),
+        dbStorage.getUserCancellations(session.auth0UserId!),
+        dbStorage.getServerBillingByUser(session.auth0UserId!),
+      ]);
+
+      // Build cancellation map
+      const activeCancellations = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
+      for (const c of activeCancellations) {
+        cancellationMap[c.virtfusionServerId] = {
+          scheduledDeletionAt: c.scheduledDeletionAt,
+          reason: c.reason,
+          mode: c.mode || 'grace',
+          status: c.status,
+        };
+      }
+
+      // Build billing map
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number }> = {};
+      for (const b of billingRecords) {
+        billingMap[b.virtfusionServerId] = {
+          status: b.status,
+          nextBillAt: b.nextBillAt,
+          suspendAt: b.suspendAt,
+          monthlyPriceCents: b.monthlyPriceCents,
+        };
+      }
+
+      // Track total bandwidth while processing servers
+      let totalBandwidth = 0;
+      let totalBandwidthLimit = 0;
+
+      // Fetch bandwidth and billing for each server in parallel (with traffic data reuse)
+      const serversWithData = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            // Fetch bandwidth status
+            const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            let bandwidthExceeded = false;
+
+            if (traffic?.current) {
+              const usedBytes = traffic.current.total || 0;
+              const limitGB = traffic.current.limit || 0;
+              const usedGB = usedBytes / (1024 * 1024 * 1024);
+              bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+
+              // Accumulate for total bandwidth calculation
+              totalBandwidth += usedBytes;
+              totalBandwidthLimit += limitGB;
+            }
+
+            // Fetch billing status, create if doesn't exist (for existing servers)
+            let billingStatus = await getServerBillingStatus(server.id);
+
+            // Auto-initialize billing for existing servers that don't have a record
+            if (!billingStatus && server.plan?.priceMonthly) {
+              try {
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                await createServerBilling({
+                  auth0UserId: session.auth0UserId!,
+                  virtfusionServerId: server.id,
+                  planId: server.plan.id,
+                  monthlyPriceCents: server.plan.priceMonthly,
+                  deployedAt,
+                });
+                billingStatus = await getServerBillingStatus(server.id);
+              } catch (billingCreateError: any) {
+                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
+              }
+            }
+
+            return {
+              ...server,
+              bandwidthExceeded,
+              billing: billingStatus ? {
+                status: billingStatus.status,
+                nextBillAt: billingStatus.nextBillAt,
+                suspendAt: billingStatus.suspendAt,
+                monthlyPriceCents: billingStatus.monthlyPriceCents,
+                autoRenew: billingStatus.autoRenew,
+              } : null,
+            };
+          } catch (error) {
+            return { ...server, bandwidthExceeded: false, billing: null };
+          }
+        })
+      );
+
+      res.json({
+        servers: serversWithData,
+        cancellations: cancellationMap,
+        billingStatuses: billingMap,
+        bandwidth: {
+          totalBandwidth,
+          totalLimit: totalBandwidthLimit,
+          serverCount: servers.length,
+        },
+      });
+    } catch (error: any) {
+      log(`Error fetching dashboard overview: ${error.message}`, 'api');
+      return handleApiError(res, error, 'Unable to load dashboard data. Please refresh the page.', 'dashboardOverview');
     }
   });
 
@@ -1037,7 +1306,7 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch server');
+      return handleApiError(res, error, 'Unable to retrieve server details. Please try again.', 'getServer');
     }
   });
 
@@ -1067,7 +1336,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to perform power action');
+      return handleApiError(res, error, 'Unable to perform the power action. The server may be busy. Please try again.', 'powerAction');
     }
   });
 
@@ -1081,7 +1350,7 @@ export async function registerRoutes(
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
       log(`Error fetching metrics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch metrics');
+      return handleApiError(res, error, 'Unable to retrieve server metrics.', 'getMetrics');
     }
   });
 
@@ -1095,7 +1364,7 @@ export async function registerRoutes(
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
     } catch (error: any) {
       log(`Error fetching live stats for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch live stats');
+      return handleApiError(res, error, 'Unable to retrieve live statistics.', 'getLiveStats');
     }
   });
 
@@ -1109,7 +1378,7 @@ export async function registerRoutes(
       res.json(traffic || []);
     } catch (error: any) {
       log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic data');
+      return handleApiError(res, error, 'Unable to retrieve traffic data.', 'getTrafficData');
     }
   });
 
@@ -1129,7 +1398,7 @@ export async function registerRoutes(
       res.json(statistics || { supported: false, points: [], interval: 60, period });
     } catch (error: any) {
       log(`Error fetching traffic statistics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic statistics');
+      return handleApiError(res, error, 'Unable to retrieve traffic statistics.', 'getTrafficStats');
     }
   });
 
@@ -1200,8 +1469,7 @@ export async function registerRoutes(
       await virtfusionClient.updateServerName(req.params.id, name.trim());
       res.json({ success: true, name: name.trim() });
     } catch (error: any) {
-      log(`Error updating server name for ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to update server name' });
+      return handleApiError(res, error, 'Unable to update server name.', 'updateServerName');
     }
   });
 
@@ -1210,21 +1478,20 @@ export async function registerRoutes(
       // Verify ownership before returning VNC details
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.getVncDetails(req.params.id);
       if (!vnc) {
-        return res.status(404).json({ error: 'VNC not available for this server' });
+        return res.status(404).json({ error: 'VNC not available for this server', code: ErrorCodes.RESOURCE_NOT_FOUND });
       }
       res.json(vnc);
     } catch (error: any) {
-      log(`Error fetching VNC details for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch VNC details' });
+      return handleApiError(res, error, 'Unable to fetch VNC details.', 'getVncDetails');
     }
   });
 
@@ -1232,18 +1499,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.enableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error enabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to enable VNC' });
+      return handleApiError(res, error, 'Unable to enable VNC console.', 'enableVnc');
     }
   });
 
@@ -1251,18 +1517,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.disableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error disabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to disable VNC' });
+      return handleApiError(res, error, 'Unable to disable VNC console.', 'disableVnc');
     }
   });
 
@@ -1270,13 +1535,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
       res.json(network || { interfaces: [] });
     } catch (error: any) {
-      log(`Error fetching network info for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch network info' });
+      return handleApiError(res, error, 'Unable to fetch network information.', 'getNetworkInfo');
     }
   });
 
@@ -1284,13 +1548,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const templates = await virtfusionClient.getOsTemplates(req.params.id);
       res.json(templates || []);
     } catch (error: any) {
-      log(`Error fetching OS templates for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch OS templates' });
+      return handleApiError(res, error, 'Unable to fetch available operating systems.', 'getOsTemplates');
     }
   });
 
@@ -1856,6 +2119,228 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  // ===========================================
+  // TWO-FACTOR AUTHENTICATION ENDPOINTS
+  // ===========================================
+
+  // Get 2FA status for current user
+  app.get('/api/user/2fa/status', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+
+      res.json({
+        enabled: tfa?.enabled || false,
+        verifiedAt: tfa?.verifiedAt || null,
+        lastUsedAt: tfa?.lastUsedAt || null,
+      });
+    } catch (error: any) {
+      log(`Error getting 2FA status: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to get 2FA status' });
+    }
+  });
+
+  // Begin 2FA setup - generate secret and QR code
+  app.post('/api/user/2fa/setup', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      // Import QR code library
+      const QRCode = await import('qrcode');
+
+      // Check if 2FA is already enabled
+      const existing = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (existing?.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled. Disable it first to set up again.' });
+      }
+
+      // Generate a new secret
+      const secret = totpGenerateSecret();
+
+      // Create or update the 2FA record
+      if (existing) {
+        await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret, enabled: false });
+      } else {
+        await dbStorage.createTwoFactorAuth({
+          auth0UserId: session.auth0UserId,
+          secret,
+          enabled: false,
+        });
+      }
+
+      // Generate QR code URL
+      const otpAuthUrl = totpGenerateURI(session.email, secret);
+      const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+
+      res.json({
+        secret,
+        qrCode: qrCodeDataUrl,
+        otpAuthUrl,
+      });
+    } catch (error: any) {
+      log(`Error setting up 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to set up 2FA' });
+    }
+  });
+
+  // Enable 2FA after verifying token
+  app.post('/api/user/2fa/enable', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Verification token is required' });
+      }
+
+      const crypto = await import('crypto');
+
+      // Get the pending 2FA setup
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa) {
+        return res.status(400).json({ error: 'Please set up 2FA first by calling /api/user/2fa/setup' });
+      }
+
+      if (tfa.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled' });
+      }
+
+      // Verify the token
+      const isValid = await totpVerify(token, tfa.secret);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
+      }
+
+      // Generate backup codes (10 codes, 8 characters each)
+      const backupCodes: string[] = [];
+      const hashedBackupCodes: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+        backupCodes.push(code);
+        // Hash the backup codes for storage
+        const hash = crypto.createHash('sha256').update(code).digest('hex');
+        hashedBackupCodes.push(hash);
+      }
+
+      // Enable 2FA with backup codes
+      await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
+
+      log(`2FA enabled for user ${session.email}`, 'security');
+
+      res.json({
+        success: true,
+        backupCodes, // Return plaintext codes only once
+        message: '2FA has been enabled. Please save your backup codes in a safe place.',
+      });
+    } catch (error: any) {
+      log(`Error enabling 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to enable 2FA' });
+    }
+  });
+
+  // Disable 2FA
+  app.post('/api/user/2fa/disable', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token, password } = req.body;
+
+      // Require either a valid 2FA token or password
+      if (!token && !password) {
+        return res.status(400).json({ error: 'Either 2FA token or password is required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa?.enabled) {
+        return res.status(400).json({ error: '2FA is not enabled' });
+      }
+
+      // If token is provided, verify it
+      if (token) {
+        const isValid = await totpVerify(token, tfa.secret);
+        if (!isValid) {
+          return res.status(400).json({ error: 'Invalid verification code' });
+        }
+      } else if (password) {
+        // Verify password
+        const authResult = await auth0Client.authenticateUser(session.email, password);
+        if (!authResult.success) {
+          return res.status(400).json({ error: 'Invalid password' });
+        }
+      }
+
+      await dbStorage.disableTwoFactorAuth(session.auth0UserId);
+      log(`2FA disabled for user ${session.email}`, 'security');
+
+      res.json({ success: true, message: '2FA has been disabled' });
+    } catch (error: any) {
+      log(`Error disabling 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+  });
+
+  // Generate new backup codes
+  app.post('/api/user/2fa/backup-codes', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: '2FA token is required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa?.enabled) {
+        return res.status(400).json({ error: '2FA is not enabled' });
+      }
+
+      // Verify the token
+      const isValid = await totpVerify(token, tfa.secret);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      // Generate new backup codes
+      const crypto = await import('crypto');
+      const backupCodes: string[] = [];
+      const hashedBackupCodes: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+        backupCodes.push(code);
+        const hash = crypto.createHash('sha256').update(code).digest('hex');
+        hashedBackupCodes.push(hash);
+      }
+
+      await dbStorage.updateTwoFactorBackupCodes(session.auth0UserId, hashedBackupCodes);
+      log(`New backup codes generated for user ${session.email}`, 'security');
+
+      res.json({
+        success: true,
+        backupCodes,
+        message: 'New backup codes generated. Please save them in a safe place.',
+      });
+    } catch (error: any) {
+      log(`Error generating backup codes: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to generate backup codes' });
     }
   });
 

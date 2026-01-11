@@ -37,33 +37,18 @@ function hasActiveSetupSession(serverId: string): boolean {
 export default function Dashboard() {
   useDocumentTitle('Dashboard');
   const { getDisplayStatus } = usePowerActions();
-  const { data: servers = [], isLoading, error } = useQuery<Server[]>({
-    queryKey: ['servers'],
-    queryFn: () => api.listServers(),
+
+  // Combined dashboard query - reduces 4 API calls to 1
+  const { data: dashboardData, isLoading, error } = useQuery({
+    queryKey: ['dashboard-overview'],
+    queryFn: () => api.getDashboardOverview(),
     refetchInterval: 10000,
   });
-  
-  const { data: cancellationsData } = useQuery({
-    queryKey: ['cancellations'],
-    queryFn: () => api.getAllCancellations(),
-    refetchInterval: 10000,
-  });
-  
-  const pendingCancellations = cancellationsData?.cancellations || {};
 
-  const { data: billingData } = useQuery({
-    queryKey: ['server-billing-statuses'],
-    queryFn: () => api.getServerBillingStatuses(),
-    refetchInterval: 30000,
-  });
-  
-  const serverBillingStatuses = billingData?.billing || {};
-
-  const { data: bandwidthData } = useQuery({
-    queryKey: ['total-bandwidth'],
-    queryFn: () => api.getTotalBandwidth(),
-    refetchInterval: 60000, // Refresh every minute
-  });
+  const servers = dashboardData?.servers || [];
+  const pendingCancellations = dashboardData?.cancellations || {};
+  const serverBillingStatuses = dashboardData?.billingStatuses || {};
+  const bandwidthData = dashboardData?.bandwidth;
 
   useSyncPowerActions(servers);
 

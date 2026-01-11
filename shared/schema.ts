@@ -200,6 +200,19 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Two-Factor Authentication settings
+export const twoFactorAuth = pgTable("two_factor_auth", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull().unique(),
+  secret: text("secret").notNull(), // Base32 encoded TOTP secret
+  enabled: boolean("enabled").default(false).notNull(),
+  backupCodes: text("backup_codes"), // JSON array of hashed backup codes
+  verifiedAt: timestamp("verified_at"), // When 2FA was first verified/enabled
+  lastUsedAt: timestamp("last_used_at"), // Last time 2FA was used for login
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
   'sales',
@@ -285,6 +298,7 @@ export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
 export const insertTicketSchema = createInsertSchema(tickets).omit({ id: true, createdAt: true, updatedAt: true, lastMessageAt: true, closedAt: true });
 export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit({ id: true, createdAt: true });
+export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -311,6 +325,8 @@ export type Ticket = typeof tickets.$inferSelect;
 export type InsertTicket = z.infer<typeof insertTicketSchema>;
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
+export type TwoFactorAuth = typeof twoFactorAuth.$inferSelect;
+export type InsertTwoFactorAuth = z.infer<typeof insertTwoFactorAuthSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
