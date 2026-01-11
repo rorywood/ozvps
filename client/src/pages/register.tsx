@@ -16,6 +16,7 @@ declare global {
       ready: (callback: () => void) => void;
       render: (container: HTMLElement, options: { sitekey: string; callback: (token: string) => void; theme: string }) => number;
       reset: (widgetId: number) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
     };
     onRecaptchaLoad?: () => void;
   }
@@ -174,8 +175,8 @@ export default function RegisterPage() {
       const response = await fetch('/api/security/recaptcha-config', {
         credentials: 'include',
       });
-      if (!response.ok) return { enabled: false, siteKey: null };
-      return response.json();
+      if (!response.ok) return { enabled: false, siteKey: null, version: 'v3' as const };
+      return response.json() as Promise<{ enabled: boolean; siteKey: string | null; version: 'v2' | 'v3' }>;
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -191,17 +192,17 @@ export default function RegisterPage() {
   });
 
   const registrationEnabled = registrationStatus?.enabled !== false;
-  
+
   // Validate reCAPTCHA site key format (valid keys start with "6L")
   const isValidSiteKey = (key: string | null | undefined): boolean => {
     if (!key || typeof key !== 'string') return false;
-    // Valid reCAPTCHA v2 site keys start with "6L" and are ~40 chars
     return key.startsWith('6L') && key.length > 30;
   };
 
   const recaptchaEnabled = recaptchaConfig?.enabled && isValidSiteKey(recaptchaConfig?.siteKey);
+  const isV3 = recaptchaConfig?.version === 'v3';
 
-  // Load reCAPTCHA script and render widget with retry mechanism
+  // Load reCAPTCHA script and render widget (v2) or just load (v3)
   useEffect(() => {
     // Reset state when reCAPTCHA is disabled or invalid
     if (!recaptchaConfig?.enabled || !isValidSiteKey(recaptchaConfig?.siteKey)) {
@@ -213,71 +214,75 @@ export default function RegisterPage() {
     }
 
     let attempts = 0;
-    const maxAttempts = 40; // 10 seconds total
+    const maxAttempts = 40;
     let retryTimer: NodeJS.Timeout | null = null;
     let scriptErrored = false;
+    const version = recaptchaConfig.version || 'v3';
 
-    const tryRenderRecaptcha = () => {
-      // Check if already rendered
-      if (widgetIdRef.current !== null) {
-        setRecaptchaLoaded(true);
-        setRecaptchaError(null);
-        return;
-      }
-
-      // Check if ref and grecaptcha are available
-      if (recaptchaRef.current && window.grecaptcha?.render) {
-        try {
-          // Clear the container first in case there's stale content
-          recaptchaRef.current.innerHTML = '';
-          
-          widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
-            sitekey: recaptchaConfig.siteKey,
-            callback: (token: string) => setRecaptchaToken(token),
-            theme: 'dark',
-          });
+    const tryInitRecaptcha = () => {
+      if (version === 'v3') {
+        // v3: Just mark as loaded when grecaptcha is ready
+        if (window.grecaptcha?.execute) {
           setRecaptchaLoaded(true);
           setRecaptchaError(null);
           return;
-        } catch (e: any) {
-          // If already rendered error, just mark as loaded
-          if (e.message?.includes('already been rendered')) {
+        }
+      } else {
+        // v2: Render widget
+        if (widgetIdRef.current !== null) {
+          setRecaptchaLoaded(true);
+          setRecaptchaError(null);
+          return;
+        }
+
+        if (recaptchaRef.current && window.grecaptcha?.render) {
+          try {
+            recaptchaRef.current.innerHTML = '';
+            widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
+              sitekey: recaptchaConfig.siteKey!,
+              callback: (token: string) => setRecaptchaToken(token),
+              theme: 'dark',
+            });
             setRecaptchaLoaded(true);
             setRecaptchaError(null);
             return;
+          } catch (e: any) {
+            if (e.message?.includes('already been rendered')) {
+              setRecaptchaLoaded(true);
+              setRecaptchaError(null);
+              return;
+            }
+            if (e.message?.includes('Invalid site key') || e.message?.includes('Invalid domain')) {
+              setRecaptchaError('Invalid reCAPTCHA configuration. Please contact support.');
+              return;
+            }
+            console.error('Failed to render reCAPTCHA:', e);
           }
-          // Check for invalid site key error
-          if (e.message?.includes('Invalid site key') || e.message?.includes('Invalid domain')) {
-            setRecaptchaError('Invalid reCAPTCHA configuration. Please contact support.');
-            return;
-          }
-          console.error('Failed to render reCAPTCHA:', e);
         }
       }
 
-      // Retry if not successful
       attempts++;
       if (attempts < maxAttempts && !scriptErrored) {
-        retryTimer = setTimeout(tryRenderRecaptcha, 250);
+        retryTimer = setTimeout(tryInitRecaptcha, 250);
       } else if (attempts >= maxAttempts) {
-        // Max retries reached - show error
         setRecaptchaError('Failed to load verification. Please refresh the page or try again later.');
       }
     };
 
     // Load script if not present
-    const existingScript = document.querySelector('script[src*="recaptcha/api.js"]');
+    const existingScript = document.querySelector('script[src*="recaptcha"]');
     if (!existingScript) {
       const script = document.createElement('script');
-      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+      script.src = version === 'v3'
+        ? `https://www.google.com/recaptcha/api.js?render=${recaptchaConfig.siteKey}`
+        : 'https://www.google.com/recaptcha/api.js?render=explicit';
       script.async = true;
       script.defer = true;
       script.onload = () => {
-        // Wait for grecaptcha to be ready
         if (window.grecaptcha) {
-          window.grecaptcha.ready(tryRenderRecaptcha);
+          window.grecaptcha.ready(tryInitRecaptcha);
         } else {
-          tryRenderRecaptcha();
+          tryInitRecaptcha();
         }
       };
       script.onerror = () => {
@@ -286,34 +291,32 @@ export default function RegisterPage() {
       };
       document.head.appendChild(script);
     } else {
-      // Script exists, try to render
       if (window.grecaptcha?.ready) {
-        window.grecaptcha.ready(tryRenderRecaptcha);
+        window.grecaptcha.ready(tryInitRecaptcha);
       } else {
-        tryRenderRecaptcha();
+        tryInitRecaptcha();
       }
     }
 
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      // Reset state on unmount so it can be re-rendered on next mount
       setRecaptchaLoaded(false);
       setRecaptchaToken(null);
       setRecaptchaError(null);
       widgetIdRef.current = null;
     };
-  }, [recaptchaEnabled, recaptchaConfig?.siteKey]);
+  }, [recaptchaEnabled, recaptchaConfig?.siteKey, recaptchaConfig?.version]);
 
   const registerMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (token?: string) => {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email, 
-          password, 
+        body: JSON.stringify({
+          email,
+          password,
           name: name || undefined,
-          recaptchaToken: recaptchaToken || undefined 
+          recaptchaToken: token,
         }),
       });
       if (!response.ok) {
@@ -328,7 +331,8 @@ export default function RegisterPage() {
     onError: (err: any) => {
       setError(err.message || "Registration failed. Please try again.");
       setRecaptchaToken(null);
-      if (widgetIdRef.current !== null && window.grecaptcha) {
+      // Reset v2 widget if applicable
+      if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
         window.grecaptcha.reset(widgetIdRef.current);
       }
     },
@@ -337,7 +341,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    
+
     if (honeypot) {
       setError("Verification failed. Please try again.");
       return;
@@ -347,30 +351,24 @@ export default function RegisterPage() {
       setError("Please enter your name");
       return;
     }
-    
+
     if (!email.trim()) {
       setError("Please enter your email address");
       return;
     }
-    
+
     if (!password) {
       setError("Please enter a password");
       return;
     }
-    
+
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
-    
+
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      return;
-    }
-    
-    // Only require reCAPTCHA if it loaded successfully (no error)
-    if (recaptchaEnabled && !recaptchaToken && !recaptchaError) {
-      setError("Please complete the reCAPTCHA verification");
       return;
     }
 
@@ -379,7 +377,33 @@ export default function RegisterPage() {
       return;
     }
 
-    registerMutation.mutate();
+    // Handle reCAPTCHA based on version
+    if (recaptchaEnabled && !recaptchaError && recaptchaLoaded) {
+      if (isV3) {
+        // v3: Get token right before submitting
+        try {
+          const token = await window.grecaptcha.execute(recaptchaConfig!.siteKey!, { action: 'register' });
+          registerMutation.mutate(token);
+          return;
+        } catch (err) {
+          console.error('reCAPTCHA v3 execute error:', err);
+          // Allow registration anyway if reCAPTCHA fails
+          registerMutation.mutate(undefined);
+          return;
+        }
+      } else {
+        // v2: Check token from widget callback
+        if (!recaptchaToken) {
+          setError("Please complete the reCAPTCHA verification");
+          return;
+        }
+        registerMutation.mutate(recaptchaToken);
+        return;
+      }
+    }
+
+    // No reCAPTCHA or error loading
+    registerMutation.mutate(undefined);
   };
 
   const handleChecklistComplete = () => {
@@ -601,7 +625,8 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {recaptchaEnabled && !recaptchaError && (
+                {/* Only show widget for v2 - v3 is invisible */}
+                {recaptchaEnabled && !recaptchaError && !isV3 && (
                   <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
                     <div ref={recaptchaRef} />
                     {!recaptchaLoaded && (

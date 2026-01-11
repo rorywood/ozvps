@@ -30,6 +30,72 @@ function handleApiError(res: Response, error: any, defaultMessage: string = 'Int
   return res.status(500).json({ error: defaultMessage });
 }
 
+// Helper to verify reCAPTCHA v3 token with score threshold
+interface RecaptchaVerifyResult {
+  success: boolean;
+  score?: number;
+  action?: string;
+  errorCodes?: string[];
+}
+
+async function verifyRecaptchaToken(
+  token: string,
+  secretKey: string,
+  expectedAction?: string,
+  minScore: number = 0.5
+): Promise<{ valid: boolean; score?: number; error?: string }> {
+  try {
+    const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
+    });
+
+    const result = await verifyResponse.json() as {
+      success: boolean;
+      score?: number;
+      action?: string;
+      'error-codes'?: string[];
+      challenge_ts?: string;
+      hostname?: string;
+    };
+
+    if (!result.success) {
+      return {
+        valid: false,
+        error: `Verification failed: ${result['error-codes']?.join(', ') || 'Unknown error'}`,
+      };
+    }
+
+    // For v3, check the score
+    if (result.score !== undefined) {
+      if (result.score < minScore) {
+        log(`reCAPTCHA score too low: ${result.score} < ${minScore}`, 'security');
+        return {
+          valid: false,
+          score: result.score,
+          error: 'Verification score too low. Please try again.',
+        };
+      }
+
+      // Optionally verify the action matches
+      if (expectedAction && result.action !== expectedAction) {
+        log(`reCAPTCHA action mismatch: expected ${expectedAction}, got ${result.action}`, 'security');
+        // Don't fail on action mismatch, just log it
+      }
+
+      log(`reCAPTCHA v3 verified: score=${result.score}, action=${result.action}`, 'security');
+      return { valid: true, score: result.score };
+    }
+
+    // v2 checkpoint - just success/fail
+    return { valid: true };
+  } catch (error: any) {
+    log(`reCAPTCHA verification error: ${error.message}`, 'security');
+    return { valid: false, error: 'Verification service unavailable' };
+  }
+}
+
 declare global {
   namespace Express {
     interface Request {
@@ -431,29 +497,23 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
-      // Check reCAPTCHA if enabled (configured via env vars)
+      // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
           // Allow registration without token if reCAPTCHA failed to load on client
           log(`Registration without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
         } else {
-          try {
-            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-            });
-            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-            
-            if (!verifyResult.success) {
-              log(`reCAPTCHA verification failed for registration: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-            }
-          } catch (err: any) {
-            log(`reCAPTCHA verification error during registration: ${err.message}`, 'security');
-            // Allow registration even if verification fails - don't lock users out
-            log(`Allowing registration despite reCAPTCHA error for: ${email}`, 'security');
+          const verifyResult = await verifyRecaptchaToken(
+            recaptchaToken,
+            recaptchaSettings.secretKey,
+            'register',
+            recaptchaSettings.minScore
+          );
+
+          if (!verifyResult.valid) {
+            log(`reCAPTCHA verification failed for registration: ${verifyResult.error}`, 'security');
+            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
           }
         }
       }
@@ -583,7 +643,7 @@ export async function registerRoutes(
       const { email, password } = parsed.data;
       const { recaptchaToken } = req.body;
 
-      // Check reCAPTCHA if enabled (configured via env vars)
+      // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
@@ -591,22 +651,16 @@ export async function registerRoutes(
           // This prevents lockout when domain is misconfigured in Google console
           log(`Login without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
         } else {
-          try {
-            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-            });
-            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-            
-            if (!verifyResult.success) {
-              log(`reCAPTCHA verification failed: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-            }
-          } catch (err: any) {
-            log(`reCAPTCHA verification error: ${err.message}`, 'security');
-            // Allow login even if verification fails - don't lock users out
-            log(`Allowing login despite reCAPTCHA error for: ${email}`, 'security');
+          const verifyResult = await verifyRecaptchaToken(
+            recaptchaToken,
+            recaptchaSettings.secretKey,
+            'login',
+            recaptchaSettings.minScore
+          );
+
+          if (!verifyResult.valid) {
+            log(`reCAPTCHA verification failed for login: ${verifyResult.error}`, 'security');
+            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
           }
         }
       }
@@ -1152,6 +1206,16 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/vnc', authMiddleware, async (req, res) => {
     try {
+      // Verify ownership before returning VNC details
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied' });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+      }
+
       const vnc = await virtfusionClient.getVncDetails(req.params.id);
       if (!vnc) {
         return res.status(404).json({ error: 'VNC not available for this server' });
@@ -1617,7 +1681,8 @@ export async function registerRoutes(
       let vncAccess = null;
       try {
         vncAccess = await virtfusionClient.getServerVncAccess(serverId);
-        log(`VNC access for server ${serverId}: ${JSON.stringify(vncAccess)}`, 'api');
+        // Log without exposing password
+        log(`VNC access retrieved for server ${serverId}: ip=${vncAccess?.ip}, port=${vncAccess?.port}, hasPassword=${!!vncAccess?.password}`, 'api');
       } catch (vncErr: any) {
         log(`Failed to get VNC access: ${vncErr.message}`, 'api');
       }
@@ -1821,9 +1886,12 @@ export async function registerRoutes(
   });
 
   // Admin: Adjust wallet balance
+  const MAX_ADJUSTMENT_CENTS = 1000000; // $10,000 max per adjustment
   const walletAdjustSchema = z.object({
     auth0UserId: z.string().min(1, 'User ID is required'),
-    amountCents: z.number().int().refine(val => val !== 0, 'Amount cannot be zero'),
+    amountCents: z.number().int()
+      .refine(val => val !== 0, 'Amount cannot be zero')
+      .refine(val => Math.abs(val) <= MAX_ADJUSTMENT_CENTS, `Adjustment cannot exceed $${(MAX_ADJUSTMENT_CENTS / 100).toLocaleString()}`),
     reason: z.string().min(3, 'Reason must be at least 3 characters').max(500, 'Reason too long'),
   });
 
@@ -2044,13 +2112,105 @@ export async function registerRoutes(
     }
   });
 
-  // Get public reCAPTCHA config (for login page - returns site key if configured via env vars)
+  // Get public reCAPTCHA config (for login/register pages)
   app.get('/api/security/recaptcha-config', (req, res) => {
     const settings = dbStorage.getRecaptchaSettings();
     res.json({
       enabled: settings.enabled,
       siteKey: settings.enabled ? settings.siteKey : null,
+      version: settings.version, // 'v2' or 'v3'
     });
+  });
+
+  // Admin: Get full reCAPTCHA settings (includes secret key status)
+  app.get('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const settings = await dbStorage.getRecaptchaSettingsAsync();
+      res.json({
+        enabled: settings.enabled,
+        siteKey: settings.siteKey || '',
+        secretKey: settings.secretKey ? '********' + settings.secretKey.slice(-4) : '', // Mask the key
+        hasSecretKey: !!settings.secretKey,
+        version: settings.version,
+        minScore: settings.minScore,
+      });
+    } catch (error: any) {
+      log(`Error fetching reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch reCAPTCHA settings' });
+    }
+  });
+
+  // Admin: Update reCAPTCHA settings
+  app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const schema = z.object({
+        siteKey: z.string().min(1, 'Site key is required'),
+        secretKey: z.string().min(1, 'Secret key is required'),
+        enabled: z.boolean(),
+        version: z.enum(['v2', 'v3']).default('v3'),
+        minScore: z.number().min(0).max(1).default(0.5),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
+      }
+
+      const { siteKey, secretKey, enabled, version, minScore } = parsed.data;
+
+      // Validate key format
+      const validation = await dbStorage.testRecaptchaConfig(siteKey, secretKey);
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+
+      await dbStorage.updateRecaptchaSettings({
+        siteKey,
+        secretKey,
+        enabled,
+        version,
+        minScore,
+      });
+
+      log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, version=${version}`, 'admin');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to update reCAPTCHA settings' });
+    }
+  });
+
+  // Admin: Test reCAPTCHA configuration
+  app.post('/api/admin/security/recaptcha/test', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const schema = z.object({
+        siteKey: z.string().min(1),
+        secretKey: z.string().min(1),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid keys provided' });
+      }
+
+      const validation = await dbStorage.testRecaptchaConfig(parsed.data.siteKey, parsed.data.secretKey);
+      res.json(validation);
+    } catch (error: any) {
+      log(`Error testing reCAPTCHA config: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to test configuration' });
+    }
   });
 
   // Check if registration is enabled (public)
