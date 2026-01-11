@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
+import { dbStorage } from "./storage";
 import { registerInstallAssets } from "./install-assets";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -53,12 +54,12 @@ app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://www.google.com/recaptcha/", "https://www.gstatic.com/recaptcha/"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "https:"],
-      frameSrc: ["'none'", "https://js.stripe.com", "https://*.stripe.com"],
+      frameSrc: ["'none'", "https://js.stripe.com", "https://*.stripe.com", "https://www.google.com/recaptcha/", "https://recaptcha.google.com/"],
       objectSrc: ["'none'"],
     }
   } : false,
@@ -227,6 +228,14 @@ app.use((req, res, next) => {
   }
 
   await registerRoutes(httpServer, app);
+
+  // Initialize reCAPTCHA settings cache
+  try {
+    await dbStorage.refreshRecaptchaCache();
+    log('reCAPTCHA settings cache initialized', 'security');
+  } catch (error: any) {
+    log(`Warning: Failed to initialize reCAPTCHA cache: ${error.message}`, 'security');
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

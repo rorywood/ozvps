@@ -1871,6 +1871,7 @@ function SettingsPanel() {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
 
+  // Registration setting
   const { data: registrationData, isLoading } = useQuery({
     queryKey: ['admin-registration-setting'],
     queryFn: () => api.getRegistrationSetting(),
@@ -1893,6 +1894,80 @@ function SettingsPanel() {
       await updateMutation.mutateAsync(enabled);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // reCAPTCHA settings
+  const [recaptchaEditing, setRecaptchaEditing] = useState(false);
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
+  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState('');
+  const [recaptchaEnabled, setRecaptchaEnabled] = useState(false);
+  const [recaptchaVersion, setRecaptchaVersion] = useState<'v2' | 'v3'>('v3');
+  const [recaptchaMinScore, setRecaptchaMinScore] = useState(0.5);
+  const [recaptchaSaving, setRecaptchaSaving] = useState(false);
+
+  const { data: recaptchaData, isLoading: recaptchaLoading, refetch: refetchRecaptcha } = useQuery({
+    queryKey: ['admin-recaptcha-settings'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/security/recaptcha', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load reCAPTCHA settings');
+      return res.json() as Promise<{
+        enabled: boolean;
+        siteKey: string;
+        secretKey: string;
+        hasSecretKey: boolean;
+        version: 'v2' | 'v3';
+        minScore: number;
+      }>;
+    },
+  });
+
+  // Populate form when data loads
+  useEffect(() => {
+    if (recaptchaData && !recaptchaEditing) {
+      setRecaptchaSiteKey(recaptchaData.siteKey || '');
+      setRecaptchaEnabled(recaptchaData.enabled);
+      setRecaptchaVersion(recaptchaData.version || 'v3');
+      setRecaptchaMinScore(recaptchaData.minScore || 0.5);
+    }
+  }, [recaptchaData, recaptchaEditing]);
+
+  const handleSaveRecaptcha = async () => {
+    if (!recaptchaSiteKey.trim()) {
+      toast.error('Site key is required');
+      return;
+    }
+    if (!recaptchaSecretKey.trim() && !recaptchaData?.hasSecretKey) {
+      toast.error('Secret key is required');
+      return;
+    }
+
+    setRecaptchaSaving(true);
+    try {
+      const res = await fetch('/api/admin/security/recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          siteKey: recaptchaSiteKey,
+          secretKey: recaptchaSecretKey || recaptchaData?.secretKey?.replace(/\*/g, '') || '',
+          enabled: recaptchaEnabled,
+          version: recaptchaVersion,
+          minScore: recaptchaMinScore,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save');
+      }
+      toast.success('reCAPTCHA settings saved');
+      setRecaptchaEditing(false);
+      setRecaptchaSecretKey('');
+      refetchRecaptcha();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save reCAPTCHA settings');
+    } finally {
+      setRecaptchaSaving(false);
     }
   };
 
@@ -1938,6 +2013,198 @@ function SettingsPanel() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* reCAPTCHA Settings */}
+      <div className="rounded-xl bg-muted/20 ring-1 ring-border p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              <h4 className="font-semibold text-foreground">Google reCAPTCHA</h4>
+              {recaptchaData?.enabled && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-400 rounded">
+                  Active
+                </span>
+              )}
+              {recaptchaData && !recaptchaData.enabled && recaptchaData.hasSecretKey && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 rounded">
+                  Configured but Disabled
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground max-w-lg">
+              Protect login and registration forms from bots using Google reCAPTCHA v3 (invisible).
+            </p>
+          </div>
+          {!recaptchaEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRecaptchaEditing(true)}
+              disabled={recaptchaLoading}
+            >
+              Configure
+            </Button>
+          )}
+        </div>
+
+        {recaptchaLoading && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {!recaptchaLoading && recaptchaEditing && (
+          <div className="space-y-4 pt-4 border-t border-border">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="recaptcha-site-key">Site Key (Public)</Label>
+                <Input
+                  id="recaptcha-site-key"
+                  type="text"
+                  placeholder="6L..."
+                  value={recaptchaSiteKey}
+                  onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recaptcha-secret-key">
+                  Secret Key {recaptchaData?.hasSecretKey && '(leave blank to keep current)'}
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="recaptcha-secret-key"
+                    type="password"
+                    placeholder={recaptchaData?.hasSecretKey ? '••••••••' : '6L...'}
+                    value={recaptchaSecretKey}
+                    onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Version</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={recaptchaVersion === 'v3' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setRecaptchaVersion('v3')}
+                    className="flex-1"
+                  >
+                    v3 (Invisible)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={recaptchaVersion === 'v2' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setRecaptchaVersion('v2')}
+                    className="flex-1"
+                  >
+                    v2 (Checkbox)
+                  </Button>
+                </div>
+              </div>
+              {recaptchaVersion === 'v3' && (
+                <div className="space-y-2">
+                  <Label>Minimum Score: {recaptchaMinScore.toFixed(1)}</Label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={recaptchaMinScore}
+                    onChange={(e) => setRecaptchaMinScore(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    0.0 = most permissive, 1.0 = most strict. Recommended: 0.5
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={recaptchaEnabled}
+                  onCheckedChange={setRecaptchaEnabled}
+                  className="data-[state=checked]:bg-primary"
+                />
+                <span className="text-sm font-medium">
+                  {recaptchaEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setRecaptchaEditing(false);
+                    setRecaptchaSecretKey('');
+                    // Reset to original values
+                    if (recaptchaData) {
+                      setRecaptchaSiteKey(recaptchaData.siteKey || '');
+                      setRecaptchaEnabled(recaptchaData.enabled);
+                      setRecaptchaVersion(recaptchaData.version || 'v3');
+                      setRecaptchaMinScore(recaptchaData.minScore || 0.5);
+                    }
+                  }}
+                  disabled={recaptchaSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveRecaptcha}
+                  disabled={recaptchaSaving || !recaptchaSiteKey.trim()}
+                >
+                  {recaptchaSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Get your reCAPTCHA keys from{' '}
+              <a
+                href="https://www.google.com/recaptcha/admin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Google reCAPTCHA Admin Console
+              </a>
+              . For v3, select "reCAPTCHA v3" when creating your site.
+            </p>
+          </div>
+        )}
+
+        {!recaptchaLoading && !recaptchaEditing && recaptchaData?.hasSecretKey && (
+          <div className="text-sm text-muted-foreground pt-2 border-t border-border">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span>Site Key: <code className="text-xs bg-muted px-1 rounded">{recaptchaData.siteKey?.slice(0, 20)}...</code></span>
+              <span>Version: <strong>{recaptchaData.version?.toUpperCase()}</strong></span>
+              {recaptchaData.version === 'v3' && (
+                <span>Min Score: <strong>{recaptchaData.minScore}</strong></span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

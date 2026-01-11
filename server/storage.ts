@@ -971,12 +971,89 @@ export const dbStorage = {
     }
   },
 
-  getRecaptchaSettings(): { enabled: boolean; siteKey: string | null; secretKey: string | null } {
-    const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
-    const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
-    const enabled = !!(siteKey && secretKey);
-    
-    return { enabled, siteKey, secretKey };
+  // Sync version that uses cached settings - call refreshRecaptchaCache periodically
+  getRecaptchaSettings(): { enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number } {
+    return this._recaptchaCache || {
+      enabled: false,
+      siteKey: null,
+      secretKey: null,
+      version: 'v3',
+      minScore: 0.5,
+    };
+  },
+
+  _recaptchaCache: null as { enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number } | null,
+
+  async refreshRecaptchaCache(): Promise<void> {
+    const settings = await this.getRecaptchaSettingsAsync();
+    this._recaptchaCache = settings;
+  },
+
+  async getRecaptchaSettingsAsync(): Promise<{ enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number }> {
+    try {
+      // Try database first
+      const [siteKeySetting, secretKeySetting, versionSetting, minScoreSetting] = await Promise.all([
+        this.getSecuritySetting('recaptcha_site_key'),
+        this.getSecuritySetting('recaptcha_secret_key'),
+        this.getSecuritySetting('recaptcha_version'),
+        this.getSecuritySetting('recaptcha_min_score'),
+      ]);
+
+      // If database has settings, use them
+      if (siteKeySetting?.value && secretKeySetting?.value) {
+        const enabled = siteKeySetting.enabled && secretKeySetting.enabled;
+        const version = (versionSetting?.value === 'v2' ? 'v2' : 'v3') as 'v2' | 'v3';
+        const minScore = minScoreSetting?.value ? parseFloat(minScoreSetting.value) : 0.5;
+
+        return {
+          enabled,
+          siteKey: siteKeySetting.value,
+          secretKey: secretKeySetting.value,
+          version,
+          minScore: isNaN(minScore) ? 0.5 : Math.max(0, Math.min(1, minScore)),
+        };
+      }
+
+      // Fall back to environment variables (legacy support)
+      const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
+      const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
+      const enabled = !!(siteKey && secretKey);
+
+      return { enabled, siteKey, secretKey, version: 'v3', minScore: 0.5 };
+    } catch (error) {
+      // If database fails, fall back to env vars
+      const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
+      const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
+      const enabled = !!(siteKey && secretKey);
+
+      return { enabled, siteKey, secretKey, version: 'v3', minScore: 0.5 };
+    }
+  },
+
+  async updateRecaptchaSettings(settings: { siteKey: string; secretKey: string; enabled: boolean; version?: 'v2' | 'v3'; minScore?: number }): Promise<void> {
+    await Promise.all([
+      this.upsertSecuritySetting('recaptcha_site_key', settings.siteKey, settings.enabled),
+      this.upsertSecuritySetting('recaptcha_secret_key', settings.secretKey, settings.enabled),
+      this.upsertSecuritySetting('recaptcha_version', settings.version || 'v3', settings.enabled),
+      this.upsertSecuritySetting('recaptcha_min_score', String(settings.minScore ?? 0.5), settings.enabled),
+    ]);
+    // Refresh cache after update
+    await this.refreshRecaptchaCache();
+  },
+
+  async testRecaptchaConfig(siteKey: string, secretKey: string): Promise<{ valid: boolean; error?: string }> {
+    // Basic validation - check key formats
+    if (!siteKey || siteKey.length < 30) {
+      return { valid: false, error: 'Invalid site key format' };
+    }
+    if (!secretKey || secretKey.length < 30) {
+      return { valid: false, error: 'Invalid secret key format' };
+    }
+    // Keys should start with 6L for reCAPTCHA
+    if (!siteKey.startsWith('6L')) {
+      return { valid: false, error: 'Site key should start with "6L"' };
+    }
+    return { valid: true };
   },
 
   // ========== ADMIN AUDIT LOGGING ==========
