@@ -149,4 +149,11 @@
   div[class*="vnc"] canvas {
     cursor: crosshair !important;
   }
+
+  /* Hide reCAPTCHA v3 badge - branding is shown on forms instead */
+  .grecaptcha-badge {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
 }

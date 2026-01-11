@@ -659,8 +659,8 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
               disabled={loginMutation.isPending}
               data-testid="button-submit"
@@ -674,6 +674,15 @@ export default function LoginPage() {
                 "Sign In"
               )}
             </Button>
+
+            {recaptchaEnabled && (
+              <p className="text-[10px] text-muted-foreground/60 text-center mt-3">
+                Protected by reCAPTCHA.{' '}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Privacy</a>
+                {' '}&{' '}
+                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Terms</a>
+              </p>
+            )}
           </form>
 
           <div className="mt-8 text-center">

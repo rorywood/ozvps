@@ -713,8 +713,8 @@ export default function RegisterPage() {
                   </motion.div>
                 )}
 
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full h-12 text-base font-medium bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg shadow-green-500/25 border-0"
                   disabled={registerMutation.isPending}
                   data-testid="button-submit"
@@ -728,6 +728,15 @@ export default function RegisterPage() {
                     "Create Account"
                   )}
                 </Button>
+
+                {recaptchaEnabled && (
+                  <p className="text-[10px] text-muted-foreground/60 text-center mt-3">
+                    Protected by reCAPTCHA.{' '}
+                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Privacy</a>
+                    {' '}&{' '}
+                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Terms</a>
+                  </p>
+                )}
               </form>
 
               <div className="mt-8 text-center">
