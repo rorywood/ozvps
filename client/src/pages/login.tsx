@@ -38,11 +38,11 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
   useEffect(() => {
     if (currentIndex === 2 && !hasCheckedHealth) {
       setHasCheckedHealth(true);
-      
+
       // Add timeout controller for the health check
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       fetch('/api/health', { signal: controller.signal })
         .then(res => {
           clearTimeout(timeoutId);
@@ -57,7 +57,7 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
           }
           // Health check passed, mark step complete and continue
           setHealthCheckPassed(true);
-          setItems(prev => prev.map((item, idx) => 
+          setItems(prev => prev.map((item, idx) =>
             idx === 2 ? { ...item, completed: true } : item
           ));
           setCurrentIndex(3);
