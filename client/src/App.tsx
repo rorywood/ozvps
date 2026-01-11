@@ -29,13 +29,25 @@ import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+
+  // Allow login, register, and pricing pages to bypass health check
+  const bypassPaths = ['/login', '/register', '/pricing'];
+  const shouldBypass = bypassPaths.some(path => location === path || location.startsWith(path + '/'));
+
   const { data: health, isLoading, refetch } = useQuery({
     queryKey: ['health'],
     queryFn: () => api.checkHealth(),
     retry: 2,
     retryDelay: 1000,
     staleTime: 30000,
+    enabled: !shouldBypass, // Don't run health check for bypassed pages
   });
+
+  // Always render children for bypassed paths
+  if (shouldBypass) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (
