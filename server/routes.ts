@@ -14,20 +14,102 @@ import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDe
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-         req.headers['x-real-ip'] || 
-         req.socket?.remoteAddress || 
-         req.ip || 
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+         req.headers['x-real-ip'] ||
+         req.socket?.remoteAddress ||
+         req.ip ||
          'unknown';
 }
 
-// Helper to handle API errors with proper status codes
-function handleApiError(res: Response, error: any, defaultMessage: string = 'Internal server error') {
+// Error codes for consistent error handling
+const ErrorCodes = {
+  // Client errors (4xx)
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  AUTHENTICATION_REQUIRED: 'AUTHENTICATION_REQUIRED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCESS_DENIED: 'ACCESS_DENIED',
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  RESOURCE_CONFLICT: 'RESOURCE_CONFLICT',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  SERVER_SUSPENDED: 'SERVER_SUSPENDED',
+
+  // Server errors (5xx)
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
+  EXTERNAL_SERVICE_TIMEOUT: 'EXTERNAL_SERVICE_TIMEOUT',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+} as const;
+
+type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
+
+interface ApiErrorResponse {
+  error: string;
+  code: ErrorCode;
+  details?: string;
+}
+
+// Helper to handle API errors with proper status codes and error codes
+function handleApiError(
+  res: Response,
+  error: any,
+  defaultMessage: string = 'An unexpected error occurred',
+  context?: string
+): Response<ApiErrorResponse> {
+  // Handle VirtFusion timeout specifically
   if (error instanceof VirtFusionTimeoutError) {
-    return res.status(504).json({ error: 'The server management service is taking too long to respond. Please try again.' });
+    log(`VirtFusion timeout${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(504).json({
+      error: 'The server management service is taking too long to respond. Please try again in a moment.',
+      code: ErrorCodes.EXTERNAL_SERVICE_TIMEOUT,
+    });
   }
-  log(`API Error: ${error.message}`, 'routes');
-  return res.status(500).json({ error: defaultMessage });
+
+  // Handle VirtFusion connection errors
+  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+    log(`VirtFusion connection error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(503).json({
+      error: 'Unable to connect to the server management service. Please try again later.',
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+    });
+  }
+
+  // Handle VirtFusion API errors (often contain status codes)
+  if (error.message?.includes('VirtFusion API error') || error.message?.includes('status')) {
+    log(`VirtFusion API error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(502).json({
+      error: 'The server management service returned an error. Please try again.',
+      code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+    });
+  }
+
+  // Handle database errors
+  if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
+    log(`Database constraint error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(409).json({
+      error: 'This resource already exists or conflicts with existing data.',
+      code: ErrorCodes.RESOURCE_CONFLICT,
+    });
+  }
+
+  if (error.code?.startsWith('2') || error.code?.startsWith('SQLITE')) {
+    log(`Database error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    return res.status(500).json({
+      error: 'A database error occurred. Please try again later.',
+      code: ErrorCodes.DATABASE_ERROR,
+    });
+  }
+
+  // Log the error for debugging
+  log(`API Error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+
+  // Return generic error with default message
+  return res.status(500).json({
+    error: defaultMessage,
+    code: ErrorCodes.INTERNAL_ERROR,
+  });
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
@@ -969,7 +1051,7 @@ export async function registerRoutes(
       res.json(serversWithBandwidthAndBilling);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch servers');
+      return handleApiError(res, error, 'Unable to retrieve your servers. Please try again.', 'listServers');
     }
   });
 
@@ -1088,7 +1170,7 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       log(`Error fetching dashboard overview: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch dashboard data');
+      return handleApiError(res, error, 'Unable to load dashboard data. Please refresh the page.', 'dashboardOverview');
     }
   });
 
@@ -1156,7 +1238,7 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch server');
+      return handleApiError(res, error, 'Unable to retrieve server details. Please try again.', 'getServer');
     }
   });
 
@@ -1186,7 +1268,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to perform power action');
+      return handleApiError(res, error, 'Unable to perform the power action. The server may be busy. Please try again.', 'powerAction');
     }
   });
 
@@ -1200,7 +1282,7 @@ export async function registerRoutes(
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
       log(`Error fetching metrics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch metrics');
+      return handleApiError(res, error, 'Unable to retrieve server metrics.', 'getMetrics');
     }
   });
 
@@ -1214,7 +1296,7 @@ export async function registerRoutes(
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
     } catch (error: any) {
       log(`Error fetching live stats for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch live stats');
+      return handleApiError(res, error, 'Unable to retrieve live statistics.', 'getLiveStats');
     }
   });
 
@@ -1228,7 +1310,7 @@ export async function registerRoutes(
       res.json(traffic || []);
     } catch (error: any) {
       log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic data');
+      return handleApiError(res, error, 'Unable to retrieve traffic data.', 'getTrafficData');
     }
   });
 
@@ -1248,7 +1330,7 @@ export async function registerRoutes(
       res.json(statistics || { supported: false, points: [], interval: 60, period });
     } catch (error: any) {
       log(`Error fetching traffic statistics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic statistics');
+      return handleApiError(res, error, 'Unable to retrieve traffic statistics.', 'getTrafficStats');
     }
   });
 
@@ -1319,8 +1401,7 @@ export async function registerRoutes(
       await virtfusionClient.updateServerName(req.params.id, name.trim());
       res.json({ success: true, name: name.trim() });
     } catch (error: any) {
-      log(`Error updating server name for ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to update server name' });
+      return handleApiError(res, error, 'Unable to update server name.', 'updateServerName');
     }
   });
 
@@ -1329,21 +1410,20 @@ export async function registerRoutes(
       // Verify ownership before returning VNC details
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.getVncDetails(req.params.id);
       if (!vnc) {
-        return res.status(404).json({ error: 'VNC not available for this server' });
+        return res.status(404).json({ error: 'VNC not available for this server', code: ErrorCodes.RESOURCE_NOT_FOUND });
       }
       res.json(vnc);
     } catch (error: any) {
-      log(`Error fetching VNC details for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch VNC details' });
+      return handleApiError(res, error, 'Unable to fetch VNC details.', 'getVncDetails');
     }
   });
 
@@ -1351,18 +1431,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.enableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error enabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to enable VNC' });
+      return handleApiError(res, error, 'Unable to enable VNC console.', 'enableVnc');
     }
   });
 
@@ -1370,18 +1449,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.disableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error disabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to disable VNC' });
+      return handleApiError(res, error, 'Unable to disable VNC console.', 'disableVnc');
     }
   });
 
@@ -1389,13 +1467,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
       res.json(network || { interfaces: [] });
     } catch (error: any) {
-      log(`Error fetching network info for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch network info' });
+      return handleApiError(res, error, 'Unable to fetch network information.', 'getNetworkInfo');
     }
   });
 
@@ -1403,13 +1480,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const templates = await virtfusionClient.getOsTemplates(req.params.id);
       res.json(templates || []);
     } catch (error: any) {
-      log(`Error fetching OS templates for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch OS templates' });
+      return handleApiError(res, error, 'Unable to fetch available operating systems.', 'getOsTemplates');
     }
   });
 
