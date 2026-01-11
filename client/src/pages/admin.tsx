@@ -1903,7 +1903,6 @@ function SettingsPanel() {
   const [recaptchaSecretKey, setRecaptchaSecretKey] = useState('');
   const [recaptchaEnabled, setRecaptchaEnabled] = useState(false);
   const [recaptchaVersion, setRecaptchaVersion] = useState<'v2' | 'v3'>('v3');
-  const [recaptchaMinScore, setRecaptchaMinScore] = useState(0.5);
   const [recaptchaSaving, setRecaptchaSaving] = useState(false);
 
   const { data: recaptchaData, isLoading: recaptchaLoading, refetch: refetchRecaptcha } = useQuery({
@@ -1917,7 +1916,6 @@ function SettingsPanel() {
         secretKey: string;
         hasSecretKey: boolean;
         version: 'v2' | 'v3';
-        minScore: number;
       }>;
     },
   });
@@ -1928,7 +1926,6 @@ function SettingsPanel() {
       setRecaptchaSiteKey(recaptchaData.siteKey || '');
       setRecaptchaEnabled(recaptchaData.enabled);
       setRecaptchaVersion(recaptchaData.version || 'v3');
-      setRecaptchaMinScore(recaptchaData.minScore || 0.5);
     }
   }, [recaptchaData, recaptchaEditing]);
 
@@ -1949,7 +1946,6 @@ function SettingsPanel() {
         siteKey: recaptchaSiteKey,
         enabled: recaptchaEnabled,
         version: recaptchaVersion,
-        minScore: recaptchaMinScore,
       };
       if (recaptchaSecretKey.trim()) {
         payload.secretKey = recaptchaSecretKey;
@@ -2115,23 +2111,6 @@ function SettingsPanel() {
                   </Button>
                 </div>
               </div>
-              {recaptchaVersion === 'v3' && (
-                <div className="space-y-2">
-                  <Label>Minimum Score: {recaptchaMinScore.toFixed(1)}</Label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={recaptchaMinScore}
-                    onChange={(e) => setRecaptchaMinScore(parseFloat(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    0.0 = most permissive, 1.0 = most strict. Recommended: 0.5
-                  </p>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-between pt-2">
@@ -2157,7 +2136,6 @@ function SettingsPanel() {
                       setRecaptchaSiteKey(recaptchaData.siteKey || '');
                       setRecaptchaEnabled(recaptchaData.enabled);
                       setRecaptchaVersion(recaptchaData.version || 'v3');
-                      setRecaptchaMinScore(recaptchaData.minScore || 0.5);
                     }
                   }}
                   disabled={recaptchaSaving}
@@ -2204,9 +2182,6 @@ function SettingsPanel() {
             <div className="flex items-center gap-4 flex-wrap">
               <span>Site Key: <code className="text-xs bg-muted px-1 rounded">{recaptchaData.siteKey?.slice(0, 20)}...</code></span>
               <span>Version: <strong>{recaptchaData.version?.toUpperCase()}</strong></span>
-              {recaptchaData.version === 'v3' && (
-                <span>Min Score: <strong>{recaptchaData.minScore}</strong></span>
-              )}
             </div>
           </div>
         )}
