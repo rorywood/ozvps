@@ -2153,7 +2153,6 @@ export async function registerRoutes(
         secretKey: settings.secretKey ? '********' + settings.secretKey.slice(-4) : '', // Mask the key
         hasSecretKey: !!settings.secretKey,
         version: settings.version,
-        minScore: settings.minScore,
       });
     } catch (error: any) {
       log(`Error fetching reCAPTCHA settings: ${error.message}`, 'admin');
@@ -2173,7 +2172,6 @@ export async function registerRoutes(
         secretKey: z.string().optional(), // Optional - keep existing if not provided
         enabled: z.boolean(),
         version: z.enum(['v2', 'v3']).default('v3'),
-        minScore: z.number().min(0).max(1).default(0.5),
       });
 
       const parsed = schema.safeParse(req.body);
@@ -2181,7 +2179,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
       }
 
-      const { siteKey, secretKey, enabled, version, minScore } = parsed.data;
+      const { siteKey, secretKey, enabled, version } = parsed.data;
 
       // Get existing settings to preserve secret key if not provided
       const existingSettings = await dbStorage.getRecaptchaSettingsAsync();
@@ -2200,12 +2198,13 @@ export async function registerRoutes(
         }
       }
 
+      // Always use secure default minScore of 0.5 (Google's recommendation)
       await dbStorage.updateRecaptchaSettings({
         siteKey,
         secretKey: finalSecretKey,
         enabled,
         version,
-        minScore,
+        minScore: 0.5,
       });
 
       log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, version=${version}`, 'admin');
