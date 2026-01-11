@@ -828,23 +828,20 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-6 text-center">
-            <a 
-              href="https://ozvps.com.au" 
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="link-back-to-website"
+            <Button
+              variant="outline"
+              className="border-border hover:bg-muted/50"
+              asChild
             >
-              <Globe className="h-4 w-4" />
-              Back to ozvps.com.au
-            </a>
+              <a
+                href="https://ozvps.com.au"
+                data-testid="link-back-to-website"
+              >
+                <Globe className="h-4 w-4 mr-2" />
+                Back to ozvps.com.au
+              </a>
+            </Button>
           </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-4">
-            Need help? Contact support@ozvps.com
-          </p>
-
-          <p className="text-center text-xs text-muted-foreground/60 mt-6">
-            Powered by Australian infrastructure. Built with ❤️ in Queensland.
-          </p>
         </motion.div>
       </div>
     </div>
