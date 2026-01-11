@@ -777,8 +777,13 @@ export async function registerRoutes(
       const { recaptchaToken } = req.body;
 
       // Check reCAPTCHA if enabled
+      // Check if this is a 2FA verification step (user already passed reCAPTCHA on initial login)
+      const { totpToken, backupCode } = req.body;
+      const is2FAStep = !!(totpToken || backupCode);
+
+      // Only check reCAPTCHA on initial login, not on 2FA verification step
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
-      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey && !is2FAStep) {
         if (!recaptchaToken) {
           // SECURITY: Reject login without reCAPTCHA token
           log(`Login blocked - missing reCAPTCHA token for: ${email}`, 'security');
@@ -852,9 +857,7 @@ export async function registerRoutes(
       // Check if 2FA is enabled for this user
       const tfa = await dbStorage.getTwoFactorAuth(auth0Result.user.user_id);
       if (tfa?.enabled) {
-        // 2FA required - check if token was provided
-        const { totpToken, backupCode } = req.body;
-
+        // 2FA required - check if token was provided (totpToken/backupCode already extracted above)
         if (!totpToken && !backupCode) {
           // Return 2FA required status - client should prompt for code
           log(`2FA required for user: ${email}`, 'auth');
