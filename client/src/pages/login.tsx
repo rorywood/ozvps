@@ -15,6 +15,7 @@ interface WelcomeItem {
   id: string;
   label: string;
   completed: boolean;
+  failed?: boolean;
 }
 
 const WELCOME_ITEMS: Omit<WelcomeItem, 'completed'>[] = [
@@ -64,6 +65,10 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
         })
         .catch(() => {
           clearTimeout(timeoutId);
+          // Mark the control step as failed
+          setItems(prev => prev.map((item, idx) =>
+            idx === 2 ? { ...item, failed: true } : item
+          ));
           setControlHostError(true);
         });
     }
@@ -104,54 +109,11 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
     return () => clearTimeout(timer);
   }, [currentIndex, items.length, onComplete, controlHostError]);
 
-  // Show error screen if control host is unreachable
-  if (controlHostError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-red-500/10 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-orange-500/10 via-transparent to-transparent" />
-        
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="w-full max-w-md mx-auto px-6 relative z-10"
-        >
-          <div className="text-center mb-8">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-500/20 border border-red-500/30 mb-6"
-            >
-              <XCircle className="w-10 h-10 text-red-500" />
-            </motion.div>
-            <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-              Connection Issue
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              We're currently having an issue contacting the control host. This may be temporary - please try again later.
-            </p>
-            <Button
-              onClick={onLogout}
-              variant="outline"
-              className="gap-2"
-              data-testid="button-logout-error"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-transparent" />
-      
+      <div className={`absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] ${controlHostError ? 'from-red-500/10' : 'from-primary/10'} via-transparent to-transparent`} />
+      <div className={`absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] ${controlHostError ? 'from-orange-500/10' : 'from-blue-500/10'} via-transparent to-transparent`} />
+
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -163,9 +125,13 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 15 }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/20 border border-green-500/30 mb-6"
+            className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${controlHostError ? 'bg-amber-500/20 border-amber-500/30' : 'bg-green-500/20 border-green-500/30'} mb-6 border`}
           >
-            <CheckCircle2 className="w-10 h-10 text-green-500" />
+            {controlHostError ? (
+              <AlertCircle className="w-10 h-10 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="w-10 h-10 text-green-500" />
+            )}
           </motion.div>
           <h2 className="text-2xl font-display font-bold text-foreground mb-2">
             Welcome back, {displayName}!
@@ -180,12 +146,12 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
             <motion.div
               key={item.id}
               initial={{ opacity: 0, x: -20 }}
-              animate={{ 
-                opacity: index <= currentIndex ? 1 : 0.4,
-                x: 0 
+              animate={{
+                opacity: index <= currentIndex || item.failed ? 1 : 0.4,
+                x: 0
               }}
-              transition={{ 
-                duration: 0.3, 
+              transition={{
+                duration: 0.3,
                 delay: index * 0.1,
                 ease: "easeOut"
               }}
@@ -193,14 +159,24 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
             >
               <div className={`
                 flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300
-                ${item.completed 
-                  ? 'bg-green-500/20 border-green-500/50' 
-                  : index === currentIndex 
-                    ? 'bg-primary/20 border-primary/50' 
-                    : 'bg-muted border-border'
+                ${item.failed
+                  ? 'bg-red-500/20 border-red-500/50'
+                  : item.completed
+                    ? 'bg-green-500/20 border-green-500/50'
+                    : index === currentIndex
+                      ? 'bg-primary/20 border-primary/50'
+                      : 'bg-muted border-border'
                 } border
               `}>
-                {item.completed ? (
+                {item.failed ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  >
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  </motion.div>
+                ) : item.completed ? (
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -216,13 +192,35 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
               </div>
               <span className={`
                 text-sm font-medium transition-colors duration-300
-                ${item.completed ? 'text-foreground' : 'text-muted-foreground'}
+                ${item.failed ? 'text-red-400' : item.completed ? 'text-foreground' : 'text-muted-foreground'}
               `}>
                 {item.label}
               </span>
             </motion.div>
           ))}
         </div>
+
+        {controlHostError && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-6 text-center space-y-4"
+          >
+            <p className="text-muted-foreground text-sm">
+              We are having some service issues at the moment, please try again in a few minutes.
+            </p>
+            <Button
+              onClick={onLogout}
+              variant="outline"
+              className="gap-2"
+              data-testid="button-logout-error"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );
