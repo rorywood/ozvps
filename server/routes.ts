@@ -501,20 +501,21 @@ export async function registerRoutes(
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
-          // Allow registration without token if reCAPTCHA failed to load on client
-          log(`Registration without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
-        } else {
-          const verifyResult = await verifyRecaptchaToken(
-            recaptchaToken,
-            recaptchaSettings.secretKey,
-            'register',
-            recaptchaSettings.minScore
-          );
+          // SECURITY: Reject registration without reCAPTCHA token
+          log(`Registration blocked - missing reCAPTCHA token for: ${email}`, 'security');
+          return res.status(400).json({ error: 'Security verification required. Please refresh the page and try again.' });
+        }
 
-          if (!verifyResult.valid) {
-            log(`reCAPTCHA verification failed for registration: ${verifyResult.error}`, 'security');
-            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-          }
+        const verifyResult = await verifyRecaptchaToken(
+          recaptchaToken,
+          recaptchaSettings.secretKey,
+          'register',
+          recaptchaSettings.minScore
+        );
+
+        if (!verifyResult.valid) {
+          log(`reCAPTCHA verification failed for registration: ${verifyResult.error}`, 'security');
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
       }
 
@@ -647,21 +648,21 @@ export async function registerRoutes(
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
-          // Allow login without token if reCAPTCHA failed to load on client
-          // This prevents lockout when domain is misconfigured in Google console
-          log(`Login without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
-        } else {
-          const verifyResult = await verifyRecaptchaToken(
-            recaptchaToken,
-            recaptchaSettings.secretKey,
-            'login',
-            recaptchaSettings.minScore
-          );
+          // SECURITY: Reject login without reCAPTCHA token
+          log(`Login blocked - missing reCAPTCHA token for: ${email}`, 'security');
+          return res.status(400).json({ error: 'Security verification required. Please refresh the page and try again.' });
+        }
 
-          if (!verifyResult.valid) {
-            log(`reCAPTCHA verification failed for login: ${verifyResult.error}`, 'security');
-            return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-          }
+        const verifyResult = await verifyRecaptchaToken(
+          recaptchaToken,
+          recaptchaSettings.secretKey,
+          'login',
+          recaptchaSettings.minScore
+        );
+
+        if (!verifyResult.valid) {
+          log(`reCAPTCHA verification failed for login: ${verifyResult.error}`, 'security');
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
       }
 
@@ -1738,10 +1739,14 @@ export async function registerRoutes(
       } catch (tokenErr: any) {
         log(`Token generation failed: ${tokenErr.message}`, 'api');
       }
-      
-      // Last fallback to direct VNC URL
-      const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
-      res.json({ url: consoleUrl });
+
+      // SECURITY: Do NOT fallback to unauthenticated URL
+      // If token generation fails, return an error instead of exposing unprotected console
+      log(`Console URL generation failed for server ${req.params.id} - no valid authentication method`, 'security');
+      return res.status(503).json({
+        error: 'Console temporarily unavailable. Please try again in a few moments.',
+        retryable: true
+      });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
@@ -1815,22 +1820,34 @@ export async function registerRoutes(
   app.post('/api/user/password', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
-      const { newPassword } = req.body;
-      
+      const { currentPassword, newPassword } = req.body;
+
+      // SECURITY: Require current password verification
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password is required' });
+      }
+
       if (!newPassword) {
         return res.status(400).json({ error: 'New password is required' });
       }
-      
+
       if (newPassword.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
-      
+
       if (!session.auth0UserId) {
         return res.status(400).json({ error: 'Unable to change password. Please contact support.' });
       }
-      
+
+      // SECURITY: Verify current password before allowing change
+      const authResult = await auth0Client.authenticateUser(session.email, currentPassword);
+      if (!authResult.success) {
+        log(`Password change blocked - invalid current password for: ${session.email}`, 'security');
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+
       const result = await auth0Client.changePassword(session.auth0UserId, newPassword);
-      
+
       if (!result.success) {
         return res.status(400).json({ error: result.error || 'Failed to change password' });
       }
