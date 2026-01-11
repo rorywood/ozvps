@@ -368,11 +368,93 @@ class ApiClient {
     return response.json();
   }
 
-  async login(email: string, password: string, recaptchaToken?: string): Promise<{ user: { id: number; email: string; name: string } }> {
+  // Two-Factor Authentication
+  async get2FAStatus(): Promise<{
+    enabled: boolean;
+    verifiedAt: string | null;
+    lastUsedAt: string | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/2fa/status`);
+    if (!response.ok) throw new Error('Failed to get 2FA status');
+    return response.json();
+  }
+
+  async setup2FA(): Promise<{
+    secret: string;
+    qrCode: string;
+    otpAuthUrl: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/2fa/setup`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to set up 2FA');
+    }
+    return response.json();
+  }
+
+  async enable2FA(token: string): Promise<{
+    success: boolean;
+    backupCodes: string[];
+    message: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/2fa/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to enable 2FA');
+    }
+    return response.json();
+  }
+
+  async disable2FA(options: { token?: string; password?: string }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/2fa/disable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to disable 2FA');
+    }
+    return response.json();
+  }
+
+  async regenerate2FABackupCodes(token: string): Promise<{
+    success: boolean;
+    backupCodes: string[];
+    message: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/user/2fa/backup-codes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to generate backup codes');
+    }
+    return response.json();
+  }
+
+  async login(
+    email: string,
+    password: string,
+    recaptchaToken?: string,
+    totpToken?: string,
+    backupCode?: string
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean }> {
     const response = await fetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, recaptchaToken })
+      body: JSON.stringify({ email, password, recaptchaToken, totpToken, backupCode })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

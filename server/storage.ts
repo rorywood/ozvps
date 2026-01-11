@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth } from "@shared/schema";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray, or, isNull, ne } from "drizzle-orm";
@@ -1489,5 +1489,77 @@ export const dbStorage = {
       waitingUser: waitingUserCount?.count || 0,
       total: totalCount?.count || 0,
     };
+  },
+
+  // Two-Factor Authentication
+  async getTwoFactorAuth(auth0UserId: string): Promise<TwoFactorAuth | undefined> {
+    const [tfa] = await db.select().from(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+    return tfa;
+  },
+
+  async createTwoFactorAuth(data: InsertTwoFactorAuth): Promise<TwoFactorAuth> {
+    const [tfa] = await db.insert(twoFactorAuth).values(data).returning();
+    return tfa;
+  },
+
+  async updateTwoFactorAuth(auth0UserId: string, updates: Partial<Omit<TwoFactorAuth, 'id' | 'auth0UserId' | 'createdAt'>>): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async enableTwoFactorAuth(auth0UserId: string, backupCodes: string[]): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        enabled: true,
+        backupCodes: JSON.stringify(backupCodes),
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async disableTwoFactorAuth(auth0UserId: string): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        enabled: false,
+        backupCodes: null,
+        verifiedAt: null,
+        lastUsedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async deleteTwoFactorAuth(auth0UserId: string): Promise<void> {
+    await db.delete(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+  },
+
+  async updateTwoFactorLastUsed(auth0UserId: string): Promise<void> {
+    await db
+      .update(twoFactorAuth)
+      .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+  },
+
+  async updateTwoFactorBackupCodes(auth0UserId: string, backupCodes: string[]): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        backupCodes: JSON.stringify(backupCodes),
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
   },
 };
