@@ -1,6 +1,6 @@
 import { db } from './db';
-import { serverBilling, billingLedger, wallets, type InsertServerBilling, type InsertBillingLedger } from '../shared/schema';
-import { eq, and, lte, isNull, or } from 'drizzle-orm';
+import { serverBilling, billingLedger, wallets } from '../shared/schema';
+import { eq, and, lte, isNull, or, not } from 'drizzle-orm';
 import { log } from './index';
 import { virtfusionClient } from './virtfusion';
 
@@ -29,7 +29,7 @@ export async function createServerBilling(params: {
   const deployedAt = params.deployedAt || new Date();
   const nextBillAt = addMonth(deployedAt);
 
-  const billingRecord: InsertServerBilling = {
+  await db.insert(serverBilling).values({
     auth0UserId: params.auth0UserId,
     virtfusionServerId: params.virtfusionServerId,
     planId: params.planId,
@@ -39,9 +39,7 @@ export async function createServerBilling(params: {
     autoRenew: true,
     nextBillAt,
     suspendAt: null,
-  };
-
-  await db.insert(serverBilling).values(billingRecord);
+  });
   log(`Created billing record for server ${params.virtfusionServerId}, next bill: ${nextBillAt.toISOString()}`, 'billing');
 }
 
@@ -87,15 +85,13 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise
       .where(eq(wallets.auth0UserId, billing.auth0UserId));
 
     // Record in ledger
-    const ledgerEntry: InsertBillingLedger = {
+    await tx.insert(billingLedger).values({
       auth0UserId: billing.auth0UserId,
       virtfusionServerId: billing.virtfusionServerId,
       amountCents: billing.monthlyPriceCents,
       description: `Monthly server billing for ${billing.virtfusionServerId}`,
       idempotencyKey,
-    };
-
-    await tx.insert(billingLedger).values(ledgerEntry);
+    });
 
     // Update billing record
     const newNextBillAt = addMonth(billing.nextBillAt);
@@ -104,7 +100,6 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise
         status: 'paid',
         nextBillAt: newNextBillAt,
         suspendAt: null,
-        lastBilledAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(serverBilling.id, billing.id));
@@ -162,8 +157,8 @@ export async function runBillingJob(): Promise<void> {
     .where(
       and(
         eq(serverBilling.status, 'unpaid'),
-        lte(serverBilling.suspendAt, now),
-        isNull(serverBilling.suspendAt).not()
+        not(isNull(serverBilling.suspendAt)),
+        lte(serverBilling.suspendAt, now)
       )
     );
 

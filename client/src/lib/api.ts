@@ -665,6 +665,7 @@ class ApiClient {
     id: number;
     type: string;
     amountCents: number;
+    description?: string | null;
     createdAt: string;
     stripeEventId?: string;
     metadata?: Record<string, unknown>;
@@ -681,6 +682,7 @@ class ApiClient {
     description: string;
     status: string;
     createdAt: string;
+    pdfUrl?: string | null;
   }> }> {
     const response = await fetch(`${this.baseUrl}/billing/invoices`);
     if (!response.ok) throw new Error('Failed to fetch invoices');
@@ -746,6 +748,20 @@ class ApiClient {
       throw new Error(data.error || 'Failed to update auto top-up settings');
     }
     return response.json();
+  }
+
+  async updateAutoTopup(config: {
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }): Promise<{
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }> {
+    return this.updateAutoTopupSettings(config);
   }
 
   async getServerBillingStatuses(): Promise<{

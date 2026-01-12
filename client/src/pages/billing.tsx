@@ -74,9 +74,19 @@ interface Transaction {
   id: number;
   type: string;
   amountCents: number;
-  description: string | null;
-  metadata: any;
+  description?: string | null;
+  metadata?: Record<string, unknown>;
   createdAt: string;
+}
+
+interface Invoice {
+  id: number;
+  invoiceNumber: string;
+  amountCents: number;
+  description: string;
+  status: string;
+  createdAt: string;
+  pdfUrl?: string | null;
 }
 
 const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000]; // In cents
@@ -548,15 +558,7 @@ export default function BillingPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Array<{
-    id: string;
-    invoiceNumber: string;
-    amountCents: number;
-    description: string;
-    status: string;
-    createdAt: string;
-    pdfUrl: string | null;
-  }> }>({
+  const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Invoice[] }>({
     queryKey: ['invoices'],
     queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
@@ -1289,11 +1291,11 @@ export default function BillingPage() {
                                       {tx.description && <> · {tx.description}</>}
                                     </div>
                                     {/* Show admin reason for admin adjustments */}
-                                    {tx.type === 'admin_adjustment' && tx.metadata?.reason && (
+                                    {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
                                       <div className="text-sm text-muted-foreground mt-1">
-                                        <span className="text-primary/70">Reason:</span> {tx.metadata.reason}
+                                        <span className="text-primary/70">Reason:</span> {(tx.metadata as Record<string, string>).reason}
                                       </div>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
                                 <span className={`font-mono text-lg font-medium ${colors.text}`}>

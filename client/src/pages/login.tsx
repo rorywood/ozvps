@@ -318,7 +318,7 @@ export default function LoginPage() {
     const tryInitRecaptcha = () => {
       if (version === 'v3') {
         // v3: Just mark as loaded when grecaptcha is ready
-        if (window.grecaptcha?.execute) {
+        if (typeof window.grecaptcha?.execute === 'function') {
           setRecaptchaLoaded(true);
           setRecaptchaError(null);
           return;

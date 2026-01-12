@@ -285,20 +285,20 @@ export const deployOrdersRelations = relations(deployOrders, ({ one }) => ({
   }),
 }));
 
-// Insert schemas
-export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
-export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
-export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertBillingLedgerSchema = createInsertSchema(billingLedger).omit({ id: true, createdAt: true });
-export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
-export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
-export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
-export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
-export const insertTicketSchema = createInsertSchema(tickets).omit({ id: true, createdAt: true, updatedAt: true, lastMessageAt: true, closedAt: true });
-export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit({ id: true, createdAt: true });
-export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth).omit({ id: true, createdAt: true, updatedAt: true });
+// Insert schemas - simplified without .omit() to avoid drizzle-zod type issues
+export const insertPlanSchema = createInsertSchema(plans);
+export const insertWalletSchema = createInsertSchema(wallets);
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions);
+export const insertDeployOrderSchema = createInsertSchema(deployOrders);
+export const insertServerBillingSchema = createInsertSchema(serverBilling);
+export const insertBillingLedgerSchema = createInsertSchema(billingLedger);
+export const insertServerCancellationSchema = createInsertSchema(serverCancellations);
+export const insertSecuritySettingSchema = createInsertSchema(securitySettings);
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs);
+export const insertInvoiceSchema = createInsertSchema(invoices);
+export const insertTicketSchema = createInsertSchema(tickets);
+export const insertTicketMessageSchema = createInsertSchema(ticketMessages);
+export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth);
 
 // Types
 export type Plan = typeof plans.$inferSelect;

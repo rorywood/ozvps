@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth } from "@shared/schema";
+import { log } from "./index";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray, or, isNull, ne } from "drizzle-orm";
@@ -135,7 +136,7 @@ export class MemoryStorage implements IStorage {
 
   async hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean> {
     const now = new Date();
-    for (const session of this.sessions.values()) {
+    for (const session of Array.from(this.sessions.values())) {
       if (
         session.auth0UserId === auth0UserId &&
         !session.revokedAt &&
@@ -228,55 +229,56 @@ export const dbStorage = {
     return plan;
   },
 
-  async upsertPlan(plan: InsertPlan): Promise<Plan> {
+  async upsertPlan(plan: InsertPlan & Record<string, unknown>): Promise<Plan> {
     // Use virtfusionPackageId as the primary lookup for synced plans
-    if (plan.virtfusionPackageId) {
+    const planData = plan as typeof plans.$inferInsert;
+    if (planData.virtfusionPackageId) {
       const [existingByVfId] = await db
         .select()
         .from(plans)
-        .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId));
-      
+        .where(eq(plans.virtfusionPackageId, planData.virtfusionPackageId!));
+
       if (existingByVfId) {
         // Preserve existing price if the new price is 0 (VirtFusion doesn't provide pricing)
-        const updateData = { ...plan };
-        if (plan.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
+        const updateData = { ...planData };
+        if (planData.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
           updateData.priceMonthly = existingByVfId.priceMonthly;
         }
         // Preserve manually-disabled plans (don't re-enable from VirtFusion sync)
         if (existingByVfId.active === false) {
           updateData.active = false;
         }
-        
+
         const [updated] = await db
           .update(plans)
           .set(updateData)
-          .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId))
+          .where(eq(plans.virtfusionPackageId, planData.virtfusionPackageId!))
           .returning();
         return updated;
       }
     }
-    
+
     // Fallback to code lookup for manually created plans
-    const existing = await this.getPlanByCode(plan.code);
+    const existing = await this.getPlanByCode(planData.code);
     if (existing) {
       // Preserve existing price if the new price is 0
-      const updateData = { ...plan };
-      if (plan.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
+      const updateData = { ...planData };
+      if (planData.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
         updateData.priceMonthly = existing.priceMonthly;
       }
       // Preserve manually-disabled plans
       if (existing.active === false) {
         updateData.active = false;
       }
-      
+
       const [updated] = await db
         .update(plans)
         .set(updateData)
-        .where(eq(plans.code, plan.code))
+        .where(eq(plans.code, planData.code))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(plans).values(plan).returning();
+    const [created] = await db.insert(plans).values(planData).returning();
     return created;
   },
 
@@ -388,7 +390,7 @@ export const dbStorage = {
     return updated;
   },
 
-  async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
+  async creditWallet(auth0UserId: string, amountCents: number, transaction: { type: string; stripeEventId?: string | null; stripePaymentIntentId?: string | null; stripeSessionId?: string | null; metadata?: Record<string, unknown> }): Promise<Wallet> {
     // SECURITY: Check for idempotency using stripeEventId to prevent duplicate credits
     if (transaction.stripeEventId) {
       const [existing] = await db
@@ -657,7 +659,7 @@ export const dbStorage = {
 
   // Deploy Orders
   async createDeployOrder(order: InsertDeployOrder): Promise<DeployOrder> {
-    const [created] = await db.insert(deployOrders).values(order).returning();
+    const [created] = await db.insert(deployOrders).values(order as typeof deployOrders.$inferInsert).returning();
     return created;
   },
 
@@ -747,7 +749,7 @@ export const dbStorage = {
 
   // Server Cancellation methods
   async createCancellationRequest(data: InsertServerCancellation): Promise<ServerCancellation> {
-    const [cancellation] = await db.insert(serverCancellations).values(data).returning();
+    const [cancellation] = await db.insert(serverCancellations).values(data as typeof serverCancellations.$inferInsert).returning();
     return cancellation;
   },
 
@@ -865,7 +867,7 @@ export const dbStorage = {
 
   // Server Billing methods
   async createServerBilling(data: InsertServerBilling): Promise<ServerBilling> {
-    const [billing] = await db.insert(serverBilling).values(data).returning();
+    const [billing] = await db.insert(serverBilling).values(data as typeof serverBilling.$inferInsert).returning();
     return billing;
   },
 
@@ -890,8 +892,8 @@ export const dbStorage = {
       .from(serverBilling)
       .where(
         and(
-          eq(serverBilling.status, 'active'),
-          sql`${serverBilling.nextBillingAt} <= NOW()`
+          or(eq(serverBilling.status, 'paid'), eq(serverBilling.status, 'active')),
+          sql`${serverBilling.nextBillAt} <= NOW()`
         )
       );
   },
@@ -902,8 +904,8 @@ export const dbStorage = {
       .from(serverBilling)
       .where(
         and(
-          eq(serverBilling.status, 'overdue'),
-          sql`${serverBilling.overdueSince} <= NOW() - INTERVAL '${gracePeriodDays} days'`
+          eq(serverBilling.status, 'unpaid'),
+          sql`${serverBilling.suspendAt} <= NOW()`
         )
       );
   },
@@ -911,11 +913,11 @@ export const dbStorage = {
   async updateServerBillingStatus(
     virtfusionServerId: string,
     status: string,
-    overdueSince?: Date | null
+    suspendAt?: Date | null
   ): Promise<ServerBilling | undefined> {
-    const updates: any = { status, updatedAt: new Date() };
-    if (overdueSince !== undefined) {
-      updates.overdueSince = overdueSince;
+    const updates: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (suspendAt !== undefined) {
+      updates.suspendAt = suspendAt;
     }
     const [updated] = await db
       .update(serverBilling)
@@ -927,15 +929,14 @@ export const dbStorage = {
 
   async markServerBilled(
     virtfusionServerId: string,
-    nextBillingAt: Date
+    nextBillAt: Date
   ): Promise<ServerBilling | undefined> {
     const [updated] = await db
       .update(serverBilling)
       .set({
-        lastBilledAt: new Date(),
-        nextBillingAt,
-        status: 'active',
-        overdueSince: null,
+        nextBillAt,
+        status: 'paid',
+        suspendAt: null,
         updatedAt: new Date(),
       })
       .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
@@ -1073,7 +1074,7 @@ export const dbStorage = {
   async createAuditLog(data: InsertAdminAuditLog): Promise<AdminAuditLog> {
     const [log] = await db
       .insert(adminAuditLogs)
-      .values(data)
+      .values(data as typeof adminAuditLogs.$inferInsert)
       .returning();
     return log;
   },
@@ -1141,7 +1142,7 @@ export const dbStorage = {
 
   // Invoice functions
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
-    const [invoice] = await db.insert(invoices).values(data).returning();
+    const [invoice] = await db.insert(invoices).values(data as typeof invoices.$inferInsert).returning();
     return invoice;
   },
 
@@ -1197,7 +1198,7 @@ export const dbStorage = {
 
   // Create a new ticket
   async createTicket(data: InsertTicket): Promise<Ticket> {
-    const [ticket] = await db.insert(tickets).values(data).returning();
+    const [ticket] = await db.insert(tickets).values(data as typeof tickets.$inferInsert).returning();
     return ticket;
   },
 
@@ -1398,9 +1399,10 @@ export const dbStorage = {
 
   // Create a ticket message
   async createTicketMessage(data: InsertTicketMessage): Promise<TicketMessage> {
-    const [message] = await db.insert(ticketMessages).values(data).returning();
+    const messageData = data as typeof ticketMessages.$inferInsert;
+    const [message] = await db.insert(ticketMessages).values(messageData).returning();
     // Update ticket last message time
-    await this.updateTicketLastMessage(data.ticketId);
+    await this.updateTicketLastMessage(messageData.ticketId);
     return message;
   },
 
@@ -1498,7 +1500,7 @@ export const dbStorage = {
   },
 
   async createTwoFactorAuth(data: InsertTwoFactorAuth): Promise<TwoFactorAuth> {
-    const [tfa] = await db.insert(twoFactorAuth).values(data).returning();
+    const [tfa] = await db.insert(twoFactorAuth).values(data as typeof twoFactorAuth.$inferInsert).returning();
     return tfa;
   },
 

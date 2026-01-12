@@ -125,8 +125,7 @@ function totpVerify(token: string, secret: string): boolean {
   try {
     // verifySync returns { valid: boolean, delta?: number, epoch?: number }
     // window: 2 allows codes from 60 seconds before/after to handle time drift
-    const result = otplibVerifySync({ token, secret, window: 2 });
-    console.log('TOTP verify result:', JSON.stringify(result));
+    const result = otplibVerifySync({ token, secret, window: 2 } as any);
     return result?.valid === true;
   } catch (error) {
     console.error('TOTP verification error:', error);
@@ -1135,29 +1134,9 @@ export async function registerRoutes(
               bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
             }
 
-            // Fetch billing status, create if doesn't exist (for existing servers)
-            let billingStatus = await getServerBillingStatus(server.id);
-
-            // Auto-initialize billing for existing servers that don't have a record
-            if (!billingStatus && server.plan?.priceMonthly) {
-              try {
-                // Use server's actual creation date for accurate billing
-                const serverCreatedAt = server.created_at || server.createdAt;
-                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-                await createServerBilling({
-                  auth0UserId: req.userSession!.auth0UserId!,
-                  virtfusionServerId: server.id,
-                  planId: server.plan.id,
-                  monthlyPriceCents: server.plan.priceMonthly,
-                  deployedAt,
-                });
-                // Fetch the newly created billing record
-                billingStatus = await getServerBillingStatus(server.id);
-              } catch (billingCreateError: any) {
-                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
-              }
-            }
+            // Fetch billing status for the server
+            // Note: Billing records are created during server deployment, not auto-initialized
+            const billingStatus = await getServerBillingStatus(server.id);
 
             return {
               ...server,
@@ -1248,27 +1227,8 @@ export async function registerRoutes(
               totalBandwidthLimit += limitGB;
             }
 
-            // Fetch billing status, create if doesn't exist (for existing servers)
-            let billingStatus = await getServerBillingStatus(server.id);
-
-            // Auto-initialize billing for existing servers that don't have a record
-            if (!billingStatus && server.plan?.priceMonthly) {
-              try {
-                const serverCreatedAt = server.created_at || server.createdAt;
-                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-                await createServerBilling({
-                  auth0UserId: session.auth0UserId!,
-                  virtfusionServerId: server.id,
-                  planId: server.plan.id,
-                  monthlyPriceCents: server.plan.priceMonthly,
-                  deployedAt,
-                });
-                billingStatus = await getServerBillingStatus(server.id);
-              } catch (billingCreateError: any) {
-                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
-              }
-            }
+            // Fetch billing status for the server
+            const billingStatus = await getServerBillingStatus(server.id);
 
             return {
               ...server,
@@ -1801,40 +1761,26 @@ export async function registerRoutes(
     try {
       const session = req.userSession!;
 
-      // Auto-initialize billing for servers that don't have records yet
-      try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
-        const activeServerIds = new Set(servers.map(s => s.id));
-
-        for (const server of servers) {
-          if (server.plan?.priceMonthly) {
-            const billingStatus = await getServerBillingStatus(server.id);
-
-            if (!billingStatus) {
-              const serverCreatedAt = server.created_at || server.createdAt;
-              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-              await createServerBilling({
-                auth0UserId: session.auth0UserId!,
-                virtfusionServerId: server.id,
-                planId: server.plan.id,
-                monthlyPriceCents: server.plan.priceMonthly,
-                deployedAt,
-              });
-              log(`Auto-initialized billing for server ${server.id}`, 'billing');
-            }
-          }
-        }
-      } catch (initError: any) {
-        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
-      }
-
       // Fetch upcoming charges
-      let upcoming = [];
+      let upcoming: Array<{
+        id: number;
+        virtfusionServerId: string;
+        planId: number;
+        monthlyPriceCents: number;
+        status: string;
+        nextBillAt: Date;
+        suspendAt: Date | null;
+        autoRenew: boolean;
+        serverName?: string;
+      }> = [];
+
       try {
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
         // Fetch servers to enrich with names and verify they still exist
+        if (!session.virtFusionUserId) {
+          return res.json({ upcoming });
+        }
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         const serverMap = new Map(servers.map(s => [s.id, s.name]));
 
@@ -2906,7 +2852,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Reason is required for suspend action' });
       }
       
-      const success = await virtfusionClient.suspendServer(parseInt(serverId));
+      const success = await virtfusionClient.suspendServer(serverId);
       if (!success) {
         throw new Error('Suspend operation failed');
       }
@@ -2925,7 +2871,7 @@ export async function registerRoutes(
       const { serverId } = req.params;
       const { reason } = req.body;
       
-      const success = await virtfusionClient.unsuspendServer(parseInt(serverId));
+      const success = await virtfusionClient.unsuspendServer(serverId);
       if (!success) {
         throw new Error('Unsuspend operation failed');
       }
@@ -3964,7 +3910,7 @@ export async function registerRoutes(
       log(`[Direct Topup] Stripe customer: ${stripeCustomerId}`, 'api');
 
       const stripe = await getUncachableStripeClient();
-      const auth0UserId = req.userSession!.auth0UserId;
+      const auth0UserId = req.userSession!.auth0UserId!;
 
       // Verify the payment method belongs to this customer
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
