@@ -458,7 +458,9 @@ class ApiClient {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Invalid email or password');
+      const error = new Error(data.error || 'Invalid email or password') as Error & { code?: string };
+      error.code = data.code;
+      throw error;
     }
     return response.json();
   }

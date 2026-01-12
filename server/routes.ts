@@ -1047,6 +1047,49 @@ export async function registerRoutes(
     }
   });
 
+  // Force logout other sessions (requires password verification for security)
+  app.post('/api/auth/force-logout', async (req, res) => {
+    try {
+      const { email, password, recaptchaToken } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+
+      // Verify reCAPTCHA if enabled (same as login)
+      const recaptchaSettings = dbStorage.getRecaptchaSettings();
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+        if (!recaptchaToken) {
+          return res.status(400).json({ error: 'reCAPTCHA verification required' });
+        }
+        const recaptchaValid = await verifyRecaptchaToken(recaptchaToken, recaptchaSettings.secretKey!, 'force_logout', recaptchaSettings.minScore || 0.5);
+        if (!recaptchaValid) {
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+        }
+      }
+
+      // Verify credentials with Auth0 (this ensures the user owns the account)
+      const auth0Result = await auth0Client.authenticateUser(email, password);
+      if (!auth0Result.success || !auth0Result.user) {
+        log(`Force logout failed for ${email} - invalid credentials`, 'auth');
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      // Revoke all existing sessions for this user
+      const auth0UserId = auth0Result.user.user_id.startsWith('auth0|')
+        ? auth0Result.user.user_id
+        : `auth0|${auth0Result.user.user_id}`;
+
+      await storage.revokeSessionsByAuth0UserId(auth0UserId, SESSION_REVOKE_REASONS.FORCE_LOGOUT);
+      log(`Force logout successful for ${email} - all sessions revoked`, 'auth');
+
+      res.json({ success: true, message: 'All other sessions have been logged out. You can now login.' });
+    } catch (error: any) {
+      log(`Force logout error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to force logout' });
+    }
+  });
+
   app.post('/api/auth/logout', async (req, res) => {
     const sessionId = req.cookies?.[SESSION_COOKIE];
     
