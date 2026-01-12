@@ -210,7 +210,7 @@ app.use((req, res, next) => {
     const databaseUrl = process.env.DATABASE_URL;
     if (databaseUrl) {
       log('Initializing Stripe schema...', 'stripe');
-      await runMigrations({ databaseUrl, schema: 'stripe' });
+      await runMigrations({ databaseUrl } as any);
       log('Stripe schema ready', 'stripe');
 
       const stripeSync = await getStripeSync();

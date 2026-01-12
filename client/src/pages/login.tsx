@@ -263,6 +263,9 @@ export default function LoginPage() {
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [savedRecaptchaToken, setSavedRecaptchaToken] = useState<string | undefined>(undefined);
 
+  // Force logout state (when blocked by another session)
+  const [showForceLogout, setShowForceLogout] = useState(false);
+
   const formatDisplayName = (name?: string, email?: string): string => {
     if (name) {
       return name
@@ -318,7 +321,7 @@ export default function LoginPage() {
     const tryInitRecaptcha = () => {
       if (version === 'v3') {
         // v3: Just mark as loaded when grecaptcha is ready
-        if (window.grecaptcha?.execute) {
+        if (typeof window.grecaptcha?.execute === 'function') {
           setRecaptchaLoaded(true);
           setRecaptchaError(null);
           return;
@@ -442,7 +445,14 @@ export default function LoginPage() {
       setUseBackupCode(false);
     },
     onError: (err: any) => {
-      setError(err.message || "Invalid email or password");
+      // Check if user is already logged in from another location
+      if (err.code === 'ALREADY_LOGGED_IN') {
+        setShowForceLogout(true);
+        setError(err.message || "You are already logged in from another location.");
+      } else {
+        setError(err.message || "Invalid email or password");
+        setShowForceLogout(false);
+      }
       setRecaptchaToken(null);
       // Reset 2FA token on error
       setTwoFAToken("");
@@ -450,6 +460,43 @@ export default function LoginPage() {
       if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
         window.grecaptcha.reset(widgetIdRef.current);
       }
+    },
+  });
+
+  // Force logout mutation
+  const forceLogoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/auth/force-logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          password,
+          recaptchaToken: savedRecaptchaToken || recaptchaToken,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to force logout');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setShowForceLogout(false);
+      setError("");
+      toast({
+        title: "Sessions cleared",
+        description: "All other sessions have been logged out. Please sign in again.",
+      });
+      // Reset reCAPTCHA for new login attempt
+      if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
+        window.grecaptcha.reset(widgetIdRef.current);
+      }
+      setRecaptchaToken(null);
+    },
+    onError: (err: any) => {
+      setError(err.message || "Failed to force logout. Please check your credentials.");
     },
   });
 
@@ -704,18 +751,43 @@ export default function LoginPage() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3"
+                  className={`flex flex-col gap-2 text-sm ${showForceLogout ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'} border rounded-lg p-3`}
                   data-testid="text-error"
                 >
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>{error}</span>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  {showForceLogout && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => forceLogoutMutation.mutate()}
+                      disabled={forceLogoutMutation.isPending}
+                      className="mt-1 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                      data-testid="button-force-logout"
+                    >
+                      {forceLogoutMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                          Logging out other session...
+                        </>
+                      ) : (
+                        <>
+                          <LogOut className="h-3 w-3 mr-1.5" />
+                          Force logout other session
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </motion.div>
               )}
 
               <Button
                 type="submit"
                 className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
-                disabled={loginMutation.isPending}
+                disabled={loginMutation.isPending || forceLogoutMutation.isPending}
                 data-testid="button-submit"
               >
                 {loginMutation.isPending ? (
