@@ -404,6 +404,19 @@ export const dbStorage = {
       }
     }
 
+    // SECURITY: Also check stripePaymentIntentId for idempotency (used by auto-topup and direct charges)
+    if (transaction.stripePaymentIntentId) {
+      const [existing] = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.stripePaymentIntentId, transaction.stripePaymentIntentId));
+      if (existing) {
+        // Already processed, return current wallet
+        log(`Duplicate credit attempt blocked for stripePaymentIntentId: ${transaction.stripePaymentIntentId}`, 'security');
+        return await this.getOrCreateWallet(auth0UserId);
+      }
+    }
+
     // Create wallet if doesn't exist
     await this.getOrCreateWallet(auth0UserId);
 

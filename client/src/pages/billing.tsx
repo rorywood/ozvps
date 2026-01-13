@@ -514,9 +514,9 @@ export default function BillingPage() {
   } | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Check for success callback
+  // Check for success/cancelled callback from Stripe checkout
   useEffect(() => {
-    if (searchParams.includes('success=true')) {
+    if (searchParams.includes('topup=success')) {
       setPaymentFeedback({
         type: 'success',
         message: 'Payment successful! Your wallet has been credited.',
@@ -526,6 +526,14 @@ export default function BillingPage() {
       }, 100);
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    } else if (searchParams.includes('topup=cancelled')) {
+      setPaymentFeedback({
+        type: 'error',
+        message: 'Payment was cancelled. No charges were made.',
+      });
+      setTimeout(() => {
+        navigate('/billing', { replace: true });
+      }, 100);
     }
   }, [searchParams, navigate, queryClient]);
 
@@ -713,8 +721,12 @@ export default function BillingPage() {
     const amountCents = getValidAmount();
     if (amountCents === null) return;
 
-    if (paymentMethods.length > 0 && selectedPaymentMethodId) {
-      directChargeMutation.mutate({ amountCents, paymentMethodId: selectedPaymentMethodId });
+    // Use the same fallback logic as the Select component - if user hasn't explicitly
+    // selected a payment method, default to the first available one
+    const effectivePaymentMethodId = selectedPaymentMethodId || paymentMethods[0]?.id;
+
+    if (paymentMethods.length > 0 && effectivePaymentMethodId) {
+      directChargeMutation.mutate({ amountCents, paymentMethodId: effectivePaymentMethodId });
     } else {
       topupMutation.mutate(amountCents);
     }
