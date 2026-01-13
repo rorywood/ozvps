@@ -213,6 +213,18 @@ export const twoFactorAuth = pgTable("two_factor_auth", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Rate limiting table for persistent brute-force protection
+export const rateLimits = pgTable("rate_limits", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  limitType: varchar("limit_type", { length: 20 }).notNull(), // 'email', 'ip', 'email_ip_combo'
+  limitKey: varchar("limit_key", { length: 255 }).notNull(), // email, IP, or combo key
+  attempts: integer("attempts").notNull().default(0),
+  windowStart: timestamp("window_start").defaultNow().notNull(),
+  lockedUntil: timestamp("locked_until"), // NULL if not locked
+  lastAttempt: timestamp("last_attempt").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
   'sales',

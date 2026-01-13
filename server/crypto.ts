@@ -7,22 +7,55 @@
 import crypto from 'crypto';
 import argon2 from 'argon2';
 
-// Get encryption key from environment or generate a warning
+// Get encryption key from environment - REQUIRED in production
 const ENCRYPTION_KEY = process.env.TOTP_ENCRYPTION_KEY;
+const SESSION_SECRET = process.env.SESSION_SECRET;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// Cache the derived key to avoid repeated derivation
+let cachedEncryptionKey: Buffer | null = null;
 
 function getEncryptionKey(): Buffer {
-  if (!ENCRYPTION_KEY) {
+  // Return cached key if available
+  if (cachedEncryptionKey) {
+    return cachedEncryptionKey;
+  }
+
+  if (ENCRYPTION_KEY) {
+    // If key is hex-encoded (64 chars = 32 bytes)
+    if (ENCRYPTION_KEY.length === 64 && /^[0-9a-fA-F]+$/.test(ENCRYPTION_KEY)) {
+      cachedEncryptionKey = Buffer.from(ENCRYPTION_KEY, 'hex');
+    } else {
+      // Otherwise derive from the key string
+      cachedEncryptionKey = crypto.scryptSync(ENCRYPTION_KEY, 'totp-salt', 32);
+    }
+    return cachedEncryptionKey;
+  }
+
+  // Fallback to SESSION_SECRET if TOTP_ENCRYPTION_KEY not set
+  if (SESSION_SECRET) {
     console.warn('WARNING: TOTP_ENCRYPTION_KEY not set. Using derived key from SESSION_SECRET.');
-    // Derive a key from SESSION_SECRET if TOTP_ENCRYPTION_KEY not set
-    const sessionSecret = process.env.SESSION_SECRET || 'default-session-secret-change-me';
-    return crypto.scryptSync(sessionSecret, 'totp-salt', 32);
+    cachedEncryptionKey = crypto.scryptSync(SESSION_SECRET, 'totp-salt', 32);
+    return cachedEncryptionKey;
   }
-  // If key is hex-encoded (64 chars = 32 bytes)
-  if (ENCRYPTION_KEY.length === 64 && /^[0-9a-fA-F]+$/.test(ENCRYPTION_KEY)) {
-    return Buffer.from(ENCRYPTION_KEY, 'hex');
+
+  // SECURITY: Fail fast in production if no secrets are configured
+  if (IS_PRODUCTION) {
+    throw new Error(
+      'SECURITY ERROR: Neither TOTP_ENCRYPTION_KEY nor SESSION_SECRET is configured. ' +
+      'This is required in production to encrypt 2FA secrets. ' +
+      'Generate a key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
   }
-  // Otherwise derive from the key string
-  return crypto.scryptSync(ENCRYPTION_KEY, 'totp-salt', 32);
+
+  // Development only: Use a derived key from a warning message
+  console.error(
+    '⚠️  SECURITY WARNING: No encryption key configured! ' +
+    'Set TOTP_ENCRYPTION_KEY or SESSION_SECRET environment variable. ' +
+    'Using insecure development key - DO NOT USE IN PRODUCTION!'
+  );
+  cachedEncryptionKey = crypto.scryptSync('INSECURE-DEV-KEY-DO-NOT-USE-IN-PRODUCTION', 'totp-salt', 32);
+  return cachedEncryptionKey;
 }
 
 /**

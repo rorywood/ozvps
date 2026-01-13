@@ -32,10 +32,14 @@ class Auth0Client {
   private managementToken: string | null = null;
   private managementTokenExpiry: number = 0;
   private userExistsCache: Map<string, { exists: boolean; checkedAt: number }> = new Map();
+  // Cache for admin status to reduce Auth0 API calls
+  private adminStatusCache: Map<string, { isAdmin: boolean; cachedAt: number }> = new Map();
   // SECURITY: Very short cache TTL to ensure deleted users are locked out quickly
   // Only cache "exists: false" longer since that's a permanent state
   private readonly USER_EXISTS_CACHE_TTL_MS = 30 * 1000; // 30 seconds for exists: true
   private readonly USER_NOT_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for exists: false
+  // Admin status cache - 5 minutes is reasonable since admin changes are rare
+  private readonly ADMIN_STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     if (!AUTH0_DOMAIN) {
@@ -330,9 +334,31 @@ class Auth0Client {
     return user?.app_metadata?.virtfusion_user_id || null;
   }
 
-  async isUserAdmin(auth0UserId: string): Promise<boolean> {
+  async isUserAdmin(auth0UserId: string, forceRefresh: boolean = false): Promise<boolean> {
+    // Check cache first (unless force refresh requested)
+    if (!forceRefresh) {
+      const cached = this.adminStatusCache.get(auth0UserId);
+      if (cached && Date.now() - cached.cachedAt < this.ADMIN_STATUS_CACHE_TTL_MS) {
+        return cached.isAdmin;
+      }
+    }
+
+    // Fetch from Auth0
     const user = await this.getUserById(auth0UserId);
-    return user?.app_metadata?.is_admin === true;
+    const isAdmin = user?.app_metadata?.is_admin === true;
+
+    // Cache the result
+    this.adminStatusCache.set(auth0UserId, { isAdmin, cachedAt: Date.now() });
+
+    return isAdmin;
+  }
+
+  /**
+   * Invalidate admin status cache for a user
+   * Call this when admin status might have changed
+   */
+  invalidateAdminStatusCache(auth0UserId: string): void {
+    this.adminStatusCache.delete(auth0UserId);
   }
 
   async userExists(auth0UserId: string): Promise<boolean> {
