@@ -463,3 +463,107 @@ export function verifyHmacSignature(
     return false;
   }
 }
+
+/**
+ * Admin function: Get all currently blocked/rate-limited entries
+ * Returns entries that are either locked or have high attempt counts
+ */
+export async function getBlockedEntries(): Promise<Array<{
+  type: RateLimitType;
+  key: string;
+  attempts: number;
+  lockedUntil: Date | null;
+  lastAttempt: Date;
+  remainingMs: number | null;
+}>> {
+  try {
+    const now = new Date();
+
+    // Get all records from the database
+    const records = await db
+      .select()
+      .from(rateLimits)
+      .orderBy(rateLimits.lastAttempt);
+
+    // Filter and format records that are either locked or have attempts
+    return records
+      .filter(r => r.attempts > 0 || (r.lockedUntil && r.lockedUntil > now))
+      .map(r => ({
+        type: r.limitType as RateLimitType,
+        key: r.limitKey,
+        attempts: r.attempts,
+        lockedUntil: r.lockedUntil,
+        lastAttempt: r.lastAttempt,
+        remainingMs: r.lockedUntil && r.lockedUntil > now
+          ? r.lockedUntil.getTime() - now.getTime()
+          : null,
+      }));
+  } catch (error: any) {
+    log(`Error fetching blocked entries: ${error.message}`, 'security');
+    return [];
+  }
+}
+
+/**
+ * Admin function: Unblock a specific email, IP, or combo
+ */
+export async function adminUnblock(type: RateLimitType, key: string): Promise<boolean> {
+  try {
+    await deleteRateLimitRecord(type, key);
+    log(`Admin unblocked ${type}: ${key}`, 'security');
+    return true;
+  } catch (error: any) {
+    log(`Error unblocking ${type}:${key}: ${error.message}`, 'security');
+    return false;
+  }
+}
+
+/**
+ * Admin function: Unblock all entries for a specific email
+ * Clears email, and all email_ip_combo entries for that email
+ */
+export async function adminUnblockEmail(email: string): Promise<{ cleared: number }> {
+  const emailKey = email.toLowerCase().trim();
+  let cleared = 0;
+
+  try {
+    // Delete the email record
+    await deleteRateLimitRecord('email', emailKey);
+    cleared++;
+
+    // Delete all combo records for this email
+    const comboRecords = await db
+      .select()
+      .from(rateLimits)
+      .where(eq(rateLimits.limitType, 'email_ip_combo'));
+
+    for (const record of comboRecords) {
+      if (record.limitKey.startsWith(`${emailKey}:`)) {
+        await deleteRateLimitRecord('email_ip_combo', record.limitKey);
+        invalidateCache('email_ip_combo', record.limitKey);
+        cleared++;
+      }
+    }
+
+    log(`Admin unblocked email ${emailKey} (${cleared} records cleared)`, 'security');
+    return { cleared };
+  } catch (error: any) {
+    log(`Error unblocking email ${emailKey}: ${error.message}`, 'security');
+    return { cleared };
+  }
+}
+
+/**
+ * Admin function: Clear all rate limit records (nuclear option)
+ */
+export async function adminClearAllRateLimits(): Promise<{ cleared: number }> {
+  try {
+    const result = await db.delete(rateLimits);
+    memoryCache.clear();
+    log(`Admin cleared all rate limit records`, 'security');
+    return { cleared: 0 }; // Drizzle doesn't return count easily
+  } catch (error: any) {
+    log(`Error clearing all rate limits: ${error.message}`, 'security');
+    return { cleared: 0 };
+  }
+}
