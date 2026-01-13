@@ -851,6 +851,60 @@ class ApiClient {
   }
 
   // ==========================================
+  // ADMIN RATE LIMIT MANAGEMENT
+  // ==========================================
+
+  async getRateLimits(): Promise<{
+    entries: Array<{
+      type: 'email' | 'ip' | 'email_ip_combo';
+      key: string;
+      attempts: number;
+      lockedUntil: string | null;
+      lastAttempt: string;
+      remainingMs: number | null;
+    }>;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/admin/security/rate-limits`);
+    if (!response.ok) throw new Error('Failed to fetch rate limits');
+    return response.json();
+  }
+
+  async unblockRateLimit(type: string, key: string): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(
+      `${this.baseUrl}/admin/security/rate-limits/${type}/${encodeURIComponent(key)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to unblock');
+    }
+    return response.json();
+  }
+
+  async unblockEmail(email: string): Promise<{ success: boolean; cleared: number; message: string }> {
+    const response = await secureFetch(
+      `${this.baseUrl}/admin/security/rate-limits/email/${encodeURIComponent(email)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to unblock email');
+    }
+    return response.json();
+  }
+
+  async clearAllRateLimits(): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/admin/security/rate-limits`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to clear rate limits');
+    }
+    return response.json();
+  }
+
+  // ==========================================
   // SUPPORT TICKET ENDPOINTS - USER
   // ==========================================
 
