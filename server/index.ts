@@ -49,7 +49,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Security headers
+// Security headers with enhanced configuration
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
     directives: {
@@ -61,10 +61,37 @@ app.use(helmet({
       connectSrc: ["'self'", "wss:", "https:"],
       frameSrc: ["'none'", "https://js.stripe.com", "https://*.stripe.com", "https://www.google.com/recaptcha/", "https://recaptcha.google.com/"],
       objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: [],
     }
   } : false,
   crossOriginEmbedderPolicy: false,
+  // Additional security headers
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  dnsPrefetchControl: { allow: false },
+  ieNoOpen: true,
+  noSniff: true,
+  originAgentCluster: true,
+  xssFilter: true,
 }));
+
+// Additional custom security headers
+app.use((req, res, next) => {
+  // Prevent browsers from performing MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Prevent clickjacking
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Enable XSS filter
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // Restrict feature usage
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  }
+  next();
+});
 
 // Rate limiting for auth endpoints (stricter)
 const authLimiter = rateLimit({
@@ -96,10 +123,26 @@ const walletLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
+// SECURITY: Rate limiting for public/unauthenticated endpoints to prevent enumeration
+const publicEndpointLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute per IP
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/wallet/topup', walletLimiter);
+// Public endpoints that don't require auth still need rate limiting
+app.use('/api/plans', publicEndpointLimiter);
+app.use('/api/locations', publicEndpointLimiter);
+app.use('/api/health', publicEndpointLimiter);
+app.use('/api/security/recaptcha-config', publicEndpointLimiter);
+app.use('/api/stripe/publishable-key', publicEndpointLimiter);
 app.use('/api/', apiLimiter);
 app.use('/install.sh', apiLimiter);
 app.use('/update-ozvps.sh', apiLimiter);
@@ -134,15 +177,20 @@ app.post(
   }
 );
 
+// SECURITY: Request body size limits to prevent DoS attacks
+const MAX_JSON_SIZE = '100kb'; // Reasonable limit for most JSON payloads
+const MAX_URL_ENCODED_SIZE = '50kb';
+
 app.use(
   express.json({
+    limit: MAX_JSON_SIZE,
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: MAX_URL_ENCODED_SIZE }));
 app.use(cookieParser());
 
 // Sensitive fields to redact from logs

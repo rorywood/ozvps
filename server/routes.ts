@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { createServer, type Server } from "http";
-import { createHmac, timingSafeEqual } from "crypto";
+import crypto, { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
@@ -124,8 +124,10 @@ function totpGenerateSecret(): string {
 function totpVerify(token: string, secret: string): boolean {
   try {
     // verifySync returns { valid: boolean, delta?: number, epoch?: number }
-    // window: 2 allows codes from 60 seconds before/after to handle time drift
-    const result = otplibVerifySync({ token, secret, window: 2 } as any);
+    // SECURITY: window: 1 allows codes from ±30 seconds to handle time drift
+    // This is a balance between security (smaller window = less attack surface)
+    // and usability (allow for reasonable clock drift between client and server)
+    const result = otplibVerifySync({ token, secret, window: 1 } as any);
     return result?.valid === true;
   } catch (error) {
     console.error('TOTP verification error:', error);
@@ -221,18 +223,50 @@ declare global {
 }
 
 const SESSION_COOKIE = 'ozvps_session';
+const CSRF_COOKIE = 'ozvps_csrf';
+const CSRF_HEADER = 'x-csrf-token';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-// CSRF protection middleware - validates Origin header for mutating requests
+/**
+ * Generate a cryptographically secure CSRF token
+ */
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Set CSRF token cookie
+ */
+function setCsrfCookie(res: Response, token: string, expiresAt: Date): void {
+  res.cookie(CSRF_COOKIE, token, {
+    httpOnly: false, // Must be readable by JavaScript to include in headers
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    expires: expiresAt,
+  });
+}
+
+/**
+ * CSRF protection middleware - implements double-submit cookie pattern
+ * Combined with Origin/Referer validation for defense in depth
+ */
 function csrfProtection(req: Request, res: Response, next: NextFunction) {
   // Only check mutating methods
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
   }
 
-  // Skip CSRF for webhook endpoints (they use their own auth)
+  // Skip CSRF for webhook endpoints (they use their own auth via signatures)
   if (req.originalUrl.startsWith('/api/hooks/') || req.originalUrl.startsWith('/api/stripe/webhook')) {
+    return next();
+  }
+
+  // Skip CSRF for login/register (no session yet)
+  if (req.originalUrl === '/api/auth/login' ||
+      req.originalUrl === '/api/auth/register' ||
+      req.originalUrl === '/api/auth/force-logout') {
     return next();
   }
 
@@ -245,31 +279,54 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
-  // Validate origin or referer matches the host
+  // Layer 1: Origin/Referer validation
+  let originValid = false;
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (originUrl.host !== host) {
-        log(`CSRF blocked: Origin ${origin} doesn't match host ${host}`, 'security');
-        return res.status(403).json({ error: 'Invalid request origin' });
-      }
+      originValid = originUrl.host === host;
     } catch {
-      return res.status(403).json({ error: 'Invalid request origin' });
+      // Invalid origin URL
     }
   } else if (referer) {
     try {
       const refererUrl = new URL(referer);
-      if (refererUrl.host !== host) {
-        log(`CSRF blocked: Referer ${referer} doesn't match host ${host}`, 'security');
-        return res.status(403).json({ error: 'Invalid request origin' });
+      originValid = refererUrl.host === host;
+    } catch {
+      // Invalid referer URL
+    }
+  }
+
+  if (!originValid) {
+    log(`CSRF blocked: Invalid or missing origin/referer`, 'security');
+    return res.status(403).json({ error: 'Invalid request origin', code: 'CSRF_ORIGIN' });
+  }
+
+  // Layer 2: Double-submit cookie validation (for authenticated requests)
+  const csrfCookie = req.cookies?.[CSRF_COOKIE];
+  const csrfHeader = req.headers[CSRF_HEADER] as string | undefined;
+
+  // If user has a session, require CSRF token
+  if (req.cookies?.[SESSION_COOKIE]) {
+    if (!csrfCookie || !csrfHeader) {
+      log(`CSRF blocked: Missing CSRF token`, 'security');
+      return res.status(403).json({ error: 'Missing security token', code: 'CSRF_MISSING' });
+    }
+
+    // Timing-safe comparison to prevent timing attacks
+    try {
+      const cookieBuffer = Buffer.from(csrfCookie, 'utf8');
+      const headerBuffer = Buffer.from(csrfHeader, 'utf8');
+
+      if (cookieBuffer.length !== headerBuffer.length ||
+          !crypto.timingSafeEqual(cookieBuffer, headerBuffer)) {
+        log(`CSRF blocked: Token mismatch`, 'security');
+        return res.status(403).json({ error: 'Invalid security token', code: 'CSRF_INVALID' });
       }
     } catch {
-      return res.status(403).json({ error: 'Invalid request origin' });
+      log(`CSRF blocked: Token comparison error`, 'security');
+      return res.status(403).json({ error: 'Invalid security token', code: 'CSRF_INVALID' });
     }
-  } else {
-    // No origin or referer - block in production
-    log(`CSRF blocked: No origin or referer header`, 'security');
-    return res.status(403).json({ error: 'Missing request origin' });
   }
 
   next();
@@ -287,18 +344,21 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     
     if (!session) {
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
     }
 
     if (new Date(session.expiresAt) < new Date()) {
       await storage.deleteSession(sessionId);
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
     }
 
     // Check if session was revoked
     if (session.revokedAt) {
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       const reason = session.revokedReason;
       
       if (reason === SESSION_REVOKE_REASONS.CONCURRENT_LOGIN) {
@@ -332,6 +392,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ 
           error: 'Your session expired due to inactivity. Please sign in again.',
           code: 'SESSION_IDLE_TIMEOUT'
@@ -349,6 +410,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         // Revoke the session and return blocked error
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ 
           error: 'Your account has been suspended. Please contact support.',
           code: 'SESSION_REVOKED_BLOCKED'
@@ -363,6 +425,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         // User was deleted from Auth0 - revoke all their sessions
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_DELETED);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         log(`Auth0 user ${session.auth0UserId} deleted - revoking sessions`, 'auth0');
         return res.status(401).json({ 
           error: 'Your account no longer exists. Please contact support if this is unexpected.',
@@ -749,8 +812,13 @@ export async function registerRoutes(
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
+        path: '/',
         expires: expiresAt,
       });
+
+      // Set CSRF token cookie for double-submit pattern
+      const csrfToken = generateCsrfToken();
+      setCsrfCookie(res, csrfToken, expiresAt);
 
       res.status(201).json({
         user: {
@@ -758,6 +826,7 @@ export async function registerRoutes(
           email: email,
           name: name || virtFusionUser.name,
         },
+        csrfToken, // Include in response for initial setup
       });
     } catch (error: any) {
       log(`Registration error: ${error.message}`, 'api');
@@ -806,29 +875,29 @@ export async function registerRoutes(
       const clientIp = getClientIp(req);
       
       // Check if IP is blocked (distributed attack protection)
-      const ipBlockStatus = isIpBlocked(clientIp);
+      const ipBlockStatus = await isIpBlocked(clientIp);
       if (ipBlockStatus.blocked) {
         const remainingMins = Math.ceil((ipBlockStatus.remainingMs || 0) / 60000);
         log(`Blocked login attempt from blocked IP: ${clientIp}`, 'security');
-        return res.status(429).json({ 
+        return res.status(429).json({
           error: `Too many login attempts from your location. Try again in ${remainingMins} minutes.`,
           code: 'IP_BLOCKED'
         });
       }
-      
+
       // Check if account is locked due to too many failed attempts
-      const lockStatus = isAccountLocked(email, clientIp);
+      const lockStatus = await isAccountLocked(email, clientIp);
       if (lockStatus.locked) {
         const remainingMins = Math.ceil((lockStatus.remainingMs || 0) / 60000);
         log(`Blocked login attempt for locked account: ${email} from IP: ${clientIp} (${lockStatus.reason})`, 'security');
-        return res.status(429).json({ 
+        return res.status(429).json({
           error: `Account temporarily locked due to too many failed attempts. Try again in ${remainingMins} minutes.`,
           code: 'ACCOUNT_LOCKED'
         });
       }
 
       // Apply progressive delay based on failed attempts
-      const delay = getProgressiveDelay(email, clientIp);
+      const delay = await getProgressiveDelay(email, clientIp);
       if (delay > 0) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -836,12 +905,12 @@ export async function registerRoutes(
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
-        recordFailedLogin(email, clientIp);
+        await recordFailedLogin(email, clientIp);
         return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
       }
-      
+
       // Clear failed login attempts on successful auth
-      clearFailedLogins(email, clientIp);
+      await clearFailedLogins(email, clientIp);
 
       // Check if user is blocked
       const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
@@ -919,7 +988,7 @@ export async function registerRoutes(
         }
 
         if (!tfaValid) {
-          recordFailedLogin(email, clientIp);
+          await recordFailedLogin(email, clientIp);
           return res.status(401).json({ error: 'Invalid two-factor authentication code' });
         }
 
@@ -1030,8 +1099,13 @@ export async function registerRoutes(
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
+        path: '/',
         expires: expiresAt,
       });
+
+      // Set CSRF token cookie for double-submit pattern
+      const csrfToken = generateCsrfToken();
+      setCsrfCookie(res, csrfToken, expiresAt);
 
       res.json({
         user: {
@@ -1040,6 +1114,7 @@ export async function registerRoutes(
           name: auth0Result.user.name,
           isAdmin,
         },
+        csrfToken, // Include in response for initial setup
       });
     } catch (error: any) {
       log(`Login error: ${error.message}`, 'api');
@@ -1102,6 +1177,7 @@ export async function registerRoutes(
     }
     
     res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
     res.json({ success: true });
   });
 
@@ -1118,6 +1194,7 @@ export async function registerRoutes(
       if (!session || new Date(session.expiresAt) < new Date()) {
         if (session) await storage.deleteSession(sessionId);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ error: 'Session expired' });
       }
 
