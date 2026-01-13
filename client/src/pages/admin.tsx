@@ -2186,6 +2186,265 @@ function SettingsPanel() {
           </div>
         )}
       </div>
+
+      {/* Rate Limit Management */}
+      <RateLimitManagement />
+    </div>
+  );
+}
+
+// Rate Limit Management Component
+function RateLimitManagement() {
+  const queryClient = useQueryClient();
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+
+  const { data: rateLimitsData, isLoading, refetch } = useQuery({
+    queryKey: ['admin-rate-limits'],
+    queryFn: () => api.getRateLimits(),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: ({ type, key }: { type: string; key: string }) => api.unblockRateLimit(type, key),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-rate-limits'] });
+      toast.success('Entry unblocked successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to unblock entry');
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: () => api.clearAllRateLimits(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-rate-limits'] });
+      toast.success('All rate limits cleared');
+      setConfirmClearAll(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to clear rate limits');
+    },
+  });
+
+  const entries = rateLimitsData?.entries || [];
+  const blockedEntries = entries.filter(e => e.remainingMs && e.remainingMs > 0);
+  const warningEntries = entries.filter(e => !e.remainingMs || e.remainingMs <= 0);
+
+  const formatRemainingTime = (ms: number | null) => {
+    if (!ms || ms <= 0) return 'Not locked';
+    const minutes = Math.ceil(ms / 60000);
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m remaining`;
+    }
+    return `${minutes}m remaining`;
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'email': return 'Email';
+      case 'ip': return 'IP Address';
+      case 'email_ip_combo': return 'Email+IP';
+      default: return type;
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'email': return 'text-blue-400 bg-blue-500/20';
+      case 'ip': return 'text-orange-400 bg-orange-500/20';
+      case 'email_ip_combo': return 'text-purple-400 bg-purple-500/20';
+      default: return 'text-gray-400 bg-gray-500/20';
+    }
+  };
+
+  return (
+    <div className="rounded-xl bg-muted/20 ring-1 ring-border p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Ban className="h-5 w-5 text-primary" />
+            <h4 className="font-semibold text-foreground">Rate Limit Management</h4>
+            {blockedEntries.length > 0 && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-red-500/20 text-red-400 rounded">
+                {blockedEntries.length} Blocked
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground max-w-lg">
+            View and manage users who are blocked or rate-limited due to too many failed login attempts.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          {entries.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmClearAll(true)}
+              className="text-red-400 hover:text-red-300 border-red-500/30 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {!isLoading && entries.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500/50" />
+          <p>No blocked or rate-limited entries</p>
+          <p className="text-sm">All users can currently log in without restrictions</p>
+        </div>
+      )}
+
+      {!isLoading && blockedEntries.length > 0 && (
+        <div className="space-y-2">
+          <h5 className="text-sm font-medium text-red-400 flex items-center gap-2">
+            <Ban className="h-4 w-4" />
+            Currently Blocked ({blockedEntries.length})
+          </h5>
+          <div className="space-y-2">
+            {blockedEntries.map((entry, idx) => (
+              <div
+                key={`${entry.type}-${entry.key}-${idx}`}
+                className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20"
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 text-xs font-medium rounded ${getTypeColor(entry.type)}`}>
+                    {getTypeLabel(entry.type)}
+                  </span>
+                  <div>
+                    <p className="font-mono text-sm text-foreground">{entry.key}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.attempts} failed attempts • {formatRemainingTime(entry.remainingMs)}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => unblockMutation.mutate({ type: entry.type, key: entry.key })}
+                  disabled={unblockMutation.isPending}
+                  className="text-green-400 hover:text-green-300 border-green-500/30 hover:bg-green-500/10"
+                >
+                  {unblockMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Unblock
+                    </>
+                  )}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isLoading && warningEntries.length > 0 && (
+        <div className="space-y-2">
+          <h5 className="text-sm font-medium text-amber-400 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Recent Failed Attempts ({warningEntries.length})
+          </h5>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {warningEntries.slice(0, 20).map((entry, idx) => (
+              <div
+                key={`${entry.type}-${entry.key}-${idx}`}
+                className="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10"
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 text-xs font-medium rounded ${getTypeColor(entry.type)}`}>
+                    {getTypeLabel(entry.type)}
+                  </span>
+                  <div>
+                    <p className="font-mono text-sm text-foreground">{entry.key}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.attempts} failed attempts • Last: {format(new Date(entry.lastAttempt), 'MMM d, h:mm a')}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => unblockMutation.mutate({ type: entry.type, key: entry.key })}
+                  disabled={unblockMutation.isPending}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
+            ))}
+            {warningEntries.length > 20 && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                Showing 20 of {warningEntries.length} entries
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Clear All Dialog */}
+      <Dialog open={confirmClearAll} onOpenChange={setConfirmClearAll}>
+        <DialogContent className="bg-gray-900 border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+              Clear All Rate Limits
+            </DialogTitle>
+            <DialogDescription>
+              This will unblock all blocked users and clear all failed attempt records.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmClearAll(false)}
+              disabled={clearAllMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => clearAllMutation.mutate()}
+              disabled={clearAllMutation.isPending}
+            >
+              {clearAllMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear All
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

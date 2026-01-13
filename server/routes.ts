@@ -11,7 +11,7 @@ import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION
 import { log } from "./index";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked } from "./security";
+import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 
 // Helper to get client IP from request
@@ -2915,6 +2915,71 @@ export async function registerRoutes(
       log(`Failed to create audit log: ${err}`, 'admin');
     }
   }
+
+  // ============================================
+  // Admin Rate Limit Management
+  // ============================================
+
+  // Get all blocked/rate-limited entries (admin)
+  app.get('/api/admin/security/rate-limits', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const entries = await getBlockedEntries();
+      res.json({ entries });
+    } catch (error: any) {
+      log(`Admin: Error fetching rate limits: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch rate limits' });
+    }
+  });
+
+  // Unblock a specific rate limit entry (admin)
+  app.delete('/api/admin/security/rate-limits/:type/:key', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { type, key } = req.params;
+
+      if (!['email', 'ip', 'email_ip_combo'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid rate limit type' });
+      }
+
+      const success = await adminUnblock(type as 'email' | 'ip' | 'email_ip_combo', decodeURIComponent(key));
+
+      if (success) {
+        await auditLog(req, 'unblock_rate_limit', 'rate_limit', key, `${type}:${key}`, { type, key }, 'success');
+        res.json({ success: true, message: `Unblocked ${type}: ${key}` });
+      } else {
+        res.status(500).json({ error: 'Failed to unblock entry' });
+      }
+    } catch (error: any) {
+      log(`Admin: Error unblocking rate limit: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to unblock entry' });
+    }
+  });
+
+  // Unblock all entries for an email (admin)
+  app.delete('/api/admin/security/rate-limits/email/:email', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { email } = req.params;
+      const result = await adminUnblockEmail(decodeURIComponent(email));
+
+      await auditLog(req, 'unblock_email', 'rate_limit', email, email, { email, cleared: result.cleared }, 'success');
+      res.json({ success: true, cleared: result.cleared, message: `Unblocked email: ${email}` });
+    } catch (error: any) {
+      log(`Admin: Error unblocking email: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to unblock email' });
+    }
+  });
+
+  // Clear all rate limits (admin - use with caution)
+  app.delete('/api/admin/security/rate-limits', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const result = await adminClearAllRateLimits();
+
+      await auditLog(req, 'clear_all_rate_limits', 'system', 'all', 'All rate limits', {}, 'success');
+      res.json({ success: true, message: 'All rate limits cleared' });
+    } catch (error: any) {
+      log(`Admin: Error clearing all rate limits: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to clear rate limits' });
+    }
+  });
 
   // Get all servers with owner info (admin)
   app.get('/api/admin/vf/servers', authMiddleware, requireAdmin, async (req, res) => {
