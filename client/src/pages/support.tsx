@@ -55,11 +55,11 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
   urgent: "Urgent",
 };
 
-const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot }> = {
+const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot; userAction?: boolean }> = {
   new: { label: "New", color: "text-blue-400 bg-blue-500/10", icon: CircleDot },
   open: { label: "Open", color: "text-cyan-400 bg-cyan-500/10", icon: CircleDot },
-  waiting_user: { label: "Awaiting Reply", color: "text-amber-400 bg-amber-500/10", icon: Timer },
-  waiting_admin: { label: "In Progress", color: "text-purple-400 bg-purple-500/10", icon: Clock },
+  waiting_user: { label: "Your Reply Needed", color: "text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30", icon: Timer, userAction: true },
+  waiting_admin: { label: "Waiting for Support", color: "text-purple-400 bg-purple-500/10", icon: Clock },
   resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
   closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
 };
@@ -113,11 +113,18 @@ function formatDate(dateString: string): string {
 }
 
 function TicketRow({ ticket }: { ticket: SupportTicket }) {
+  const needsAction = ticket.status === "waiting_user";
   return (
     <Link href={`/support/${ticket.id}`}>
-      <div className="flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer border-b border-border/50 last:border-b-0">
+      <div className={cn(
+        "flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer border-b border-border/50 last:border-b-0",
+        needsAction && "bg-amber-500/5 hover:bg-amber-500/10"
+      )}>
+        {needsAction && (
+          <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+        )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs text-muted-foreground">#{ticket.id}</span>
             <StatusBadge status={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
@@ -329,6 +336,8 @@ function NewTicketDialog({
 export default function SupportPage() {
   useDocumentTitle("Support");
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
+  const [categoryFilter, setCategoryFilter] = useState<TicketCategory | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [search, setSearch] = useState("");
   const [newTicketOpen, setNewTicketOpen] = useState(false);
 
@@ -337,13 +346,27 @@ export default function SupportPage() {
     queryFn: () => api.getSupportTickets({ status: filter }),
   });
 
+  // Count tickets needing user action
+  const actionNeededCount = data?.tickets.filter(t => t.status === "waiting_user").length || 0;
+
   const filteredTickets = data?.tickets.filter((ticket) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      ticket.title.toLowerCase().includes(searchLower) ||
-      ticket.id.toString().includes(searchLower)
-    );
+    // Search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      if (!ticket.title.toLowerCase().includes(searchLower) &&
+          !ticket.id.toString().includes(searchLower)) {
+        return false;
+      }
+    }
+    // Category filter
+    if (categoryFilter !== "all" && ticket.category !== categoryFilter) {
+      return false;
+    }
+    // Priority filter
+    if (priorityFilter !== "all" && ticket.priority !== priorityFilter) {
+      return false;
+    }
+    return true;
   });
 
   return (
@@ -362,24 +385,88 @@ export default function SupportPage() {
           </Button>
         </div>
 
-        <div className="rounded-xl bg-card/50 border border-border overflow-hidden">
-          <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search tickets..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+        {/* Action needed alert */}
+        {actionNeededCount > 0 && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <Timer className="h-5 w-5 text-amber-400" />
             </div>
-            <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "open" | "closed")}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="open">Open</TabsTrigger>
-                <TabsTrigger value="closed">Closed</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex-1">
+              <p className="font-medium text-amber-400">
+                {actionNeededCount} ticket{actionNeededCount > 1 ? "s" : ""} need{actionNeededCount === 1 ? "s" : ""} your reply
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Our team is waiting for additional information from you
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-xl bg-card/50 border border-border overflow-hidden">
+          <div className="p-4 border-b border-border/50 space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tickets..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "open" | "closed")}>
+                <TabsList>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="open">Open</TabsTrigger>
+                  <TabsTrigger value="closed">Closed</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {/* Additional filters */}
+            <div className="flex flex-wrap gap-3">
+              <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as TicketCategory | "all")}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as TicketPriority | "all")}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {(categoryFilter !== "all" || priorityFilter !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setCategoryFilter("all");
+                    setPriorityFilter("all");
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Clear filters
+                </Button>
+              )}
+            </div>
           </div>
 
           {isLoading ? (

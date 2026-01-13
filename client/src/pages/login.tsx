@@ -781,6 +781,26 @@ export default function LoginPage() {
                       )}
                     </Button>
                   )}
+                  {/* Show registration prompt for credential errors */}
+                  {!showForceLogout && error.toLowerCase().includes('invalid') && (
+                    <div className="mt-2 pt-2 border-t border-red-500/20">
+                      <p className="text-muted-foreground text-xs mb-2">
+                        Don't have an account yet?
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="w-full border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                        data-testid="button-register-prompt"
+                      >
+                        <Link href="/register">
+                          Create a new account
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
