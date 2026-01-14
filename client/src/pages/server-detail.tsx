@@ -203,7 +203,7 @@ export default function ServerDetail() {
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 10000, // Poll every 10 seconds for status updates
+    refetchInterval: 3000, // Poll every 3 seconds for real-time updates
   });
 
   // Dynamic page title
@@ -235,19 +235,20 @@ export default function ServerDetail() {
   });
   
   
-  // Fetch cancellation status
+  // Fetch cancellation status - poll every 3s for real-time deletion status
   const { data: cancellationData, refetch: refetchCancellation } = useQuery({
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
-    enabled: !!serverId
+    enabled: !!serverId,
+    refetchInterval: 3000, // Poll every 3 seconds for deletion progress
   });
 
-  // Live stats polling every 5 seconds
+  // Live stats polling every 3 seconds
   const { data: liveStats } = useQuery({
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && server?.status === 'running',
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: 3000, // Poll every 3 seconds for real-time stats
   });
 
   // Console lock hook - must be after server query
@@ -2161,25 +2162,39 @@ export default function ServerDetail() {
                     </div>
                     
                     {cancellationData.cancellation.mode === 'immediate' ? (
-                      <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <div className="p-4 bg-gradient-to-br from-red-500/15 to-red-600/10 border-2 border-red-500/40 rounded-xl animate-pulse-slow">
                         <div className="flex items-start gap-3">
-                          <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
-                          <div>
-                            <div className="font-medium text-red-400">Cannot Be Revoked</div>
-                            <div className="text-sm text-red-400/80">
-                              Immediate deletion cannot be stopped. Your server and all data will be permanently destroyed.
+                          <div className="bg-red-500/20 p-2 rounded-lg">
+                            <Trash2 className="h-5 w-5 text-red-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-red-400 text-base flex items-center gap-2">
+                              Deletion In Progress
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </div>
+                            <div className="text-sm text-red-400/90 mt-1">
+                              <span className="font-semibold">{server?.name}</span> is being permanently deleted. This process cannot be stopped.
+                            </div>
+                            <div className="text-xs text-red-400/70 mt-2">
+                              • All data will be destroyed within 5 minutes
+                              <br />• Backups will not be available after deletion
                             </div>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                      <div className="p-4 bg-gradient-to-br from-amber-500/15 to-yellow-600/10 border-2 border-amber-500/30 rounded-xl">
                         <div className="flex items-start gap-3">
-                          <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5" />
-                          <div>
-                            <div className="font-medium text-yellow-400">Days Remaining</div>
-                            <div className="text-sm text-yellow-400/80">
-                              {Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days until deletion
+                          <div className="bg-amber-500/20 p-2 rounded-lg">
+                            <Clock className="h-5 w-5 text-amber-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-amber-400 text-base">Grace Period Active</div>
+                            <div className="text-sm text-amber-400/90 mt-1">
+                              <span className="font-semibold">{Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days</span> remaining until <span className="font-semibold">{server?.name}</span> is deleted
+                            </div>
+                            <div className="text-xs text-amber-400/70 mt-2">
+                              Scheduled deletion: {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
                         </div>
@@ -2520,22 +2535,27 @@ export default function ServerDetail() {
             
             <div>
               <Label className="text-sm text-foreground mb-2 block">
-                Type <span className="font-mono font-bold text-red-400">delete my server</span> to confirm:
+                Type <span className="font-mono font-bold text-red-400">{server?.name}</span> to confirm deletion:
               </Label>
               <Input
                 value={immediateConfirmText}
                 onChange={(e) => setImmediateConfirmText(e.target.value)}
-                placeholder="delete my server"
+                placeholder={server?.name || "server name"}
                 className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
                 data-testid="input-confirm-delete"
+                autoComplete="off"
+                autoFocus
               />
+              <p className="text-xs text-red-400/60 mt-1.5">
+                ⚠️ This confirmation is case-sensitive and must match exactly.
+              </p>
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <Button
               variant="outline"
-              className="flex-1 border-border"
+              className="flex-1 border-border hover:bg-muted"
               onClick={() => {
                 setImmediateConfirmOpen(false);
                 setImmediateConfirmText("");
@@ -2545,8 +2565,8 @@ export default function ServerDetail() {
               Cancel
             </Button>
             <Button
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
-              disabled={immediateConfirmText.toLowerCase() !== 'delete my server' || requestCancellationMutation.isPending}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              disabled={immediateConfirmText !== server?.name || requestCancellationMutation.isPending}
               onClick={() => serverId && requestCancellationMutation.mutate({
                 id: serverId,
                 reason: cancellationReason || undefined,
@@ -2557,12 +2577,12 @@ export default function ServerDetail() {
               {requestCancellationMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
+                  Deleting Server...
                 </>
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Server
+                  Delete {server?.name}
                 </>
               )}
             </Button>
