@@ -3,7 +3,7 @@ import { useRoute, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { VncViewer } from "@/components/vnc-viewer";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Monitor, ArrowLeft, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
@@ -85,11 +85,11 @@ export default function ServerConsole() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <GlassCard className="p-12 flex flex-col items-center">
+        <Card className="p-12 flex flex-col items-center">
           <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
           <p className="text-foreground font-medium mb-1">Initializing Console</p>
           <p className="text-muted-foreground text-sm">Enabling VNC access...</p>
-        </GlassCard>
+        </Card>
       </div>
     );
   }
@@ -97,7 +97,7 @@ export default function ServerConsole() {
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <GlassCard className="p-12 flex flex-col items-center max-w-md">
+        <Card className="p-12 flex flex-col items-center max-w-md">
           <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Console Error</h3>
           <p className="text-muted-foreground text-center mb-4">
@@ -119,7 +119,7 @@ export default function ServerConsole() {
               </Link>
             )}
           </div>
-        </GlassCard>
+        </Card>
       </div>
     );
   }
@@ -139,7 +139,7 @@ export default function ServerConsole() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <GlassCard className="p-12 flex flex-col items-center max-w-md">
+      <Card className="p-12 flex flex-col items-center max-w-md">
         <Monitor className="h-12 w-12 text-primary mb-4" />
         <h3 className="text-lg font-semibold text-foreground mb-2">Console Unavailable</h3>
         <p className="text-muted-foreground text-center mb-4">
@@ -157,7 +157,7 @@ export default function ServerConsole() {
             </Button>
           </Link>
         )}
-      </GlassCard>
+      </Card>
     </div>
   );
 }

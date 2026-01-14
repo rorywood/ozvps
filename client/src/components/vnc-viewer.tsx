@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { VncScreen } from "react-vnc";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
@@ -401,17 +401,17 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
         {/* Status Overlays */}
         {status === 'connecting' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
-            <GlassCard className="p-8 flex flex-col items-center">
+            <Card className="p-8 flex flex-col items-center">
               <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
               <p className="text-foreground font-medium">Connecting to Console...</p>
               <p className="text-muted-foreground text-sm mt-1">Please wait</p>
-            </GlassCard>
+            </Card>
           </div>
         )}
 
         {(status === 'disconnected' || status === 'error') && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
-            <GlassCard className="p-8 flex flex-col items-center">
+            <Card className="p-8 flex flex-col items-center">
               <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
                 <X className="h-6 w-6 text-red-500" />
               </div>
@@ -429,7 +429,7 @@ export function VncViewer({ wsUrl, password, onDisconnect, onClose }: VncViewerP
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reconnect
               </Button>
-            </GlassCard>
+            </Card>
           </div>
         )}
 

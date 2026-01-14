@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/layout/app-shell";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -252,12 +252,12 @@ export default function Account() {
         </div>
 
         {isLoading ? (
-          <GlassCard className="p-12 flex flex-col items-center justify-center">
+          <Card className="p-12 flex flex-col items-center justify-center">
             <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
             <p className="text-muted-foreground">Loading profile...</p>
-          </GlassCard>
+          </Card>
         ) : error ? (
-          <GlassCard className="p-12 flex flex-col items-center justify-center">
+          <Card className="p-12 flex flex-col items-center justify-center">
             <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
               <User className="h-8 w-8 text-yellow-400" />
             </div>
@@ -265,11 +265,11 @@ export default function Account() {
             <p className="text-muted-foreground text-center max-w-md">
               There was an issue loading your profile. Please try again later.
             </p>
-          </GlassCard>
+          </Card>
         ) : (
           <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <GlassCard className="p-6" data-testid="profile-section">
+            <Card className="p-6" data-testid="profile-section">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
@@ -382,9 +382,9 @@ export default function Account() {
                 )}
               </div>
 
-            </GlassCard>
+            </Card>
 
-            <GlassCard className="p-6" data-testid="security-section">
+            <Card className="p-6" data-testid="security-section">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
                   <Shield className="h-5 w-5" />
@@ -462,11 +462,11 @@ export default function Account() {
                   Password must be at least 8 characters long
                 </p>
               </div>
-            </GlassCard>
+            </Card>
           </div>
 
           {/* Two-Factor Authentication Section */}
-          <GlassCard className="p-6 mt-6" data-testid="2fa-section">
+          <Card className="p-6 mt-6" data-testid="2fa-section">
             <div className="flex items-center gap-3 mb-6">
               <div className={`h-10 w-10 rounded-lg flex items-center justify-center border ${
                 twoFAStatus?.enabled
@@ -791,7 +791,7 @@ export default function Account() {
                 </div>
               </div>
             ) : null}
-          </GlassCard>
+          </Card>
           </>
         )}
 

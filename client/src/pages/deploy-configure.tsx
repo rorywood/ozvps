@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useSearch } from "wouter";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -264,7 +264,7 @@ export default function DeployConfigurePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <GlassCard className="p-5">
+            <Card className="p-5">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                 Hostname
               </h2>
@@ -286,9 +286,9 @@ export default function DeployConfigurePage() {
                   </p>
                 )}
               </div>
-            </GlassCard>
+            </Card>
 
-            <GlassCard className="p-5">
+            <Card className="p-5">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                 Operating System
               </h2>
@@ -345,12 +345,12 @@ export default function DeployConfigurePage() {
                   ))}
                 </div>
               )}
-            </GlassCard>
+            </Card>
           </div>
 
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-6">
-              <GlassCard className="p-5">
+              <Card className="p-5">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Summary</h2>
                 
                 <div className="space-y-4">
@@ -475,7 +475,7 @@ export default function DeployConfigurePage() {
                     Charges deduct from wallet balance
                   </p>
                 </div>
-              </GlassCard>
+              </Card>
             </div>
           </div>
         </div>

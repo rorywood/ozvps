@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { 
@@ -1610,7 +1610,7 @@ export default function ServerDetail() {
 
         {/* Specs Bar */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
              <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Cpu className="h-5 w-5" />
              </div>
@@ -1618,9 +1618,9 @@ export default function ServerDetail() {
                 <div className="text-sm font-bold text-foreground">{server.plan.specs.vcpu} vCore</div>
                 <div className="text-xs text-muted-foreground">CPU Allocated</div>
              </div>
-          </GlassCard>
+          </Card>
           
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
              <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Activity className="h-5 w-5" />
              </div>
@@ -1628,9 +1628,9 @@ export default function ServerDetail() {
                 <div className="text-sm font-bold text-foreground">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
                 <div className="text-xs text-muted-foreground">RAM Allocated</div>
              </div>
-          </GlassCard>
+          </Card>
 
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
              <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <StorageIcon className="h-5 w-5" />
              </div>
@@ -1638,9 +1638,9 @@ export default function ServerDetail() {
                 <div className="text-sm font-bold text-foreground">{server.plan.specs.disk} GB</div>
                 <div className="text-xs text-muted-foreground">Storage Allocated</div>
              </div>
-          </GlassCard>
+          </Card>
 
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
+          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
              <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
                 <Network className="h-5 w-5" />
              </div>
@@ -1650,7 +1650,7 @@ export default function ServerDetail() {
                 </div>
                 <div className="text-xs text-muted-foreground">Primary IP</div>
              </div>
-          </GlassCard>
+          </Card>
         </div>
 
         {/* Navigation Tabs */}
@@ -1675,7 +1675,7 @@ export default function ServerDetail() {
             {/* Live Stats - CPU, Memory, Disk */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* CPU Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1708,10 +1708,10 @@ export default function ServerDetail() {
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
                 </div>
-              </GlassCard>
+              </Card>
 
               {/* Memory Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1748,10 +1748,10 @@ export default function ServerDetail() {
                       : '—'}
                   </span>
                 </div>
-              </GlassCard>
+              </Card>
 
               {/* Disk Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1788,11 +1788,11 @@ export default function ServerDetail() {
                       : '—'}
                   </span>
                 </div>
-              </GlassCard>
+              </Card>
             </div>
 
             {/* Bandwidth Stats Card - Compact */}
-            <GlassCard className="p-4">
+            <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-400" />
@@ -1935,12 +1935,12 @@ export default function ServerDetail() {
                   </div>
                 );
               })()}
-            </GlassCard>
+            </Card>
           </TabsContent>
 
           {/* IP Management Tab */}
           <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            <Card className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
               </div>
@@ -2003,12 +2003,12 @@ export default function ServerDetail() {
                   <p>No network interfaces found</p>
                 </div>
               )}
-            </GlassCard>
+            </Card>
           </TabsContent>
 
           {/* Reset Password Tab */}
           <TabsContent value="reset-password" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            <Card className="p-6">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-foreground mb-2">Reset Server Password</h3>
@@ -2058,12 +2058,12 @@ export default function ServerDetail() {
                   )}
                 </div>
               </div>
-            </GlassCard>
+            </Card>
           </TabsContent>
 
           {/* Reinstallation Tab */}
           <TabsContent value="reinstallation" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            <Card className="p-6">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-foreground mb-2">Reinstall Operating System</h3>
@@ -2119,12 +2119,12 @@ export default function ServerDetail() {
                   )}
                 </div>
               </div>
-            </GlassCard>
+            </Card>
           </TabsContent>
 
           {/* Cancellation Tab */}
           <TabsContent value="cancellation" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            <Card className="p-6">
               <div className="space-y-6">
                 {cancellationData?.cancellation ? (
                   // Show existing cancellation request
@@ -2359,7 +2359,7 @@ export default function ServerDetail() {
                   </>
                 )}
               </div>
-            </GlassCard>
+            </Card>
           </TabsContent>
 
         </Tabs>
