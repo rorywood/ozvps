@@ -23,56 +23,16 @@ import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
-import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
 import { api } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react"; // Still used in AuthGuard
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-
-  // Allow auth pages, pricing, and root to bypass health check - users should always see these
-  // Errors will show inline when they try to use features that require VirtFusion
-  const bypassPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/pricing'];
-
-  // Check both wouter location and window.location for reliability
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : location;
-  const shouldBypass = bypassPaths.some(path =>
-    currentPath === path ||
-    currentPath.startsWith(path + '/') ||
-    location === path ||
-    location.startsWith(path + '/')
-  );
-
-  const { data: health, isLoading, refetch } = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.checkHealth(),
-    retry: 2,
-    retryDelay: 1000,
-    staleTime: 30000,
-    enabled: !shouldBypass,
-  });
-
-  // Always render children immediately for bypassed paths - don't wait for any queries
-  if (shouldBypass) {
-    return <>{children}</>;
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (health?.status === 'error') {
-    return <SystemError errorCode={health.errorCode} onRetry={() => refetch()} />;
-  }
-
+  // No longer blocking access - just render children
+  // Errors will show inline when users try to use features that require VirtFusion
   return <>{children}</>;
 }
 
