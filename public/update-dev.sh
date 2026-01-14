@@ -181,6 +181,34 @@ cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
 
+# Ensure ecosystem.config.cjs exists (create if missing from repo)
+if [ ! -f "$INSTALL_DIR/ecosystem.config.cjs" ]; then
+    info "Creating ecosystem.config.cjs..."
+    cat > "$INSTALL_DIR/ecosystem.config.cjs" << 'EOFCONFIG'
+module.exports = {
+  apps: [{
+    name: 'ozvps-panel',
+    script: 'npm',
+    args: 'start',
+    cwd: '/opt/ozvps-panel',
+    env: {
+      NODE_ENV: 'development'
+    },
+    env_file: '/opt/ozvps-panel/.env',
+    instances: 1,
+    exec_mode: 'fork',
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    error_file: '/root/.pm2/logs/ozvps-panel-error.log',
+    out_file: '/root/.pm2/logs/ozvps-panel-out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+  }]
+};
+EOFCONFIG
+    success "ecosystem.config.cjs created"
+fi
+
 if [ -n "$LATEST_COMMIT" ]; then
     echo "$LATEST_COMMIT" > "$INSTALL_DIR/.commit"
 fi
