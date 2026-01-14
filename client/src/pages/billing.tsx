@@ -519,13 +519,29 @@ export default function BillingPage() {
     if (searchParams.includes('topup=success')) {
       setPaymentFeedback({
         type: 'success',
-        message: 'Payment successful! Your wallet has been credited.',
+        message: 'Payment successful! Your wallet is being credited...',
       });
-      setTimeout(() => {
-        navigate('/billing', { replace: true });
-      }, 100);
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+
+      // Aggressively refetch wallet data to show updated balance
+      // Poll every 500ms for up to 10 seconds to catch the webhook update
+      let pollCount = 0;
+      const maxPolls = 20; // 10 seconds total
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        await queryClient.refetchQueries({ queryKey: ['wallet'] });
+        await queryClient.refetchQueries({ queryKey: ['transactions'] });
+
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          setPaymentFeedback({
+            type: 'success',
+            message: 'Payment successful! Your wallet has been credited.',
+          });
+          setTimeout(() => navigate('/billing', { replace: true }), 2000);
+        }
+      }, 500);
+
+      return () => clearInterval(pollInterval);
     } else if (searchParams.includes('topup=cancelled')) {
       setPaymentFeedback({
         type: 'error',
@@ -533,15 +549,16 @@ export default function BillingPage() {
       });
       setTimeout(() => {
         navigate('/billing', { replace: true });
-      }, 100);
+      }, 3000);
     }
   }, [searchParams, navigate, queryClient]);
 
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 10000, // Auto-refresh every 10 seconds for better UX
     refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: stripeStatus } = useQuery({
@@ -562,14 +579,18 @@ export default function BillingPage() {
     queryKey: ['transactions'],
     queryFn: () => api.getTransactions(),
     enabled: stripeConfigured,
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
     refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Invoice[] }>({
     queryKey: ['invoices'],
     queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: upcomingChargesData, isLoading: loadingUpcomingCharges } = useQuery<{ upcoming: Array<{
@@ -631,7 +652,7 @@ export default function BillingPage() {
   const directChargeMutation = useMutation({
     mutationFn: ({ amountCents, paymentMethodId }: { amountCents: number; paymentMethodId: string }) =>
       api.directTopup(amountCents, paymentMethodId),
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       console.log('[Direct Topup] Success response:', data);
       if (data.success) {
         const chargedAmount = (data.chargedAmountCents || 0) / 100;
@@ -640,8 +661,10 @@ export default function BillingPage() {
           message: `Payment Approved - $${chargedAmount.toFixed(2)} has been added to your wallet!`,
           amount: data.chargedAmountCents
         });
-        queryClient.invalidateQueries({ queryKey: ['wallet'] });
-        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        // Immediately refetch to show updated balance
+        await queryClient.refetchQueries({ queryKey: ['wallet'] });
+        await queryClient.refetchQueries({ queryKey: ['transactions'] });
+        await queryClient.refetchQueries({ queryKey: ['invoices'] });
         setTopupDialogOpen(false);
         setSelectedAmount(null);
         setCustomAmount("");
