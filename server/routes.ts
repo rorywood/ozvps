@@ -639,20 +639,23 @@ export async function registerRoutes(
   // System health check (public)
   app.get('/api/health', async (req, res) => {
     try {
-      const isConnected = await virtfusionClient.validateConnection();
-      if (!isConnected) {
-        log('Health check failed: VirtFusion API unreachable', 'api');
-        return res.status(503).json({ 
-          status: 'error', 
+      const connectionStatus = await virtfusionClient.getConnectionStatus();
+      if (!connectionStatus.connected) {
+        // Log the actual error type for admins
+        log(`Health check failed: VirtFusion ${connectionStatus.errorType || 'unknown error'}`, 'api');
+
+        // Return generic error to users (don't expose license/config details)
+        return res.status(503).json({
+          status: 'error',
           errorCode: 'VF_API_UNAVAILABLE',
-          message: 'VirtFusion API is unreachable'
+          message: 'Server management system is temporarily unavailable. Please try again later.'
         });
       }
       res.json({ status: 'ok' });
     } catch (error: any) {
       log(`Health check error: ${error.message}`, 'api');
-      res.status(503).json({ 
-        status: 'error', 
+      res.status(503).json({
+        status: 'error',
         errorCode: 'SYSTEM_ERROR',
         message: 'System health check failed'
       });
@@ -727,14 +730,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: auth0Result.error || 'Failed to create account' });
       }
 
-      // Create VirtFusion user
+      // Build the Auth0 user ID early - we need it for potential rollback
+      const auth0UserId = `auth0|${auth0Result.user.user_id}`;
+
+      // Create VirtFusion user - if this fails, rollback Auth0 user
       const virtFusionUser = await virtfusionClient.findOrCreateUser(email, name || email.split('@')[0]);
       if (!virtFusionUser) {
+        // Rollback: Delete the Auth0 user we just created
+        log(`VirtFusion user creation failed for ${email}, rolling back Auth0 user`, 'auth');
+        await auth0Client.deleteUser(auth0UserId);
         return res.status(500).json({ error: 'Failed to create account. Please try again or contact support.' });
       }
-
-      // Store VirtFusion user ID in Auth0 metadata (no local database needed)
-      const auth0UserId = `auth0|${auth0Result.user.user_id}`;
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
       
@@ -797,7 +803,7 @@ export async function registerRoutes(
         log(`Failed to create Stripe customer during registration: ${stripeError.message}`, 'stripe');
       }
 
-      // Create local session
+      // Create local session (new users start with emailVerified: false)
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
@@ -806,6 +812,7 @@ export async function registerRoutes(
         email: email,
         name: name || virtFusionUser.name,
         auth0UserId: auth0UserId, // Use the prefixed version for consistency
+        emailVerified: false, // New users start unverified
         expiresAt,
       });
 
@@ -826,6 +833,7 @@ export async function registerRoutes(
           id: auth0UserId,
           email: email,
           name: name || virtFusionUser.name,
+          emailVerified: false, // New users start unverified
         },
         csrfToken, // Include in response for initial setup
       });
@@ -1245,6 +1253,9 @@ export async function registerRoutes(
         log(`Admin user logged in: ${email}`, 'auth');
       }
 
+      // Get email verification status from Auth0
+      const emailVerified = auth0Result.user.email_verified === true;
+
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
@@ -1255,6 +1266,7 @@ export async function registerRoutes(
         name: auth0Result.user.name,
         auth0UserId: auth0UserIdPrefixed, // Use prefixed version for consistency with Auth0 API
         isAdmin,
+        emailVerified,
         expiresAt,
       });
 
@@ -1276,6 +1288,7 @@ export async function registerRoutes(
           email: email,
           name: auth0Result.user.name,
           isAdmin,
+          emailVerified,
         },
         csrfToken, // Include in response for initial setup
       });
@@ -1361,20 +1374,37 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Session expired' });
       }
 
-      // Check Auth0 for updated admin status (refreshes every call)
+      // Check Auth0 for updated admin status and email verification (refreshes every call)
       let isAdmin = session.isAdmin ?? false;
+      let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
+          const [currentAdminStatus, currentEmailVerified] = await Promise.all([
+            auth0Client.isUserAdmin(session.auth0UserId),
+            auth0Client.isEmailVerified(session.auth0UserId),
+          ]);
+
+          const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
+
           if (currentAdminStatus !== isAdmin) {
             log(`Admin status changed for ${session.email}: ${isAdmin} -> ${currentAdminStatus}`, 'auth');
             isAdmin = currentAdminStatus;
-            // Update session with new admin status
-            await storage.updateSession(sessionId, { isAdmin: currentAdminStatus });
+            updates.isAdmin = currentAdminStatus;
+          }
+
+          if (currentEmailVerified !== emailVerified) {
+            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}`, 'auth');
+            emailVerified = currentEmailVerified;
+            updates.emailVerified = currentEmailVerified;
+          }
+
+          // Update session if anything changed
+          if (Object.keys(updates).length > 0) {
+            await storage.updateSession(sessionId, updates);
           }
         } catch (err: any) {
           // If Auth0 check fails, use cached session value
-          log(`Failed to refresh admin status from Auth0: ${err.message}`, 'auth');
+          log(`Failed to refresh status from Auth0: ${err.message}`, 'auth');
         }
       }
 
@@ -1386,11 +1416,40 @@ export async function registerRoutes(
           virtFusionUserId: session.virtFusionUserId,
           extRelationId: session.extRelationId,
           isAdmin,
+          emailVerified,
         },
       });
     } catch (error: any) {
       log(`Auth check error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Authentication check failed' });
+    }
+  });
+
+  // Resend verification email - requires authentication
+  app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      // Check if already verified
+      if (session.emailVerified) {
+        return res.status(400).json({ error: 'Email is already verified' });
+      }
+
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User account not properly configured' });
+      }
+
+      const result = await auth0Client.resendVerificationEmail(session.auth0UserId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Failed to send verification email' });
+      }
+
+      log(`Verification email resent for ${session.email}`, 'auth');
+      res.json({ success: true, message: 'Verification email sent. Please check your inbox.' });
+    } catch (error: any) {
+      log(`Resend verification error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send verification email' });
     }
   });
 

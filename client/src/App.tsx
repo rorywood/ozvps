@@ -22,6 +22,7 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
+import VerifyEmail from "@/pages/verify-email";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
@@ -66,7 +67,8 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function AuthGuard({ children, requireVerified = true }: { children: React.ReactNode; requireVerified?: boolean }) {
+  const [location] = useLocation();
   const { data: auth, isLoading } = useQuery({
     queryKey: ['auth'],
     queryFn: () => api.getAuthUser(),
@@ -84,6 +86,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!auth) {
     return <Redirect to="/login" />;
+  }
+
+  // Redirect unverified users to verify-email page (unless already there or verification not required)
+  if (requireVerified && auth.emailVerified === false && location !== '/verify-email') {
+    return <Redirect to="/verify-email" />;
   }
 
   return <>{children}</>;
@@ -110,6 +117,11 @@ function Router() {
       </Route>
       <Route path="/reset-password">
         {auth ? <Redirect to="/dashboard" /> : <ResetPassword />}
+      </Route>
+      <Route path="/verify-email">
+        <AuthGuard requireVerified={false}>
+          <VerifyEmail />
+        </AuthGuard>
       </Route>
       <Route path="/pricing">
         <Pricing />

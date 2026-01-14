@@ -14,6 +14,7 @@ export interface Session {
   email: string;
   name?: string | null;
   isAdmin?: boolean;
+  emailVerified?: boolean;
   expiresAt: Date;
   revokedAt?: Date | null;
   revokedReason?: string | null;
@@ -36,6 +37,7 @@ export interface IStorage {
     email: string;
     name?: string;
     isAdmin?: boolean;
+    emailVerified?: boolean;
     expiresAt: Date;
   }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
@@ -46,7 +48,7 @@ export interface IStorage {
   hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean>;
   revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
   updateSessionActivity(sessionId: string): Promise<void>;
-  updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name'>>): Promise<void>;
+  updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
 }
@@ -63,6 +65,7 @@ export class MemoryStorage implements IStorage {
     email: string;
     name?: string;
     isAdmin?: boolean;
+    emailVerified?: boolean;
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
@@ -76,6 +79,7 @@ export class MemoryStorage implements IStorage {
       email: data.email,
       name: data.name || null,
       isAdmin: data.isAdmin || false,
+      emailVerified: data.emailVerified ?? false,
       expiresAt: data.expiresAt,
       revokedAt: null,
       revokedReason: null,
@@ -177,7 +181,7 @@ export class MemoryStorage implements IStorage {
     }
   }
 
-  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name'>>): Promise<void> {
+  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) {
       if (updates.isAdmin !== undefined) {
@@ -185,6 +189,9 @@ export class MemoryStorage implements IStorage {
       }
       if (updates.name !== undefined) {
         session.name = updates.name;
+      }
+      if (updates.emailVerified !== undefined) {
+        session.emailVerified = updates.emailVerified;
       }
     }
   }
