@@ -10,39 +10,54 @@
   --font-display: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-background: hsl(222 47% 6%);
-  --color-foreground: hsl(210 40% 98%);
-  --color-card: hsl(222 47% 11%);
-  --color-card-foreground: hsl(210 40% 98%);
-  --color-sidebar: hsl(222 47% 8%);
-  --color-popover: hsl(222 47% 11%);
-  --color-popover-foreground: hsl(210 40% 98%);
-  --color-primary: hsl(217 91% 60%);
-  --color-primary-foreground: hsl(222 47% 11%);
-  --color-secondary: hsl(217 19% 27%);
-  --color-secondary-foreground: hsl(210 40% 98%);
-  --color-muted: hsl(217 19% 27% / 0.5);
-  --color-muted-foreground: hsl(215 20% 65%);
-  --color-accent: hsl(217 19% 27% / 0.5);
-  --color-accent-foreground: hsl(210 40% 98%);
-  --color-destructive: hsl(0 62% 30%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-  --color-border: hsl(217 19% 27%);
-  --color-input: hsl(217 19% 27%);
-  --color-ring: hsl(217 91% 60%);
-  --color-chart-1: hsl(220 70% 50%);
-  --color-chart-2: hsl(160 60% 45%);
-  --color-chart-3: hsl(30 80% 55%);
-  --color-chart-4: hsl(280 65% 60%);
-  --color-chart-5: hsl(340 75% 55%);
+  /* DigitalOcean-style Dark Mode Colors */
+  --color-background: hsl(219 95% 7%);
+  --color-foreground: hsl(0 0% 95%);
+  --color-card: hsl(219 95% 10%);
+  --color-card-foreground: hsl(0 0% 95%);
+  --color-sidebar: hsl(219 95% 8%);
+  --color-popover: hsl(219 95% 10%);
+  --color-popover-foreground: hsl(0 0% 95%);
 
-  /* New semantic colors */
-  --color-success: hsl(142 76% 36%);
+  /* Primary - Bright blue like DO */
+  --color-primary: hsl(211 100% 50%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  /* Secondary - subtle gray-blue */
+  --color-secondary: hsl(219 30% 15%);
+  --color-secondary-foreground: hsl(0 0% 95%);
+
+  /* Muted - darker gray */
+  --color-muted: hsl(219 30% 15%);
+  --color-muted-foreground: hsl(215 20% 65%);
+
+  /* Accent */
+  --color-accent: hsl(219 30% 15%);
+  --color-accent-foreground: hsl(0 0% 95%);
+
+  /* Destructive - brighter red */
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  /* Borders - subtle in dark mode */
+  --color-border: hsl(219 30% 18%);
+  --color-input: hsl(219 30% 18%);
+  --color-ring: hsl(211 100% 50%);
+
+  /* Status Colors - DigitalOcean style */
+  --color-success: hsl(145 80% 33%);
   --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(38 92% 50%);
+  --color-warning: hsl(14 100% 60%);
   --color-warning-foreground: hsl(0 0% 100%);
-  --color-info: hsl(199 89% 48%);
+  --color-info: hsl(199 95% 48%);
   --color-info-foreground: hsl(0 0% 100%);
+
+  /* Chart colors - match DO */
+  --color-chart-1: hsl(211 100% 50%);
+  --color-chart-2: hsl(145 80% 33%);
+  --color-chart-3: hsl(14 100% 60%);
+  --color-chart-4: hsl(271 81% 56%);
+  --color-chart-5: hsl(45 93% 47%);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -64,44 +79,80 @@
   :root.light {
     color-scheme: light;
 
-    --color-background: hsl(0 0% 98%);
-    --color-foreground: hsl(222 47% 11%);
+    /* DigitalOcean-style Light Mode - Pure white, navy text */
+    --color-background: hsl(0 0% 100%);
+    --color-foreground: hsl(219 95% 15%);
     --color-card: hsl(0 0% 100%);
-    --color-card-foreground: hsl(222 47% 11%);
-    --color-sidebar: hsl(0 0% 96%);
+    --color-card-foreground: hsl(219 95% 15%);
+    --color-sidebar: hsl(214 15% 97%);
     --color-popover: hsl(0 0% 100%);
-    --color-popover-foreground: hsl(222 47% 11%);
-    --color-primary: hsl(217 91% 50%);
-    --color-primary-foreground: hsl(0 0% 100%);
-    --color-secondary: hsl(217 19% 85%);
-    --color-secondary-foreground: hsl(222 47% 11%);
-    --color-muted: hsl(217 19% 90%);
-    --color-muted-foreground: hsl(215 20% 45%);
-    --color-accent: hsl(217 19% 92%);
-    --color-accent-foreground: hsl(222 47% 11%);
-    --color-destructive: hsl(0 62% 55%);
-    --color-destructive-foreground: hsl(0 0% 100%);
-    --color-border: hsl(217 19% 85%);
-    --color-input: hsl(217 19% 88%);
-    --color-ring: hsl(217 91% 50%);
-    --color-chart-1: hsl(220 70% 50%);
-    --color-chart-2: hsl(160 60% 45%);
-    --color-chart-3: hsl(30 80% 55%);
-    --color-chart-4: hsl(280 65% 60%);
-    --color-chart-5: hsl(340 75% 55%);
+    --color-popover-foreground: hsl(219 95% 15%);
 
-    /* Light theme semantic colors */
-    --color-success: hsl(142 71% 45%);
+    /* Primary - Bright blue */
+    --color-primary: hsl(211 100% 50%);
+    --color-primary-foreground: hsl(0 0% 100%);
+
+    /* Secondary - light gray */
+    --color-secondary: hsl(214 20% 95%);
+    --color-secondary-foreground: hsl(219 95% 15%);
+
+    /* Muted - subtle gray */
+    --color-muted: hsl(214 15% 95%);
+    --color-muted-foreground: hsl(215 15% 45%);
+
+    /* Accent */
+    --color-accent: hsl(214 20% 95%);
+    --color-accent-foreground: hsl(219 95% 15%);
+
+    /* Destructive - bright red */
+    --color-destructive: hsl(0 84% 60%);
+    --color-destructive-foreground: hsl(0 0% 100%);
+
+    /* Borders - very subtle gray */
+    --color-border: hsl(214 15% 91%);
+    --color-input: hsl(214 15% 91%);
+    --color-ring: hsl(211 100% 50%);
+
+    /* Chart colors - same as dark */
+    --color-chart-1: hsl(211 100% 50%);
+    --color-chart-2: hsl(145 80% 33%);
+    --color-chart-3: hsl(14 100% 60%);
+    --color-chart-4: hsl(271 81% 56%);
+    --color-chart-5: hsl(45 93% 47%);
+
+    /* Status colors - same as dark */
+    --color-success: hsl(145 80% 33%);
     --color-success-foreground: hsl(0 0% 100%);
-    --color-warning: hsl(38 92% 50%);
+    --color-warning: hsl(14 100% 60%);
     --color-warning-foreground: hsl(0 0% 100%);
-    --color-info: hsl(199 89% 48%);
+    --color-info: hsl(199 95% 48%);
     --color-info-foreground: hsl(0 0% 100%);
   }
   
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
+    font-feature-settings: "kern" 1;
+    letter-spacing: -0.011em;
+  }
+
+  /* Typography hierarchy - DO style */
+  h1 {
+    @apply text-3xl font-bold tracking-tight text-foreground;
+    letter-spacing: -0.025em;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold tracking-tight text-foreground;
+  }
+
+  h3 {
+    @apply text-xl font-semibold text-foreground;
+  }
+
+  /* Labels - uppercase and tracked */
+  label {
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
   /* Light theme global overrides for dialog backgrounds only */

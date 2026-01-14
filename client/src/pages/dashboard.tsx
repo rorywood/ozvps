@@ -2,21 +2,19 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageSection } from "@/components/layout/page-section";
 import { Card } from "@/components/ui/card";
-import { ServerCard } from "@/components/ui/server-card";
-import { SkeletonServerGrid } from "@/components/ui/skeleton-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import {
   Server as ServerIcon,
-  Cpu,
-  HardDrive,
-  TrendingUp,
-  AlertCircle
+  AlertCircle,
+  ChevronRight
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
+import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
   useDocumentTitle('Dashboard');
@@ -64,90 +62,68 @@ export default function Dashboard() {
           description="Overview of your infrastructure"
         />
 
-        {/* Stats Grid */}
+        {/* DO-Style Minimal Stats - No icons, just numbers */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card padding="sm" className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                <ServerIcon className="h-5 w-5 text-primary" />
-              </div>
+          <div className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+            <div className="text-3xl font-bold text-foreground" data-testid="text-active-servers">
+              {stats.active_servers}/{stats.total_servers}
             </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground font-display" data-testid="text-active-servers">
-                {stats.active_servers}/{stats.total_servers}
-              </div>
-              <div className="text-sm text-muted-foreground">Active Servers</div>
+            <div className="text-xs uppercase text-muted-foreground mt-1 tracking-wide">
+              Active Servers
             </div>
-          </Card>
+          </div>
 
-          <Card padding="sm" className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Cpu className="h-5 w-5 text-blue-500" />
-              </div>
+          <div className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+            <div className="text-3xl font-bold text-foreground" data-testid="text-cpu-cores">
+              {stats.total_cpu_cores}
             </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground font-display" data-testid="text-cpu-cores">
-                {stats.total_cpu_cores}
-              </div>
-              <div className="text-sm text-muted-foreground">CPU Cores</div>
+            <div className="text-xs uppercase text-muted-foreground mt-1 tracking-wide">
+              CPU Cores
             </div>
-          </Card>
+          </div>
 
-          <Card padding="sm" className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <HardDrive className="h-5 w-5 text-cyan-500" />
-              </div>
+          <div className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+            <div className="text-3xl font-bold text-foreground" data-testid="text-ram-gb">
+              {stats.total_ram_gb} GB
             </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground font-display" data-testid="text-ram-gb">
-                {stats.total_ram_gb} GB
-              </div>
-              <div className="text-sm text-muted-foreground">Memory</div>
+            <div className="text-xs uppercase text-muted-foreground mt-1 tracking-wide">
+              Memory
             </div>
-          </Card>
+          </div>
 
-          <Card padding="sm" className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <HardDrive className="h-5 w-5 text-green-500" />
-              </div>
+          <div className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+            <div className="text-3xl font-bold text-foreground" data-testid="text-disk-gb">
+              {stats.total_disk_gb} GB
             </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground font-display" data-testid="text-disk-gb">
-                {stats.total_disk_gb} GB
-              </div>
-              <div className="text-sm text-muted-foreground">Storage</div>
+            <div className="text-xs uppercase text-muted-foreground mt-1 tracking-wide">
+              Storage
             </div>
-          </Card>
+          </div>
 
-          <Card padding="sm" className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-blue-500" />
-              </div>
+          <div className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+            <div className="text-3xl font-bold text-foreground" data-testid="text-bandwidth">
+              {bandwidthData ? formatBandwidth(bandwidthData.totalBandwidth) : '—'}
             </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground font-display" data-testid="text-bandwidth">
-                {bandwidthData ? formatBandwidth(bandwidthData.totalBandwidth) : '—'}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Total Bandwidth
-                {bandwidthData?.totalLimit && ` / ${
-                  bandwidthData.totalLimit >= 1000
-                    ? `${(bandwidthData.totalLimit / 1024).toFixed(2)} TB`
-                    : `${bandwidthData.totalLimit} GB`
-                }`}
-              </div>
+            <div className="text-xs uppercase text-muted-foreground mt-1 tracking-wide">
+              Bandwidth
+              {bandwidthData?.totalLimit && ` / ${
+                bandwidthData.totalLimit >= 1000
+                  ? `${(bandwidthData.totalLimit / 1024).toFixed(2)} TB`
+                  : `${bandwidthData.totalLimit} GB`
+              }`}
             </div>
-          </Card>
+          </div>
         </div>
 
-        {/* Servers Section */}
+        {/* DO-Style Horizontal Server Rows */}
         <PageSection title="Your Servers">
           {isLoading ? (
-            <SkeletonServerGrid count={3} />
+            <div className="border border-border rounded-lg p-8 flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                Loading servers...
+              </div>
+            </div>
           ) : error ? (
             <Card padding="lg" className="flex flex-col items-center justify-center text-center">
               <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
@@ -172,14 +148,56 @@ export default function Dashboard() {
               </Button>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {servers.map((server) => (
-                <ServerCard
-                  key={server.id}
-                  server={server}
-                  onClick={() => setLocation(`/servers/${server.id}`)}
-                />
-              ))}
+            <div className="border border-border rounded-lg overflow-hidden bg-card">
+              {servers.map((server, index) => {
+                const displayStatus = getDisplayStatus(server.id, server.status);
+                const isRunning = displayStatus === 'running';
+                const isStopped = displayStatus === 'stopped';
+
+                return (
+                  <Link key={server.id} href={`/servers/${server.id}`}>
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer",
+                        index !== 0 && "border-t border-border"
+                      )}
+                    >
+                      {/* Status dot - small and minimal */}
+                      <div className={cn(
+                        "h-2 w-2 rounded-full flex-shrink-0",
+                        isRunning && "bg-success",
+                        isStopped && "bg-muted-foreground",
+                        !isRunning && !isStopped && "bg-warning"
+                      )} />
+
+                      {/* Server name - bold */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-foreground truncate">
+                          {server.name || 'New Server'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {server.primaryIp}
+                        </div>
+                      </div>
+
+                      {/* Specs - compact display */}
+                      <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+                        <div>{server.plan?.specs?.vcpu || 0} vCPU</div>
+                        <div>{Math.round((server.plan?.specs?.ram || 0) / 1024)}GB RAM</div>
+                        <div>{server.plan?.specs?.disk || 0}GB</div>
+                      </div>
+
+                      {/* Status badge - minimal */}
+                      <Badge variant={isRunning ? "success" : "secondary"} className="capitalize">
+                        {displayStatus}
+                      </Badge>
+
+                      {/* Arrow */}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </PageSection>
