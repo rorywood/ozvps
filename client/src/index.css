@@ -89,29 +89,29 @@
     min-height: 100vh;
   }
   
-  /* Glassmorphism Utilities - adjusted for theme */
+  /* Glassmorphism Utilities - theme aware */
   .glass {
-    @apply bg-card/60 backdrop-blur-md border border-border/50 shadow-lg;
+    background-color: hsl(var(--color-card) / 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--color-border) / 0.5);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
-  
+
   .glass-card {
-    @apply bg-card/40 backdrop-blur-xl border border-border/50 hover:border-border transition-colors duration-200;
+    background-color: hsl(var(--color-card) / 0.4);
+    backdrop-filter: blur(24px);
+    border: 1px solid hsl(var(--color-border) / 0.5);
+    transition: border-color 200ms;
   }
-  
+
+  .glass-card:hover {
+    border-color: hsl(var(--color-border));
+  }
+
   .glass-panel {
-    @apply bg-sidebar/95 backdrop-blur-2xl border-r border-border/50;
-  }
-  
-  .light .glass {
-    @apply bg-white/80 border-gray-200/50;
-  }
-  
-  .light .glass-card {
-    @apply bg-white/60 border-gray-200/50 hover:border-gray-300;
-  }
-  
-  .light .glass-panel {
-    @apply bg-white/90 border-gray-200/50;
+    background-color: hsl(var(--color-card));
+    backdrop-filter: blur(32px);
+    border: 1px solid hsl(var(--color-border) / 0.3);
   }
   
   /* Light theme global overrides for dialog backgrounds only */

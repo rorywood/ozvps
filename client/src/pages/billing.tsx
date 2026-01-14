@@ -1178,20 +1178,19 @@ export default function BillingPage() {
 
               {/* Server Charges Tab */}
               <TabsContent value="servers" className="space-y-6 mt-6">
-                {upcomingChargesData && upcomingChargesData.upcoming.length > 0 ? (
+                {loadingUpcomingCharges ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : upcomingChargesData && upcomingChargesData.upcoming.length > 0 ? (
                   <div data-testid="upcoming-charges-section">
                     <h2 className="text-xl font-semibold text-foreground mb-4">Upcoming Server Charges</h2>
                     <p className="text-sm text-muted-foreground mb-4">
                       Monthly billing for your servers. Charges are automatically deducted from your wallet balance.
                     </p>
 
-                    {loadingUpcomingCharges ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {upcomingChargesData.upcoming.map((charge) => {
+                    <div className="space-y-3">
+                      {upcomingChargesData.upcoming.map((charge) => {
                           const nextBillDate = new Date(charge.nextBillAt);
                           const now = new Date();
                           const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -1273,8 +1272,7 @@ export default function BillingPage() {
                             </Link>
                           );
                         })}
-                      </div>
-                    )}
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
