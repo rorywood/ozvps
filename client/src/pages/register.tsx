@@ -466,7 +466,7 @@ export default function RegisterPage() {
         
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
           <Link href="/">
-            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-12 cursor-pointer" data-testid="img-logo-side" />
+            <img src={logo} alt="OzVPS" className="h-16 w-auto dark:invert-0 invert mb-12 cursor-pointer" data-testid="img-logo-side" />
           </Link>
           
           <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
@@ -526,7 +526,7 @@ export default function RegisterPage() {
             >
               <div className="lg:hidden flex justify-center mb-8">
                 <Link href="/">
-                  <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo" />
+                  <img src={logo} alt="OzVPS" className="h-12 w-auto dark:invert-0 invert cursor-pointer" data-testid="img-logo" />
                 </Link>
               </div>
 

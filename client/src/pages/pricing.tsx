@@ -48,7 +48,7 @@ export default function PricingPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col items-center mb-12">
           <Link href={isLoggedIn ? "/dashboard" : "/login"}>
-            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-6 cursor-pointer" data-testid="img-logo" />
+            <img src={logo} alt="OzVPS" className="h-16 w-auto dark:invert-0 invert mb-6 cursor-pointer" data-testid="img-logo" />
           </Link>
           <h1 className="text-3xl font-display font-bold text-foreground text-center" data-testid="text-page-title">
             VPS Pricing

@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getGravatarUrl } from "@/lib/gravatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -244,7 +245,7 @@ function DesktopNav() {
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-8">
             <Link href="/dashboard">
-              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer" data-testid="img-logo" />
+              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo" />
             </Link>
             
             <nav className="flex items-center gap-1">
@@ -304,7 +305,7 @@ function DesktopNav() {
           <div className="flex items-center gap-4">
             {balance !== undefined && (
               <Link href="/billing">
-                <div 
+                <div
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer"
                   data-testid="nav-balance"
                 >
@@ -315,6 +316,7 @@ function DesktopNav() {
                 </div>
               </Link>
             )}
+            <ThemeToggle />
             <div className="w-px h-6 bg-border" />
             <ProfileDropdown />
           </div>
@@ -382,7 +384,7 @@ function MobileNav() {
     )}>
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
-          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo-mobile" />
+          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo-mobile" />
         </Link>
         
         <div className="flex items-center gap-3">
@@ -475,6 +477,10 @@ function MobileNav() {
                 </div>
 
                 <div className="p-4 border-t border-border space-y-3">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm font-medium text-muted-foreground">Theme</span>
+                    <ThemeToggle />
+                  </div>
                   <button
                     onClick={() => logoutMutation.mutate()}
                     disabled={logoutMutation.isPending}

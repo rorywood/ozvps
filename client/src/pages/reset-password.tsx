@@ -117,7 +117,7 @@ export default function ResetPasswordPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto mx-auto mb-4 drop-shadow-lg"
+                className="h-12 w-auto dark:invert-0 invert mx-auto mb-4 drop-shadow-lg"
               />
             </Link>
             <h1 className="text-2xl font-bold text-foreground">Reset Password</h1>
