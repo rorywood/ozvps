@@ -107,12 +107,18 @@ npm run build
 echo "✓ Application built"
 
 # Verify build
-if [ -f "dist/index.cjs" ]; then
-    echo "✓ Build verified"
-else
-    echo "✗ Build failed - dist/index.cjs not found"
+if [ ! -f "dist/index.cjs" ]; then
+    echo "✗ Build verification failed - dist/index.cjs not found"
     exit 1
 fi
+
+if [ ! -f "dist/public/index.html" ]; then
+    echo "✗ Build verification failed - dist/public/index.html not found"
+    echo "✗ Client build may have failed"
+    exit 1
+fi
+
+echo "✓ Build verified (client + server)"
 
 # Step 4: Database Migrations
 echo ""

@@ -233,13 +233,22 @@ fi
 
 info "Building application..."
 if ! npm run build 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; then
-    if [ -f "dist/index.cjs" ]; then
-        BUILD_SIZE=$(du -sh dist 2>/dev/null | cut -f1 || echo "unknown")
-        success "Build complete ($BUILD_SIZE)"
-    else
-        error "Build failed - dist/index.cjs not found"
+    # Verify server build
+    if [ ! -f "dist/index.cjs" ]; then
+        error "Build verification failed - dist/index.cjs not found"
         exit 1
     fi
+
+    # Verify client build
+    if [ ! -f "dist/public/index.html" ]; then
+        error "Build verification failed - dist/public/index.html not found"
+        error "Client build may have failed"
+        npm run build 2>&1 | tail -20
+        exit 1
+    fi
+
+    BUILD_SIZE=$(du -sh dist 2>/dev/null | cut -f1 || echo "unknown")
+    success "Build complete ($BUILD_SIZE)"
 else
     error "Build failed"
     npm run build 2>&1 | tail -20

@@ -49,6 +49,39 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_de
 [ -f "$INSTALL_DIR/.env" ] && sed -i 's|DATABASE_URL=.*|DATABASE_URL=postgresql://ozvps_dev:OzVPS_Dev_2024!@localhost:5432/ozvps_dev|' "$INSTALL_DIR/.env"
 echo -e "${GREEN}✓ Database ready${NC}"
 
+# STEP 1.5: Redis (Optional for Session Persistence)
+echo -e "\n${CYAN}${BOLD}  STEP 1.5: Redis (Optional)${NC}"
+if ! command -v redis-server &>/dev/null; then
+    echo -e "${YELLOW}Redis not installed. Install for session persistence across PM2 restarts? (y/N)${NC}"
+    read -t 10 -n 1 -r INSTALL_REDIS || INSTALL_REDIS="n"
+    echo
+    if [[ $INSTALL_REDIS =~ ^[Yy]$ ]]; then
+        echo -e "${CYAN}→ Installing Redis...${NC}"
+        apt-get install -y redis-server
+        systemctl start redis-server
+        systemctl enable redis-server
+
+        # Add REDIS_URL to .env if not present
+        if [ -f "$INSTALL_DIR/.env" ] && ! grep -q "^REDIS_URL=" "$INSTALL_DIR/.env"; then
+            echo "REDIS_URL=redis://localhost:6379" >> "$INSTALL_DIR/.env"
+        fi
+        echo -e "${GREEN}✓ Redis installed and configured${NC}"
+    else
+        echo -e "${YELLOW}⊘ Skipped Redis - will use memory-based sessions${NC}"
+        # Remove REDIS_URL from .env if present to avoid connection attempts
+        if [ -f "$INSTALL_DIR/.env" ]; then
+            sed -i '/^REDIS_URL=/d' "$INSTALL_DIR/.env"
+        fi
+    fi
+else
+    echo -e "${GREEN}✓ Redis already installed${NC}"
+    # Ensure Redis is configured in .env
+    if [ -f "$INSTALL_DIR/.env" ] && ! grep -q "^REDIS_URL=" "$INSTALL_DIR/.env"; then
+        echo "REDIS_URL=redis://localhost:6379" >> "$INSTALL_DIR/.env"
+        echo -e "${CYAN}→ Added REDIS_URL to .env${NC}"
+    fi
+fi
+
 # STEP 2: Download
 echo -e "\n${CYAN}${BOLD}  STEP 2: Download Code${NC}"
 TEMP_DIR=$(mktemp -d)
@@ -76,6 +109,24 @@ echo -e "\n${CYAN}${BOLD}  STEP 3: Build${NC}"
 cd "$INSTALL_DIR"
 npm install && npm run build
 echo -e "${GREEN}✓ Built${NC}"
+
+# STEP 3.5: Verify Build Output
+echo -e "\n${CYAN}${BOLD}  STEP 3.5: Verify Build${NC}"
+if [ ! -f "$INSTALL_DIR/dist/public/index.html" ]; then
+    echo -e "${RED}✗ Build verification failed!${NC}"
+    echo -e "${RED}Missing: $INSTALL_DIR/dist/public/index.html${NC}"
+    echo -e "${YELLOW}Build may have failed. Check build logs above.${NC}"
+    exit 1
+fi
+
+if [ ! -f "$INSTALL_DIR/dist/index.cjs" ]; then
+    echo -e "${RED}✗ Build verification failed!${NC}"
+    echo -e "${RED}Missing: $INSTALL_DIR/dist/index.cjs${NC}"
+    echo -e "${YELLOW}Server build may have failed. Check build logs above.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Build verified (client + server)${NC}"
 
 # STEP 4: Migrations
 echo -e "\n${CYAN}${BOLD}  STEP 4: Migrations${NC}"
