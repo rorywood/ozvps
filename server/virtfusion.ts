@@ -1919,7 +1919,7 @@ export class VirtFusionClient {
     }
   }
 
-  // Get IP allocations - tries VirtFusion API first, falls back to server extraction
+  // Get IP allocations - Enhanced to fetch from multiple sources
   async getIpAllocations(): Promise<Array<{
     id: number;
     address: string;
@@ -1931,8 +1931,6 @@ export class VirtFusionClient {
     inUse: boolean;
   }>> {
     try {
-      // First, try to get IP blocks and their addresses directly
-      const ipBlocks = await this.getIpBlocks();
       const allocations: Array<{
         id: number;
         address: string;
@@ -1943,13 +1941,17 @@ export class VirtFusionClient {
         blockId: number;
         inUse: boolean;
       }> = [];
-
       let globalId = 1;
 
-      // Try to fetch IPs from each block
-      for (const block of ipBlocks) {
-        const blockIps = await this.getIpAddressesFromBlock(block.id);
-        if (blockIps.length > 0) {
+      // Strategy 1: Try to get IP blocks and their addresses directly
+      try {
+        const ipBlocks = await this.getIpBlocks();
+        log(`Found ${ipBlocks.length} IP blocks`, 'virtfusion');
+
+        for (const block of ipBlocks) {
+          const blockIps = await this.getIpAddressesFromBlock(block.id);
+          log(`Block ${block.id} (${block.name}): ${blockIps.length} addresses`, 'virtfusion');
+
           for (const ip of blockIps) {
             allocations.push({
               id: globalId++,
@@ -1963,35 +1965,91 @@ export class VirtFusionClient {
             });
           }
         }
+      } catch (blockError: any) {
+        log(`Failed to fetch from IP blocks: ${blockError.message}`, 'virtfusion');
       }
 
-      // If we got IPs from blocks, return them
-      if (allocations.length > 0) {
-        log(`Fetched ${allocations.length} IP addresses from ${ipBlocks.length} blocks`, 'virtfusion');
-        return allocations;
-      }
+      // Strategy 2: Fetch servers and extract all network interfaces
+      try {
+        const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers?results=500&remoteState=true');
+        const servers = response.data || [];
+        log(`Fetching IPs from ${servers.length} servers`, 'virtfusion');
 
-      // Fallback: derive from servers if block IP fetch didn't work
-      const servers = await this.listServers();
-      for (const server of servers) {
-        if (server.primaryIp && server.primaryIp !== 'N/A') {
-          allocations.push({
-            id: globalId++,
-            address: server.primaryIp,
-            type: server.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
-            serverId: parseInt(server.id) || undefined,
-            serverName: server.name,
-            userId: server.userId,
-            blockId: 0,
-            inUse: true,
-          });
+        for (const server of servers) {
+          const serverData = this.transformServer(server);
+
+          // Extract IPs from network interfaces
+          if (server.network?.interfaces && Array.isArray(server.network.interfaces)) {
+            for (const iface of server.network.interfaces) {
+              // Add IPv4 addresses
+              if (iface.ipv4 && Array.isArray(iface.ipv4)) {
+                for (const ipv4 of iface.ipv4) {
+                  if (ipv4.address && ipv4.address !== '0.0.0.0') {
+                    allocations.push({
+                      id: globalId++,
+                      address: ipv4.address,
+                      type: 'ipv4',
+                      serverId: server.id,
+                      serverName: server.name || `Server ${server.id}`,
+                      userId: server.userId,
+                      blockId: 0,
+                      inUse: true,
+                    });
+                  }
+                }
+              }
+
+              // Add IPv6 addresses
+              if (iface.ipv6 && Array.isArray(iface.ipv6)) {
+                for (const ipv6 of iface.ipv6) {
+                  if (ipv6.address && ipv6.address !== '::') {
+                    allocations.push({
+                      id: globalId++,
+                      address: ipv6.address,
+                      type: 'ipv6',
+                      serverId: server.id,
+                      serverName: server.name || `Server ${server.id}`,
+                      userId: server.userId,
+                      blockId: 0,
+                      inUse: true,
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // Fallback: If no network interfaces, use primary IP
+          if (serverData.primaryIp && serverData.primaryIp !== 'N/A') {
+            // Check if this IP was already added from network interfaces
+            const alreadyExists = allocations.some(a => a.address === serverData.primaryIp);
+            if (!alreadyExists) {
+              allocations.push({
+                id: globalId++,
+                address: serverData.primaryIp,
+                type: serverData.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
+                serverId: server.id,
+                serverName: server.name || `Server ${server.id}`,
+                userId: server.userId,
+                blockId: 0,
+                inUse: true,
+              });
+            }
+          }
         }
+      } catch (serverError: any) {
+        log(`Failed to fetch from servers: ${serverError.message}`, 'virtfusion');
       }
 
-      log(`Derived ${allocations.length} IP allocations from ${servers.length} servers`, 'virtfusion');
-      return allocations;
-    } catch (error) {
-      log(`Failed to fetch IP allocations: ${error}`, 'virtfusion');
+      // Remove duplicates based on IP address
+      const uniqueAllocations = allocations.filter((allocation, index, self) =>
+        index === self.findIndex(a => a.address === allocation.address)
+      );
+
+      log(`Fetched ${uniqueAllocations.length} unique IP allocations (${allocations.length} total before dedup)`, 'virtfusion');
+      return uniqueAllocations;
+    } catch (error: any) {
+      log(`Failed to fetch IP allocations: ${error.message}`, 'virtfusion');
       return [];
     }
   }
