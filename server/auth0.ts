@@ -447,6 +447,104 @@ class Auth0Client {
       return { success: false, error: 'Password change service unavailable' };
     }
   }
+
+  async resendVerificationEmail(auth0UserId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/jobs/verification-email`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: auth0UserId,
+            client_id: AUTH0_CLIENT_ID,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Failed to resend verification email: ${response.status} ${JSON.stringify(error)}`, 'auth0');
+
+        if (error.statusCode === 429 || error.error === 'too_many_requests') {
+          return { success: false, error: 'Please wait a few minutes before requesting another verification email.' };
+        }
+        return { success: false, error: error.message || 'Failed to send verification email' };
+      }
+
+      log(`Verification email resent for user ${auth0UserId}`, 'auth0');
+      return { success: true };
+    } catch (error: any) {
+      log(`Auth0 resend verification error: ${error.message}`, 'auth0');
+      return { success: false, error: 'Verification service unavailable' };
+    }
+  }
+
+  async isEmailVerified(auth0UserId: string): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}?fields=email_verified`,
+        {
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to check email verification status: ${response.status}`, 'auth0');
+        return false;
+      }
+
+      const user = await response.json() as any;
+      return user.email_verified === true;
+    } catch (error: any) {
+      log(`Auth0 email verification check error: ${error.message}`, 'auth0');
+      return false;
+    }
+  }
+
+  /**
+   * Delete a user from Auth0 (for rollback during failed registration)
+   */
+  async deleteUser(auth0UserId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Failed to delete Auth0 user ${auth0UserId}: ${response.status} ${JSON.stringify(error)}`, 'auth0');
+        return { success: false, error: error.message || 'Failed to delete user' };
+      }
+
+      // Invalidate caches
+      this.userExistsCache.delete(auth0UserId);
+      this.adminStatusCache.delete(auth0UserId);
+
+      log(`Deleted Auth0 user ${auth0UserId}`, 'auth0');
+      return { success: true };
+    } catch (error: any) {
+      log(`Auth0 delete user error: ${error.message}`, 'auth0');
+      return { success: false, error: 'User deletion service unavailable' };
+    }
+  }
 }
 
 export const auth0Client = new Auth0Client();

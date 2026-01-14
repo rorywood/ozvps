@@ -267,6 +267,50 @@ export class VirtFusionClient {
     }
   }
 
+  /**
+   * Get detailed connection status including license check
+   * Returns: { connected: boolean, errorType?: 'license_expired' | 'api_error' | 'timeout' }
+   */
+  async getConnectionStatus(): Promise<{ connected: boolean; errorType?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/connect`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        return { connected: true };
+      }
+
+      // Check for license-related errors (typically 402 Payment Required or specific messages)
+      if (response.status === 402 || response.status === 403) {
+        const text = await response.text();
+        const isLicenseError = text.toLowerCase().includes('license') ||
+                               text.toLowerCase().includes('expired') ||
+                               text.toLowerCase().includes('subscription');
+        if (isLicenseError) {
+          log('VirtFusion license issue detected', 'virtfusion');
+          return { connected: false, errorType: 'license_expired' };
+        }
+      }
+
+      // Check for unauthorized (API key issues)
+      if (response.status === 401) {
+        return { connected: false, errorType: 'unauthorized' };
+      }
+
+      return { connected: false, errorType: 'api_error' };
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        return { connected: false, errorType: 'timeout' };
+      }
+      return { connected: false, errorType: 'network_error' };
+    }
+  }
+
   async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
     try {
       const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`);

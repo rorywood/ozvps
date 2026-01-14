@@ -5,17 +5,43 @@ interface AuthSession {
   authenticated: boolean;
 }
 
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+  isAdmin?: boolean;
+  emailVerified?: boolean;
+  virtFusionUserId?: number;
+  extRelationId?: string;
+}
+
+interface AuthMeResponse {
+  user: User;
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
-  const { data: session, isLoading } = useQuery<AuthSession>({
+  const { data: session, isLoading: sessionLoading } = useQuery<AuthSession>({
     queryKey: ["auth", "session"],
     queryFn: async () => {
       const response = await fetch("/api/auth/session");
       return response.json();
     },
     staleTime: 1000 * 60 * 5,
+  });
+
+  // Fetch full user data including emailVerified
+  const { data: meData, isLoading: meLoading } = useQuery<AuthMeResponse>({
+    queryKey: ["auth", "me"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me");
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: session?.authenticated ?? false,
+    staleTime: 1000 * 30, // 30 seconds
   });
 
   const logoutMutation = useMutation({
@@ -36,8 +62,9 @@ export function useAuth() {
   });
 
   return {
+    user: meData?.user ?? null,
     isAuthenticated: session?.authenticated ?? false,
-    isLoading,
+    isLoading: sessionLoading || meLoading,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };
