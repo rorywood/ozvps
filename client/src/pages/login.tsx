@@ -265,6 +265,7 @@ export default function LoginPage() {
 
   // Force logout state (when blocked by another session)
   const [showForceLogout, setShowForceLogout] = useState(false);
+  const [showUserNotFound, setShowUserNotFound] = useState(false);
 
   const formatDisplayName = (name?: string, email?: string): string => {
     if (name) {
@@ -448,10 +449,17 @@ export default function LoginPage() {
       // Check if user is already logged in from another location
       if (err.code === 'ALREADY_LOGGED_IN') {
         setShowForceLogout(true);
+        setShowUserNotFound(false);
         setError(err.message || "You are already logged in from another location.");
+      } else if (err.code === 'USER_NOT_FOUND') {
+        // User doesn't exist - show friendly registration prompt
+        setShowUserNotFound(true);
+        setShowForceLogout(false);
+        setError(""); // Clear error - we'll show a special message instead
       } else {
         setError(err.message || "Invalid email or password");
         setShowForceLogout(false);
+        setShowUserNotFound(false);
       }
       setRecaptchaToken(null);
       // Reset 2FA token on error
@@ -686,7 +694,7 @@ export default function LoginPage() {
                     placeholder="you@example.com"
                     className="pl-10 h-11 bg-input border-border focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/50"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setShowUserNotFound(false); }}
                     autoComplete="email"
                     data-testid="input-email"
                   />
@@ -747,6 +755,36 @@ export default function LoginPage() {
                 </motion.div>
               )}
 
+              {/* User not found - friendly green prompt to register */}
+              {showUserNotFound && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col gap-3 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4"
+                  data-testid="text-user-not-found"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                    <span className="font-medium">No account found with this email</span>
+                  </div>
+                  <p className="text-emerald-300/80 text-xs">
+                    It looks like you haven't created an account yet. Get started in just a few seconds!
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="w-full border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                    data-testid="button-register-from-login"
+                  >
+                    <Link href="/register">
+                      Create your account
+                    </Link>
+                  </Button>
+                </motion.div>
+              )}
+
               {error && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
@@ -780,26 +818,6 @@ export default function LoginPage() {
                         </>
                       )}
                     </Button>
-                  )}
-                  {/* Show registration prompt for credential errors */}
-                  {!showForceLogout && error.toLowerCase().includes('invalid') && (
-                    <div className="mt-2 pt-2 border-t border-red-500/20">
-                      <p className="text-muted-foreground text-xs mb-2">
-                        Don't have an account yet?
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        asChild
-                        className="w-full border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-                        data-testid="button-register-prompt"
-                      >
-                        <Link href="/register">
-                          Create a new account
-                        </Link>
-                      </Button>
-                    </div>
                   )}
                 </motion.div>
               )}

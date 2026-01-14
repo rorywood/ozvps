@@ -902,11 +902,27 @@ export async function registerRoutes(
         await new Promise(resolve => setTimeout(resolve, delay));
       }
 
+      // Check if user exists in Auth0 first
+      const existingUser = await auth0Client.getUserByEmail(email);
+
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
         await recordFailedLogin(email, clientIp);
-        return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
+
+        // If user doesn't exist, return a specific code for the frontend
+        if (!existingUser) {
+          return res.status(401).json({
+            error: 'No account found with this email address',
+            code: 'USER_NOT_FOUND'
+          });
+        }
+
+        // User exists but wrong password
+        return res.status(401).json({
+          error: 'Invalid password. Please try again.',
+          code: 'INVALID_PASSWORD'
+        });
       }
 
       // Clear failed login attempts on successful auth
