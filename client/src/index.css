@@ -36,6 +36,14 @@
   --color-chart-4: hsl(280 65% 60%);
   --color-chart-5: hsl(340 75% 55%);
 
+  /* New semantic colors */
+  --color-success: hsl(142 76% 36%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-info: hsl(199 89% 48%);
+  --color-info-foreground: hsl(0 0% 100%);
+
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -81,38 +89,21 @@
     --color-chart-3: hsl(30 80% 55%);
     --color-chart-4: hsl(280 65% 60%);
     --color-chart-5: hsl(340 75% 55%);
+
+    /* Light theme semantic colors */
+    --color-success: hsl(142 71% 45%);
+    --color-success-foreground: hsl(0 0% 100%);
+    --color-warning: hsl(38 92% 50%);
+    --color-warning-foreground: hsl(0 0% 100%);
+    --color-info: hsl(199 89% 48%);
+    --color-info-foreground: hsl(0 0% 100%);
   }
   
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
   }
-  
-  /* Glassmorphism Utilities - adjusted for theme */
-  .glass {
-    @apply bg-card/60 backdrop-blur-md border border-border/50 shadow-lg;
-  }
 
-  .glass-card {
-    @apply bg-card/40 backdrop-blur-xl border border-border/50 hover:border-border transition-colors duration-200;
-  }
-
-  .glass-panel {
-    @apply bg-sidebar/95 backdrop-blur-2xl border-r border-border/50;
-  }
-
-  .light .glass {
-    @apply bg-white/80 border-gray-200/50;
-  }
-
-  .light .glass-card {
-    @apply bg-white/60 border-gray-200/50 hover:border-gray-300;
-  }
-
-  .light .glass-panel {
-    @apply bg-white/90 border-gray-200/50;
-  }
-  
   /* Light theme global overrides for dialog backgrounds only */
   .light .bg-zinc-900,
   .light .bg-gray-900 {
