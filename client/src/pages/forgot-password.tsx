@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle, ServerCrash } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
@@ -14,6 +14,36 @@ export default function ForgotPasswordPage() {
 
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [serviceUnavailable, setServiceUnavailable] = useState(false);
+
+  // Check service health on component mount
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    fetch('/api/health', { signal: controller.signal })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          setServiceUnavailable(true);
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.status !== 'ok') {
+          setServiceUnavailable(true);
+        }
+      })
+      .catch(() => {
+        clearTimeout(timeoutId);
+        setServiceUnavailable(true);
+      });
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, []);
 
   const forgotPasswordMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -106,6 +136,22 @@ export default function ForgotPasswordPage() {
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
+                {serviceUnavailable && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-start gap-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-4"
+                  >
+                    <ServerCrash className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium mb-1">Service Temporarily Unavailable</p>
+                      <p className="text-amber-300/80 text-xs">
+                        Our systems are currently undergoing maintenance. Please try again in a few minutes.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
                 {forgotPasswordMutation.isError && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
