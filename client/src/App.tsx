@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DevBanner } from "@/components/dev-banner";
+import { DevBannerProvider } from "@/contexts/dev-banner-context";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -196,11 +197,11 @@ function SessionErrorHandler() {
 
   useEffect(() => {
     setSessionErrorCallback((error: SessionError) => {
-      if (error.code) {
-        sessionStorage.setItem('sessionError', JSON.stringify(error));
-        queryClient.clear();
-        setLocation('/login');
-      }
+      // Always redirect to login on any 401 error (e.g., when PM2 restarts)
+      sessionStorage.setItem('sessionError', JSON.stringify(error));
+      queryClient.clear();
+      // Use window.location for clean redirect that resets all state
+      window.location.href = '/login';
     });
 
     return () => setSessionErrorCallback(() => {});
@@ -212,19 +213,21 @@ function SessionErrorHandler() {
 function App() {
   return (
     <ThemeProvider defaultTheme="dark">
-      <QueryClientProvider client={queryClient}>
-        <PowerActionProvider>
-          <TooltipProvider>
-            <DevBanner />
-            <Toaster />
-            <SessionTimeoutHandler />
-            <SessionErrorHandler />
-            <SystemHealthCheck>
-              <Router />
-            </SystemHealthCheck>
-          </TooltipProvider>
-        </PowerActionProvider>
-      </QueryClientProvider>
+      <DevBannerProvider>
+        <QueryClientProvider client={queryClient}>
+          <PowerActionProvider>
+            <TooltipProvider>
+              <DevBanner />
+              <Toaster />
+              <SessionTimeoutHandler />
+              <SessionErrorHandler />
+              <SystemHealthCheck>
+                <Router />
+              </SystemHealthCheck>
+            </TooltipProvider>
+          </PowerActionProvider>
+        </QueryClientProvider>
+      </DevBannerProvider>
     </ThemeProvider>
   );
 }

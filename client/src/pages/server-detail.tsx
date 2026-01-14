@@ -911,7 +911,8 @@ export default function ServerDetail() {
   // Check if initial setup is in progress (blocks server usage until complete)
   // reinstallTask now hydrates from backend on mount, so isActive is authoritative
   // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
-  const isSettingUp = reinstallTask.isActive && (needsSetup || isSetupMode);
+  // Don't show as "setting up" if status is complete - server is ready
+  const isSettingUp = reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode);
   
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage

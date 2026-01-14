@@ -93,9 +93,24 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
   const [copiedSshCommand, setCopiedSshCommand] = useState(false);
   const [confirmedSaved, setConfirmedSaved] = useState(false);
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [waitingForBoot, setWaitingForBoot] = useState(false);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
+
+  // Wait 15 seconds after completion before showing credentials (gives server time to boot)
+  useEffect(() => {
+    if (isComplete && credentials && !showCredentials) {
+      setWaitingForBoot(true);
+      const timer = setTimeout(() => {
+        setShowCredentials(true);
+        setWaitingForBoot(false);
+      }, 15000); // 15 second delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, credentials, showCredentials]);
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
     try {
@@ -263,8 +278,23 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         })}
       </div>
 
-      {/* Credentials Section - Show immediately on completion */}
-      {isComplete && credentials && (
+      {/* Waiting for server to boot */}
+      {isComplete && waitingForBoot && (
+        <div className="space-y-4 p-5 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
+            </div>
+            <div>
+              <h4 className="font-medium text-blue-400">Server Booting Up</h4>
+              <p className="text-xs text-muted-foreground">Waiting for server to be fully online before showing credentials...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credentials Section - Show after boot delay */}
+      {isComplete && showCredentials && credentials && (
         <div className="space-y-4 p-5 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
