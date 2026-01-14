@@ -5,7 +5,16 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(git push:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(where npm:*)",
+      "Bash(grep:*)",
+      "Bash(for file in D:/Claude/ozvps/client/src/pages/account.tsx D:/Claude/ozvps/client/src/pages/deploy-configure.tsx D:/Claude/ozvps/client/src/pages/order.tsx D:/Claude/ozvps/client/src/pages/pricing.tsx D:/Claude/ozvps/client/src/pages/server-console.tsx)",
+      "Bash(do grep -c \"GlassCard\" \"$file\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(cd:*)"
     ]
   }
 }

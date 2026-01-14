@@ -28,7 +28,7 @@ export default function ServerList() {
   const { data: servers, isLoading, isError } = useQuery({
     queryKey: ['servers'],
     queryFn: () => api.listServers(),
-    refetchInterval: 3000, // 3 second refresh for real-time updates
+    refetchInterval: 1000, // 1 second refresh for real-time updates
   });
 
   useSyncPowerActions(servers);

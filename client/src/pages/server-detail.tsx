@@ -918,186 +918,108 @@ export default function ServerDetail() {
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
 
-  // If server needs setup, show the setup wizard
+  // If server needs setup but provisioning hasn't started, show waiting message
+  // Note: Ideally the backend should start provisioning immediately after deploy
+  // This manual setup step is a UX issue that should be fixed in the backend
   if (needsSetup && !reinstallTask.isActive) {
     return (
       <AppShell>
-        <div className="py-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
+        <div className="max-w-2xl mx-auto py-12 space-y-6">
+          <div className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                {server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+              </h1>
+              <p className="text-muted-foreground">
+                Server is being prepared. Provisioning will begin automatically.
+              </p>
+            </div>
+          </div>
+
+          <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Plan</div>
+                <div className="font-medium text-foreground">{server.plan.name}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Location</div>
+                <div className="font-medium text-foreground">{server.location.name}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">IP Address</div>
+                <div className="font-mono text-sm text-foreground">{server.primaryIp}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Status</div>
+                <div className="font-medium text-warning">Awaiting Provisioning</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center">
             <Link href="/servers">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back-setup">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Servers
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // If server is being provisioned, show full-page provisioning view (DO style)
+  if (isSettingUp) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto py-12 space-y-8">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-6">
+            <Link href="/servers">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-display font-bold text-foreground tracking-tight">{server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}</h1>
-              <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
+              <h1 className="text-2xl font-bold text-foreground">
+                {server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+              </h1>
+              <p className="text-sm text-muted-foreground">{server?.primaryIp}</p>
             </div>
           </div>
-          
-          {/* Setup Wizard Card */}
-          <div className="glass-card rounded-xl border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/20 to-blue-500/20 p-6 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-primary/20">
-                  <Settings className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-display font-semibold text-foreground">Setup Your Server</h2>
-                  <p className="text-sm text-muted-foreground">Choose an operating system and set your hostname</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Server Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/50 border border-border">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Plan</p>
-                  <p className="text-sm font-medium text-foreground">{server.plan.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
-                  <p className="text-sm font-medium text-foreground">{server.location.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">IP Address</p>
-                  <p className="text-sm font-mono text-foreground">{server.primaryIp}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                  <p className="text-sm font-medium text-yellow-400">Awaiting Setup</p>
-                </div>
-              </div>
-              
-              {/* Hostname Input */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground">Hostname</Label>
-                <Input
-                  placeholder="e.g. web-server-1"
-                  value={setupHostname}
-                  onChange={(e) => handleSetupHostnameChange(e.target.value)}
-                  className={cn(
-                    "bg-card/30 border-border text-foreground placeholder:text-muted-foreground focus:border-primary",
-                    setupHostnameError && "border-red-500 focus:border-red-500"
-                  )}
-                  data-testid="input-setup-hostname"
-                />
-                {setupHostnameError && (
-                  <p className="text-xs text-red-400">{setupHostnameError}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
-                </p>
-              </div>
-              
-              {/* OS Selection */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-foreground">Operating System</Label>
-                  <div className="relative w-48">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search OS..."
-                      value={setupOsSearchQuery}
-                      onChange={(e) => setSetupOsSearchQuery(e.target.value)}
-                      className="pl-9 h-8 bg-card/30 border-border text-foreground text-sm"
-                      data-testid="input-setup-search"
-                    />
-                  </div>
-                </div>
-                
-                {/* OS Grid */}
-                {loadingSetupTemplates ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : setupGroupedTemplates.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No operating systems found
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {setupGroupedTemplates.map(({ category, templates }) => (
-                      <div key={category}>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                          {category}
-                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                            {templates.length}
-                          </span>
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                          {templates.map(template => {
-                            const templateId = String(template.id);
-                            const isSelected = setupSelectedOs === templateId;
-                            const displayName = template.version && !template.name.includes(template.version)
-                              ? `${template.name} ${template.version}`
-                              : template.name;
-                            
-                            return (
-                              <button
-                                key={templateId}
-                                onClick={() => setSetupSelectedOs(templateId)}
-                                className={cn(
-                                  "flex flex-col items-center p-4 rounded-xl border transition-all text-center",
-                                  isSelected
-                                    ? "bg-primary/15 border-primary ring-1 ring-primary/50"
-                                    : "bg-muted/20 border-border hover:bg-muted/30 hover:border-border"
-                                )}
-                                data-testid={`button-setup-os-${templateId}`}
-                              >
-                                <img
-                                  src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                                  alt={template.name}
-                                  className="h-10 w-10 object-contain mb-2"
-                                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                                />
-                                <span className="text-sm font-medium text-foreground leading-tight">
-                                  {displayName}
-                                </span>
-                                {isSelected && (
-                                  <div className="mt-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                                    <Check className="h-3 w-3 text-foreground" />
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              {/* Setup Button */}
-              <Button
-                className="w-full bg-primary hover:bg-primary/90 text-foreground font-medium py-3 h-12"
-                onClick={handleSetup}
-                disabled={!setupSelectedOs || !isSetupHostnameValid || setupMutation.isPending}
-                data-testid="button-start-setup"
-              >
-                {setupMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Starting Setup...
-                  </>
-                ) : (
-                  <>
-                    <Rocket className="h-5 w-5 mr-2" />
-                    Setup Server
-                  </>
-                )}
-              </Button>
-              
-              {!isSetupHostnameValid && setupHostname.trim() === '' && (
-                <p className="text-xs text-muted-foreground text-center">
-                  Enter a hostname to continue
-                </p>
-              )}
-            </div>
-          </div>
+
+          {/* Full-page provisioning view */}
+          <SetupProgressChecklist
+            state={reinstallTask}
+            serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+            onDismiss={() => {
+              if (reinstallTask.credentials) {
+                updateSavedCredentials(reinstallTask.credentials);
+                setShowSavedCredentials(true);
+              }
+              reinstallTask.reset();
+              updateSetupMode(false);
+              updateSetupMinimized(false);
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+            }}
+            onClose={() => {
+              if (reinstallTask.credentials) {
+                updateSavedCredentials(reinstallTask.credentials);
+                setShowSavedCredentials(true);
+              }
+              reinstallTask.reset();
+              updateSetupMode(false);
+              updateSetupMinimized(false);
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+            }}
+          />
         </div>
       </AppShell>
     );
@@ -1188,48 +1110,17 @@ export default function ServerDetail() {
     <AppShell>
       <div className="space-y-6 pb-20">
         
-        {/* Building Banner - Shown when setup is minimized (but not when complete) */}
-        {reinstallTask.isActive && isSetupMode && setupMinimized && reinstallTask.status !== 'complete' && (
-          <div 
-            className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/30 transition-colors" 
-            data-testid="banner-building"
-            onClick={() => updateSetupMinimized(false)}
-          >
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 text-blue-400 animate-spin flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-blue-300">Server Building</h3>
-                <p className="text-sm text-blue-300/80">
-                  Your server is being set up. Click to view progress. ({reinstallTask.percent}% complete)
-                </p>
-              </div>
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="border-blue-400/50 text-blue-300 hover:bg-blue-500/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                updateSetupMinimized(false);
-              }}
-            >
-              View Progress
-            </Button>
-          </div>
-        )}
-        
+        {/* Building banner removed - showing full-page provisioning view instead */}
         {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
         {showSavedCredentials && savedCredentials && server?.status === 'running' && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
-          <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-4" data-testid="banner-credentials">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <div>
-                  <h3 className="font-semibold text-green-300">SSH Login Credentials</h3>
-                  <p className="text-sm text-green-300/80">
-                    Save these credentials - they won't be shown again unless you reset the password
-                  </p>
-                </div>
+          <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-success flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-success">Your Server is Ready!</h3>
+                <p className="text-sm text-muted-foreground">
+                  Save these credentials to access your server
+                </p>
               </div>
             </div>
 
@@ -1237,12 +1128,12 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Server IP</span>
-                  <span className="font-mono text-green-300">{savedCredentials.serverIp}</span>
+                  <span className="font-mono text-foreground">{savedCredentials.serverIp}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
                     navigator.clipboard.writeText(savedCredentials.serverIp);
                     toast({ title: "Copied", description: "Server IP copied to clipboard" });
@@ -1254,12 +1145,12 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Username</span>
-                  <span className="font-mono text-green-300">{savedCredentials.username}</span>
+                  <span className="font-mono text-foreground">{savedCredentials.username}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
                     navigator.clipboard.writeText(savedCredentials.username);
                     toast({ title: "Copied", description: "Username copied to clipboard" });
@@ -1271,7 +1162,7 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Password</span>
-                  <span className="font-mono text-green-300">
+                  <span className="font-mono text-foreground">
                     {showCredentialsPassword ? savedCredentials.password : '••••••••••••'}
                   </span>
                 </div>
@@ -1279,7 +1170,7 @@ export default function ServerDetail() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
                     onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
                     data-testid="button-toggle-password-visibility"
                   >
@@ -1288,7 +1179,7 @@ export default function ServerDetail() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
                     onClick={() => {
                       navigator.clipboard.writeText(savedCredentials.password);
                       toast({ title: "Copied", description: "Password copied to clipboard" });
@@ -1302,54 +1193,36 @@ export default function ServerDetail() {
             </div>
 
             {/* SSH Command with Copy Button */}
-            <div className="pt-2 border-t border-green-500/30 space-y-3">
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-green-300">Quick Connect:</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs font-mono text-green-400 bg-card/30 px-3 py-2 rounded">
-                    ssh {savedCredentials.username}@{savedCredentials.serverIp}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-green-400 hover:bg-green-500/20"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`ssh ${savedCredentials.username}@${savedCredentials.serverIp}`);
-                      toast({ title: "Copied", description: "SSH command copied to clipboard" });
-                    }}
-                    title="Copy SSH command"
-                    data-testid="button-copy-ssh-command"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
+            <div className="pt-2 border-t border-border space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono text-success bg-card/30 px-3 py-2 rounded">
+                  ssh {savedCredentials.username}@{savedCredentials.serverIp}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:bg-muted"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`ssh ${savedCredentials.username}@{savedCredentials.serverIp}`);
+                    toast({ title: "Copied", description: "SSH command copied to clipboard" });
+                  }}
+                  title="Copy SSH command"
+                  data-testid="button-copy-ssh-command"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
               </div>
+            </div>
 
-              {/* SSH Connection Guide */}
-              <div className="bg-card/30 rounded-lg p-3 space-y-2">
-                <p className="text-xs font-medium text-green-300">How to Connect:</p>
-                <ol className="text-xs text-green-300/80 space-y-1 list-decimal list-inside">
-                  <li>Copy the SSH command above</li>
-                  <li>Open your terminal or SSH client</li>
-                  <li>Paste and run the command</li>
-                  <li>Enter the password when prompted</li>
-                  <li>Change your password after first login</li>
-                </ol>
-              </div>
-
-              {/* Dismiss Button */}
+            {/* Close button */}
+            <div className="flex justify-end pt-2">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-full border-green-500/50 text-green-400 hover:bg-green-500/20"
-                onClick={() => {
-                  setShowSavedCredentials(false);
-                  updateSavedCredentials(null);
-                }}
-                data-testid="button-close-credentials"
+                onClick={() => setShowSavedCredentials(false)}
               >
-                <Check className="h-3 w-3 mr-2" />
-                I've Saved My Credentials
+                Dismiss
               </Button>
             </div>
           </div>
@@ -2590,99 +2463,7 @@ export default function ServerDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Setup/Reinstall Progress Dialog */}
-      <Dialog open={reinstallTask.isActive && !setupMinimized} onOpenChange={() => {}}>
-        <DialogContent 
-          className={cn(
-            "bg-background border-border text-foreground",
-            isSetupMode ? "max-w-lg" : "max-w-md"
-          )} 
-          hideCloseButton
-        >
-          {isSetupMode ? (
-            /* New Setup Progress Checklist */
-            <SetupProgressChecklist 
-              state={reinstallTask}
-              serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
-              onDismiss={() => {
-                // Save credentials before resetting so user can still view them
-                if (reinstallTask.credentials) {
-                  updateSavedCredentials(reinstallTask.credentials);
-                  setShowSavedCredentials(true);
-                }
-                reinstallTask.reset();
-                updateSetupMode(false);
-                updateSetupMinimized(false);
-                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                queryClient.invalidateQueries({ queryKey: ['servers'] });
-              }}
-              onMinimize={() => {
-                updateSetupMinimized(true);
-              }}
-              onClose={() => {
-                // Save credentials and close dialog without continuing
-                if (reinstallTask.credentials) {
-                  updateSavedCredentials(reinstallTask.credentials);
-                  setShowSavedCredentials(true);
-                }
-                reinstallTask.reset();
-                updateSetupMode(false);
-                updateSetupMinimized(false);
-                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                queryClient.invalidateQueries({ queryKey: ['servers'] });
-              }}
-            />
-          ) : (
-            /* Reinstall Progress Panel (original) */
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  {reinstallTask.status === 'complete' ? (
-                    <>
-                      <Check className="h-5 w-5 text-green-500" />
-                      Reinstall Complete
-                    </>
-                  ) : reinstallTask.status === 'failed' ? (
-                    <>
-                      <AlertCircle className="h-5 w-5 text-red-500" />
-                      Reinstall Failed
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                      Reinstalling Server
-                    </>
-                  )}
-                </DialogTitle>
-                <DialogDescription className="text-muted-foreground">
-                  {reinstallTask.status === 'complete' 
-                    ? 'Your server has been reinstalled successfully.'
-                    : reinstallTask.status === 'failed'
-                    ? 'There was a problem reinstalling your server.'
-                    : 'Please wait while your server is being reinstalled. This may take several minutes.'}
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="py-4">
-                <ReinstallProgressPanel 
-                  state={reinstallTask} 
-                  onDismiss={() => {
-                    reinstallTask.reset();
-                    queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                    queryClient.invalidateQueries({ queryKey: ['servers'] });
-                  }}
-                />
-              </div>
-              
-              {reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed' && (
-                <div className="text-xs text-muted-foreground text-center">
-                  Do not close this window. Your server will be available shortly.
-                </div>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Provisioning dialog removed - now showing full-page view */}
 
       {/* Password Reset Dialog */}
       <Dialog 
