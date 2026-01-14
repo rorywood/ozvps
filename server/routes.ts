@@ -218,6 +218,7 @@ declare global {
         email: string;
         name?: string;
         isAdmin: boolean;
+        emailVerified: boolean;
       };
     }
   }
@@ -444,6 +445,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       email: session.email,
       name: session.name ?? undefined,
       isAdmin: session.isAdmin ?? false,
+      emailVerified: session.emailVerified ?? false,
     };
 
     next();
@@ -451,6 +453,22 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     log(`Auth middleware error: ${error}`, 'api');
     return res.status(500).json({ error: 'Authentication error' });
   }
+}
+
+// Middleware to require email verification
+async function requireEmailVerified(req: Request, res: Response, next: NextFunction) {
+  if (!req.userSession) {
+    return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+  }
+
+  if (!req.userSession.emailVerified) {
+    return res.status(403).json({
+      error: 'Email verification required. Please verify your email address before performing this action.',
+      code: 'EMAIL_NOT_VERIFIED'
+    });
+  }
+
+  next();
 }
 
 async function verifyServerOwnership(serverId: string, userVirtFusionId: number | null): Promise<boolean> {
@@ -1676,7 +1694,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/power', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/power', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -1940,7 +1958,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/reinstall', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -2012,7 +2030,7 @@ export async function registerRoutes(
   });
 
   // Reset server password - security-sensitive endpoint with ownership verification
-  app.post('/api/servers/:id/reset-password', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -4214,7 +4232,7 @@ export async function registerRoutes(
   });
 
   // SECURITY: Ensures Stripe customer exists before creating checkout session
-  app.post('/api/wallet/topup', authMiddleware, async (req, res) => {
+  app.post('/api/wallet/topup', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const result = topupSchema.safeParse(req.body);
       if (!result.success) {
@@ -4297,7 +4315,7 @@ export async function registerRoutes(
     paymentMethodId: z.string().min(1),
   });
 
-  app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
+  app.post('/api/wallet/topup/direct', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       log(`[Direct Topup] Request received from user ${req.userSession?.auth0UserId}`, 'api');
 
@@ -4494,7 +4512,7 @@ export async function registerRoutes(
     locationCode: z.string().optional(),
   });
 
-  app.post('/api/deploy', authMiddleware, async (req, res) => {
+  app.post('/api/deploy', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       const virtFusionUserId = req.userSession!.virtFusionUserId;
