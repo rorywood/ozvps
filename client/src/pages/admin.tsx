@@ -1203,7 +1203,7 @@ export default function AdminPage() {
 
       {/* Server Action Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <DialogContent className="bg-gray-900 border-border">
+        <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
               {actionType === 'delete' && <Trash2 className="h-5 w-5 text-red-400" />}
@@ -1284,7 +1284,7 @@ export default function AdminPage() {
 
       {/* Adjust Credits Dialog */}
       <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-border">
+        <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <DollarSign className="h-5 w-5 text-amber-400" />
@@ -1349,7 +1349,7 @@ export default function AdminPage() {
 
       {/* Transactions Dialog */}
       <Dialog open={transactionsDialogOpen} onOpenChange={setTransactionsDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-border max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <History className="h-5 w-5 text-amber-400" />
@@ -1392,7 +1392,7 @@ export default function AdminPage() {
 
       {/* Link VirtFusion Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-border">
+        <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <Link className="h-5 w-5 text-blue-400" />
@@ -2406,7 +2406,7 @@ function RateLimitManagement() {
 
       {/* Confirm Clear All Dialog */}
       <Dialog open={confirmClearAll} onOpenChange={setConfirmClearAll}>
-        <DialogContent className="bg-gray-900 border-border">
+        <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-400" />

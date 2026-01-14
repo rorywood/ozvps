@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { loadStripe, Stripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { useTheme } from "@/components/theme-provider";
 
 interface Wallet {
   id: number;
@@ -154,6 +155,10 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { theme } = useTheme();
+
+  // Determine if we're in light mode (theme can be 'light', 'dark', or 'system')
+  const isLightMode = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,10 +231,10 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
             style: {
               base: {
                 fontSize: '16px',
-                color: '#ffffff',
+                color: isLightMode ? '#1a1f2e' : '#ffffff',
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 '::placeholder': {
-                  color: '#9ca3af',
+                  color: isLightMode ? '#6b7280' : '#9ca3af',
                 },
               },
               invalid: {
