@@ -29,6 +29,7 @@ import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react"; // Still used in AuthGuard
+import { useSessionTimeout } from "@/hooks/use-session-timeout";
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   // No longer blocking access - just render children
@@ -176,9 +177,23 @@ function Router() {
   );
 }
 
+function SessionTimeoutHandler() {
+  const { data: auth } = useQuery({
+    queryKey: ['auth'],
+    queryFn: () => api.getAuthUser(),
+    retry: false,
+    staleTime: 0,
+  });
+
+  // Only track activity for authenticated users
+  useSessionTimeout();
+
+  return null;
+}
+
 function SessionErrorHandler() {
   const [, setLocation] = useLocation();
-  
+
   useEffect(() => {
     setSessionErrorCallback((error: SessionError) => {
       if (error.code) {
@@ -187,10 +202,10 @@ function SessionErrorHandler() {
         setLocation('/login');
       }
     });
-    
+
     return () => setSessionErrorCallback(() => {});
   }, [setLocation]);
-  
+
   return null;
 }
 
@@ -202,6 +217,7 @@ function App() {
           <TooltipProvider>
             <DevBanner />
             <Toaster />
+            <SessionTimeoutHandler />
             <SessionErrorHandler />
             <SystemHealthCheck>
               <Router />
