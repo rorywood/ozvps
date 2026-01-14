@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DevBanner } from "@/components/dev-banner";
-import { DevBannerProvider } from "@/contexts/dev-banner-context";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -213,21 +212,19 @@ function SessionErrorHandler() {
 function App() {
   return (
     <ThemeProvider defaultTheme="dark">
-      <DevBannerProvider>
-        <QueryClientProvider client={queryClient}>
-          <PowerActionProvider>
-            <TooltipProvider>
-              <DevBanner />
-              <Toaster />
-              <SessionTimeoutHandler />
-              <SessionErrorHandler />
-              <SystemHealthCheck>
-                <Router />
-              </SystemHealthCheck>
-            </TooltipProvider>
-          </PowerActionProvider>
-        </QueryClientProvider>
-      </DevBannerProvider>
+      <QueryClientProvider client={queryClient}>
+        <PowerActionProvider>
+          <TooltipProvider>
+            <DevBanner />
+            <Toaster />
+            <SessionTimeoutHandler />
+            <SessionErrorHandler />
+            <SystemHealthCheck>
+              <Router />
+            </SystemHealthCheck>
+          </TooltipProvider>
+        </PowerActionProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

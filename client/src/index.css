@@ -114,41 +114,10 @@
     @apply bg-white/90 border-gray-200/50;
   }
   
-  /* Light theme global overrides for hardcoded dark colors */
-  .light [class*="bg-[#0a"] {
-    background-color: hsl(0 0% 98%) !important;
-  }
-
-  .light [class*="border-white/"] {
-    border-color: hsl(217 19% 85%) !important;
-  }
-
-  .light [class*="bg-white/"][class*="hover:"] {
-    background-color: hsl(217 19% 92%) !important;
-  }
-
-  .light [class*="bg-black/"] {
-    background-color: hsl(0 0% 100%) !important;
-  }
-
-  /* Override dark gray/zinc/slate backgrounds in light mode */
-  .light .bg-gray-900,
+  /* Light theme global overrides for dialog backgrounds only */
   .light .bg-zinc-900,
-  .light .bg-slate-900 {
+  .light .bg-gray-900 {
     background-color: hsl(0 0% 100%) !important;
-  }
-
-  .light .bg-gray-800,
-  .light .bg-zinc-800,
-  .light .bg-slate-800 {
-    background-color: hsl(0 0% 98%) !important;
-  }
-
-  /* Override dark text colors in light mode */
-  .light .text-gray-100,
-  .light .text-zinc-100,
-  .light .text-slate-100 {
-    color: hsl(222 47% 11%) !important;
   }
 
   h1, h2, h3, h4, h5, h6 {

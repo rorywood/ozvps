@@ -12,26 +12,21 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useDevBanner } from "@/contexts/dev-banner-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { isDismissed } = useDevBanner();
-
-  // Check if dev banner is actually showing (dev environment AND not dismissed)
+  // Check if dev banner is showing - simple check without context
   const version = import.meta.env.VITE_APP_VERSION || "1.0.0-dev";
   const isDev = version.includes("-dev") ||
                 (typeof window !== "undefined" && window.location.hostname.includes("dev")) ||
                 import.meta.env.MODE === "development" ||
                 import.meta.env.DEV;
 
-  const showDevBanner = isDev && !isDismissed;
-
   return (
     <div className="min-h-screen text-foreground flex flex-col">
       <TopNav />
       <main className={cn(
         "flex-1 flex flex-col",
-        showDevBanner ? "pt-38 lg:pt-38" : "pt-24 lg:pt-24"
+        isDev ? "pt-38 lg:pt-38" : "pt-24 lg:pt-24"
       )}>
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl animate-in fade-in duration-500 flex-1">
           {children}

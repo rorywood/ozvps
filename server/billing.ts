@@ -235,12 +235,11 @@ export async function getUpcomingCharges(auth0UserId: string) {
     .where(
       and(
         eq(serverBilling.auth0UserId, auth0UserId),
-        // Show all servers except cancelled ones
+        // Show active, paid, and unpaid servers (exclude suspended - they don't exist in VirtFusion)
         or(
           eq(serverBilling.status, 'active'),
           eq(serverBilling.status, 'paid'),
-          eq(serverBilling.status, 'unpaid'),
-          eq(serverBilling.status, 'suspended')
+          eq(serverBilling.status, 'unpaid')
         )
       )
     )
