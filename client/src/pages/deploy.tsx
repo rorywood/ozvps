@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,9 @@ import {
   MapPin,
   HardDrive,
   Plus,
-  ChevronRight
+  ChevronRight,
+  AlertCircle,
+  Mail
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -109,6 +111,11 @@ export default function DeployPage() {
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
+  });
+
+  const { data: authData } = useQuery({
+    queryKey: ['auth'],
+    queryFn: () => api.getAuthUser(),
   });
 
   const { data: stripeStatus } = useQuery({
@@ -231,9 +238,33 @@ export default function DeployPage() {
   const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !selectedOsId ? 3 : 4;
   const selectedOs = templates.flatMap(g => g.templates).find(t => t.id === selectedOsId);
 
+  const isEmailVerified = authData?.emailVerified ?? true;
+
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto">
+        {/* Email Verification Banner */}
+        {!isEmailVerified && (
+          <div className="mb-6 bg-warning/10 border border-warning/20 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-warning mb-1">Email Verification Required</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                You need to verify your email address before you can deploy servers.
+                We've sent a verification link to <span className="font-medium text-foreground">{authData?.email}</span>.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button asChild variant="outline" size="sm" className="border-warning/50 text-warning hover:bg-warning/20">
+                  <Link href="/verify-email">
+                    <Mail className="h-4 w-4 mr-2" />
+                    Go to Verification Page
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">
@@ -598,7 +629,16 @@ export default function DeployPage() {
 
                   {/* Deploy Button */}
                   <div className="pt-2">
-                    {!selectedPlanId || !selectedOsId || !hostname ? (
+                    {!isEmailVerified ? (
+                      <Button
+                        className="w-full h-11"
+                        disabled
+                        data-testid="button-deploy-unverified"
+                      >
+                        <Mail className="h-4 w-4 mr-2" />
+                        Email Verification Required
+                      </Button>
+                    ) : !selectedPlanId || !selectedOsId || !hostname ? (
                       <Button
                         className="w-full h-11"
                         disabled
