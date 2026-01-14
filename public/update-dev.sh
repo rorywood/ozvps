@@ -1,166 +1,317 @@
 #!/bin/bash
 
 # OzVPS Development Update Script
-# Branch: claude/dev-l5488
+# Version: 3.1.0
 
-set -e
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
 
-BRANCH="claude/dev-l5488"
 INSTALL_DIR="/opt/ozvps-panel"
-REPO="rorywood/ozvps"
+SERVICE_NAME="ozvps-panel"
+GITHUB_BRANCH="claude/dev-l5488"
+GITHUB_REPO="rorywood/ozvps"
 
+error() { echo -e "${RED}✗${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+info() { echo -e "${CYAN}→${NC} $1"; }
+warning() { echo -e "${YELLOW}⚠${NC} $1"; }
+
+step_header() {
+    echo ""
+    echo -e "${BLUE}╭$( printf '─%.0s' {1..60} )╮${NC}"
+    echo -e "${BLUE}│${NC} ${BOLD}Step $1/$2: $3${NC}"
+    echo -e "${BLUE}╰$( printf '─%.0s' {1..60} )╯${NC}"
+}
+
+clear
+echo -e "${CYAN}${BOLD}"
+cat << "EOF"
+╔═══════════════════════════════════════════════════════════╗
+║   ██████╗ ███████╗██╗   ██╗██████╗ ███████╗              ║
+║  ██╔═══██╗╚══███╔╝██║   ██║██╔══██╗██╔════╝              ║
+║  ██║   ██║  ███╔╝ ██║   ██║██████╔╝███████╗              ║
+║  ██║   ██║ ███╔╝  ╚██╗ ██╔╝██╔═══╝ ╚════██║              ║
+║  ╚██████╔╝███████╗ ╚████╔╝ ██║     ███████║              ║
+║   ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚══════╝              ║
+║           Development Update System v3.1                 ║
+╚═══════════════════════════════════════════════════════════╝
+EOF
+echo -e "${NC}"
+echo -e "${DIM}Branch: ${GITHUB_BRANCH}${NC}"
 echo ""
-echo "╔════════════════════════════════════════╗"
-echo "║   OzVPS Development Update            ║"
-echo "║   Branch: claude/dev-l5488            ║"
-echo "╚════════════════════════════════════════╝"
-echo ""
+
+if [ "$EUID" -ne 0 ]; then
+    error "Must run as root"
+    exit 1
+fi
+
+if [ ! -d "$INSTALL_DIR" ]; then
+    error "Installation not found at $INSTALL_DIR"
+    exit 1
+fi
 
 # Check for new commits
+echo ""
+info "Checking for new commits..."
+
 CURRENT_COMMIT=""
 if [ -f "$INSTALL_DIR/.commit" ]; then
     CURRENT_COMMIT=$(cat "$INSTALL_DIR/.commit" 2>/dev/null || echo "")
 fi
 
-LATEST_COMMIT=$(curl -fsSL "https://api.github.com/repos/${REPO}/commits/${BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
+LATEST_COMMIT=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
 
 if [ -n "$LATEST_COMMIT" ] && [ -n "$CURRENT_COMMIT" ] && [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
-    echo "Already up to date (${LATEST_COMMIT:0:7})"
+    success "Already on latest version (${LATEST_COMMIT:0:7})"
     echo ""
-    read -p "Force update anyway? [y/N]: " -n 1 -r
+    read -p "$(echo -e ${CYAN}Force update anyway? [y/N]: ${NC})" -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Update cancelled."
+        echo -e "${CYAN}Update cancelled.${NC}"
         exit 0
+    fi
+    info "Proceeding with forced update..."
+else
+    if [ -n "$CURRENT_COMMIT" ] && [ -n "$LATEST_COMMIT" ]; then
+        success "New commits available!"
+        echo -e "  ${DIM}Current: ${CURRENT_COMMIT:0:7}${NC}"
+        echo -e "  ${DIM}Latest:  ${LATEST_COMMIT:0:7}${NC}"
     fi
 fi
 
-# Step 1: PostgreSQL Check
-echo "═══════════════════════════════════════════"
-echo "  STEP 1: PostgreSQL Installation"
-echo "═══════════════════════════════════════════"
-echo ""
+sleep 1
 
-if command -v psql &> /dev/null; then
-    echo "✓ PostgreSQL already installed"
-else
-    echo "Installing PostgreSQL..."
-    apt-get update && apt-get install -y postgresql postgresql-contrib
-    echo "✓ PostgreSQL installed"
+# ============================================================================
+step_header 1 6 "Pre-flight Checks"
+
+info "Checking PostgreSQL..."
+if ! command -v psql &>/dev/null; then
+    info "Installing PostgreSQL..."
+    apt-get update -qq && apt-get install -y postgresql postgresql-contrib >/dev/null 2>&1
+fi
+systemctl start postgresql 2>/dev/null || service postgresql start
+systemctl enable postgresql >/dev/null 2>&1 || true
+sleep 2
+
+sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>&1 | grep -v "already exists" || true
+sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>&1 | grep -v "already exists" || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" >/dev/null 2>&1 || true
+success "PostgreSQL ready"
+
+if ! command -v node &>/dev/null; then
+    error "Node.js not found"
+    exit 1
+fi
+success "Node.js $(node -v) detected"
+
+if ! command -v pm2 &>/dev/null; then
+    error "PM2 not found"
+    exit 1
+fi
+success "PM2 installed"
+
+sleep 1
+
+# ============================================================================
+step_header 2 6 "Creating Backup"
+
+BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+info "Backup location: $BACKUP_DIR"
+
+mkdir -p "$BACKUP_DIR"
+cp -r "$INSTALL_DIR"/* "$BACKUP_DIR/" 2>/dev/null || true
+cp "$INSTALL_DIR"/.env "$BACKUP_DIR/.env" 2>/dev/null || true
+
+BACKUP_SIZE=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1 || echo "unknown")
+success "Backup created ($BACKUP_SIZE)"
+
+# Keep only last 3 backups
+BACKUP_COUNT=$(find "$(dirname "$INSTALL_DIR")" -maxdepth 1 -name "$(basename "$INSTALL_DIR").backup.*" -type d 2>/dev/null | wc -l)
+if [ "$BACKUP_COUNT" -gt 3 ]; then
+    info "Cleaning old backups (keeping last 3)..."
+    find "$(dirname "$INSTALL_DIR")" -maxdepth 1 -name "$(basename "$INSTALL_DIR").backup.*" -type d 2>/dev/null | sort | head -n -3 | xargs rm -rf
 fi
 
-echo "Starting PostgreSQL service..."
-systemctl enable postgresql
-systemctl start postgresql
-echo "✓ PostgreSQL is running"
+sleep 1
 
-echo ""
-echo "Setting up database..."
-sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'ozvps_dev_password';" 2>/dev/null || echo "  (user already exists)"
-sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>/dev/null || echo "  (database already exists)"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;"
-echo "✓ Database ready"
+# ============================================================================
+step_header 3 6 "Downloading Latest Code"
 
-# Step 2: Download Latest Code
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  STEP 2: Download Latest Code"
-echo "═══════════════════════════════════════════"
-echo ""
-
-mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-# Backup configuration
-echo "Backing up configuration..."
-cp .env .env.backup 2>/dev/null || true
+TEMP_DIR=$(mktemp -d)
+cp "$INSTALL_DIR/.env" "$TEMP_DIR/.env" 2>/dev/null || true
+cp "$INSTALL_DIR/ecosystem.config.cjs" "$TEMP_DIR/ecosystem.config.cjs" 2>/dev/null || true
 
-echo "Downloading from GitHub ($BRANCH branch)..."
-curl -sL "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" -o /tmp/ozvps.tar.gz
-echo "✓ Downloaded"
+SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
+TEMP_ZIP="/tmp/ozvps-update-${SAFE_BRANCH}.zip"
+TEMP_EXTRACT="/tmp/ozvps-update-${SAFE_BRANCH}-extract"
 
-echo "Removing old files..."
-find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 ! -name '.env*' -exec rm -rf {} +
+info "Downloading from GitHub..."
+if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"; then
+    error "Failed to download from GitHub"
+    exit 1
+fi
+FILE_SIZE=$(du -sh "$TEMP_ZIP" 2>/dev/null | cut -f1 || echo "unknown")
+success "Downloaded $FILE_SIZE"
 
-echo "Extracting new code..."
-tar -xzf /tmp/ozvps.tar.gz -C /tmp
-cp -r /tmp/ozvps-"${BRANCH//\//-}"/* "$INSTALL_DIR/"
-rm -rf /tmp/ozvps-* /tmp/ozvps.tar.gz
-echo "✓ Files copied"
+info "Extracting..."
+find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 ! -name 'node_modules' ! -name '.env' ! -name '.backup.*' ! -name 'ecosystem.config.cjs' -exec rm -rf {} + 2>/dev/null || true
 
-# Restore configuration
-cp .env.backup .env 2>/dev/null || true
-echo "✓ Code updated"
+rm -rf "$TEMP_EXTRACT" && mkdir -p "$TEMP_EXTRACT"
+unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
 
-# Save commit hash
+if [ -z "$EXTRACTED_DIR" ]; then
+    error "Could not find extracted directory"
+    rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+    exit 1
+fi
+
+cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
+cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
+cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
+rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
+
 if [ -n "$LATEST_COMMIT" ]; then
     echo "$LATEST_COMMIT" > "$INSTALL_DIR/.commit"
 fi
 
-# Step 3: Build Application
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  STEP 3: Build Application"
-echo "═══════════════════════════════════════════"
-echo ""
+success "Code updated"
 
-echo "Installing dependencies..."
-npm install
-echo "✓ Dependencies installed"
+sleep 1
 
-echo ""
-echo "Building application..."
-npm run build
-echo "✓ Application built"
+# ============================================================================
+step_header 4 6 "Building Application"
 
-# Verify build
-if [ -f "dist/index.cjs" ]; then
-    echo "✓ Build verified"
+cd "$INSTALL_DIR"
+
+info "Installing dependencies..."
+if ! npm install --silent 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; then
+    success "Dependencies installed"
 else
-    echo "✗ Build failed - dist/index.cjs not found"
+    error "Failed to install dependencies"
+    npm install 2>&1 | tail -20
     exit 1
 fi
 
-# Step 4: Database Migrations
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  STEP 4: Database Migrations"
-echo "═══════════════════════════════════════════"
-echo ""
-
-echo "Loading environment..."
-set -a
-source .env
-set +a
-
-echo "Running migrations..."
-npx drizzle-kit push --force 2>/dev/null || npx drizzle-kit push 2>/dev/null || echo "No migrations needed"
-echo "✓ Migrations complete"
-
-# Step 5: Restart Application
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  STEP 5: Restart Application"
-echo "═══════════════════════════════════════════"
-echo ""
-
-echo "Restarting PM2..."
-pm2 delete ozvps-panel 2>/dev/null || true
-pm2 start npm --name "ozvps-panel" -- start
-pm2 save
-
-echo "Waiting for application to start..."
-sleep 3
-
-# Check if running
-if pm2 list | grep -q "ozvps-panel.*online"; then
-    echo "✓ Application is running"
+info "Building application..."
+if ! npm run build 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; then
+    if [ -f "dist/index.cjs" ]; then
+        BUILD_SIZE=$(du -sh dist 2>/dev/null | cut -f1 || echo "unknown")
+        success "Build complete ($BUILD_SIZE)"
+    else
+        error "Build failed - dist/index.cjs not found"
+        exit 1
+    fi
 else
-    echo "⚠ Application may not be running. Check: pm2 logs ozvps-panel"
+    error "Build failed"
+    npm run build 2>&1 | tail -20
+    exit 1
 fi
 
+sleep 1
+
+# ============================================================================
+step_header 5 6 "Database Migrations"
+
+info "Loading environment..."
+if [ -f "$INSTALL_DIR/.env" ]; then
+    set -a
+    source "$INSTALL_DIR/.env"
+    set +a
+    success "Environment loaded"
+else
+    error ".env file not found"
+    exit 1
+fi
+
+if [ -z "$DATABASE_URL" ]; then
+    error "DATABASE_URL not set in .env"
+    exit 1
+fi
+
+info "Running migrations..."
+MIGRATION_OUTPUT=$(npx drizzle-kit push --force 2>&1)
+MIGRATION_EXIT=$?
+
+if [ $MIGRATION_EXIT -ne 0 ]; then
+    error "Migrations failed"
+    echo -e "${DIM}$MIGRATION_OUTPUT${NC}"
+    exit 1
+fi
+
+if echo "$MIGRATION_OUTPUT" | grep -q "Cannot find module"; then
+    error "drizzle-kit not found"
+    echo -e "${DIM}$MIGRATION_OUTPUT${NC}"
+    exit 1
+fi
+
+success "Migrations applied"
+
+if [ -f "$INSTALL_DIR/reset-billing.js" ]; then
+    info "Resetting billing records..."
+    node reset-billing.js >/dev/null 2>&1 && success "Billing reset" || warning "Billing reset skipped"
+fi
+
+sleep 1
+
+# ============================================================================
+step_header 6 6 "Restarting Application"
+
+info "Stopping old instance..."
+pm2 delete "$SERVICE_NAME" 2>/dev/null || true
+success "Stopped"
+
+info "Starting new instance..."
+if pm2 start "$INSTALL_DIR/ecosystem.config.cjs" >/dev/null 2>&1; then
+    pm2 save --force >/dev/null 2>&1
+    success "Started"
+else
+    error "Failed to start application"
+    pm2 logs "$SERVICE_NAME" --lines 20 --nostream
+    exit 1
+fi
+
+info "Waiting for application to be healthy..."
+APP_PORT=$(grep "^PORT=" "$INSTALL_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d ' "' || echo "3000")
+
+for i in {1..30}; do
+    if curl -s "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+        success "Application is healthy"
+        break
+    fi
+    sleep 1
+    if [ $i -eq 30 ]; then
+        warning "Health check timeout"
+        echo -e "${DIM}Check logs: pm2 logs $SERVICE_NAME${NC}"
+    fi
+done
+
+sleep 1
+
+# ============================================================================
 echo ""
-echo "╔════════════════════════════════════════╗"
-echo "║   Update Complete!                    ║"
-echo "╚════════════════════════════════════════╝"
+echo -e "${GREEN}${BOLD}"
+cat << "EOF"
+╔═══════════════════════════════════════════════════════════╗
+║                    ✓ Update Complete!                    ║
+╚═══════════════════════════════════════════════════════════╝
+EOF
+echo -e "${NC}"
+
+echo -e "${BOLD}Quick Commands:${NC}"
+echo -e "  ${CYAN}pm2 status${NC}              - View application status"
+echo -e "  ${CYAN}pm2 logs $SERVICE_NAME${NC}  - View application logs"
+echo -e "  ${CYAN}pm2 restart $SERVICE_NAME${NC} - Restart application"
+echo ""
+echo -e "${DIM}Completed at $(date '+%Y-%m-%d %H:%M:%S')${NC}"
 echo ""
