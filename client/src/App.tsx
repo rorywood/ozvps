@@ -37,7 +37,15 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   // Allow auth pages and pricing to bypass health check - users should always see these
   // Errors will show inline when they try to use features that require VirtFusion
   const bypassPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/pricing'];
-  const shouldBypass = bypassPaths.some(path => location === path || location.startsWith(path + '/'));
+
+  // Check both wouter location and window.location for reliability
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : location;
+  const shouldBypass = bypassPaths.some(path =>
+    currentPath === path ||
+    currentPath.startsWith(path + '/') ||
+    location === path ||
+    location.startsWith(path + '/')
+  );
 
   const { data: health, isLoading, refetch } = useQuery({
     queryKey: ['health'],
@@ -45,10 +53,10 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
     retry: 2,
     retryDelay: 1000,
     staleTime: 30000,
-    enabled: !shouldBypass, // Don't run health check for bypassed pages
+    enabled: !shouldBypass,
   });
 
-  // Always render children for bypassed paths
+  // Always render children immediately for bypassed paths - don't wait for any queries
   if (shouldBypass) {
     return <>{children}</>;
   }
