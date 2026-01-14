@@ -4,7 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
-import { dbStorage } from "./storage";
+import { dbStorage, initializeStorage } from "./storage";
 import { registerInstallAssets } from "./install-assets";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -13,6 +13,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { startCancellationProcessor } from "./cancellation-processor";
 import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
 import { startBillingProcessor } from "./billing-processor";
+import { connectRedis, disconnectRedis, redisClient } from "./redis";
 
 const app = express();
 const httpServer = createServer(app);
@@ -253,6 +254,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize Redis for session storage
+  await connectRedis();
+  initializeStorage(redisClient);
+
   // Initialize Stripe schema and sync data on startup
   try {
     const databaseUrl = process.env.DATABASE_URL;
@@ -322,17 +327,36 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
-      
+
       // Start background job for processing server cancellations
       startCancellationProcessor();
-      
+
       // Start background job for cleaning up orphaned accounts (deleted Auth0 users)
       startOrphanCleanupProcessor();
-      
+
       // Start background job for server billing and auto top-ups
       getUncachableStripeClient()
         .then(stripe => startBillingProcessor(stripe))
         .catch(() => startBillingProcessor(null));
     },
   );
+
+  // Graceful shutdown handler
+  process.on('SIGTERM', async () => {
+    log('SIGTERM received, shutting down gracefully...', 'server');
+    await disconnectRedis();
+    httpServer.close(() => {
+      log('Server closed', 'server');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', async () => {
+    log('SIGINT received, shutting down gracefully...', 'server');
+    await disconnectRedis();
+    httpServer.close(() => {
+      log('Server closed', 'server');
+      process.exit(0);
+    });
+  });
 })();

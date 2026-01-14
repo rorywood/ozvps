@@ -5,7 +5,14 @@ import { DevChangelog } from "./dev-changelog";
 import { Button } from "@/components/ui/button";
 
 export function DevBanner() {
-  const [dismissed, setDismissed] = useState(false);
+  // Use sessionStorage to persist dismissal across component re-renders but reset on page refresh
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
   const version = import.meta.env.VITE_APP_VERSION || "1.0.0-dev";
   const buildDate = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
 
@@ -17,6 +24,13 @@ export function DevBanner() {
                 (typeof window !== "undefined" && window.location.hostname.includes("dev")) ||
                 import.meta.env.MODE === "development" ||
                 import.meta.env.DEV;
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    sessionStorage.setItem("dev-banner-dismissed", "true");
+    // Dispatch custom event so AppShell can update
+    window.dispatchEvent(new Event("dev-banner-dismissed"));
+  };
 
   if (!isDev || dismissed) return null;
 
@@ -36,7 +50,7 @@ export function DevBanner() {
             variant="ghost"
             size="icon"
             className="h-6 w-6 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-500/30 dark:text-yellow-500 dark:hover:text-yellow-400"
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             title="Dismiss (will reappear on page refresh)"
           >
             <X className="h-4 w-4" />

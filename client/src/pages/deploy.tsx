@@ -272,7 +272,7 @@ export default function DeployPage() {
                           <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">NVMe</span>
+                          <span className="text-muted-foreground">Storage</span>
                           <span className="text-foreground font-medium">{plan.storageGb} GB</span>
                         </div>
                         <div className="flex justify-between">

@@ -1217,8 +1217,8 @@ export default function ServerDetail() {
           </div>
         )}
         
-        {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
-        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+        {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
+        {showSavedCredentials && savedCredentials && server?.status === 'running' && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
           <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-4" data-testid="banner-credentials">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">

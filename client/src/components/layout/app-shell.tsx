@@ -1,7 +1,7 @@
 import { TopNav } from "./top-nav";
 import { Link } from "wouter";
 import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Info, ChevronUp, ChevronDown } from "lucide-react";
 import {
   Dialog,
@@ -14,19 +14,39 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  // Check if dev banner should show (always show in dev, user dismisses per-session)
+  // Check if dev banner should show
   const version = import.meta.env.VITE_APP_VERSION || "1.0.0-dev";
   const isDev = version.includes("-dev") ||
                 (typeof window !== "undefined" && window.location.hostname.includes("dev")) ||
                 import.meta.env.MODE === "development" ||
                 import.meta.env.DEV;
 
+  // Track whether dev banner is dismissed
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
+  // Listen for banner dismissal event
+  useEffect(() => {
+    const handleBannerDismissed = () => {
+      setBannerDismissed(true);
+    };
+    window.addEventListener("dev-banner-dismissed", handleBannerDismissed);
+    return () => window.removeEventListener("dev-banner-dismissed", handleBannerDismissed);
+  }, []);
+
+  // Show dev padding only if in dev mode AND banner not dismissed
+  const showDevPadding = isDev && !bannerDismissed;
+
   return (
     <div className="min-h-screen text-foreground flex flex-col">
       <TopNav />
       <main className={cn(
-        "flex-1 flex flex-col",
-        isDev ? "pt-38 lg:pt-38" : "pt-24 lg:pt-24"
+        "flex-1 flex flex-col transition-[padding] duration-300",
+        showDevPadding ? "pt-38 lg:pt-38" : "pt-24 lg:pt-24"
       )}>
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl animate-in fade-in duration-500 flex-1">
           {children}

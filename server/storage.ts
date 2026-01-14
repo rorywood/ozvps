@@ -217,7 +217,388 @@ export class MemoryStorage implements IStorage {
   }
 }
 
-export const storage = new MemoryStorage();
+// Redis-backed session storage
+export class RedisStorage implements IStorage {
+  private redisClient: any;
+  private memoryFallback: MemoryStorage;
+
+  constructor(redisClient: any) {
+    this.redisClient = redisClient;
+    this.memoryFallback = new MemoryStorage();
+  }
+
+  private isRedisAvailable(): boolean {
+    return this.redisClient?.isOpen === true;
+  }
+
+  private sessionKey(id: string): string {
+    return `session:${id}`;
+  }
+
+  private userSessionsKey(auth0UserId: string): string {
+    return `user_sessions:${auth0UserId}`;
+  }
+
+  private userFlagsKey(auth0UserId: string): string {
+    return `user_flags:${auth0UserId}`;
+  }
+
+  async createSession(data: {
+    visitorId?: number;
+    auth0UserId?: string;
+    virtFusionUserId?: number;
+    extRelationId?: string;
+    email: string;
+    name?: string;
+    isAdmin?: boolean;
+    emailVerified?: boolean;
+    expiresAt: Date;
+  }): Promise<Session> {
+    const id = randomBytes(32).toString("hex");
+    const now = new Date();
+    const session: Session = {
+      id,
+      userId: data.visitorId || null,
+      auth0UserId: data.auth0UserId || null,
+      virtFusionUserId: data.virtFusionUserId || null,
+      extRelationId: data.extRelationId || null,
+      email: data.email,
+      name: data.name || null,
+      isAdmin: data.isAdmin || false,
+      emailVerified: data.emailVerified ?? false,
+      expiresAt: data.expiresAt,
+      revokedAt: null,
+      revokedReason: null,
+      lastActivityAt: now,
+    };
+
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.createSession(data);
+    }
+
+    try {
+      const ttlSeconds = Math.ceil((data.expiresAt.getTime() - now.getTime()) / 1000);
+      await this.redisClient.setEx(
+        this.sessionKey(id),
+        ttlSeconds,
+        JSON.stringify(session)
+      );
+
+      // Track user sessions for bulk operations
+      if (data.auth0UserId) {
+        await this.redisClient.sAdd(this.userSessionsKey(data.auth0UserId), id);
+        await this.redisClient.expire(this.userSessionsKey(data.auth0UserId), ttlSeconds);
+      }
+
+      return session;
+    } catch (error: any) {
+      log(`Redis error in createSession: ${error.message}`, 'storage');
+      return this.memoryFallback.createSession(data);
+    }
+  }
+
+  async getSession(id: string): Promise<Session | undefined> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getSession(id);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.sessionKey(id));
+      if (!data) return undefined;
+
+      const session: Session = JSON.parse(data);
+
+      // Convert date strings back to Date objects
+      session.expiresAt = new Date(session.expiresAt);
+      session.lastActivityAt = new Date(session.lastActivityAt);
+      if (session.revokedAt) {
+        session.revokedAt = new Date(session.revokedAt);
+      }
+
+      // Check if expired
+      if (session.expiresAt < new Date()) {
+        await this.deleteSession(id);
+        return undefined;
+      }
+
+      return session;
+    } catch (error: any) {
+      log(`Redis error in getSession: ${error.message}`, 'storage');
+      return this.memoryFallback.getSession(id);
+    }
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteSession(id);
+    }
+
+    try {
+      // Get session to find user ID for cleanup
+      const session = await this.getSession(id);
+      if (session?.auth0UserId) {
+        await this.redisClient.sRem(this.userSessionsKey(session.auth0UserId), id);
+      }
+      await this.redisClient.del(this.sessionKey(id));
+    } catch (error: any) {
+      log(`Redis error in deleteSession: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteSession(id);
+    }
+  }
+
+  async deleteUserSessions(userId: number): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteUserSessions(userId);
+    }
+
+    try {
+      // Note: Redis implementation tracks by auth0UserId, not userId
+      // This method is kept for interface compatibility but may not find sessions
+      log(`deleteUserSessions called with userId ${userId} - Redis tracks by auth0UserId`, 'storage');
+    } catch (error: any) {
+      log(`Redis error in deleteUserSessions: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteUserSessions(userId);
+    }
+  }
+
+  async deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteSessionsByAuth0UserId(auth0UserId);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      if (sessionIds.length > 0) {
+        const keys = sessionIds.map((id: string) => this.sessionKey(id));
+        await this.redisClient.del(keys);
+        await this.redisClient.del(this.userSessionsKey(auth0UserId));
+      }
+    } catch (error: any) {
+      log(`Redis error in deleteSessionsByAuth0UserId: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteSessionsByAuth0UserId(auth0UserId);
+    }
+  }
+
+  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (session && !session.revokedAt) {
+          session.revokedAt = now;
+          session.revokedReason = reason;
+          const ttlSeconds = Math.ceil((session.expiresAt.getTime() - now.getTime()) / 1000);
+          if (ttlSeconds > 0) {
+            await this.redisClient.setEx(
+              this.sessionKey(id),
+              ttlSeconds,
+              JSON.stringify(session)
+            );
+          }
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in revokeSessionsByAuth0UserId: ${error.message}`, 'storage');
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+    }
+  }
+
+  async hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.hasActiveSession(auth0UserId, idleTimeoutMs);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (
+          session &&
+          !session.revokedAt &&
+          new Date(session.expiresAt) > now
+        ) {
+          const lastActivity = new Date(session.lastActivityAt);
+          const idleTime = now.getTime() - lastActivity.getTime();
+          if (idleTime <= idleTimeoutMs) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error: any) {
+      log(`Redis error in hasActiveSession: ${error.message}`, 'storage');
+      return this.memoryFallback.hasActiveSession(auth0UserId, idleTimeoutMs);
+    }
+  }
+
+  async revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.revokeIdleSessions(auth0UserId, idleTimeoutMs, reason);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (
+          session &&
+          !session.revokedAt &&
+          new Date(session.expiresAt) > now
+        ) {
+          const lastActivity = new Date(session.lastActivityAt);
+          const idleTime = now.getTime() - lastActivity.getTime();
+          if (idleTime > idleTimeoutMs) {
+            session.revokedAt = now;
+            session.revokedReason = reason;
+            const ttlSeconds = Math.ceil((session.expiresAt.getTime() - now.getTime()) / 1000);
+            if (ttlSeconds > 0) {
+              await this.redisClient.setEx(
+                this.sessionKey(id),
+                ttlSeconds,
+                JSON.stringify(session)
+              );
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in revokeIdleSessions: ${error.message}`, 'storage');
+      return this.memoryFallback.revokeIdleSessions(auth0UserId, idleTimeoutMs, reason);
+    }
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.updateSessionActivity(sessionId);
+    }
+
+    try {
+      const session = await this.getSession(sessionId);
+      if (session) {
+        session.lastActivityAt = new Date();
+        const ttlSeconds = Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000);
+        if (ttlSeconds > 0) {
+          await this.redisClient.setEx(
+            this.sessionKey(sessionId),
+            ttlSeconds,
+            JSON.stringify(session)
+          );
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in updateSessionActivity: ${error.message}`, 'storage');
+      return this.memoryFallback.updateSessionActivity(sessionId);
+    }
+  }
+
+  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.updateSession(sessionId, updates);
+    }
+
+    try {
+      const session = await this.getSession(sessionId);
+      if (session) {
+        if (updates.isAdmin !== undefined) {
+          session.isAdmin = updates.isAdmin;
+        }
+        if (updates.name !== undefined) {
+          session.name = updates.name;
+        }
+        if (updates.emailVerified !== undefined) {
+          session.emailVerified = updates.emailVerified;
+        }
+        const ttlSeconds = Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000);
+        if (ttlSeconds > 0) {
+          await this.redisClient.setEx(
+            this.sessionKey(sessionId),
+            ttlSeconds,
+            JSON.stringify(session)
+          );
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in updateSession: ${error.message}`, 'storage');
+      return this.memoryFallback.updateSession(sessionId, updates);
+    }
+  }
+
+  async getUserFlags(auth0UserId: string): Promise<UserFlags | undefined> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getUserFlags(auth0UserId);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      if (!data) return undefined;
+
+      const flags: UserFlags = JSON.parse(data);
+      // Convert date strings back to Date objects
+      if (flags.blockedAt) {
+        flags.blockedAt = new Date(flags.blockedAt);
+      }
+      return flags;
+    } catch (error: any) {
+      log(`Redis error in getUserFlags: ${error.message}`, 'storage');
+      return this.memoryFallback.getUserFlags(auth0UserId);
+    }
+  }
+
+  async setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.setUserBlocked(auth0UserId, blocked, reason);
+    }
+
+    try {
+      const flags: UserFlags = {
+        auth0UserId,
+        blocked,
+        blockedReason: blocked ? (reason || null) : null,
+        blockedAt: blocked ? new Date() : null,
+      };
+
+      // Store user flags with 30 day expiry
+      await this.redisClient.setEx(
+        this.userFlagsKey(auth0UserId),
+        30 * 24 * 60 * 60,
+        JSON.stringify(flags)
+      );
+    } catch (error: any) {
+      log(`Redis error in setUserBlocked: ${error.message}`, 'storage');
+      return this.memoryFallback.setUserBlocked(auth0UserId, blocked, reason);
+    }
+  }
+}
+
+// Initialize storage - will be updated to use Redis when available
+let storageInstance: IStorage = new MemoryStorage();
+
+export function initializeStorage(redisClient?: any): IStorage {
+  if (redisClient && redisClient.isOpen) {
+    log('Initializing Redis-backed session storage', 'storage');
+    storageInstance = new RedisStorage(redisClient);
+  } else {
+    log('Redis not available, using memory-backed session storage', 'storage');
+    storageInstance = new MemoryStorage();
+  }
+  return storageInstance;
+}
+
+export const storage = new Proxy({} as IStorage, {
+  get(_, prop) {
+    return (storageInstance as any)[prop];
+  }
+});
 
 // Database storage for plans, wallets, and deploy orders
 export const dbStorage = {
