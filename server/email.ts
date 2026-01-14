@@ -1,0 +1,219 @@
+import { Resend } from 'resend';
+import { log } from './index';
+
+// Resend API key
+const RESEND_API_KEY = 're_WXhg2HSN_6PKUomuokPfFoMZ7NX5EjEES';
+const EMAIL_FROM = 'OzVPS <noreply@ozvps.com.au>';
+
+const resend = new Resend(RESEND_API_KEY);
+
+interface EmailResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * Send a password reset email
+ */
+export async function sendPasswordResetEmail(
+  to: string,
+  resetLink: string,
+  expiresInMinutes: number = 30
+): Promise<EmailResult> {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: 'Reset Your OzVPS Password',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your Password</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background-color: #1e293b; border-radius: 12px; overflow: hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 30px 40px; text-align: center; border-bottom: 1px solid #334155;">
+              <h1 style="margin: 0; color: #38bdf8; font-size: 24px; font-weight: 700;">OzVPS</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #f1f5f9; font-size: 20px; font-weight: 600;">Reset Your Password</h2>
+
+              <p style="margin: 0 0 20px; color: #94a3b8; font-size: 15px; line-height: 1.6;">
+                We received a request to reset the password for your OzVPS account. Click the button below to create a new password.
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${resetLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #38bdf8 0%, #3b82f6 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px;">
+                      Reset Password
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 20px 0 0; color: #64748b; font-size: 13px; line-height: 1.6;">
+                This link will expire in <strong style="color: #94a3b8;">${expiresInMinutes} minutes</strong>. If you didn't request a password reset, you can safely ignore this email.
+              </p>
+
+              <p style="margin: 20px 0 0; color: #64748b; font-size: 13px; line-height: 1.6;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin: 10px 0 0; word-break: break-all;">
+                <a href="${resetLink}" style="color: #38bdf8; font-size: 12px; text-decoration: none;">${resetLink}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #0f172a; text-align: center; border-top: 1px solid #334155;">
+              <p style="margin: 0; color: #64748b; font-size: 12px;">
+                © ${new Date().getFullYear()} OzVPS. All rights reserved.
+              </p>
+              <p style="margin: 10px 0 0; color: #475569; font-size: 11px;">
+                Powered by Australian infrastructure. Built with ❤️ in Queensland.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+Reset Your OzVPS Password
+
+We received a request to reset the password for your OzVPS account.
+
+Click the link below to create a new password:
+${resetLink}
+
+This link will expire in ${expiresInMinutes} minutes.
+
+If you didn't request a password reset, you can safely ignore this email.
+
+---
+© ${new Date().getFullYear()} OzVPS. All rights reserved.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send password reset email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Password reset email sent to ${to}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending password reset email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send a password changed confirmation email
+ */
+export async function sendPasswordChangedEmail(to: string): Promise<EmailResult> {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: 'Your OzVPS Password Has Been Changed',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Changed</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background-color: #1e293b; border-radius: 12px; overflow: hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 30px 40px; text-align: center; border-bottom: 1px solid #334155;">
+              <h1 style="margin: 0; color: #38bdf8; font-size: 24px; font-weight: 700;">OzVPS</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <div style="display: inline-block; width: 60px; height: 60px; background-color: #10b981; border-radius: 50%; line-height: 60px; font-size: 28px;">
+                  ✓
+                </div>
+              </div>
+
+              <h2 style="margin: 0 0 20px; color: #f1f5f9; font-size: 20px; font-weight: 600; text-align: center;">Password Successfully Changed</h2>
+
+              <p style="margin: 0 0 20px; color: #94a3b8; font-size: 15px; line-height: 1.6; text-align: center;">
+                Your OzVPS account password has been successfully updated.
+              </p>
+
+              <div style="background-color: #0f172a; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <p style="margin: 0; color: #f59e0b; font-size: 13px; line-height: 1.6;">
+                  <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support team immediately at <a href="mailto:support@ozvps.com.au" style="color: #38bdf8;">support@ozvps.com.au</a>
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #0f172a; text-align: center; border-top: 1px solid #334155;">
+              <p style="margin: 0; color: #64748b; font-size: 12px;">
+                © ${new Date().getFullYear()} OzVPS. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+Password Successfully Changed
+
+Your OzVPS account password has been successfully updated.
+
+⚠️ Security Notice: If you did not make this change, please contact our support team immediately at support@ozvps.com.au
+
+---
+© ${new Date().getFullYear()} OzVPS. All rights reserved.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send password changed email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Password changed email sent to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending password changed email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}

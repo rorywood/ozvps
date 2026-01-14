@@ -20,6 +20,8 @@ import Deploy from "@/pages/deploy";
 import DeployConfigure from "@/pages/deploy-configure";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import SystemError from "@/pages/system-error";
 import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
@@ -102,6 +104,12 @@ function Router() {
       </Route>
       <Route path="/register">
         {auth ? <Redirect to="/dashboard" /> : <Register />}
+      </Route>
+      <Route path="/forgot-password">
+        {auth ? <Redirect to="/dashboard" /> : <ForgotPassword />}
+      </Route>
+      <Route path="/reset-password">
+        {auth ? <Redirect to="/dashboard" /> : <ResetPassword />}
       </Route>
       <Route path="/pricing">
         <Pricing />

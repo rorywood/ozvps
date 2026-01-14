@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken } from "@shared/schema";
 import { log } from "./index";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -1576,5 +1576,63 @@ export const dbStorage = {
       .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
       .returning();
     return updated;
+  },
+
+  // Password reset token functions
+  async createPasswordResetToken(email: string): Promise<PasswordResetToken> {
+    // Generate a secure random token
+    const token = randomBytes(32).toString('hex');
+    // Token expires in 30 minutes
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    // Invalidate any existing tokens for this email
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true, usedAt: new Date() })
+      .where(and(
+        eq(passwordResetTokens.email, email.toLowerCase()),
+        eq(passwordResetTokens.used, false)
+      ));
+
+    // Create new token
+    const [resetToken] = await db
+      .insert(passwordResetTokens)
+      .values({
+        email: email.toLowerCase(),
+        token,
+        expiresAt,
+        used: false,
+      } as typeof passwordResetTokens.$inferInsert)
+      .returning();
+
+    return resetToken;
+  },
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return resetToken;
+  },
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true, usedAt: new Date() })
+      .where(eq(passwordResetTokens.token, token));
+  },
+
+  async cleanupExpiredPasswordResetTokens(): Promise<number> {
+    const result = await db
+      .delete(passwordResetTokens)
+      .where(
+        or(
+          sql`${passwordResetTokens.expiresAt} < NOW()`,
+          eq(passwordResetTokens.used, true)
+        )
+      )
+      .returning();
+    return result.length;
   },
 };

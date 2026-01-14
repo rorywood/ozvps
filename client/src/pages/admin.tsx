@@ -2188,9 +2188,6 @@ function SettingsPanel() {
       </div>
 
       {/* Rate Limit Management */}
-      <div className="rounded-xl bg-yellow-500/20 ring-1 ring-yellow-500 p-4 text-yellow-400 font-bold text-center">
-        DEBUG: If you see this yellow box, the new code is loading. Rate Limit section below ↓
-      </div>
       <RateLimitManagement />
     </div>
   );

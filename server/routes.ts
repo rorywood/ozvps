@@ -13,6 +13,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from "./email";
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
@@ -834,6 +835,152 @@ export async function registerRoutes(
     }
   });
 
+  // Forgot password - request reset link
+  app.post('/api/auth/forgot-password', loginRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Check if user exists in Auth0
+      const user = await auth0Client.getUserByEmail(email);
+
+      // Always return success message to prevent email enumeration
+      // But only send email if user exists
+      if (user) {
+        // Create password reset token
+        const resetToken = await dbStorage.createPasswordResetToken(email);
+
+        // Build reset URL
+        const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+        const resetLink = `${baseUrl}/reset-password?token=${resetToken.token}`;
+
+        // Send password reset email
+        const emailResult = await sendPasswordResetEmail(email, resetLink, 30);
+
+        if (emailResult.success) {
+          log(`Password reset email sent to ${email}`, 'auth');
+        } else {
+          log(`Failed to send password reset email to ${email}: ${emailResult.error}`, 'auth');
+        }
+      } else {
+        log(`Password reset requested for non-existent email: ${email}`, 'auth');
+      }
+
+      // Always return success to prevent email enumeration
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link shortly.'
+      });
+    } catch (error: any) {
+      log(`Forgot password error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to process password reset request' });
+    }
+  });
+
+  // Reset password - set new password with token
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Reset token is required' });
+      }
+
+      if (!password || typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+
+      // Get and validate token
+      const resetToken = await dbStorage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        log(`Invalid password reset token attempted`, 'security');
+        return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+      }
+
+      if (resetToken.used) {
+        log(`Already used password reset token attempted for ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'This reset link has already been used. Please request a new one.' });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        log(`Expired password reset token attempted for ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+      }
+
+      // Get user from Auth0
+      const user = await auth0Client.getUserByEmail(resetToken.email);
+      if (!user) {
+        log(`Password reset attempted for non-existent user: ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'Account not found. Please contact support.' });
+      }
+
+      // Update password in Auth0
+      const updateResult = await auth0Client.changePassword(user.user_id, password);
+      if (!updateResult.success) {
+        log(`Failed to update password for ${resetToken.email}: ${updateResult.error}`, 'auth');
+        return res.status(500).json({ error: updateResult.error || 'Failed to update password' });
+      }
+
+      // Mark token as used
+      await dbStorage.markPasswordResetTokenUsed(token);
+
+      // Send confirmation email
+      await sendPasswordChangedEmail(resetToken.email);
+
+      // Revoke all existing sessions for security
+      await storage.revokeSessionsByAuth0UserId(user.user_id, SESSION_REVOKE_REASONS.PASSWORD_CHANGED);
+
+      log(`Password successfully reset for ${resetToken.email}`, 'auth');
+
+      res.json({
+        success: true,
+        message: 'Your password has been reset successfully. You can now log in with your new password.'
+      });
+    } catch (error: any) {
+      log(`Reset password error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
+  // Validate reset token (for frontend)
+  app.get('/api/auth/validate-reset-token', async (req, res) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ valid: false, error: 'Token is required' });
+      }
+
+      const resetToken = await dbStorage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        return res.json({ valid: false, error: 'Invalid reset link' });
+      }
+
+      if (resetToken.used) {
+        return res.json({ valid: false, error: 'This reset link has already been used' });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return res.json({ valid: false, error: 'This reset link has expired' });
+      }
+
+      res.json({ valid: true, email: resetToken.email });
+    } catch (error: any) {
+      log(`Validate reset token error: ${error.message}`, 'api');
+      res.status(500).json({ valid: false, error: 'Failed to validate token' });
+    }
+  });
+
   app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
@@ -902,11 +1049,27 @@ export async function registerRoutes(
         await new Promise(resolve => setTimeout(resolve, delay));
       }
 
+      // Check if user exists in Auth0 first
+      const existingUser = await auth0Client.getUserByEmail(email);
+
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
         await recordFailedLogin(email, clientIp);
-        return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
+
+        // If user doesn't exist, return a specific code for the frontend
+        if (!existingUser) {
+          return res.status(401).json({
+            error: 'No account found with this email address',
+            code: 'USER_NOT_FOUND'
+          });
+        }
+
+        // User exists but wrong password
+        return res.status(401).json({
+          error: 'Invalid password. Please try again.',
+          code: 'INVALID_PASSWORD'
+        });
       }
 
       // Clear failed login attempts on successful auth

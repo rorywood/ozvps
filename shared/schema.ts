@@ -225,6 +225,17 @@ export const rateLimits = pgTable("rate_limits", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: varchar("email", { length: 255 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  usedAt: timestamp("used_at"),
+});
+
 // Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
   'sales',
@@ -311,6 +322,7 @@ export const insertInvoiceSchema = createInsertSchema(invoices);
 export const insertTicketSchema = createInsertSchema(tickets);
 export const insertTicketMessageSchema = createInsertSchema(ticketMessages);
 export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth);
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -339,6 +351,8 @@ export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
 export type TwoFactorAuth = typeof twoFactorAuth.$inferSelect;
 export type InsertTwoFactorAuth = z.infer<typeof insertTwoFactorAuthSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
