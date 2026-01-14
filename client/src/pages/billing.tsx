@@ -143,9 +143,9 @@ function getTransactionType(type: string, metadata?: any, amountCents?: number):
 function getTransactionColor(type: string, amountCents: number): { bg: string; text: string } {
   // Use amount sign to determine color - positive is green, negative is red
   if (amountCents >= 0) {
-    return { bg: 'bg-green-500/20', text: 'text-green-500' };
+    return { bg: 'bg-success/10', text: 'text-success' };
   }
-  return { bg: 'bg-red-500/20', text: 'text-red-500' };
+  return { bg: 'bg-destructive/10', text: 'text-destructive' };
 }
 
 // Card Form Component
@@ -224,7 +224,7 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 rounded-lg bg-card/30 border border-border">
+      <div className="p-4 rounded-lg bg-card border border-border">
         <CardElement
           options={{
             hidePostalCode: true,
@@ -248,7 +248,7 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
         />
       </div>
       {error && (
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       )}
       <DialogFooter>
         <Button
@@ -371,16 +371,11 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
   };
 
   return (
-    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-6">
+    <div className="border border-border rounded-lg p-6 bg-card">
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
-            <Zap className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-medium text-foreground">Auto Top-Up</h3>
-            <p className="text-sm text-muted-foreground">Automatically add funds when balance is low</p>
-          </div>
+        <div>
+          <h3 className="font-semibold text-foreground mb-1">Auto Top-Up</h3>
+          <p className="text-sm text-muted-foreground">Automatically add funds when balance is low</p>
         </div>
         <Switch
           checked={localEnabled}
@@ -393,7 +388,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
       {localEnabled && (
         <div className="space-y-4 mt-4 pt-4 border-t border-border">
           <div>
-            <Label htmlFor="threshold" className="text-foreground">
+            <Label htmlFor="threshold">
               Trigger when balance falls below
             </Label>
             <div className="relative mt-1.5">
@@ -408,14 +403,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                   setLocalThreshold(e.target.value);
                   setIsEditing(true);
                 }}
-                className="pl-8 bg-card/30 border-border"
+                className="pl-8 bg-card border-border"
                 data-testid="input-auto-topup-threshold"
               />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="amount" className="text-foreground">
+            <Label htmlFor="amount">
               Amount to add
             </Label>
             <div className="relative mt-1.5">
@@ -430,14 +425,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                   setLocalAmount(e.target.value);
                   setIsEditing(true);
                 }}
-                className="pl-8 bg-card/30 border-border"
+                className="pl-8 bg-card border-border"
                 data-testid="input-auto-topup-amount"
               />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="payment-method" className="text-foreground">
+            <Label htmlFor="payment-method">
               Payment method
             </Label>
             <Select
@@ -447,7 +442,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                 setIsEditing(true);
               }}
             >
-              <SelectTrigger className="mt-1.5 bg-card/30 border-border" data-testid="select-auto-topup-payment-method">
+              <SelectTrigger className="mt-1.5 bg-card border-border" data-testid="select-auto-topup-payment-method">
                 <SelectValue placeholder="Select a card" />
               </SelectTrigger>
               <SelectContent>
@@ -782,9 +777,9 @@ export default function BillingPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-6xl">
+      <div className="space-y-8 max-w-6xl">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-page-title">
+          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
             Billing
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -793,11 +788,11 @@ export default function BillingPage() {
         </div>
 
         {!stripeConfigured ? (
-          <div className="rounded-2xl bg-muted/10 ring-1 ring-border p-12 text-center">
-            <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mx-auto mb-4">
-              <CreditCard className="h-8 w-8 text-yellow-400" />
+          <div className="border border-border rounded-lg p-12 text-center bg-card">
+            <div className="h-16 w-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+              <CreditCard className="h-8 w-8 text-warning" />
             </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">Payments Not Available</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Payments Not Available</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               The payment system is being configured. Please contact support if you need to add funds to your account.
             </p>
@@ -807,21 +802,21 @@ export default function BillingPage() {
             {/* Payment Feedback Message */}
             {paymentFeedback && (
               <div
-                className={`rounded-xl p-4 flex items-center justify-between ${
+                className={`border rounded-lg p-4 flex items-center justify-between ${
                   paymentFeedback.type === 'success'
-                    ? 'bg-green-500/10 ring-1 ring-green-500/30'
-                    : 'bg-red-500/10 ring-1 ring-red-500/30'
+                    ? 'bg-success/5 border-success/20'
+                    : 'bg-destructive/5 border-destructive/20'
                 }`}
                 data-testid={`payment-feedback-${paymentFeedback.type}`}
               >
                 <div className="flex items-center gap-3">
                   {paymentFeedback.type === 'success' ? (
-                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />
+                    <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />
                   ) : (
-                    <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />
+                    <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
                   )}
-                  <span className={`font-medium ${
-                    paymentFeedback.type === 'success' ? 'text-green-500' : 'text-red-500'
+                  <span className={`text-sm font-medium ${
+                    paymentFeedback.type === 'success' ? 'text-success' : 'text-destructive'
                   }`}>
                     {paymentFeedback.message}
                   </span>
@@ -838,31 +833,26 @@ export default function BillingPage() {
               </div>
             )}
 
-            {/* Wallet Balance - Hero Card */}
-            <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-blue-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
-                    <Wallet className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
-                    {loadingWallet ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    ) : (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-foreground font-display" data-testid="text-balance">
-                          {formatCurrency(wallet?.balanceCents || 0)}
-                        </span>
-                        <span className="text-muted-foreground">AUD</span>
-                      </div>
-                    )}
-                  </div>
+            {/* Wallet Balance - Minimal DO Style */}
+            <div className="border border-border rounded-lg p-6 bg-card" data-testid="wallet-section">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground tracking-wide mb-2">Available Balance</p>
+                  {loadingWallet ? (
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  ) : (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-5xl font-bold text-foreground font-display tracking-tight" data-testid="text-balance">
+                        {formatCurrency(wallet?.balanceCents || 0)}
+                      </span>
+                      <span className="text-xl text-muted-foreground">AUD</span>
+                    </div>
+                  )}
                 </div>
 
                 <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button size="lg" className="gap-2 shadow-lg" data-testid="button-topup">
+                    <Button size="lg" className="gap-2" data-testid="button-topup">
                       <Plus className="h-5 w-5" />
                       Add Funds
                     </Button>
@@ -896,7 +886,7 @@ export default function BillingPage() {
                           placeholder="Custom amount"
                           value={customAmount}
                           onChange={(e) => handleCustomAmountChange(e.target.value)}
-                          className="pl-8 bg-card/30 border-border"
+                          className="pl-8 bg-card border-border"
                           data-testid="input-custom-amount"
                         />
                       </div>
@@ -907,14 +897,14 @@ export default function BillingPage() {
                       {/* Payment Method Selection */}
                       {paymentMethods.length > 0 && (
                         <div className="pt-4 border-t border-border">
-                          <label className="text-sm font-medium text-foreground mb-2 block">
+                          <Label className="mb-2 block">
                             Pay with saved card
-                          </label>
+                          </Label>
                           <Select
                             value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
                             onValueChange={(value) => setSelectedPaymentMethodId(value)}
                           >
-                            <SelectTrigger className="w-full bg-card/30 border-border" data-testid="select-payment-method">
+                            <SelectTrigger className="w-full bg-card border-border" data-testid="select-payment-method">
                               <SelectValue placeholder="Select a card" />
                             </SelectTrigger>
                             <SelectContent>
@@ -955,12 +945,12 @@ export default function BillingPage() {
               </div>
 
               {wallet?.stripeCustomerId && (
-                <div className="pt-4 mt-4 border-t border-border">
+                <div className="pt-6 mt-6 border-t border-border">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
+                    <span className="text-xs uppercase text-muted-foreground tracking-wide">Stripe Customer ID</span>
                     <div className="flex items-center gap-2">
                       <code
-                        className="text-xs font-mono text-foreground/70 bg-card/30 px-2 py-1 rounded"
+                        className="text-xs font-mono text-muted-foreground bg-muted/30 px-2 py-1 rounded"
                         data-testid="text-stripe-customer-id"
                       >
                         {showStripeId
@@ -999,26 +989,41 @@ export default function BillingPage() {
               )}
             </div>
 
-            {/* Tabbed Content */}
+            {/* Tabbed Content - DO Style Underlined Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-                <TabsTrigger value="overview" className="gap-2">
+              <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start w-full">
+                <TabsTrigger
+                  value="overview"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Wallet className="h-4 w-4" />
                   <span className="hidden sm:inline">Overview</span>
                 </TabsTrigger>
-                <TabsTrigger value="servers" className="gap-2">
+                <TabsTrigger
+                  value="servers"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Server className="h-4 w-4" />
                   <span className="hidden sm:inline">Servers</span>
                 </TabsTrigger>
-                <TabsTrigger value="transactions" className="gap-2">
+                <TabsTrigger
+                  value="transactions"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <History className="h-4 w-4" />
                   <span className="hidden sm:inline">Transactions</span>
                 </TabsTrigger>
-                <TabsTrigger value="invoices" className="gap-2">
+                <TabsTrigger
+                  value="invoices"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Receipt className="h-4 w-4" />
                   <span className="hidden sm:inline">Invoices</span>
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-2">
+                <TabsTrigger
+                  value="settings"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Settings className="h-4 w-4" />
                   <span className="hidden sm:inline">Settings</span>
                 </TabsTrigger>
@@ -1027,7 +1032,7 @@ export default function BillingPage() {
               {/* Overview Tab */}
               <TabsContent value="overview" className="space-y-6 mt-6">
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Payment Methods</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Payment Methods</h2>
 
                   <div data-testid="payment-methods-section">
                     {loadingPaymentMethods ? (
@@ -1035,9 +1040,9 @@ export default function BillingPage() {
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : paymentMethods.length === 0 ? (
-                      <div className="rounded-xl bg-muted/10 ring-1 ring-border p-8 text-center">
+                      <div className="border border-border rounded-lg p-8 text-center bg-card">
                         <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground mb-4">No payment methods saved</p>
+                        <p className="text-sm text-muted-foreground mb-4">No payment methods saved</p>
                         <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
                           <DialogTrigger asChild>
                             <Button variant="outline" className="gap-2 border-border">
@@ -1108,8 +1113,8 @@ export default function BillingPage() {
                               </DialogHeader>
                               {stripeLoadError ? (
                                 <div className="py-8 text-center">
-                                  <AlertCircle className="h-8 w-8 mx-auto text-red-500 mb-3" />
-                                  <p className="text-red-400 mb-4">{stripeLoadError}</p>
+                                  <AlertCircle className="h-8 w-8 mx-auto text-destructive mb-3" />
+                                  <p className="text-destructive mb-4">{stripeLoadError}</p>
                                   <Button
                                     variant="outline"
                                     onClick={() => {
@@ -1143,22 +1148,24 @@ export default function BillingPage() {
                             </DialogContent>
                           </Dialog>
                         </div>
-                        <div className="grid gap-3">
-                          {paymentMethods.map((pm) => (
+                        {/* Horizontal payment method rows like server list */}
+                        <div className="border border-border rounded-lg overflow-hidden bg-card">
+                          {paymentMethods.map((pm, index) => (
                             <div
                               key={pm.id}
-                              className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                              className={cn(
+                                "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                                index !== 0 && "border-t border-border"
+                              )}
                               data-testid={`card-${pm.id}`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                                  <CreditCard className="h-5 w-5 text-blue-500" />
-                                </div>
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
                                 <div>
-                                  <div className="font-medium text-foreground">
+                                  <div className="font-medium text-foreground text-sm">
                                     {formatCardBrand(pm.brand)} •••• {pm.last4}
                                   </div>
-                                  <div className="text-sm text-muted-foreground">
+                                  <div className="text-xs text-muted-foreground">
                                     Expires {pm.expMonth}/{pm.expYear}
                                   </div>
                                 </div>
@@ -1167,7 +1174,7 @@ export default function BillingPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
-                                className="text-muted-foreground hover:text-red-500"
+                                className="text-muted-foreground hover:text-destructive h-8"
                                 data-testid={`button-delete-card-${pm.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1189,13 +1196,14 @@ export default function BillingPage() {
                   </div>
                 ) : upcomingChargesData && upcomingChargesData.upcoming.length > 0 ? (
                   <div data-testid="upcoming-charges-section">
-                    <h2 className="text-xl font-semibold text-foreground mb-4">Upcoming Server Charges</h2>
+                    <h2 className="text-lg font-semibold text-foreground mb-2">Upcoming Server Charges</h2>
                     <p className="text-sm text-muted-foreground mb-4">
                       Monthly billing for your servers. Charges are automatically deducted from your wallet balance.
                     </p>
 
-                    <div className="space-y-3">
-                      {upcomingChargesData.upcoming.map((charge) => {
+                    {/* Horizontal server charge rows */}
+                    <div className="border border-border rounded-lg overflow-hidden bg-card">
+                      {upcomingChargesData.upcoming.map((charge, index) => {
                           const nextBillDate = new Date(charge.nextBillAt);
                           const now = new Date();
                           const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -1206,84 +1214,69 @@ export default function BillingPage() {
                             <Link
                               key={charge.id}
                               href={`/servers/${charge.virtfusionServerId}`}
-                              className={`block p-5 rounded-xl ring-1 transition-all hover:shadow-md cursor-pointer ${
-                                charge.status === 'suspended'
-                                  ? 'bg-red-500/5 ring-red-500/20 hover:bg-red-500/10'
-                                  : charge.status === 'unpaid'
-                                  ? 'bg-yellow-500/5 ring-yellow-500/20 hover:bg-yellow-500/10'
-                                  : 'bg-muted/5 ring-border hover:bg-muted/10 hover:ring-muted-foreground/20'
-                              }`}
+                              className={cn(
+                                "flex items-center justify-between px-4 py-4 hover:bg-muted/30 transition-colors cursor-pointer",
+                                index !== 0 && "border-t border-border"
+                              )}
                               data-testid={`upcoming-charge-${charge.id}`}
                             >
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-start gap-4 flex-1">
-                                  <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${
-                                    charge.status === 'suspended'
-                                      ? 'bg-red-500/10 text-red-500'
-                                      : charge.status === 'unpaid'
-                                      ? 'bg-yellow-500/10 text-yellow-500'
-                                      : 'bg-blue-500/10 text-blue-500'
-                                  }`}>
-                                    <Server className="h-6 w-6" />
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="font-semibold text-foreground text-sm truncate">
+                                      {charge.serverName || `Server #${charge.virtfusionServerId}`}
+                                    </span>
+                                    {charge.status === 'suspended' && (
+                                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                        SUSPENDED
+                                      </Badge>
+                                    )}
+                                    {charge.status === 'unpaid' && (
+                                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                                        UNPAID
+                                      </Badge>
+                                    )}
+                                    {charge.status === 'active' && (
+                                      <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                                        ACTIVE
+                                      </Badge>
+                                    )}
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-base font-semibold text-foreground">
-                                        {charge.serverName || `Server #${charge.virtfusionServerId}`}
+                                  <div className="text-xs text-muted-foreground">
+                                    {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
+                                      <span className="text-warning">
+                                        Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''}
                                       </span>
-                                      {charge.status === 'suspended' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 tracking-wide">
-                                          SUSPENDED
-                                        </span>
-                                      )}
-                                      {charge.status === 'unpaid' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 tracking-wide">
-                                          UNPAID
-                                        </span>
-                                      )}
-                                      {charge.status === 'active' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 tracking-wide">
-                                          ACTIVE
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                      {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
-                                        <span className="text-yellow-400 font-medium">
-                                          ⚠ Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - Add funds to prevent suspension
-                                        </span>
-                                      ) : charge.status === 'suspended' ? (
-                                        <span className="text-red-400 font-medium">
-                                          ⛔ Suspended - Add funds to reactivate
-                                        </span>
-                                      ) : (
-                                        <>
-                                          <span>Next billing:</span>
-                                          <span className="font-medium text-foreground">{formatDate(charge.nextBillAt)}</span>
-                                          <span className="text-muted-foreground/60">•</span>
-                                          <span>{daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''}</span>
-                                        </>
-                                      )}
-                                    </div>
+                                    ) : charge.status === 'suspended' ? (
+                                      <span className="text-destructive">
+                                        Suspended - Add funds to reactivate
+                                      </span>
+                                    ) : (
+                                      <>
+                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})
+                                      </>
+                                    )}
                                   </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <div className="font-mono text-xl font-bold text-foreground">
-                                    {formatCurrency(charge.monthlyPriceCents)}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">per month</div>
                                 </div>
                               </div>
+                              <div className="text-right flex-shrink-0 ml-4">
+                                <div className="font-mono text-base font-bold text-foreground">
+                                  {formatCurrency(charge.monthlyPriceCents)}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">per month</div>
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
                             </Link>
                           );
                         })}
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                  <div className="border border-border rounded-lg p-12 text-center bg-card">
                     <Server className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">No Active Servers</h3>
-                    <p className="text-muted-foreground">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">No Active Servers</h3>
+                    <p className="text-sm text-muted-foreground">
                       You don't have any active servers with recurring charges.
                     </p>
                   </div>
@@ -1293,53 +1286,57 @@ export default function BillingPage() {
               {/* Transactions Tab */}
               <TabsContent value="transactions" className="space-y-6 mt-6">
                 <div data-testid="transactions-section">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Transaction History</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Transaction History</h2>
 
                   {loadingTransactions ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : transactions.length === 0 ? (
-                    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                    <div className="border border-border rounded-lg p-12 text-center bg-card">
                       <History className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-muted-foreground">No transactions yet</p>
+                      <p className="text-sm text-muted-foreground">No transactions yet</p>
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2">
-                        {paginatedTransactions.map((tx) => {
+                      {/* Horizontal transaction rows */}
+                      <div className="border border-border rounded-lg overflow-hidden bg-card">
+                        {paginatedTransactions.map((tx, index) => {
                           const colors = getTransactionColor(tx.type, tx.amountCents);
                           return (
                             <div
                               key={tx.id}
-                              className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                              className={cn(
+                                "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                                index !== 0 && "border-t border-border"
+                              )}
                               data-testid={`transaction-${tx.id}`}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className={`h-10 w-10 rounded-full flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${colors.bg}`}>
+                                  <div className={colors.text}>
                                     {getTransactionIcon(tx.type, tx.metadata, tx.amountCents)}
                                   </div>
-                                  <div>
-                                    <div className="font-medium text-foreground">
-                                      {getTransactionType(tx.type, tx.metadata, tx.amountCents)}
-                                    </div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {formatDate(tx.createdAt)}
-                                      {tx.description && <> · {tx.description}</>}
-                                    </div>
-                                    {/* Show admin reason for admin adjustments */}
-                                    {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
-                                      <div className="text-sm text-muted-foreground mt-1">
-                                        <span className="text-primary/70">Reason:</span> {(tx.metadata as Record<string, string>).reason}
-                                      </div>
-                                    ) : null}
-                                  </div>
                                 </div>
-                                <span className={`font-mono text-lg font-medium ${colors.text}`}>
-                                  {tx.amountCents >= 0 ? '+' : ''}{formatCurrency(tx.amountCents)}
-                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-foreground text-sm">
+                                    {getTransactionType(tx.type, tx.metadata, tx.amountCents)}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatDate(tx.createdAt)}
+                                    {tx.description && <> · {tx.description}</>}
+                                  </div>
+                                  {/* Show admin reason for admin adjustments */}
+                                  {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      <span className="text-primary">Reason:</span> {(tx.metadata as Record<string, string>).reason}
+                                    </div>
+                                  ) : null}
+                                </div>
                               </div>
+                              <span className={`font-mono text-base font-semibold flex-shrink-0 ml-4 ${colors.text}`}>
+                                {tx.amountCents >= 0 ? '+' : ''}{formatCurrency(tx.amountCents)}
+                              </span>
                             </div>
                           );
                         })}
@@ -1385,55 +1382,54 @@ export default function BillingPage() {
               {/* Invoices Tab */}
               <TabsContent value="invoices" className="space-y-6 mt-6">
                 <div data-testid="invoices-section">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Invoices</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Invoices</h2>
 
                   {loadingInvoices ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : invoices.length === 0 ? (
-                    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                    <div className="border border-border rounded-lg p-12 text-center bg-card">
                       <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-muted-foreground">No invoices yet</p>
+                      <p className="text-sm text-muted-foreground">No invoices yet</p>
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2">
-                        {paginatedInvoices.map((invoice) => (
+                      {/* Horizontal invoice rows */}
+                      <div className="border border-border rounded-lg overflow-hidden bg-card">
+                        {paginatedInvoices.map((invoice, index) => (
                           <div
                             key={invoice.id}
-                            className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                            className={cn(
+                              "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                              index !== 0 && "border-t border-border"
+                            )}
                             data-testid={`invoice-${invoice.id}`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500">
-                                  <FileText className="h-5 w-5" />
-                                </div>
-                                <div>
-                                  <div className="font-medium text-foreground">{invoice.invoiceNumber}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {formatDate(invoice.createdAt)} · {invoice.description}
-                                  </div>
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground text-sm">{invoice.invoiceNumber}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {formatDate(invoice.createdAt)} · {invoice.description}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-mono text-lg font-medium text-green-500">
-                                  ${(invoice.amountCents / 100).toFixed(2)}
-                                </span>
-                                {invoice.pdfUrl && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="gap-2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => window.open(invoice.pdfUrl!, '_blank')}
-                                    data-testid={`button-download-invoice-${invoice.id}`}
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    <span className="hidden sm:inline">PDF</span>
-                                  </Button>
-                                )}
-                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                              <span className="font-mono text-base font-semibold text-success">
+                                ${(invoice.amountCents / 100).toFixed(2)}
+                              </span>
+                              {invoice.pdfUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => window.open(invoice.pdfUrl!, '_blank')}
+                                  data-testid={`button-download-invoice-${invoice.id}`}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1486,25 +1482,23 @@ export default function BillingPage() {
             </Tabs>
 
             {/* Support Banner */}
-            <div className="rounded-xl bg-muted/10 ring-1 ring-border p-6">
+            <div className="border border-border rounded-lg p-6 bg-card">
               <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-primary" />
-                </div>
+                <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <h3 className="font-medium text-foreground mb-1">Need help with billing?</h3>
+                  <h3 className="font-semibold text-foreground mb-1">Need help with billing?</h3>
                   <p className="text-sm text-muted-foreground mb-3">
                     If you have any questions about your wallet, transactions, or need assistance, our support team is here to help.
                   </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1 border-border text-primary hover:text-primary/80"
+                    className="gap-1 border-border"
                     onClick={() => navigate('/support')}
                     data-testid="button-contact-support"
                   >
                     Contact Support
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
