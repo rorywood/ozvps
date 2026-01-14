@@ -172,19 +172,7 @@ export default function ServerDetail() {
       // Ignore storage errors
     }
   };
-  
-  // Auto-hide credentials banner after 2 minutes
-  useEffect(() => {
-    if (showSavedCredentials && savedCredentials) {
-      const timer = setTimeout(() => {
-        setShowSavedCredentials(false);
-        updateSavedCredentials(null);
-      }, 2 * 60 * 1000); // 2 minutes
-      return () => clearTimeout(timer);
-    }
-  }, [showSavedCredentials, savedCredentials]);
-  
-  
+
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -1230,39 +1218,28 @@ export default function ServerDetail() {
         
         {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
         {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
-          <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
-            <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-4" data-testid="banner-credentials">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Shield className="h-5 w-5 text-green-400 flex-shrink-0" />
                 <div>
                   <h3 className="font-semibold text-green-300">SSH Login Credentials</h3>
                   <p className="text-sm text-green-300/80">
-                    Save these credentials - they won't be shown again
+                    Save these credentials - they won't be shown again unless you reset the password
                   </p>
                 </div>
               </div>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-8 w-8 text-green-400 hover:bg-green-500/20"
-                onClick={() => {
-                  setShowSavedCredentials(false);
-                  updateSavedCredentials(null);
-                }}
-                data-testid="button-close-credentials"
-              >
-                <X className="h-4 w-4" />
-              </Button>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Server IP</span>
                   <span className="font-mono text-green-300">{savedCredentials.serverIp}</span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-7 w-7 text-green-400 hover:bg-green-500/20"
                   onClick={() => {
                     navigator.clipboard.writeText(savedCredentials.serverIp);
@@ -1277,9 +1254,9 @@ export default function ServerDetail() {
                   <span className="text-xs text-muted-foreground block">Username</span>
                   <span className="font-mono text-green-300">{savedCredentials.username}</span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-7 w-7 text-green-400 hover:bg-green-500/20"
                   onClick={() => {
                     navigator.clipboard.writeText(savedCredentials.username);
@@ -1297,25 +1274,22 @@ export default function ServerDetail() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-7 w-7 text-green-400 hover:bg-green-500/20"
                     onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
                     data-testid="button-toggle-password-visibility"
                   >
                     {showCredentialsPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-7 w-7 text-green-400 hover:bg-green-500/20"
                     onClick={() => {
                       navigator.clipboard.writeText(savedCredentials.password);
                       toast({ title: "Copied", description: "Password copied to clipboard" });
-                      // Dismiss the credentials banner after copying password
-                      setShowSavedCredentials(false);
-                      updateSavedCredentials(null);
                     }}
                     data-testid="button-copy-password"
                   >
@@ -1323,6 +1297,58 @@ export default function ServerDetail() {
                   </Button>
                 </div>
               </div>
+            </div>
+
+            {/* SSH Command with Copy Button */}
+            <div className="pt-2 border-t border-green-500/30 space-y-3">
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-green-300">Quick Connect:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono text-green-400 bg-card/30 px-3 py-2 rounded">
+                    ssh {savedCredentials.username}@{savedCredentials.serverIp}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-400 hover:bg-green-500/20"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`ssh ${savedCredentials.username}@${savedCredentials.serverIp}`);
+                      toast({ title: "Copied", description: "SSH command copied to clipboard" });
+                    }}
+                    title="Copy SSH command"
+                    data-testid="button-copy-ssh-command"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* SSH Connection Guide */}
+              <div className="bg-card/30 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-medium text-green-300">How to Connect:</p>
+                <ol className="text-xs text-green-300/80 space-y-1 list-decimal list-inside">
+                  <li>Copy the SSH command above</li>
+                  <li>Open your terminal or SSH client</li>
+                  <li>Paste and run the command</li>
+                  <li>Enter the password when prompted</li>
+                  <li>Change your password after first login</li>
+                </ol>
+              </div>
+
+              {/* Dismiss Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full border-green-500/50 text-green-400 hover:bg-green-500/20"
+                onClick={() => {
+                  setShowSavedCredentials(false);
+                  updateSavedCredentials(null);
+                }}
+                data-testid="button-close-credentials"
+              >
+                <Check className="h-3 w-3 mr-2" />
+                I've Saved My Credentials
+              </Button>
             </div>
           </div>
         )}

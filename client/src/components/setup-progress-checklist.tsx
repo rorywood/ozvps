@@ -12,7 +12,7 @@ interface SetupProgressChecklistProps {
   onClose?: () => void;
 }
 
-const CREDENTIAL_REVEAL_DELAY = 15;
+// Credentials now shown immediately upon completion
 
 interface ChecklistStep {
   id: string;
@@ -91,32 +91,11 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
   const { status, percent, error, credentials, isActive } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
-  const [credentialCountdown, setCredentialCountdown] = useState(CREDENTIAL_REVEAL_DELAY);
-  const [credentialsRevealed, setCredentialsRevealed] = useState(false);
-  const countdownStarted = useRef(false);
+  const [copiedSshCommand, setCopiedSshCommand] = useState(false);
+  const [confirmedSaved, setConfirmedSaved] = useState(false);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
-  
-  useEffect(() => {
-    if (isComplete && credentials && !countdownStarted.current) {
-      countdownStarted.current = true;
-      setCredentialCountdown(CREDENTIAL_REVEAL_DELAY);
-      
-      const interval = setInterval(() => {
-        setCredentialCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setCredentialsRevealed(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [isComplete, credentials]);
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
     try {
@@ -125,6 +104,18 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
       setTimeout(() => setCopiedField(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleCopySshCommand = async () => {
+    if (!credentials) return;
+    const sshCommand = `ssh ${credentials.username}@${credentials.serverIp}`;
+    try {
+      await navigator.clipboard.writeText(sshCommand);
+      setCopiedSshCommand(true);
+      setTimeout(() => setCopiedSshCommand(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy SSH command:', err);
     }
   };
 
@@ -272,55 +263,8 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         })}
       </div>
 
-      {/* Credentials Section - Only show on completion after countdown */}
-      {isComplete && credentials && !credentialsRevealed && (
-        <div className="space-y-4 p-5 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-lg bg-blue-500/20">
-              <Clock className="h-6 w-6 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-medium text-blue-400">Server Starting Up</h4>
-              <p className="text-xs text-muted-foreground">Please wait while your server finishes booting...</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-4 py-4">
-            <div className="relative w-20 h-20">
-              <svg className="w-20 h-20 transform -rotate-90">
-                <circle
-                  cx="40"
-                  cy="40"
-                  r="35"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                  className="text-foreground/10"
-                />
-                <circle
-                  cx="40"
-                  cy="40"
-                  r="35"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                  strokeDasharray={220}
-                  strokeDashoffset={220 - (220 * (CREDENTIAL_REVEAL_DELAY - credentialCountdown) / CREDENTIAL_REVEAL_DELAY)}
-                  className="text-blue-500 transition-all duration-1000"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-bold text-foreground">{credentialCountdown}</span>
-              </div>
-            </div>
-          </div>
-          <p className="text-sm text-center text-muted-foreground">
-            Credentials will appear in {credentialCountdown} seconds
-          </p>
-        </div>
-      )}
-      
-      {isComplete && credentials && credentialsRevealed && (
+      {/* Credentials Section - Show immediately on completion */}
+      {isComplete && credentials && (
         <div className="space-y-4 p-5 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
@@ -410,18 +354,61 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             </div>
           </div>
 
-          {/* SSH Command Help */}
-          <div className="pt-2 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-2">Connect via SSH:</p>
-            <code className="text-xs font-mono text-green-400 bg-card/30 px-3 py-2 rounded block">
-              ssh {credentials.username}@{credentials.serverIp}
-            </code>
+          {/* SSH Command with Copy Button */}
+          <div className="pt-2 border-t border-border space-y-3">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono text-green-400 bg-card/30 px-3 py-2 rounded">
+                  ssh {credentials.username}@{credentials.serverIp}
+                </code>
+                <button
+                  onClick={handleCopySshCommand}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors shrink-0"
+                  title="Copy SSH command"
+                  data-testid="button-copy-ssh-command"
+                >
+                  {copiedSshCommand ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* SSH Connection Guide */}
+            <div className="bg-card/30 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-medium text-foreground">How to Connect:</p>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Copy the SSH command above</li>
+                <li>Open your terminal or SSH client</li>
+                <li>Paste and run the command</li>
+                <li>Enter the password when prompted</li>
+                <li>Change your password after first login</li>
+              </ol>
+            </div>
+
+            {/* Confirmation Checkbox */}
+            <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+              <input
+                type="checkbox"
+                id="confirm-saved"
+                checked={confirmedSaved}
+                onChange={(e) => setConfirmedSaved(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-amber-500/50 bg-card text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                data-testid="checkbox-confirm-saved"
+              />
+              <label htmlFor="confirm-saved" className="text-xs text-amber-300 cursor-pointer">
+                I've saved these credentials securely. I understand they won't be shown again unless I reset the password.
+              </label>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Action Button - Only show after credentials revealed or on failure */}
-      {((isComplete && credentialsRevealed) || isFailed) && onDismiss && (
+      {/* Action Button - Only show after credentials are acknowledged or on failure */}
+      {((isComplete && credentials && confirmedSaved) || isFailed) && onDismiss && (
         <Button
           onClick={onDismiss}
           className={cn(
