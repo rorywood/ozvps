@@ -15,6 +15,7 @@
   --color-card: hsl(222 47% 11%);
   --color-card-foreground: hsl(210 40% 98%);
   --color-sidebar: hsl(222 47% 8%);
+  --color-popover: hsl(222 47% 11%);
   --color-popover-foreground: hsl(210 40% 98%);
   --color-primary: hsl(217 91% 60%);
   --color-primary-foreground: hsl(222 47% 11%);
@@ -60,6 +61,7 @@
     --color-card: hsl(0 0% 100%);
     --color-card-foreground: hsl(222 47% 11%);
     --color-sidebar: hsl(0 0% 96%);
+    --color-popover: hsl(0 0% 100%);
     --color-popover-foreground: hsl(222 47% 11%);
     --color-primary: hsl(217 91% 50%);
     --color-primary-foreground: hsl(0 0% 100%);

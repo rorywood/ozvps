@@ -18,7 +18,7 @@ import logo from "@/assets/logo.png";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -234,7 +234,22 @@ function DesktopNav() {
   const hasUnreadSupport = (supportCounts?.waitingUser || 0) > 0;
 
   // Check if dev banner is showing
-  const isDev = window.location.hostname.includes("dev");
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBannerDismissed = () => {
+      setBannerDismissed(true);
+    };
+    window.addEventListener("dev-banner-dismissed", handleBannerDismissed);
+    return () => window.removeEventListener("dev-banner-dismissed", handleBannerDismissed);
+  }, []);
+
+  const isDev = window.location.hostname.includes("dev") && !bannerDismissed;
 
   return (
     <header className={cn(
@@ -375,7 +390,22 @@ function MobileNav() {
   ];
 
   // Check if dev banner is showing
-  const isDev = window.location.hostname.includes("dev");
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBannerDismissed = () => {
+      setBannerDismissed(true);
+    };
+    window.addEventListener("dev-banner-dismissed", handleBannerDismissed);
+    return () => window.removeEventListener("dev-banner-dismissed", handleBannerDismissed);
+  }, []);
+
+  const isDev = window.location.hostname.includes("dev") && !bannerDismissed;
 
   return (
     <header className={cn(
