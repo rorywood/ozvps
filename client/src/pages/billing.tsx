@@ -1040,7 +1040,7 @@ export default function BillingPage() {
                               Add Payment Method
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-md bg-zinc-900 border-border">
+                          <DialogContent className="max-w-md bg-card border-border">
                             <DialogHeader>
                               <DialogTitle className="text-foreground">Add Payment Method</DialogTitle>
                               <DialogDescription className="text-muted-foreground">
@@ -1094,7 +1094,7 @@ export default function BillingPage() {
                                 Add Card
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-md bg-zinc-900 border-border">
+                            <DialogContent className="max-w-md bg-card border-border">
                               <DialogHeader>
                                 <DialogTitle className="text-foreground">Add Payment Method</DialogTitle>
                                 <DialogDescription className="text-muted-foreground">
