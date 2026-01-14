@@ -76,7 +76,7 @@ class Auth0Client {
     return this.managementToken;
   }
 
-  async authenticateUser(email: string, password: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
+  async authenticateUser(email: string, password: string): Promise<{ success: boolean; user?: Auth0User; error?: string; isConnectionError?: boolean }> {
     try {
       const response = await fetch(`${this.baseUrl}/oauth/token`, {
         method: 'POST',
@@ -142,7 +142,7 @@ class Auth0Client {
       };
     } catch (error: any) {
       log(`Auth0 authentication error: ${error.message}`, 'auth0');
-      return { success: false, error: 'Authentication service unavailable' };
+      return { success: false, error: 'Authentication service unavailable', isConnectionError: true };
     }
   }
 

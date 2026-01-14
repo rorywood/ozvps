@@ -185,13 +185,15 @@ export default function ForgotPasswordPage() {
                 <Button
                   type="submit"
                   className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
-                  disabled={forgotPasswordMutation.isPending || !email.trim()}
+                  disabled={forgotPasswordMutation.isPending || !email.trim() || serviceUnavailable}
                 >
                   {forgotPasswordMutation.isPending ? (
                     <>
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                       Sending...
                     </>
+                  ) : serviceUnavailable ? (
+                    "Service Unavailable"
                   ) : (
                     "Send reset link"
                   )}

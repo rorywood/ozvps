@@ -1059,24 +1059,39 @@ export class VirtFusionClient {
       // Response includes expectedPassword field (admin API v4.1.0+)
       // Required: "user" parameter specifies which user's password to reset
       // Optional: "sendMail" parameter (v5.0.0+) controls email notification
-      const data = await this.request<{ data: { queueId?: number; expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
+      const data = await this.request<{
+        data: {
+          queueId?: number;
+          expectedPassword?: string;
+          password?: string;
+          decryptedPassword?: string;
+          reset_password?: boolean;
+        }
+      }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ user: resetUser, sendMail: false }),
       });
-      
+
+      // Check if the password reset actually succeeded
+      // VirtFusion returns reset_password: false if guest agent is not responding
+      if (data.data?.reset_password === false) {
+        log(`Password reset for server ${serverId} failed: Guest agent not responding or not installed`, 'virtfusion');
+        throw new Error('Password reset failed. The guest agent is not responding. Please ensure your server is fully booted and the QEMU guest agent is installed.');
+      }
+
       // Invalidate cache since server credentials have changed
       this.invalidateServerCache(serverId);
-      
+
       // VirtFusion returns the new password - check various possible field names
       // v4.1.0+ uses expectedPassword, older versions may use password or decryptedPassword
       const newPassword = data.data?.expectedPassword || data.data?.decryptedPassword || data.data?.password || null;
-      
+
       if (!newPassword) {
         log(`Password reset for server ${serverId} succeeded but no password returned in response`, 'virtfusion');
       } else {
         log(`Password reset for server ${serverId} completed successfully`, 'virtfusion');
       }
-      
+
       return { success: true, password: newPassword, username: resetUser };
     } catch (error) {
       log(`Failed to reset password for server ${serverId}: ${error}`, 'virtfusion');

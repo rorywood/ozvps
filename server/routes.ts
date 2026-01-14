@@ -1063,7 +1063,10 @@ export async function registerRoutes(
       // Authenticate with Auth0
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
-        await recordFailedLogin(email, clientIp);
+        // Only record failed login if it's an authentication failure, not a connection error
+        if (!auth0Result.isConnectionError) {
+          await recordFailedLogin(email, clientIp);
+        }
 
         // If user doesn't exist, return a specific code for the frontend
         if (!existingUser) {

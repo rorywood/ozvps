@@ -12,13 +12,13 @@ import { log } from './index';
 // Configuration constants
 const FAILED_ATTEMPTS_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+const LOCKOUT_DURATION_MS = 20 * 1000; // 20 seconds
 const PROGRESSIVE_DELAY_BASE_MS = 1000;
 
 // IP-based rate limiting for distributed attacks
 const IP_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const IP_MAX_ATTEMPTS = 20; // Max attempts per IP in window
-const IP_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 min lockout
+const IP_LOCKOUT_DURATION_MS = 20 * 1000; // 20 seconds
 
 // Email+IP combo has stricter limits
 const COMBO_MAX_ATTEMPTS = 3;
