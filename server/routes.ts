@@ -4239,7 +4239,7 @@ export async function registerRoutes(
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,
-        payment_method_types: ['card'],
+        payment_method_types: ['card', 'apple_pay', 'google_pay'], // Enable Apple Pay and Google Pay
         line_items: [
           {
             price_data: {
