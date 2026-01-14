@@ -2988,6 +2988,60 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Verify user email manually (bypass email verification requirement)
+  const verifyEmailSchema = z.object({
+    auth0UserId: z.string().min(1, 'Auth0 user ID is required'),
+  });
+
+  app.post('/api/admin/verify-email', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const result = verifyEmailSchema.safeParse(req.body);
+      if (!result.success) {
+        const errorMessages = result.error.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ error: errorMessages });
+      }
+
+      const { auth0UserId } = result.data;
+      log(`Admin ${req.userSession.email} manually verifying email for Auth0 user ${auth0UserId}`, 'admin');
+
+      // Update Auth0 user to mark email as verified
+      await auth0Client.updateUser(auth0UserId, { email_verified: true });
+
+      // Audit log
+      await dbStorage.createAuditLog({
+        adminEmail: req.userSession.email,
+        action: 'EMAIL_VERIFIED_MANUALLY',
+        targetType: 'user',
+        targetId: auth0UserId,
+        details: `Admin manually verified email for user ${auth0UserId}`,
+        status: 'success',
+      });
+
+      log(`Admin ${req.userSession.email} successfully verified email for user ${auth0UserId}`, 'admin');
+      res.json({ success: true, message: 'Email verified successfully' });
+    } catch (error: any) {
+      log(`Admin email verification failed: ${error.message}`, 'admin');
+
+      // Audit log for failure
+      try {
+        await dbStorage.createAuditLog({
+          adminEmail: req.userSession!.email,
+          action: 'EMAIL_VERIFIED_MANUALLY',
+          targetType: 'user',
+          targetId: req.body.auth0UserId,
+          details: `Failed to verify email: ${error.message}`,
+          status: 'failed',
+        });
+      } catch {}
+
+      res.status(500).json({ error: 'Failed to verify email' });
+    }
+  });
+
   // Get public reCAPTCHA config (for login/register pages)
   app.get('/api/security/recaptcha-config', (req, res) => {
     const settings = dbStorage.getRecaptchaSettings();
@@ -3420,18 +3474,20 @@ export async function registerRoutes(
           let serverCount = 0;
           let email = 'Unknown';
           let name = 'Unknown User';
-          
+          let emailVerified = false;
+
           // Fetch user info from Auth0 to get email and name
           try {
             const auth0User = await auth0Client.getUserById(wallet.auth0UserId);
             if (auth0User) {
               email = auth0User.email || 'Unknown';
               name = auth0User.name || auth0User.email || 'Unknown User';
+              emailVerified = auth0User.email_verified || false;
             }
           } catch (e) {
             // Auth0 user may have been deleted
           }
-          
+
           // If wallet has a linked VirtFusion user, fetch their server count
           if (wallet.virtFusionUserId) {
             try {
@@ -3441,12 +3497,13 @@ export async function registerRoutes(
               // VirtFusion user may have been deleted
             }
           }
-          
+
           return {
             virtfusionId: wallet.virtFusionUserId || null,
             auth0UserId: wallet.auth0UserId,
             name,
             email,
+            emailVerified,
             virtfusionLinked: !!wallet.virtFusionUserId,
             status: wallet.deletedAt ? 'deleted' : 'active',
             serverCount,

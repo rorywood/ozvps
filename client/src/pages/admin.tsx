@@ -8,7 +8,8 @@ import {
   User, Link, Shield, Eye, EyeOff, Save, Wallet, Server, Cpu, Network,
   Users, FileText, Power, RefreshCw, Trash2, CheckCircle, Activity, HardDrive,
   Play, Square, RotateCcw, ArrowRightLeft, ChevronDown, ChevronUp, Ban, Unlink,
-  Globe, MapPin, XCircle, MessageSquare, Clock, Timer, CircleDot, Send, Tag
+  Globe, MapPin, XCircle, MessageSquare, Clock, Timer, CircleDot, Send, Tag,
+  Mail, CheckCircle2
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ interface VFUser {
   auth0UserId: string;
   email: string;
   name: string;
+  emailVerified: boolean;
   virtfusionLinked: boolean;
   status: 'active' | 'deleted';
   serverCount: number;
@@ -354,6 +356,28 @@ export default function AdminPage() {
       reason: inlineAdjustReason,
     });
   };
+
+  const verifyEmailMutation = useMutation({
+    mutationFn: async (auth0UserId: string) => {
+      const response = await fetch('/api/admin/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth0UserId }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to verify email');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Email verified successfully');
+      queryClient.invalidateQueries({ queryKey: ['vf-users'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to verify email');
+    },
+  });
 
   const linkMutation = useMutation({
     mutationFn: async (data: { auth0UserId: string; oldExtRelationId: string }) => {
@@ -1052,6 +1076,7 @@ export default function AdminPage() {
                       <thead>
                         <tr className="border-b border-border text-left">
                           <th className="p-3 text-muted-foreground font-medium">User</th>
+                          <th className="p-3 text-muted-foreground font-medium">Email Status</th>
                           <th className="p-3 text-muted-foreground font-medium">VirtFusion</th>
                           <th className="p-3 text-muted-foreground font-medium">Servers</th>
                           <th className="p-3 text-muted-foreground font-medium">Balance</th>
@@ -1064,6 +1089,26 @@ export default function AdminPage() {
                             <td className="p-3">
                               <p className="font-medium text-foreground">{user.name}</p>
                               <p className="text-xs text-muted-foreground">{user.email}</p>
+                            </td>
+                            <td className="p-3">
+                              {user.emailVerified ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-success">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Verified
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-warning hover:text-warning hover:bg-warning/10 text-xs"
+                                  onClick={() => verifyEmailMutation.mutate(user.auth0UserId)}
+                                  disabled={verifyEmailMutation.isPending}
+                                  title="Verify email on user's behalf"
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Verify
+                                </Button>
+                              )}
                             </td>
                             <td className="p-3">
                               {user.virtfusionLinked ? (
