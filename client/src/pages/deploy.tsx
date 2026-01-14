@@ -1,30 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
-import { 
+import {
   Check,
   Loader2,
   Zap,
-  Wallet,
   Server,
   MapPin,
-  AlertTriangle
+  HardDrive,
+  Plus,
+  ChevronRight
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
+import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
+import { cn } from "@/lib/utils";
 import flagAU from "@/assets/flag-au.png";
 
 interface Plan {
@@ -37,7 +32,6 @@ interface Plan {
   transferGb: number;
   priceMonthly: number;
   active: boolean;
-  popular?: boolean;
 }
 
 interface Location {
@@ -54,9 +48,20 @@ interface Wallet {
   balanceCents: number;
 }
 
+interface OsTemplate {
+  id: number;
+  name: string;
+  version?: string;
+  description?: string;
+}
+
+interface TemplateGroup {
+  name: string;
+  templates: OsTemplate[];
+}
+
 function formatCurrency(cents: number): string {
-  const dollars = cents / 100;
-  return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatRAM(mb: number): string {
@@ -78,10 +83,12 @@ export default function DeployPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
+  const [hostname, setHostname] = useState("");
+  const [hostnameError, setHostnameError] = useState("");
 
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
@@ -93,17 +100,48 @@ export default function DeployPage() {
     queryFn: () => api.getLocations(),
   });
 
+  const { data: templatesData, isLoading: loadingTemplates } = useQuery<TemplateGroup[]>({
+    queryKey: ['plan-templates', selectedPlanId],
+    queryFn: () => api.getPlanTemplates(selectedPlanId!),
+    enabled: !!selectedPlanId && selectedPlanId > 0,
+  });
+
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
   });
 
+  const { data: stripeStatus } = useQuery({
+    queryKey: ['stripe-status'],
+    queryFn: () => api.getStripeStatus(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const stripeConfigured = stripeStatus?.configured ?? false;
+
+  const topupMutation = useMutation({
+    mutationFn: (amountCents: number) => api.createTopup(amountCents),
+    onSuccess: (data: { url: string }) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create checkout session",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deployMutation = useMutation({
-    mutationFn: (data: { planId: number; locationCode: string }) => api.deployServer(data),
+    mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string }) =>
+      api.deployServer(data),
     onSuccess: (data: { orderId: number; serverId: number }) => {
       toast({
-        title: "Server created!",
-        description: "Complete the setup to install your operating system.",
+        title: "Server deployed!",
+        description: "Your new VPS is being provisioned.",
       });
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
@@ -113,7 +151,7 @@ export default function DeployPage() {
     onError: (error: any) => {
       toast({
         title: "Deployment failed",
-        description: error.message || "Failed to create server",
+        description: error.message || "Failed to deploy server",
         variant: "destructive",
       });
     },
@@ -124,287 +162,502 @@ export default function DeployPage() {
   const wallet = walletData?.wallet;
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
+  const templates = templatesData || [];
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  const handleDeployClick = () => {
-    if (!selectedPlanId || !selectedLocationCode) return;
-    setConfirmDialogOpen(true);
+  const validateHostname = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length === 0) {
+      setHostnameError("Hostname is required");
+      return false;
+    }
+    if (trimmed.length > 253) {
+      setHostnameError("Hostname must be 253 characters or less");
+      return false;
+    }
+    const labels = trimmed.split('.');
+    for (const label of labels) {
+      if (label.length === 0) {
+        setHostnameError("Hostname cannot have empty labels");
+        return false;
+      }
+      if (label.length > 63) {
+        setHostnameError("Each part must be 63 characters or less");
+        return false;
+      }
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) {
+        setHostnameError("Single character parts must be a letter or number");
+        return false;
+      }
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) {
+        setHostnameError("Each part must start and end with a letter or number");
+        return false;
+      }
+    }
+    setHostnameError("");
+    return true;
   };
 
-  const handleConfirmDeploy = () => {
-    if (!selectedPlanId || !selectedLocationCode) return;
-    setConfirmDialogOpen(false);
-    deployMutation.mutate({ planId: selectedPlanId, locationCode: selectedLocationCode });
+  const handleHostnameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setHostname(value);
+    if (value.trim()) {
+      validateHostname(value);
+    } else {
+      setHostnameError("");
+    }
   };
 
-  const handleAddFunds = () => {
-    setLocation('/billing');
+  const handleDeploy = () => {
+    if (!selectedPlan || !selectedOsId || !selectedLocationCode) return;
+    if (!validateHostname(hostname)) return;
+
+    deployMutation.mutate({
+      planId: selectedPlan.id,
+      osId: selectedOsId,
+      hostname: hostname.trim().toLowerCase(),
+      locationCode: selectedLocationCode,
+    });
   };
+
+  const handleTopupAndDeploy = () => {
+    if (!selectedPlan || !wallet) return;
+    const shortfall = selectedPlan.priceMonthly - wallet.balanceCents;
+    const topupNeeded = Math.max(shortfall, 500);
+    topupMutation.mutate(topupNeeded);
+  };
+
+  // Determine current step for progress indicator
+  const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !selectedOsId ? 3 : 4;
+  const selectedOs = templates.flatMap(g => g.templates).find(t => t.id === selectedOsId);
 
   return (
     <AppShell>
-      <div className="min-h-[calc(100vh-12rem)] flex flex-col overflow-x-hidden">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <Server className="h-6 w-6 text-blue-400" />
-            <h1 className="text-2xl font-display font-bold text-foreground" data-testid="text-page-title">
-              Deploy Server
-            </h1>
-          </div>
-          <p className="text-muted-foreground text-sm ml-9">
-            Select a plan and region to get started
+          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">
+            Deploy New Server
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Choose your configuration and deploy in seconds
           </p>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 space-y-8 pb-32 overflow-x-hidden">
-          
-          {/* Location Selection */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <MapPin className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-foreground">
-                Region
-              </h2>
+        {/* Step Progress */}
+        <div className="mb-8 flex items-center gap-2">
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 1 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedPlanId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedPlanId ? <Check className="h-3 w-3" /> : "1"}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {locations.map((location) => (
-                <button
-                  key={location.code}
-                  type="button"
-                  disabled={!location.enabled}
-                  onClick={() => location.enabled && setSelectedLocationCode(location.code)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-                    !location.enabled 
-                      ? 'opacity-40 cursor-not-allowed bg-muted/50 border-border/50' 
-                      : selectedLocationCode === location.code 
-                        ? 'bg-blue-500/10 border-blue-500/50 text-foreground' 
-                        : 'bg-muted/50 border-border hover:border-primary/50 text-muted-foreground hover:text-foreground'
-                  }`}
-                  data-testid={`radio-location-${location.code.toLowerCase()}`}
-                >
-                  <img 
-                    src={flagAU} 
-                    alt={location.countryCode} 
-                    className="h-4 w-5 object-cover rounded-sm"
-                  />
-                  <span className="text-sm font-medium">{location.name}</span>
-                  {selectedLocationCode === location.code && (
-                    <Check className="h-3.5 w-3.5 text-blue-400" />
-                  )}
-                  {!location.enabled && (
-                    <span className="text-[10px] text-muted-foreground">Soon</span>
-                  )}
-                </button>
-              ))}
+            <span>Plan</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 2 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedLocationCode ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedLocationCode ? <Check className="h-3 w-3" /> : "2"}
             </div>
-          </section>
-
-          {/* Plan Selection */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-foreground">
-                Select Plan
-              </h2>
+            <span>Region</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 3 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedOsId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedOsId ? <Check className="h-3 w-3" /> : "3"}
             </div>
-            
-            {loadingPlans ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 text-blue-400 animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                {plans.map((plan) => {
-                  const isSelected = selectedPlanId === plan.id;
-                  const isPopular = plan.code === 'lite';
-                  
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => setSelectedPlanId(plan.id)}
-                      className={`relative p-4 rounded-xl border text-left transition-all ${
-                        isSelected
-                          ? 'bg-blue-500/10 border-blue-500/50'
-                          : 'bg-card/50 border-border hover:border-primary/30 hover:bg-card/70'
-                      }`}
-                      data-testid={`card-plan-${plan.code}`}
-                    >
-                      {/* Popular Badge */}
-                      {isPopular && (
-                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                          <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-blue-500 text-white rounded-full">
-                            Popular
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* Selected Check */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3">
-                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
-                            <Check className="h-3 w-3 text-foreground" />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Plan Name & Price */}
-                      <div className="mb-4">
-                        <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
-                        <div className="flex items-baseline gap-0.5 mt-1">
-                          <span className="text-2xl font-bold text-foreground">
-                            {formatCurrency(plan.priceMonthly)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">/mo</span>
-                        </div>
-                      </div>
-                      
-                      {/* Specs */}
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">vCPU</span>
-                          <span className="text-foreground font-medium">{plan.vcpu}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">RAM</span>
-                          <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Storage</span>
-                          <span className="text-foreground font-medium">{plan.storageGb} GB</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Transfer</span>
-                          <span className="text-foreground font-medium">{formatTransfer(plan.transferGb)}</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+            <span>OS</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 4 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              hostname ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {hostname ? <Check className="h-3 w-3" /> : "4"}
+            </div>
+            <span>Hostname</span>
+          </div>
         </div>
 
-        {/* Sticky Bottom Bar */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:pl-64">
-          <div className="bg-gradient-to-t from-background via-background to-transparent h-6 pointer-events-none" />
-          <div className="bg-background/95 backdrop-blur-sm border-t border-border">
-            <div className="max-w-5xl mx-auto px-4 py-3">
-              <div className="flex items-center justify-between gap-4">
-                {/* Left: Summary */}
-                <div className="flex items-center gap-4 text-sm">
-                  {selectedLocation && (
-                    <div className="flex items-center gap-2">
-                      <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
-                      <span className="text-foreground/80">{selectedLocation.name}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-8">
+
+            {/* Step 1: Choose Plan */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <Server className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">Choose a Plan</h2>
+              </div>
+
+              {loadingPlans ? (
+                <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
+                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {plans.map((plan) => {
+                    const isSelected = selectedPlanId === plan.id;
+                    const isPopular = plan.code === 'lite';
+
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setSelectedPlanId(plan.id)}
+                        className={cn(
+                          "relative p-4 rounded-lg border text-left transition-all",
+                          isSelected
+                            ? "bg-primary/5 border-primary shadow-sm"
+                            : "bg-card border-border hover:border-primary/50"
+                        )}
+                        data-testid={`card-plan-${plan.code}`}
+                      >
+                        {isPopular && (
+                          <div className="mb-2">
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-primary text-primary-foreground rounded">
+                              Popular
+                            </span>
+                          </div>
+                        )}
+
+                        {isSelected && (
+                          <div className="absolute top-3 right-3">
+                            <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mb-3">
+                          <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
+                          <div className="flex items-baseline gap-1 mt-1">
+                            <span className="text-3xl font-bold text-foreground tracking-tight">
+                              ${(plan.priceMonthly / 100).toFixed(0)}
+                            </span>
+                            <span className="text-sm text-muted-foreground">/mo</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">vCPU</span>
+                            <span className="text-foreground font-medium">{plan.vcpu}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">RAM</span>
+                            <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Storage</span>
+                            <span className="text-foreground font-medium">{plan.storageGb} GB</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Transfer</span>
+                            <span className="text-foreground font-medium">{formatTransfer(plan.transferGb)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Step 2: Choose Region */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <MapPin className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">Choose a Region</h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {locations.map((location) => (
+                  <button
+                    key={location.code}
+                    type="button"
+                    disabled={!location.enabled}
+                    onClick={() => location.enabled && setSelectedLocationCode(location.code)}
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-lg border transition-all",
+                      !location.enabled
+                        ? "opacity-50 cursor-not-allowed bg-muted/30 border-border"
+                        : selectedLocationCode === location.code
+                          ? "bg-primary/5 border-primary shadow-sm"
+                          : "bg-card border-border hover:border-primary/50"
+                    )}
+                    data-testid={`radio-location-${location.code.toLowerCase()}`}
+                  >
+                    <img
+                      src={flagAU}
+                      alt={location.countryCode}
+                      className="h-8 w-12 object-cover rounded"
+                    />
+                    <div className="flex-1 text-left">
+                      <div className="font-medium text-foreground">{location.name}</div>
+                      <div className="text-xs text-muted-foreground">{location.country}</div>
                     </div>
-                  )}
-                  {selectedPlan && (
-                    <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground">
-                      <span className="text-border">|</span>
-                      <span className="text-foreground">{selectedPlan.name}</span>
-                      <span className="text-border">-</span>
-                      <span>{selectedPlan.vcpu} vCPU, {formatRAM(selectedPlan.ramMb)}</span>
-                    </div>
-                  )}
+                    {selectedLocationCode === location.code && (
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                    )}
+                    {!location.enabled && (
+                      <span className="text-xs text-muted-foreground">Soon</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Step 3: Choose OS */}
+            {selectedPlanId && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <HardDrive className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Choose Operating System</h2>
                 </div>
 
-                {/* Right: Balance, Price & Deploy */}
-                <div className="flex items-center gap-4">
-                  {/* Balance */}
-                  <div className="hidden sm:block text-right">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
-                    <div className={`text-sm font-mono font-medium ${canAfford ? 'text-green-400' : 'text-foreground'}`}>
-                      {loadingWallet ? "..." : `$${((wallet?.balanceCents || 0) / 100).toFixed(2)}`}
+                {loadingTemplates ? (
+                  <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
+                    <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center py-8 border border-border rounded-lg bg-card">
+                    <p className="text-sm text-muted-foreground">
+                      No operating systems available for this plan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {templates.map((group, groupIndex) => (
+                      <div key={groupIndex}>
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                          {group.name}
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {group.templates.map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => setSelectedOsId(template.id)}
+                              className={cn(
+                                "relative flex items-center gap-3 p-4 rounded-lg border transition-all text-left",
+                                selectedOsId === template.id
+                                  ? "bg-primary/5 border-primary shadow-sm"
+                                  : "bg-card border-border hover:border-primary/50"
+                              )}
+                              data-testid={`radio-os-${template.id}`}
+                            >
+                              <img
+                                src={getOsLogoUrl({ id: template.id, name: template.name, group: group.name })}
+                                alt={template.name}
+                                className="h-10 w-10 object-contain flex-shrink-0"
+                                onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground truncate">
+                                  {template.name}
+                                </div>
+                                {template.version && (
+                                  <div className="text-xs text-muted-foreground">{template.version}</div>
+                                )}
+                              </div>
+                              {selectedOsId === template.id && (
+                                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Step 4: Hostname */}
+            {selectedOsId && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <Server className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Set Hostname</h2>
+                </div>
+                <div className="border border-border rounded-lg p-6 bg-card">
+                  <div className="space-y-2">
+                    <Label htmlFor="hostname">Server Hostname</Label>
+                    <Input
+                      id="hostname"
+                      placeholder="my-server"
+                      value={hostname}
+                      onChange={handleHostnameChange}
+                      className={hostnameError ? "border-destructive" : ""}
+                      data-testid="input-hostname"
+                    />
+                    {hostnameError ? (
+                      <p className="text-xs text-destructive">{hostnameError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Summary Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="lg:sticky lg:top-6">
+              <div className="border border-border rounded-lg p-6 bg-card">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Summary</h2>
+
+                <div className="space-y-4">
+                  {/* Plan */}
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Plan</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedPlan ? selectedPlan.name : <span className="text-muted-foreground italic">Not selected</span>}
+                    </div>
+                    {selectedPlan && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>{selectedPlan.vcpu} vCPU</div>
+                        <div>{formatRAM(selectedPlan.ramMb)}</div>
+                        <div>{selectedPlan.storageGb} GB NVMe</div>
+                        <div>{formatTransfer(selectedPlan.transferGb)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Region */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Region</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedLocation ? selectedLocation.name : <span className="text-muted-foreground italic">Not selected</span>}
                     </div>
                   </div>
 
-                  {/* Price */}
-                  {selectedPlan && (
-                    <div className="text-right">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Due Now</div>
-                      <div className="text-sm font-mono font-bold text-foreground">
-                        ${(selectedPlan.priceMonthly / 100).toFixed(2)}
-                      </div>
+                  {/* OS */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Operating System</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedOs ? selectedOs.name : <span className="text-muted-foreground italic">Not selected</span>}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Hostname */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Hostname</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {hostname || <span className="text-muted-foreground italic">Not set</span>}
+                    </div>
+                  </div>
+
+                  {/* Pricing */}
+                  <div className="border-t border-border pt-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Monthly price</span>
+                      <span className="font-mono font-medium text-foreground">
+                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Balance</span>
+                      <span className={cn(
+                        "font-mono font-medium",
+                        canAfford ? "text-success" : "text-foreground"
+                      )}>
+                        {loadingWallet ? "..." : formatCurrency(wallet?.balanceCents || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-border">
+                      <span className="font-medium text-foreground">Due now</span>
+                      <span className="font-mono font-bold text-xl text-primary">
+                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                      </span>
+                    </div>
+                  </div>
 
                   {/* Deploy Button */}
-                  {!selectedPlan ? (
-                    <Button 
-                      className="h-9 px-5 bg-muted text-muted-foreground hover:bg-muted cursor-not-allowed border-0" 
-                      disabled 
-                      data-testid="button-deploy-disabled"
-                    >
-                      Select a plan
-                    </Button>
-                  ) : canAfford ? (
-                    <Button 
-                      className="h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white border-0" 
-                      onClick={handleDeployClick}
-                      disabled={loadingWallet || deployMutation.isPending}
-                      data-testid="button-deploy"
-                    >
-                      {deployMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-1.5" />
-                          Deploy
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button 
-                      className="h-9 px-5 bg-muted hover:bg-muted/80 text-foreground border-0" 
-                      onClick={handleAddFunds}
-                      data-testid="button-add-funds"
-                    >
-                      <Wallet className="h-4 w-4 mr-1.5" />
-                      Add Funds
-                    </Button>
-                  )}
+                  <div className="pt-2">
+                    {!selectedPlanId || !selectedOsId || !hostname ? (
+                      <Button
+                        className="w-full h-11"
+                        disabled
+                        data-testid="button-deploy-disabled"
+                      >
+                        {!selectedPlanId ? 'Select plan' : !selectedOsId ? 'Select OS' : 'Enter hostname'}
+                      </Button>
+                    ) : canAfford ? (
+                      <Button
+                        className="w-full h-11 gap-2"
+                        onClick={handleDeploy}
+                        disabled={deployMutation.isPending || loadingWallet}
+                        data-testid="button-deploy"
+                      >
+                        {deployMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4" />
+                            Deploy Server
+                          </>
+                        )}
+                      </Button>
+                    ) : stripeConfigured ? (
+                      <Button
+                        className="w-full h-11 gap-2"
+                        onClick={handleTopupAndDeploy}
+                        disabled={topupMutation.isPending}
+                        data-testid="button-topup-deploy"
+                      >
+                        {topupMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            Top up & Deploy
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        className="w-full h-11"
+                        disabled
+                        data-testid="button-deploy-no-stripe"
+                      >
+                        Insufficient balance
+                      </Button>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Charges deduct from wallet balance
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Deploy Confirmation Dialog */}
-      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <AlertDialogContent className="bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
-              Confirm Deployment
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              You are about to spend{" "}
-              <span className="font-semibold text-foreground">
-                {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "$0"}
-              </span>{" "}
-              to deploy this server.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-muted" data-testid="button-cancel-deploy">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleConfirmDeploy}
-              className="bg-blue-600 hover:bg-blue-700"
-              data-testid="button-confirm-deploy"
-            >
-              <Zap className="h-4 w-4 mr-1.5" />
-              Deploy
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppShell>
   );
 }
