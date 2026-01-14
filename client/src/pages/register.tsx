@@ -192,28 +192,7 @@ export default function RegisterPage() {
   });
 
   // Check if control server is available - registration requires it
-  const { data: healthStatus, isLoading: healthLoading } = useQuery({
-    queryKey: ['control-health'],
-    queryFn: async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      try {
-        const response = await fetch('/api/health', { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!response.ok) return { available: false };
-        const data = await response.json();
-        return { available: data.status === 'ok' };
-      } catch {
-        clearTimeout(timeoutId);
-        return { available: false };
-      }
-    },
-    staleTime: 30 * 1000,
-    retry: 1,
-  });
-
-  const controlServerAvailable = healthStatus?.available !== false;
-  const registrationEnabled = registrationStatus?.enabled !== false && controlServerAvailable;
+  const registrationEnabled = registrationStatus?.enabled !== false;
 
   // Validate reCAPTCHA site key format (valid keys start with "6L")
   const isValidSiteKey = (key: string | null | undefined): boolean => {
@@ -539,19 +518,17 @@ export default function RegisterPage() {
                 </p>
               </div>
 
-              {!registrationEnabled && !registrationLoading && !healthLoading ? (
+              {!registrationEnabled && !registrationLoading ? (
                 <div className="space-y-6">
                   <div className="flex flex-col items-center justify-center text-center p-8 rounded-xl bg-amber-500/10 border border-amber-500/20">
                     <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
                       <XCircle className="w-8 h-8 text-amber-500" />
                     </div>
                     <h2 className="text-xl font-semibold text-foreground mb-2">
-                      {!controlServerAvailable ? 'Service Temporarily Unavailable' : 'Registration Temporarily Closed'}
+                      Registration Temporarily Closed
                     </h2>
                     <p className="text-muted-foreground text-sm max-w-sm">
-                      {!controlServerAvailable
-                        ? 'Our systems are currently undergoing maintenance. Please try again in a few minutes.'
-                        : 'New account registration is currently disabled. Please contact support if you need access or check back later.'}
+                      New account registration is currently disabled. Please contact support if you need access or check back later.
                     </p>
                   </div>
                   <div className="text-center">

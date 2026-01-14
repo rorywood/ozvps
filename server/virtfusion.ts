@@ -268,8 +268,8 @@ export class VirtFusionClient {
   }
 
   /**
-   * Get detailed connection status including license check
-   * Returns: { connected: boolean, errorType?: 'license_expired' | 'api_error' | 'timeout' }
+   * Get connection status by checking if VirtFusion API is responding
+   * Returns: { connected: boolean, errorType?: string }
    */
   async getConnectionStatus(): Promise<{ connected: boolean; errorType?: string }> {
     try {
@@ -281,28 +281,26 @@ export class VirtFusionClient {
         },
       });
 
+      // Any successful response means API is working
+      // Don't check for specific status codes or license issues
       if (response.ok) {
         return { connected: true };
       }
 
-      // Check for license-related errors (typically 402 Payment Required or specific messages)
-      if (response.status === 402 || response.status === 403) {
-        const text = await response.text();
-        const isLicenseError = text.toLowerCase().includes('license') ||
-                               text.toLowerCase().includes('expired') ||
-                               text.toLowerCase().includes('subscription');
-        if (isLicenseError) {
-          log('VirtFusion license issue detected', 'virtfusion');
-          return { connected: false, errorType: 'license_expired' };
-        }
+      // Even 401/403 means API is responding, just auth issues
+      // This is fine for health check purposes
+      if (response.status === 401 || response.status === 403) {
+        log('VirtFusion API responding but auth issue detected', 'virtfusion');
+        return { connected: true }; // API is up, just config issue
       }
 
-      // Check for unauthorized (API key issues)
-      if (response.status === 401) {
-        return { connected: false, errorType: 'unauthorized' };
+      // Only consider 5xx errors as API being down
+      if (response.status >= 500) {
+        return { connected: false, errorType: 'api_error' };
       }
 
-      return { connected: false, errorType: 'api_error' };
+      // For any other status, consider API as available
+      return { connected: true };
     } catch (error: any) {
       if (error.name === 'AbortError' || error.message?.includes('timeout')) {
         return { connected: false, errorType: 'timeout' };

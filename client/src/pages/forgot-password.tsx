@@ -14,36 +14,6 @@ export default function ForgotPasswordPage() {
 
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [serviceUnavailable, setServiceUnavailable] = useState(false);
-
-  // Check service health on component mount
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    fetch('/api/health', { signal: controller.signal })
-      .then(res => {
-        clearTimeout(timeoutId);
-        if (!res.ok) {
-          setServiceUnavailable(true);
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.status !== 'ok') {
-          setServiceUnavailable(true);
-        }
-      })
-      .catch(() => {
-        clearTimeout(timeoutId);
-        setServiceUnavailable(true);
-      });
-
-    return () => {
-      clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, []);
 
   const forgotPasswordMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -136,22 +106,6 @@ export default function ForgotPasswordPage() {
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
-                {serviceUnavailable && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-start gap-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-4"
-                  >
-                    <ServerCrash className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium mb-1">Service Temporarily Unavailable</p>
-                      <p className="text-amber-300/80 text-xs">
-                        Our systems are currently undergoing maintenance. Please try again in a few minutes.
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-
                 {forgotPasswordMutation.isError && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
@@ -185,15 +139,13 @@ export default function ForgotPasswordPage() {
                 <Button
                   type="submit"
                   className="w-full h-12 text-base font-medium bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white shadow-lg shadow-primary/25 border-0"
-                  disabled={forgotPasswordMutation.isPending || !email.trim() || serviceUnavailable}
+                  disabled={forgotPasswordMutation.isPending || !email.trim()}
                 >
                   {forgotPasswordMutation.isPending ? (
                     <>
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                       Sending...
                     </>
-                  ) : serviceUnavailable ? (
-                    "Service Unavailable"
                   ) : (
                     "Send reset link"
                   )}

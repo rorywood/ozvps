@@ -1527,10 +1527,26 @@ export default function ServerDetail() {
                 </>
               )}
             </Button>
-            
+
+            <Button
+              variant="secondary"
+              className={cn(
+                "shadow-none font-medium h-9",
+                (isSuspended || reinstallTask.isActive)
+                  ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed"
+                  : "bg-muted/50 hover:bg-muted text-foreground border-border"
+              )}
+              onClick={() => setPasswordResetDialogOpen(true)}
+              disabled={isSuspended || reinstallTask.isActive}
+              data-testid="button-reset-password-main"
+            >
+              <Key className="h-4 w-4 mr-2 text-muted-foreground" />
+              Reset Password
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
+                <Button
                   className={cn(
                     "font-medium h-9 border-0",
                     (isSuspended || consoleLock.isLocked || reinstallTask.isActive)
