@@ -34,9 +34,9 @@ import { Loader2 } from "lucide-react";
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
-  // Allow auth pages and pricing to bypass health check - users should always see these
+  // Allow auth pages, pricing, and root to bypass health check - users should always see these
   // Errors will show inline when they try to use features that require VirtFusion
-  const bypassPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/pricing'];
+  const bypassPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/pricing'];
 
   // Check both wouter location and window.location for reliability
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : location;
