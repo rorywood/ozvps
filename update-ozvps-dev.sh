@@ -222,12 +222,21 @@ step_header 4 6 "Building Application"
 
 cd "$INSTALL_DIR"
 
+info "Cleaning old dependencies..."
+rm -rf node_modules package-lock.json
+
 info "Installing dependencies..."
-if ! npm install --silent 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; then
-    success "Dependencies installed"
+if npm install 2>&1 | tee /tmp/npm-install.log | grep -v "^npm " | grep -v "added\|removed\|packages" | tail -5; then
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        success "Dependencies installed"
+    else
+        error "Failed to install dependencies"
+        cat /tmp/npm-install.log | tail -30
+        exit 1
+    fi
 else
     error "Failed to install dependencies"
-    npm install 2>&1 | tail -20
+    cat /tmp/npm-install.log | tail -30
     exit 1
 fi
 
