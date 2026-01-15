@@ -1106,10 +1106,1144 @@ export default function ServerDetail() {
     );
   }
 
-
   return (
     <AppShell>
-      <div>Server Detail - Testing (hooks preserved)</div>
+      <div className="space-y-6 pb-20">
+        
+        {/* Building banner removed - showing full-page provisioning view instead */}
+        {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
+        {showSavedCredentials && savedCredentials && server?.status === 'running' && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+          <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-success flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-success">Your Server is Ready!</h3>
+                <p className="text-sm text-muted-foreground">
+                  Save these credentials to access your server
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Server IP</span>
+                  <span className="font-mono text-foreground">{savedCredentials.serverIp}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                  onClick={() => {
+                    navigator.clipboard.writeText(savedCredentials.serverIp);
+                    toast({ title: "Copied", description: "Server IP copied to clipboard" });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Username</span>
+                  <span className="font-mono text-foreground">{savedCredentials.username}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                  onClick={() => {
+                    navigator.clipboard.writeText(savedCredentials.username);
+                    toast({ title: "Copied", description: "Username copied to clipboard" });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Password</span>
+                  <span className="font-mono text-foreground">
+                    {showCredentialsPassword ? savedCredentials.password : '••••••••••••'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                    onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
+                    data-testid="button-toggle-password-visibility"
+                  >
+                    {showCredentialsPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                    onClick={() => {
+                      navigator.clipboard.writeText(savedCredentials.password);
+                      toast({ title: "Copied", description: "Password copied to clipboard" });
+                    }}
+                    data-testid="button-copy-password"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* SSH Command with Copy Button */}
+            <div className="pt-2 border-t border-border space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono text-success bg-card/30 px-3 py-2 rounded">
+                  ssh {savedCredentials.username}@{savedCredentials.serverIp}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:bg-muted"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`ssh ${savedCredentials.username}@{savedCredentials.serverIp}`);
+                    toast({ title: "Copied", description: "SSH command copied to clipboard" });
+                  }}
+                  title="Copy SSH command"
+                  data-testid="button-copy-ssh-command"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Close button */}
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSavedCredentials(false)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Suspension Banner */}
+        {isSuspended && (
+          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
+            <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
+              <p className="text-sm text-yellow-300/80">
+                Please contact support for assistance.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* DigitalOcean-style Layout: Sidebar + Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+
+          {/* LEFT SIDEBAR - Server Info */}
+          <div className="space-y-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Plan</p>
+                  <p className="text-sm font-semibold text-foreground">{server.plan?.name || 'Unknown Plan'}</p>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Specs</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Cpu className="h-4 w-4" />
+                      <span>{server.plan.specs.vcpu} vCPU</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Activity className="h-4 w-4" />
+                      <span>{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'} RAM</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <StorageIcon className="h-4 w-4" />
+                      <span>{server.plan.specs.disk} GB Storage</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Location</p>
+                  <div className="flex items-center gap-2">
+                    {server.location?.country === 'Australia' && (
+                      <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
+                    )}
+                    <span className="text-sm text-foreground">{server.location?.city}, {server.location?.country}</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Primary IP</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-foreground">{server.primaryIp}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        navigator.clipboard.writeText(server.primaryIp);
+                        toast({ title: "Copied to clipboard" });
+                      }}
+                      title="Copy IP address"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(server.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* RIGHT MAIN CONTENT */}
+          <div className="space-y-6">
+
+        {/* Header Section */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+               <Link href="/servers">
+                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="h-8 w-48 bg-card/30 border-border text-foreground font-display font-bold text-lg"
+                    maxLength={50}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName();
+                      if (e.key === 'Escape') handleCancelEditName();
+                    }}
+                    data-testid="input-server-name"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    onClick={handleSaveName}
+                    disabled={isRenamingServer || !editedName.trim()}
+                    data-testid="button-save-name"
+                  >
+                    {isRenamingServer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                    onClick={handleCancelEditName}
+                    disabled={isRenamingServer}
+                    data-testid="button-cancel-name"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h1 
+                    className={cn(
+                      "text-2xl font-display font-bold text-foreground tracking-tight",
+                      !isSuspended && "cursor-pointer hover:text-foreground/80 transition-colors"
+                    )}
+                    onClick={!isSuspended ? handleStartEditName : undefined}
+                    data-testid="text-server-name"
+                    title={!isSuspended ? "Click to rename" : undefined}
+                  >
+                    {server.name}
+                  </h1>
+                  {cancellationData?.cancellation && (
+                    <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1" data-testid="badge-pending-cancellation">
+                      <Calendar className="h-3 w-3" />
+                      PENDING CANCELLATION
+                    </span>
+                  )}
+                </div>
+              )}
+              {(powerActionPending || isTransitioning || consoleLock.isLocked) ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
+                  <span className="text-xs text-orange-400 font-medium">
+                    {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reboot' ? 'Rebooting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Rebooting...' :
+                     consoleLock.isLocked ? 'Rebooting...' :
+                     displayStatus === 'starting' ? 'Starting...' :
+                     displayStatus === 'rebooting' ? 'Rebooting...' :
+                     displayStatus === 'stopping' ? 'Stopping...' :
+                     powerActionPending === 'boot' ? 'Starting...' :
+                     powerActionPending === 'reboot' ? 'Rebooting...' :
+                     powerActionPending === 'poweroff' ? 'Stopping...' :
+                     'Processing...'}
+                  </span>
+                </div>
+              ) : (
+                <div className={cn(
+                  "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
+                  displayStatus === 'running' ? "bg-green-500 shadow-green-500/50" : 
+                  displayStatus === 'stopped' ? "bg-red-500 shadow-red-500/50" :
+                  "bg-yellow-500 shadow-yellow-500/50"
+                )} data-testid="status-indicator" />
+              )}
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
+              <div className="flex items-center gap-2">
+                <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
+                <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
+                <button 
+                  onClick={() => copyToClipboard(server.primaryIp)} 
+                  className="text-muted-foreground hover:text-foreground"
+                  data-testid="button-copy-ip"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
+                <span className="text-foreground">{server.location.name}</span>
+              </div>
+              {server.image && (
+                <div className="flex items-center gap-2">
+                  <img
+                    src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
+                    alt={server.image.name}
+                    className="h-4 w-4 object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
+                  />
+                  <span className="text-foreground">{server.image.name}</span>
+                </div>
+              )}
+              {server.billing?.nextBillAt && (
+                <div className="flex items-center gap-2">
+                  <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
+                  <span className="text-foreground">
+                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* DigitalOcean-style Power Controls - Prominent Buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Primary Console Button */}
+            <Button
+              className="h-10"
+              onClick={handleOpenVnc}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
+              data-testid="button-console"
+            >
+              <TerminalSquare className="h-4 w-4 mr-2" />
+              Console
+            </Button>
+
+            {/* Power Control Buttons - Separate, Not Dropdown */}
+            {displayStatus === 'stopped' ? (
+              <Button
+                variant="outline"
+                className="h-10 border-success/50 text-success hover:bg-success/10"
+                onClick={() => handlePowerAction('boot')}
+                disabled={isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                data-testid="button-start"
+              >
+                <Power className="h-4 w-4 mr-2" />
+                Start
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-10"
+                  onClick={() => handlePowerAction('reboot')}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  data-testid="button-reboot"
+                >
+                  <RotateCw className="h-4 w-4 mr-2" />
+                  Reboot
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
+                  onClick={() => handlePowerAction('poweroff')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  data-testid="button-stop"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
+
+            {/* More Menu - Secondary Actions */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => setPasswordResetDialogOpen(true)}
+                  disabled={isSuspended || reinstallTask.isActive}
+                >
+                  <Key className="h-4 w-4 mr-2" /> Reset Password
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Navigation Tabs - Restructured to 3 Tabs (DO Style) */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <div className="border-b border-border">
+            <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
+              <TabsTrigger
+                value="overview"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-overview"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="access"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-access"
+              >
+                Access
+              </TabsTrigger>
+              <TabsTrigger
+                value="destroy"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-destroy"
+              >
+                Destroy
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* OVERVIEW TAB - Combines Statistics + IP Management */}
+          <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
+            
+            {/* Live Stats - CPU, Memory, Disk */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* CPU Card */}
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-foreground" data-testid="text-cpu-percent">
+                      {liveStats ? `${liveStats.cpu_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
+                  ) : (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
+                    </span>
+                  )}
+                </div>
+                <div className="w-full bg-muted rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.cpu_usage || 0}%` : '0%' }}
+                    data-testid="progress-cpu"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
+                </div>
+              </Card>
+
+              {/* Memory Card */}
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-foreground" data-testid="text-memory-percent">
+                      {liveStats ? `${liveStats.ram_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
+                  ) : (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
+                    </span>
+                  )}
+                </div>
+                <div className="w-full bg-muted rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-green-500" : "bg-muted/30"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.ram_usage || 0}%` : '0%' }}
+                    data-testid="progress-memory"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span data-testid="text-memory-used">
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.memory_used_mb 
+                      ? `${liveStats.memory_used_mb} MB / ${liveStats.memory_total_mb} MB` 
+                      : '—'}
+                  </span>
+                </div>
+              </Card>
+
+              {/* Disk Card */}
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
+                  {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-foreground" data-testid="text-disk-percent">
+                      {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
+                    </span>
+                  ) : consoleLock.isLocked ? (
+                    <span className="text-lg font-bold text-muted-foreground">—</span>
+                  ) : (
+                    <span className="text-xs text-orange-400 flex items-center gap-1.5">
+                      {(powerActionPending || server.status !== 'stopped') && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {powerActionPending === 'boot' ? 'Starting...' : 
+                       powerActionPending ? 'Please wait...' :
+                       server.status === 'stopped' ? 'Offline' : 'Loading...'}
+                    </span>
+                  )}
+                </div>
+                <div className="w-full bg-muted rounded-full h-1.5">
+                  <div 
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-500",
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
+                    )}
+                    style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
+                    data-testid="progress-disk"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+                  <span data-testid="text-disk-used">
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb 
+                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` 
+                      : '—'}
+                  </span>
+                </div>
+              </Card>
+            </div>
+
+            {/* Bandwidth Stats Card - Compact */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-400" />
+                  Bandwidth Usage
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => refetchTraffic()}
+                  disabled={isTrafficFetching}
+                  data-testid="button-refresh-bandwidth"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", isTrafficFetching && "animate-spin")} />
+                </Button>
+              </div>
+
+              {(() => {
+                const current = trafficData?.current;
+                const network = trafficData?.network;
+                
+                // Smart unit formatter - shows MB for small values, GB for large
+                const formatBytes = (bytes: number): string => {
+                  if (bytes === 0) return '0 MB';
+                  const gb = bytes / (1024 * 1024 * 1024);
+                  if (gb >= 1000) {
+                    const tb = gb / 1024;
+                    return `${tb.toFixed(2)} TB`;
+                  }
+                  if (gb >= 1) {
+                    return `${gb.toFixed(2)} GB`;
+                  }
+                  const mb = bytes / (1024 * 1024);
+                  if (mb >= 1) {
+                    return `${mb.toFixed(1)} MB`;
+                  }
+                  const kb = bytes / 1024;
+                  return `${kb.toFixed(0)} KB`;
+                };
+                
+                const usedBytes = current?.total || 0;
+                const usedGBNum = usedBytes / (1024 * 1024 * 1024);
+                const usedDisplay = formatBytes(usedBytes);
+                const rxDisplay = formatBytes(current?.rx || 0);
+                const txDisplay = formatBytes(current?.tx || 0);
+                const limitGB = current?.limit || bandwidthAllowance || 0;
+                const remainingBytes = limitGB > 0 ? Math.max(0, (limitGB * 1024 * 1024 * 1024) - usedBytes) : null;
+                const remainingDisplay = remainingBytes !== null ? formatBytes(remainingBytes) : null;
+                const usagePercent = limitGB > 0 ? Math.min(100, (usedGBNum / limitGB) * 100) : 0;
+                
+                const periodStart = current?.periodStart ? new Date(current.periodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+                const periodEnd = current?.periodEnd ? new Date(current.periodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+                
+                return (
+                  <div className="space-y-2">
+                    {/* Bandwidth Exceeded Warning */}
+                    {usagePercent >= 100 && (
+                      <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Bandwidth Limit Exceeded</p>
+                            <p className="text-[10px] text-muted-foreground">Bandwidth has been shaped to 1Mbps Download and 1Mbps Upload.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {usagePercent >= 80 && usagePercent < 100 && (
+                      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground font-semibold">Approaching Bandwidth Limit</p>
+                            <p className="text-[10px] text-muted-foreground">{usagePercent.toFixed(1)}% of allowance used</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Compact Usage Display */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1024).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
+                      </span>
+                      {remainingDisplay !== null ? (
+                        <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
+                          {remainingDisplay} <span className="text-[10px] text-muted-foreground font-normal">left</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unlimited</span>
+                      )}
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className={cn(
+                          "h-2 rounded-full transition-all duration-500",
+                          usagePercent > 90 ? "bg-red-500" :
+                          usagePercent > 70 ? "bg-yellow-500" :
+                          "bg-blue-500"
+                        )}
+                        style={{ width: `${Math.max(usagePercent, 1)}%` }}
+                        data-testid="progress-bandwidth"
+                      />
+                    </div>
+                    
+                    {/* Compact Stats Row */}
+                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <ArrowDownToLine className="h-2.5 w-2.5 text-green-400" />IN
+                        </div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-rx">{rxDisplay}</div>
+                      </div>
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <ArrowUpFromLine className="h-2.5 w-2.5 text-blue-400" />OUT
+                        </div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-tx">{txDisplay}</div>
+                      </div>
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Gauge className="h-2.5 w-2.5 text-blue-400" />PORT
+                        </div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
+                      </div>
+                      <div className="p-1.5 bg-muted/50 rounded border border-border">
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Network className="h-2.5 w-2.5 text-cyan-400" />%
+                        </div>
+                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                    
+                    {/* Period - inline */}
+                    {periodStart && periodEnd && (
+                      <div className="text-[10px] text-muted-foreground text-center">{periodStart} - {periodEnd}</div>
+                    )}
+                  </div>
+                );
+              })()}
+            </Card>
+
+            {/* IP Management - Inline in Overview */}
+            <Card className="p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
+              </div>
+
+              {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
+                <div className="space-y-4">
+                  {networkInfo.interfaces.map((iface, index) => (
+                    <div key={index} className="p-4 bg-muted/50 rounded-lg border border-border">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Network className="h-5 w-5 text-blue-400" />
+                        <span className="font-mono font-bold text-foreground">{iface.name}</span>
+                        <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
+                      </div>
+
+                      {iface.ipv4.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
+                          {iface.ipv4.map((ip, ipIndex) => (
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
+                                <button
+                                  onClick={() => copyToClipboard(ip.address)}
+                                  className="text-muted-foreground hover:text-foreground p-1"
+                                  data-testid={`button-copy-ip-${index}-${ipIndex}`}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {iface.ipv6.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv6 Addresses</div>
+                          {iface.ipv6.map((ip, ipIndex) => (
+                            <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                              <span className="font-mono text-foreground text-sm">{ip.address}</span>
+                              <button
+                                onClick={() => copyToClipboard(ip.address)}
+                                className="text-muted-foreground hover:text-foreground p-1"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Network className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No network interfaces found</p>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
+          {/* ACCESS TAB - Password Reset */}
+          <TabsContent value="access" className="space-y-4 animate-in fade-in duration-300">
+            <Card className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground mb-2">Reset Server Password</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Generate a new root/administrator password for your server. The new password will be displayed 
+                    once and must be saved immediately.
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-amber-400">Important Information</div>
+                      <div className="text-sm text-amber-400/80">
+                        The new password will only be shown once. Make sure to copy and save it in a secure location 
+                        before closing the dialog.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <Button 
+                    className={cn(
+                      "text-foreground",
+                      (isSuspended || cancellationData?.cancellation)
+                        ? "bg-muted text-muted-foreground cursor-not-allowed"
+                        : "bg-blue-600 hover:bg-blue-700"
+                    )}
+                    onClick={() => setPasswordResetDialogOpen(true)}
+                    disabled={isSuspended || !!cancellationData?.cancellation}
+                    data-testid="button-reset-password"
+                  >
+                    <Key className="h-4 w-4 mr-2" />
+                    Reset Password
+                  </Button>
+                  {isSuspended && (
+                    <p className="text-sm text-yellow-400/80 mt-2">
+                      Password reset is disabled while the server is suspended.
+                    </p>
+                  )}
+                  {cancellationData?.cancellation && !isSuspended && (
+                    <p className="text-sm text-red-400/80 mt-2">
+                      Password reset is disabled because this server is scheduled for deletion.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* DESTROY TAB - Combines Reinstallation + Cancellation (Danger Zone) */}
+          <TabsContent value="destroy" className="space-y-6 animate-in fade-in duration-300">
+
+            {/* Reinstall Section */}
+            <Card className="p-6 border-destructive/30">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground mb-2">Reinstall Operating System</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This will completely erase all data on your server and install a fresh operating system.
+                    Make sure to backup any important data before proceeding.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-red-400">Warning: Data Loss</div>
+                      <div className="text-sm text-red-400/80">
+                        All existing data on the server will be permanently deleted. This action cannot be undone.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">Current Operating System</label>
+                    <div className="p-3 bg-muted/50 rounded-md border border-border">
+                      <span className="text-foreground">{server.image?.name || 'Unknown'}</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    className={cn(
+                      "text-foreground",
+                      (isSuspended || cancellationData?.cancellation)
+                        ? "bg-muted text-muted-foreground cursor-not-allowed"
+                        : "bg-red-600 hover:bg-red-700"
+                    )}
+                    onClick={() => setReinstallDialogOpen(true)}
+                    disabled={isSuspended || !!cancellationData?.cancellation}
+                    data-testid="button-reinstall"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reinstall Server
+                  </Button>
+                  {isSuspended && (
+                    <p className="text-sm text-yellow-400/80 mt-2">
+                      Reinstall is disabled while the server is suspended.
+                    </p>
+                  )}
+                  {cancellationData?.cancellation && !isSuspended && (
+                    <p className="text-sm text-red-400/80 mt-2">
+                      Reinstall is disabled because this server is scheduled for deletion.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            {/* Cancellation Section */}
+            <Card className="p-6 border-destructive/50">
+              <div className="space-y-6">
+                {cancellationData?.cancellation ? (
+                  // Show existing cancellation request
+                  <>
+                    <div className="flex items-start gap-4">
+                      <div className={cn("p-3 rounded-lg", cancellationData.cancellation.mode === 'immediate' ? "bg-red-500/20" : "bg-orange-500/20")}>
+                        {cancellationData.cancellation.mode === 'immediate' ? (
+                          <Trash2 className="h-6 w-6 text-red-400" />
+                        ) : (
+                          <Calendar className="h-6 w-6 text-orange-400" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-foreground mb-1">
+                          {cancellationData.cancellation.mode === 'immediate' ? 'Immediate Deletion in Progress' : 'Cancellation Scheduled'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {cancellationData.cancellation.mode === 'immediate' ? (
+                            <>This server will be permanently deleted within 5 minutes.</>
+                          ) : (
+                            <>
+                              This server is scheduled for deletion on{' '}
+                              <span className="text-orange-400 font-medium">
+                                {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
+                                  weekday: 'long',
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {cancellationData.cancellation.mode === 'immediate' ? (
+                      <div className="p-4 bg-gradient-to-br from-red-500/15 to-red-600/10 border-2 border-red-500/40 rounded-xl animate-pulse-slow">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-red-500/20 p-2 rounded-lg">
+                            <Trash2 className="h-5 w-5 text-red-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-red-400 text-base flex items-center gap-2">
+                              Deletion In Progress
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </div>
+                            <div className="text-sm text-red-400/90 mt-1">
+                              <span className="font-semibold">{server?.name}</span> is being permanently deleted. This process cannot be stopped.
+                            </div>
+                            <div className="text-xs text-red-400/70 mt-2">
+                              • All data will be destroyed within 5 minutes
+                              <br />• Backups will not be available after deletion
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gradient-to-br from-amber-500/15 to-yellow-600/10 border-2 border-amber-500/30 rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-amber-500/20 p-2 rounded-lg">
+                            <Clock className="h-5 w-5 text-amber-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-amber-400 text-base">Grace Period Active</div>
+                            <div className="text-sm text-amber-400/90 mt-1">
+                              <span className="font-semibold">{Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days</span> remaining until <span className="font-semibold">{server?.name}</span> is deleted
+                            </div>
+                            <div className="text-xs text-amber-400/70 mt-2">
+                              Scheduled deletion: {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {cancellationData.cancellation.reason && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground block mb-2">Reason for Cancellation</label>
+                        <div className="p-3 bg-muted/50 rounded-md border border-border">
+                          <span className="text-foreground text-sm">{cancellationData.cancellation.reason}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Only show revoke option for grace period cancellations */}
+                    {cancellationData.cancellation.mode !== 'immediate' && (
+                      <div className="pt-4 border-t border-border">
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Changed your mind? You can revoke the cancellation request and keep your server.
+                        </p>
+                        <Button 
+                          variant="outline"
+                          className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                          onClick={() => serverId && revokeCancellationMutation.mutate(serverId)}
+                          disabled={revokeCancellationMutation.isPending}
+                          data-testid="button-revoke-cancellation"
+                        >
+                          {revokeCancellationMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Revoking...
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Revoke Cancellation
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  // Show cancellation options
+                  <>
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground mb-2">Cancel This Server</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Choose how you want to cancel this server. Once cancelled, your data will be permanently deleted.
+                      </p>
+                    </div>
+                    
+                    {/* Global Warning */}
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-6">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-bold text-red-400">No Refunds</div>
+                          <div className="text-sm text-red-400/80">
+                            Cancelling your server does not entitle you to any refunds. All prepaid credit will remain in your wallet for future use.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Reason Input */}
+                    <div className="mb-6">
+                      <Label className="text-sm font-medium text-foreground mb-2 block">
+                        Reason for Cancellation (Optional)
+                      </Label>
+                      <Input
+                        value={cancellationReason}
+                        onChange={(e) => setCancellationReason(e.target.value)}
+                        placeholder="e.g., No longer needed, switching providers..."
+                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                        data-testid="input-cancellation-reason"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Help us improve by sharing why you're cancelling.
+                      </p>
+                    </div>
+                    
+                    {/* Two Options */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Option 1: 30-Day Grace Period */}
+                      <div className="p-4 bg-muted/50 border border-border rounded-lg space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-5 w-5 text-orange-400" />
+                          <h4 className="font-semibold text-foreground">30-Day Grace Period</h4>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Your server will remain active for 30 days. You can revoke the cancellation at any time during this period.
+                        </p>
+                        <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded text-xs text-orange-400">
+                          Server deleted after 30 days. Can be revoked.
+                        </div>
+                        <Button 
+                          className={cn(
+                            "w-full text-foreground",
+                            isSuspended 
+                              ? "bg-muted text-muted-foreground cursor-not-allowed"
+                              : "bg-orange-600 hover:bg-orange-700"
+                          )}
+                          onClick={() => serverId && requestCancellationMutation.mutate({ 
+                            id: serverId, 
+                            reason: cancellationReason || undefined,
+                            mode: 'grace'
+                          })}
+                          disabled={isSuspended || requestCancellationMutation.isPending}
+                          data-testid="button-cancel-grace"
+                        >
+                          {requestCancellationMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-4 w-4 mr-2" />
+                              Cancel with Grace Period
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Option 2: Delete Immediately */}
+                      <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-lg space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Trash2 className="h-5 w-5 text-red-400" />
+                          <h4 className="font-semibold text-foreground">Delete Immediately</h4>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Your server will be permanently deleted within 5 minutes. This action cannot be undone or revoked.
+                        </p>
+                        <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 font-medium">
+                          WARNING: Cannot be undone. All data will be lost.
+                        </div>
+                        <Button 
+                          variant="outline"
+                          className={cn(
+                            "w-full",
+                            isSuspended 
+                              ? "bg-muted text-muted-foreground cursor-not-allowed border-border"
+                              : "border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          )}
+                          onClick={() => setImmediateConfirmOpen(true)}
+                          disabled={isSuspended || requestCancellationMutation.isPending}
+                          data-testid="button-cancel-immediate"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Now
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {isSuspended && (
+                      <p className="text-sm text-yellow-400/80 mt-4">
+                        Contact support to cancel a suspended server.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+
+        </Tabs>
+        </div>
+        {/* End of main content area */}
+
+      </div>
+      {/* End of grid layout (sidebar + main content) */}
+
+
     </AppShell>
   );
 }
