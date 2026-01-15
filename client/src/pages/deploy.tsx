@@ -92,6 +92,34 @@ export default function DeployPage() {
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState("");
 
+  // Check email verification status
+  const { data: authData } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: () => api.getMe(),
+  });
+
+  // Resend verification email mutation
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to send verification email');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Verification email sent!', description: 'Please check your inbox and spam folder.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
     queryFn: () => api.getPlans(),
@@ -240,31 +268,66 @@ export default function DeployPage() {
 
   const isEmailVerified = authData?.emailVerified ?? true;
 
-  return (
-    <AppShell>
-      <div className="max-w-7xl mx-auto">
-        {/* Email Verification Banner */}
-        {!isEmailVerified && (
-          <div className="mb-6 bg-warning/10 border border-warning/20 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-warning mb-1">Email Verification Required</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                You need to verify your email address before you can deploy servers.
-                We've sent a verification link to <span className="font-medium text-foreground">{authData?.email}</span>.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button asChild variant="outline" size="sm" className="border-warning/50 text-warning hover:bg-warning/20">
-                  <Link href="/verify-email">
-                    <Mail className="h-4 w-4 mr-2" />
-                    Go to Verification Page
-                  </Link>
-                </Button>
+  // If email is not verified, show only the verification message
+  if (!isEmailVerified) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto py-12">
+          <div className="bg-warning/10 border-l-4 border-l-warning rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="h-6 w-6 text-warning flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-foreground mb-2">
+                  Email Verification Required
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  You need to verify your email address before you can deploy servers.
+                  We've sent a verification link to <span className="font-medium text-foreground">{authData?.email}</span>.
+                </p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Please check your inbox and spam folder for the verification email. If you haven't received it, you can request a new one.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => resendMutation.mutate()}
+                    disabled={resendMutation.isPending || resendMutation.isSuccess}
+                    className="border-warning/50 text-warning hover:bg-warning/20"
+                  >
+                    {resendMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : resendMutation.isSuccess ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Email Sent
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Resend Verification Email
+                      </>
+                    )}
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link href="/dashboard">
+                      Go to Dashboard
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </AppShell>
+    );
+  }
 
+  return (
+    <AppShell>
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">
@@ -629,16 +692,7 @@ export default function DeployPage() {
 
                   {/* Deploy Button */}
                   <div className="pt-2">
-                    {!isEmailVerified ? (
-                      <Button
-                        className="w-full h-11"
-                        disabled
-                        data-testid="button-deploy-unverified"
-                      >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Email Verification Required
-                      </Button>
-                    ) : !selectedPlanId || !selectedOsId || !hostname ? (
+                    {!selectedPlanId || !selectedOsId || !hostname ? (
                       <Button
                         className="w-full h-11"
                         disabled
