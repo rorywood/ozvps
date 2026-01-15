@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
@@ -12,7 +12,6 @@ const buildDate = new Date().toISOString().split('T')[0];
 
 export default defineConfig({
   plugins: [react()],
-  esbuild: false,
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_BUILD_DATE': JSON.stringify(buildDate),
