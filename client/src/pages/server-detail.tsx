@@ -1447,179 +1447,106 @@ export default function ServerDetail() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="secondary" 
-              className={cn(
-                "shadow-none font-medium h-9",
-                (powerActionPending || server.status !== 'running' || isSuspended || reinstallTask.isActive)
-                  ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed" 
-                  : "bg-muted/50 hover:bg-muted text-foreground border-border"
-              )}
+          {/* DigitalOcean-style Power Controls - Prominent Buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Primary Console Button */}
+            <Button
+              className="h-10"
               onClick={handleOpenVnc}
               disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
               data-testid="button-console"
             >
-              {reinstallTask.isActive ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  {isSettingUp ? "Setting up..." : "Building..."}
-                </>
-              ) : consoleLock.isLocked ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  {consoleLock.action === 'boot' ? 'Starting...' :
-                   consoleLock.action === 'reinstall' ? 'Rebuilding...' : 'Restarting...'}
-                </>
-              ) : (
-                <>
-                  <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                  Console
-                </>
-              )}
+              <TerminalSquare className="h-4 w-4 mr-2" />
+              Console
             </Button>
 
-            <Button
-              variant="secondary"
-              className={cn(
-                "shadow-none font-medium h-9",
-                (isSuspended || reinstallTask.isActive)
-                  ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed"
-                  : "bg-muted/50 hover:bg-muted text-foreground border-border"
-              )}
-              onClick={() => setPasswordResetDialogOpen(true)}
-              disabled={isSuspended || reinstallTask.isActive}
-              data-testid="button-reset-password-main"
-            >
-              <Key className="h-4 w-4 mr-2 text-muted-foreground" />
-              Reset Password
-            </Button>
+            {/* Power Control Buttons - Separate, Not Dropdown */}
+            {displayStatus === 'stopped' ? (
+              <Button
+                variant="outline"
+                className="h-10 border-success/50 text-success hover:bg-success/10"
+                onClick={() => handlePowerAction('boot')}
+                disabled={isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                data-testid="button-start"
+              >
+                <Power className="h-4 w-4 mr-2" />
+                Start
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-10"
+                  onClick={() => handlePowerAction('reboot')}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  data-testid="button-reboot"
+                >
+                  <RotateCw className="h-4 w-4 mr-2" />
+                  Reboot
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
+                  onClick={() => handlePowerAction('poweroff')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  data-testid="button-stop"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            )}
 
+            {/* More Menu - Secondary Actions */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  className={cn(
-                    "font-medium h-9 border-0",
-                    (isSuspended || consoleLock.isLocked || reinstallTask.isActive)
-                      ? "bg-muted text-muted-foreground cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
-                  )}
-                  data-testid="button-power-options"
-                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
-                >
-                  {(powerActionPending || consoleLock.isLocked || reinstallTask.isActive) ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Power className="h-4 w-4 mr-2" />
-                  )}
-                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") :
-                   consoleLock.isLocked && consoleLock.action === 'boot' ? "Starting..." :
-                   consoleLock.isLocked && consoleLock.action === 'reinstall' ? "Rebuilding..." :
-                   consoleLock.isLocked ? "Restarting..." : "Power Options"}
-                  {!consoleLock.isLocked && !reinstallTask.isActive && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Settings className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={displayStatus === 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('boot')}
-                    data-testid="menu-item-start"
-                  >
-                   <Power className="h-4 w-4 mr-2" /> Start Server
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('reboot')}
-                    data-testid="menu-item-reboot"
-                  >
-                   <RotateCw className="h-4 w-4 mr-2" /> Reboot
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('shutdown')}
-                    data-testid="menu-item-shutdown"
-                  >
-                   <Power className="h-4 w-4 mr-2" /> Shutdown
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('poweroff')}
-                    data-testid="menu-item-poweroff"
-                  >
-                   <Power className="h-4 w-4 mr-2 rotate-180" /> Force Stop
-                 </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => setPasswordResetDialogOpen(true)}
+                  disabled={isSuspended || reinstallTask.isActive}
+                >
+                  <Key className="h-4 w-4 mr-2" /> Reset Password
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        {/* Specs Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Cpu className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.vcpu} vCore</div>
-                <div className="text-xs text-muted-foreground">CPU Allocated</div>
-             </div>
-          </Card>
-          
-          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Activity className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
-                <div className="text-xs text-muted-foreground">RAM Allocated</div>
-             </div>
-          </Card>
-
-          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <StorageIcon className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.disk} GB</div>
-                <div className="text-xs text-muted-foreground">Storage Allocated</div>
-             </div>
-          </Card>
-
-          <Card className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Network className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground" data-testid="text-traffic">
-                  {server.primaryIp !== 'N/A' ? server.primaryIp : 'No IP'}
-                </div>
-                <div className="text-xs text-muted-foreground">Primary IP</div>
-             </div>
-          </Card>
-        </div>
-
-        {/* Navigation Tabs */}
-        <Tabs defaultValue="statistics" className="space-y-6">
+        {/* Navigation Tabs - Restructured to 3 Tabs (DO Style) */}
+        <Tabs defaultValue="overview" className="space-y-6">
           <div className="border-b border-border">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
-              {["Statistics", "IP Management", "Reset Password", "Reinstallation", "Cancellation"].map(tab => (
-                 <TabsTrigger 
-                    key={tab} 
-                    value={tab.toLowerCase().replace(' ', '-')}
-                    className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
-                    data-testid={`tab-${tab.toLowerCase().replace(' ', '-')}`}
-                  >
-                    {tab}
-                 </TabsTrigger>
-              ))}
+              <TabsTrigger
+                value="overview"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-overview"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="access"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-access"
+              >
+                Access
+              </TabsTrigger>
+              <TabsTrigger
+                value="destroy"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-destroy"
+              >
+                Destroy
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="statistics" className="space-y-6 animate-in fade-in duration-300">
+          {/* OVERVIEW TAB - Combines Statistics + IP Management */}
+          <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
             
             {/* Live Stats - CPU, Memory, Disk */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
