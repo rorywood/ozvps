@@ -62,18 +62,7 @@ export default defineConfig({
       },
     },
   },
-  esbuild: {
-    target: "esnext",
-    supported: {
-      'top-level-await': true,
-      'class-field': true,
-      'class-static-field': true,
-      'class-private-field': true,
-      'class-private-method': true,
-      'class-private-accessor': true,
-      'class-static-blocks': true,
-    },
-  },
+  esbuild: false,
   optimizeDeps: {
     exclude: [
       'react',
