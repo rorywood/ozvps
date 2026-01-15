@@ -98,9 +98,6 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
-    "@babel/plugin-transform-class-properties": "^7.25.9",
-    "@babel/plugin-transform-private-methods": "^7.25.9",
-    "@babel/plugin-transform-private-property-in-object": "^7.25.9",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.4",
@@ -115,7 +112,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.5.13",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react-swc": "^3.7.2",
     "autoprefixer": "^10.4.21",
     "drizzle-kit": "^0.31.8",
     "esbuild": "^0.25.1",
