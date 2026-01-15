@@ -21,8 +21,18 @@ export default defineConfig({
       jsxRuntime: 'automatic',
       babel: {
         parserOpts: {
-          plugins: ['decorators-legacy', 'classProperties'],
+          plugins: [
+            'decorators-legacy',
+            'classProperties',
+            'classPrivateProperties',
+            'classPrivateMethods',
+          ],
         },
+        plugins: [
+          ['@babel/plugin-transform-class-properties', { loose: false }],
+          ['@babel/plugin-transform-private-methods', { loose: false }],
+          ['@babel/plugin-transform-private-property-in-object', { loose: false }],
+        ],
       },
     }),
     runtimeErrorOverlay(),
@@ -70,6 +80,8 @@ export default defineConfig({
     },
   },
   esbuild: {
+    // Disable esbuild for JSX/TSX - let Babel handle it via React plugin
+    exclude: /\.(jsx|tsx)$/,
     target: "esnext",
     supported: {
       'top-level-await': true,
