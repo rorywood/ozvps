@@ -22,6 +22,8 @@ export default defineConfig({
       babel: {
         parserOpts: {
           plugins: [
+            'typescript',
+            'jsx',
             'decorators-legacy',
             'classProperties',
             'classPrivateProperties',
