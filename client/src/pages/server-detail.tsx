@@ -1812,15 +1812,13 @@ export default function ServerDetail() {
                 );
               })()}
             </Card>
-          </TabsContent>
 
-          {/* IP Management Tab */}
-          <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
+            {/* IP Management - Inline in Overview */}
             <Card className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
               </div>
-              
+
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
                 <div className="space-y-4">
                   {networkInfo.interfaces.map((iface, index) => (
@@ -1830,7 +1828,7 @@ export default function ServerDetail() {
                         <span className="font-mono font-bold text-foreground">{iface.name}</span>
                         <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
                       </div>
-                      
+
                       {iface.ipv4.length > 0 && (
                         <div className="space-y-2">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
@@ -1841,7 +1839,7 @@ export default function ServerDetail() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
-                                <button 
+                                <button
                                   onClick={() => copyToClipboard(ip.address)}
                                   className="text-muted-foreground hover:text-foreground p-1"
                                   data-testid={`button-copy-ip-${index}-${ipIndex}`}
@@ -1853,14 +1851,14 @@ export default function ServerDetail() {
                           ))}
                         </div>
                       )}
-                      
+
                       {iface.ipv6.length > 0 && (
                         <div className="space-y-2 mt-4">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv6 Addresses</div>
                           {iface.ipv6.map((ip, ipIndex) => (
                             <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                               <span className="font-mono text-foreground text-sm">{ip.address}</span>
-                              <button 
+                              <button
                                 onClick={() => copyToClipboard(ip.address)}
                                 className="text-muted-foreground hover:text-foreground p-1"
                               >
@@ -1882,8 +1880,8 @@ export default function ServerDetail() {
             </Card>
           </TabsContent>
 
-          {/* Reset Password Tab */}
-          <TabsContent value="reset-password" className="space-y-4 animate-in fade-in duration-300">
+          {/* ACCESS TAB - Password Reset */}
+          <TabsContent value="access" className="space-y-4 animate-in fade-in duration-300">
             <Card className="p-6">
               <div className="space-y-6">
                 <div>
@@ -1937,9 +1935,11 @@ export default function ServerDetail() {
             </Card>
           </TabsContent>
 
-          {/* Reinstallation Tab */}
-          <TabsContent value="reinstallation" className="space-y-4 animate-in fade-in duration-300">
-            <Card className="p-6">
+          {/* DESTROY TAB - Combines Reinstallation + Cancellation (Danger Zone) */}
+          <TabsContent value="destroy" className="space-y-6 animate-in fade-in duration-300">
+
+            {/* Reinstall Section */}
+            <Card className="p-6 border-destructive/30">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-foreground mb-2">Reinstall Operating System</h3>
@@ -1948,7 +1948,7 @@ export default function ServerDetail() {
                     Make sure to backup any important data before proceeding.
                   </p>
                 </div>
-                
+
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
@@ -1969,7 +1969,7 @@ export default function ServerDetail() {
                     </div>
                   </div>
 
-                  <Button 
+                  <Button
                     className={cn(
                       "text-foreground",
                       (isSuspended || cancellationData?.cancellation)
@@ -1996,11 +1996,9 @@ export default function ServerDetail() {
                 </div>
               </div>
             </Card>
-          </TabsContent>
 
-          {/* Cancellation Tab */}
-          <TabsContent value="cancellation" className="space-y-4 animate-in fade-in duration-300">
-            <Card className="p-6">
+            {/* Cancellation Section */}
+            <Card className="p-6 border-destructive/50">
               <div className="space-y-6">
                 {cancellationData?.cancellation ? (
                   // Show existing cancellation request
@@ -2239,7 +2237,11 @@ export default function ServerDetail() {
           </TabsContent>
 
         </Tabs>
-      </div>
+          </div>
+          {/* End of main content area */}
+
+        </div>
+        {/* End of grid layout (sidebar + main content) */}
 
       {/* Reinstall Dialog - Searchable Template Picker */}
       <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
