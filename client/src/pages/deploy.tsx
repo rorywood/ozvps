@@ -141,11 +141,6 @@ export default function DeployPage() {
     queryFn: () => api.getWallet(),
   });
 
-  const { data: authData } = useQuery({
-    queryKey: ['auth'],
-    queryFn: () => api.getAuthUser(),
-  });
-
   const { data: stripeStatus } = useQuery({
     queryKey: ['stripe-status'],
     queryFn: () => api.getStripeStatus(),
