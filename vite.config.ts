@@ -59,11 +59,24 @@ export default defineConfig({
     target: "esnext",
     supported: {
       'top-level-await': true,
+      'class-field': true,
+      'class-static-field': true,
+      'class-private-field': true,
+      'class-private-method': true,
+      'class-private-accessor': true,
+      'class-static-blocks': true,
     },
   },
   optimizeDeps: {
     esbuildOptions: {
       target: "esnext",
+      supported: {
+        'class-field': true,
+        'class-static-field': true,
+        'class-private-field': true,
+        'class-private-method': true,
+        'class-private-accessor': true,
+      },
     },
   },
   server: {
