@@ -1241,9 +1241,85 @@ export default function ServerDetail() {
           </div>
         )}
         
-        {/* Header Section */}
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-border">
+        {/* DigitalOcean-style Layout: Sidebar + Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+
+          {/* LEFT SIDEBAR - Server Info */}
           <div className="space-y-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Plan</p>
+                  <p className="text-sm font-semibold text-foreground">{server.plan?.name || 'Unknown Plan'}</p>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Specs</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Cpu className="h-4 w-4" />
+                      <span>{server.plan.specs.vcpu} vCPU</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Activity className="h-4 w-4" />
+                      <span>{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'} RAM</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <StorageIcon className="h-4 w-4" />
+                      <span>{server.plan.specs.disk} GB Storage</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Location</p>
+                  <div className="flex items-center gap-2">
+                    {server.location?.country === 'Australia' && (
+                      <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
+                    )}
+                    <span className="text-sm text-foreground">{server.location?.city}, {server.location?.country}</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Primary IP</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-foreground">{server.primaryIp}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        navigator.clipboard.writeText(server.primaryIp);
+                        toast({ title: "Copied to clipboard" });
+                      }}
+                      title="Copy IP address"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(server.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* RIGHT MAIN CONTENT */}
+          <div className="space-y-6">
+
+        {/* Header Section */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
                <Link href="/servers">
                 <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">

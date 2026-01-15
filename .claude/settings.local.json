@@ -14,7 +14,8 @@
       "Bash(do grep -c \"GlassCard\" \"$file\")",
       "Bash(echo:*)",
       "Bash(done)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
