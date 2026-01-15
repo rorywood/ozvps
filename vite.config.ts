@@ -52,6 +52,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
     target: "esnext",
+    minify: "terser",
     rollupOptions: {
       output: {
         manualChunks: {
