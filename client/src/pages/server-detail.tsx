@@ -2237,11 +2237,11 @@ export default function ServerDetail() {
           </TabsContent>
 
         </Tabs>
-          </div>
-          {/* End of main content area */}
-
         </div>
-        {/* End of grid layout (sidebar + main content) */}
+        {/* End of main content area */}
+
+      </div>
+      {/* End of grid layout (sidebar + main content) */}
 
       {/* Reinstall Dialog - Searchable Template Picker */}
       <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
