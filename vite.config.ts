@@ -80,8 +80,6 @@ export default defineConfig({
     },
   },
   esbuild: {
-    // Disable esbuild for JSX/TSX - let Babel handle it via React plugin
-    exclude: /\.(jsx|tsx)$/,
     target: "esnext",
     supported: {
       'top-level-await': true,
