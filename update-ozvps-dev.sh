@@ -232,7 +232,10 @@ else
 fi
 
 info "Building application..."
-if ! npm run build 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; then
+BUILD_OUTPUT=$(npm run build 2>&1)
+BUILD_EXIT=$?
+
+if [ $BUILD_EXIT -eq 0 ]; then
     # Verify server build
     if [ ! -f "dist/index.cjs" ]; then
         error "Build verification failed - dist/index.cjs not found"
@@ -251,7 +254,7 @@ if ! npm run build 2>&1 | grep -E "error|ERR!" && [ "${PIPESTATUS[0]}" -eq 0 ]; 
     success "Build complete ($BUILD_SIZE)"
 else
     error "Build failed"
-    npm run build 2>&1 | tail -20
+    echo -e "${DIM}$BUILD_OUTPUT${NC}" | tail -50
     exit 1
 fi
 
