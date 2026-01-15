@@ -17,26 +17,7 @@ const buildDate = new Date().toISOString().split('T')[0];
 
 export default defineConfig({
   plugins: [
-    react({
-      jsxRuntime: 'automatic',
-      babel: {
-        parserOpts: {
-          plugins: [
-            'typescript',
-            'jsx',
-            'decorators-legacy',
-            'classProperties',
-            'classPrivateProperties',
-            'classPrivateMethods',
-          ],
-        },
-        plugins: [
-          ['@babel/plugin-transform-class-properties', { loose: false }],
-          ['@babel/plugin-transform-private-methods', { loose: false }],
-          ['@babel/plugin-transform-private-property-in-object', { loose: false }],
-        ],
-      },
-    }),
+    react(),
     runtimeErrorOverlay(),
     tailwindcss(),
     metaImagesPlugin(),
