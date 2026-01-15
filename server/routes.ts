@@ -3042,6 +3042,31 @@ export async function registerRoutes(
     }
   });
 
+  // User: Resend verification email
+  app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.auth0UserId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      log(`User ${req.userSession.email} requesting verification email resend`, 'auth');
+
+      // Call Auth0 to resend verification email
+      const result = await auth0Client.resendVerificationEmail(req.userSession.auth0UserId);
+
+      if (!result.success) {
+        log(`Failed to resend verification email for ${req.userSession.email}: ${result.error}`, 'auth');
+        return res.status(400).json({ error: result.error || 'Failed to send verification email' });
+      }
+
+      log(`Verification email resent successfully for ${req.userSession.email}`, 'auth');
+      res.json({ success: true, message: 'Verification email sent successfully' });
+    } catch (error: any) {
+      log(`Resend verification email error: ${error.message}`, 'auth');
+      res.status(500).json({ error: 'Failed to send verification email' });
+    }
+  });
+
   // Get public reCAPTCHA config (for login/register pages)
   app.get('/api/security/recaptcha-config', (req, res) => {
     const settings = dbStorage.getRecaptchaSettings();

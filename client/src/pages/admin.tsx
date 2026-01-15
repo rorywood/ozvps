@@ -362,6 +362,7 @@ export default function AdminPage() {
       const response = await fetch('/api/admin/verify-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ auth0UserId }),
       });
       if (!response.ok) {

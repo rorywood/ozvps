@@ -15,6 +15,7 @@ import {
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import { cn } from "@/lib/utils";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 export default function Dashboard() {
   useDocumentTitle('Dashboard');
@@ -57,6 +58,8 @@ export default function Dashboard() {
   return (
     <AppShell>
       <div className="space-y-8">
+        <EmailVerificationBanner />
+
         <PageHeader
           title="Dashboard"
           description="Overview of your infrastructure"

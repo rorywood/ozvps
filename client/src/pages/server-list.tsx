@@ -19,6 +19,7 @@ import {
 import { Link, useLocation } from "wouter";
 import { useSyncPowerActions } from "@/hooks/use-power-actions";
 import { useState } from "react";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 export default function ServerList() {
   useDocumentTitle('Servers');
@@ -48,6 +49,8 @@ export default function ServerList() {
   return (
     <AppShell>
       <div className="space-y-6">
+        <EmailVerificationBanner />
+
         <PageHeader
           title="Servers"
           description="Manage your virtual private servers"
