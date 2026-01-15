@@ -93,7 +93,7 @@ export default function DeployPage() {
   const [hostnameError, setHostnameError] = useState("");
 
   // Check email verification status
-  const { data: authData } = useQuery({
+  const { data: authData, isLoading: authLoading } = useQuery({
     queryKey: ["auth", "me"],
     queryFn: () => api.getMe(),
   });
@@ -261,10 +261,19 @@ export default function DeployPage() {
   const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !selectedOsId ? 3 : 4;
   const selectedOs = templates.flatMap(g => g.templates).find(t => t.id === selectedOsId);
 
-  const isEmailVerified = authData?.emailVerified ?? true;
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppShell>
+    );
+  }
 
   // If email is not verified, show only the verification message
-  if (!isEmailVerified) {
+  if (authData && !authData.emailVerified) {
     return (
       <AppShell>
         <div className="max-w-3xl mx-auto py-12">
