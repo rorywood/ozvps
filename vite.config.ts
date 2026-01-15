@@ -53,17 +53,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
-    target: "es2020",
+    target: "esnext",
   },
   esbuild: {
-    target: "es2020",
+    target: "esnext",
     supported: {
-      'top-level-await': true
+      'top-level-await': true,
     },
   },
   optimizeDeps: {
     esbuildOptions: {
-      target: "es2020",
+      target: "esnext",
     },
   },
   server: {
