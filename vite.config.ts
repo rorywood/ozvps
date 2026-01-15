@@ -17,8 +17,11 @@ const buildDate = new Date().toISOString().split('T')[0];
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
     metaImagesPlugin(),
+    // Only include dev plugins in non-production
+    ...(process.env.NODE_ENV !== "production"
+      ? [runtimeErrorOverlay()]
+      : []),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -31,6 +34,8 @@ export default defineConfig({
         ]
       : []),
   ],
+  // Disable esbuild - use SWC for transforms, Terser for minification
+  esbuild: false,
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_BUILD_DATE': JSON.stringify(buildDate),
