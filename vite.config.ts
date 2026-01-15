@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import swc from "rollup-plugin-swc3";
 import path from "path";
 import { fileURLToPath } from "url";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
@@ -59,6 +60,15 @@ export default defineConfig({
     target: "esnext",
     minify: "terser",
     rollupOptions: {
+      plugins: [
+        // Use SWC to transform node_modules that have modern syntax
+        swc({
+          include: /node_modules\/(react-dom|lucide-react|@radix-ui)/,
+          jsc: {
+            target: "es2022",
+          },
+        }),
+      ],
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
