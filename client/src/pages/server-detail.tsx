@@ -344,6 +344,20 @@ export default function ServerDetail() {
     const minimumRebootingTime = 4000; // 4 seconds minimum
     const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
+    // DEBUG LOGGING
+    console.log('[server-detail] AUTO-DISMISS CHECK:', {
+      taskAtFinalStage,
+      serverFullyOnline,
+      serverCommissioned,
+      hasBeenRebootingLongEnough,
+      'reinstallTask.rebootingStartTime': reinstallTask.rebootingStartTime,
+      'reinstallTask.status': reinstallTask.status,
+      'server.status': server?.status,
+      'server.needsSetup': server?.needsSetup,
+      timeInRebooting,
+      minimumRebootingTime,
+    });
+
     // ALL conditions must be true
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 

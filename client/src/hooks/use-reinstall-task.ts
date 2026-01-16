@@ -187,9 +187,10 @@ export function useReinstallTask(serverId: string) {
             return prev; // Already at rebooting, no update needed
           }
 
-          console.log('[useReinstallTask] Transitioning to REBOOTING status - will show for minimum 4 seconds');
-          addTimelineEvent('rebooting', 'Server commissioned - booting up...');
           const bootingStartTime = Date.now();
+          console.log('[useReinstallTask] Transitioning to REBOOTING status - will show for minimum 4 seconds');
+          console.log('[useReinstallTask] SET rebootingStartTime =', bootingStartTime);
+          addTimelineEvent('rebooting', 'Server commissioned - booting up...');
           const booting = {
             ...prev,
             isActive: true,
