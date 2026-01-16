@@ -88,7 +88,7 @@ export default function DeployPage() {
   const { toast } = useToast();
 
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
+  const [selectedLocationCode, setSelectedLocationCode] = useState<string>("");
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState("");
