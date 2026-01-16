@@ -339,6 +339,7 @@ class ApiClient {
     buildFailed: boolean;
     suspended: boolean;
     commissionStatus: number;
+    commissioned: number; // 0 = not built, 1 = building, 2 = paused, 3 = complete (AUTHORITATIVE)
     isComplete: boolean;
     isError: boolean;
     isBuilding: boolean;

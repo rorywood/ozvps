@@ -289,8 +289,14 @@ export default function ServerDetail() {
   // ALSO: Clear if user navigates back after setup is complete
   useEffect(() => {
     if (server && !server.needsSetup && serverId) {
-      // If reinstallTask is complete or not active, and server doesn't need setup, clear flags
-      const shouldClearFlags = !reinstallTask.isActive || reinstallTask.status === 'complete';
+      // CRITICAL: Don't clear flags if reinstallTask status is 'complete'
+      // Let the auto-dismiss effect handle the cleanup after showing credentials
+      // Only clear flags if task is completely inactive or in other terminal states
+      const shouldClearFlags = !reinstallTask.isActive ||
+                               (reinstallTask.status !== 'complete' &&
+                                reinstallTask.status !== 'queued' &&
+                                reinstallTask.status !== 'provisioning' &&
+                                reinstallTask.status !== 'installing');
 
       if (shouldClearFlags) {
         try {
@@ -299,13 +305,13 @@ export default function ServerDetail() {
                                 sessionStorage.getItem(`setupMinimized:${serverId}`);
 
           if (hasSetupFlags || isSetupMode) {
-            console.log('[server-detail] Server fully online, clearing setup flags');
+            console.log('[server-detail] Server fully online, clearing stale setup flags');
             sessionStorage.removeItem(`setupMode:${serverId}`);
             sessionStorage.removeItem(`setupMinimized:${serverId}`);
             setIsSetupMode(false);
             setSetupMinimized(false);
 
-            // If reinstallTask is still showing as active/complete, reset it
+            // If reinstallTask is still showing as active, reset it
             if (reinstallTask.isActive) {
               console.log('[server-detail] Resetting stale reinstallTask state');
               reinstallTask.reset();
