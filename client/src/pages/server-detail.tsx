@@ -337,10 +337,11 @@ export default function ServerDetail() {
     const serverCommissioned = server && server.needsSetup === false;
 
     // Check if enough time has passed since entering 'rebooting' status
-    const rebootingStartTime = reinstallTask.rebootingStartTime || 0;
+    // CRITICAL: If rebootingStartTime is undefined, treat as "hasn't started yet" (infinite time)
+    const rebootingStartTime = reinstallTask.rebootingStartTime || Date.now();
     const timeInRebooting = Date.now() - rebootingStartTime;
     const minimumRebootingTime = 4000; // 4 seconds minimum
-    const hasBeenRebootingLongEnough = timeInRebooting >= minimumRebootingTime;
+    const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
     // ALL conditions must be true
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
