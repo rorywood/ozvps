@@ -83,7 +83,6 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
   const [copiedSshCommand, setCopiedSshCommand] = useState(false);
-  const [confirmedSaved, setConfirmedSaved] = useState(false);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
@@ -329,32 +328,22 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
               </button>
             </div>
 
-            {/* Confirmation Checkbox */}
-            <div className="flex items-start gap-3 bg-warning/10 border border-warning/20 rounded-lg p-3 mt-3">
-              <input
-                type="checkbox"
-                id="confirm-saved"
-                checked={confirmedSaved}
-                onChange={(e) => setConfirmedSaved(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-warning/50 bg-card text-warning focus:ring-warning focus:ring-offset-0"
-                data-testid="checkbox-confirm-saved"
-              />
-              <label htmlFor="confirm-saved" className="text-xs text-muted-foreground cursor-pointer">
-                I've saved these credentials securely. I understand they won't be shown again unless I reset the password.
-              </label>
+            {/* Note about credentials */}
+            <div className="flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-lg p-3 mt-3">
+              <div className="text-xs text-muted-foreground">
+                <strong className="text-warning">Important:</strong> Save these credentials securely. They won't be shown again unless you reset the password.
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Auto-redirect message for completion */}
-      {isComplete && (
-        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-3 bg-success/10 border border-success/20 rounded-lg">
-          <Loader2 className="h-4 w-4 animate-spin text-success" />
-          <span>
-            {credentials && !confirmedSaved
-              ? 'Please confirm you saved the credentials above'
-              : 'Redirecting to server overview...'}
+      {/* Completion message - credentials will be shown in banner on overview page */}
+      {isComplete && credentials && (
+        <div className="flex items-center gap-2 text-sm text-success py-3 px-4 bg-success/10 border border-success/20 rounded-lg">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+          <span className="font-medium">
+            Setup complete! Credentials have been saved.
           </span>
         </div>
       )}

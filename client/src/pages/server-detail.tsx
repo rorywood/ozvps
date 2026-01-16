@@ -340,51 +340,49 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
-  // AUTO-DISMISS: When setup completes, automatically dismiss checklist and show server overview
-  // Trigger once when status becomes 'complete'
+  // AUTO-DISMISS: When setup completes, immediately show server overview
+  // Dismiss as soon as server is active in VirtFusion (no delay)
   useEffect(() => {
-    if (reinstallTask.status === 'complete' && reinstallTask.isActive && isSetupMode) {
-      console.log('[server-detail] Setup complete! Starting auto-dismiss timer...');
+    // Dismiss if EITHER:
+    // 1. reinstallTask marks as complete, OR
+    // 2. Server data shows needsSetup=false and not provisioning (VirtFusion confirms ready)
+    const taskComplete = reinstallTask.status === 'complete';
+    const serverReady = server && !server.needsSetup && server.status !== 'provisioning';
+    const shouldDismiss = (taskComplete || serverReady) && isSetupMode;
 
-      // Wait 3 seconds: 1s to show completion message + 2s after confirming credentials
-      const timer = setTimeout(() => {
-        console.log('[server-detail] Auto-dismiss timer fired, clearing setup mode...');
+    if (shouldDismiss) {
+      console.log('[server-detail] Setup complete! Dismissing setup mode immediately...', {
+        taskComplete,
+        serverReady,
+        needsSetup: server?.needsSetup,
+        serverStatus: server?.status,
+      });
 
-        // Save credentials if available
-        if (reinstallTask.credentials) {
-          updateSavedCredentials(reinstallTask.credentials);
-          setShowSavedCredentials(true);
-        }
+      // Save credentials if available (will be shown in banner later)
+      if (reinstallTask.credentials) {
+        updateSavedCredentials(reinstallTask.credentials);
+        setShowSavedCredentials(true);
+      }
 
-        // IMPORTANT: Don't call reset() here - it would change status to 'idle'
-        // and cause a visual flicker. Just clear the setup mode flags.
-        // The reinstallTask state will be cleaned up by auto-clear effect later.
+      // Clear setup mode flags immediately (this will cause re-render to show overview)
+      updateSetupMode(false);
+      updateSetupMinimized(false);
 
-        // Clear setup mode flags (this will cause re-render to show overview)
-        updateSetupMode(false);
-        updateSetupMinimized(false);
+      // Clear sessionStorage flags
+      try {
+        sessionStorage.removeItem(`setupMode:${serverId}`);
+        sessionStorage.removeItem(`setupMinimized:${serverId}`);
+      } catch (e) {
+        // Ignore
+      }
 
-        // Clear sessionStorage flags
-        try {
-          sessionStorage.removeItem(`setupMode:${serverId}`);
-          sessionStorage.removeItem(`setupMinimized:${serverId}`);
-        } catch (e) {
-          // Ignore
-        }
+      // Invalidate queries to refresh server data with latest status
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
 
-        // Invalidate queries to refresh server data with latest status
-        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        queryClient.invalidateQueries({ queryKey: ['servers'] });
-
-        console.log('[server-detail] Setup mode cleared, queries invalidated');
-      }, 3000);
-
-      return () => {
-        console.log('[server-detail] Cleaning up auto-dismiss timer');
-        clearTimeout(timer);
-      };
+      console.log('[server-detail] Setup mode cleared, showing server overview now');
     }
-  }, [reinstallTask.status, reinstallTask.isActive, isSetupMode, serverId]);
+  }, [reinstallTask.status, isSetupMode, server?.needsSetup, server?.status, serverId]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
