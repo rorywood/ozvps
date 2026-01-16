@@ -2193,10 +2193,22 @@ export async function registerRoutes(
       try {
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
+        // If no billing records, return empty
+        if (billingRecords.length === 0) {
+          return res.json({ upcoming: [] });
+        }
+
         // Fetch servers to enrich with names and verify they still exist
         if (!session.virtFusionUserId) {
+          log(`Warning: Session missing virtFusionUserId for ${session.email}, returning billing without server names`, 'billing');
+          // Return billing records without server name enrichment
+          upcoming = billingRecords.map(billing => ({
+            ...billing,
+            serverName: undefined,
+          }));
           return res.json({ upcoming });
         }
+
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         // Convert server IDs to strings since serverBilling stores virtfusionServerId as text
         const serverMap = new Map(servers.map(s => [String(s.id), s.name]));
