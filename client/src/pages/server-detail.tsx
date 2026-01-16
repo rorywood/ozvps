@@ -536,20 +536,19 @@ export default function ServerDetail() {
       api.requestCancellation(id, reason, mode),
     onSuccess: (_, variables) => {
       setCancellationReason("");
-      setImmediateConfirmOpen(false);
       setImmediateConfirmText("");
       refetchCancellation();
       toast({
-        title: variables.mode === 'immediate' ? "Immediate Deletion Scheduled" : "Cancellation Requested",
-        description: variables.mode === 'immediate' 
-          ? "Your server will be permanently deleted within 5 minutes. This cannot be undone."
-          : "Your server will be deleted in 30 days. You can revoke this at any time.",
+        title: variables.mode === 'immediate' ? "Server Destruction Started" : "Scheduled for Deletion",
+        description: variables.mode === 'immediate'
+          ? "Your server is being destroyed. This cannot be undone."
+          : "Your server will be deleted in 30 days. You can cancel this anytime.",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Cancellation Failed",
-        description: error.message || "Failed to request cancellation. Please try again.",
+        title: "Failed",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     }
@@ -908,20 +907,34 @@ export default function ServerDetail() {
 
   const isSuspended = server?.suspended === true;
   const needsSetup = server?.needsSetup === true;
-  
+
+  // Check if this server was just deployed (set by deploy page)
+  const justDeployed = typeof window !== 'undefined' &&
+    sessionStorage.getItem(`justDeployed:${serverId}`) === 'true';
+
+  // If server was just deployed, start polling immediately
+  useEffect(() => {
+    if (justDeployed && serverId && !reinstallTask.isActive) {
+      // Clear the flag so we don't keep triggering
+      sessionStorage.removeItem(`justDeployed:${serverId}`);
+      // Start the reinstall task to poll for build status
+      reinstallTask.startTask();
+    }
+  }, [justDeployed, serverId, reinstallTask.isActive]);
+
   // Check if initial setup is in progress (blocks server usage until complete)
   // reinstallTask now hydrates from backend on mount, so isActive is authoritative
   // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
   // Don't show as "setting up" if status is complete - server is ready
   const isSettingUp = reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode);
-  
+
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
 
   // If server needs setup but provisioning hasn't started, show waiting message
   // Note: Ideally the backend should start provisioning immediately after deploy
-  // This manual setup step is a UX issue that should be fixed in the backend
-  if (needsSetup && !reinstallTask.isActive) {
+  // Skip this view if we just deployed - we'll show provisioning view instead
+  if (needsSetup && !reinstallTask.isActive && !justDeployed) {
     return (
       <AppShell>
         <div className="max-w-2xl mx-auto py-12 space-y-6">

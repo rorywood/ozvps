@@ -179,6 +179,13 @@ export default function DeployPage() {
         title: "Server deployed!",
         description: "Your new VPS is being provisioned.",
       });
+      // Set flag so server-detail page knows this is a fresh deploy and should show provisioning view
+      try {
+        sessionStorage.setItem(`setupMode:${data.serverId}`, 'true');
+        sessionStorage.setItem(`justDeployed:${data.serverId}`, 'true');
+      } catch {
+        // Ignore storage errors
+      }
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -264,7 +271,8 @@ export default function DeployPage() {
   };
 
   // Determine current step for progress indicator
-  const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !selectedOsId ? 3 : 4;
+  // Order: Plan → Region → Hostname → OS
+  const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !hostname ? 3 : !selectedOsId ? 4 : 5;
   const selectedOs = templates.flatMap(g => g.templates).find(t => t.id === selectedOsId);
 
   // Show loading state while checking auth
@@ -386,11 +394,11 @@ export default function DeployPage() {
           )}>
             <div className={cn(
               "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
-              selectedOsId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+              hostname ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
             )}>
-              {selectedOsId ? <Check className="h-3 w-3" /> : "3"}
+              {hostname ? <Check className="h-3 w-3" /> : "3"}
             </div>
-            <span>OS</span>
+            <span>Hostname</span>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <div className={cn(
@@ -399,11 +407,11 @@ export default function DeployPage() {
           )}>
             <div className={cn(
               "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
-              hostname ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+              selectedOsId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
             )}>
-              {hostname ? <Check className="h-3 w-3" /> : "4"}
+              {selectedOsId ? <Check className="h-3 w-3" /> : "4"}
             </div>
-            <span>Hostname</span>
+            <span>OS</span>
           </div>
         </div>
 
@@ -535,8 +543,38 @@ export default function DeployPage() {
               </div>
             </section>
 
-            {/* Step 3: Choose OS */}
+            {/* Step 3: Set Hostname */}
             {selectedPlanId && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <Server className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Set Hostname</h2>
+                </div>
+                <div className="border border-border rounded-lg p-6 bg-card">
+                  <div className="space-y-2">
+                    <Label htmlFor="hostname">Server Hostname</Label>
+                    <Input
+                      id="hostname"
+                      placeholder="my-server"
+                      value={hostname}
+                      onChange={handleHostnameChange}
+                      className={hostnameError ? "border-destructive" : ""}
+                      data-testid="input-hostname"
+                    />
+                    {hostnameError ? (
+                      <p className="text-xs text-destructive">{hostnameError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Step 4: Choose OS */}
+            {selectedPlanId && hostname && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <HardDrive className="h-5 w-5 text-primary" />
@@ -598,36 +636,6 @@ export default function DeployPage() {
                     ))}
                   </div>
                 )}
-              </section>
-            )}
-
-            {/* Step 4: Hostname */}
-            {selectedOsId && (
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <Server className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-semibold text-foreground">Set Hostname</h2>
-                </div>
-                <div className="border border-border rounded-lg p-6 bg-card">
-                  <div className="space-y-2">
-                    <Label htmlFor="hostname">Server Hostname</Label>
-                    <Input
-                      id="hostname"
-                      placeholder="my-server"
-                      value={hostname}
-                      onChange={handleHostnameChange}
-                      className={hostnameError ? "border-destructive" : ""}
-                      data-testid="input-hostname"
-                    />
-                    {hostnameError ? (
-                      <p className="text-xs text-destructive">{hostnameError}</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
-                      </p>
-                    )}
-                  </div>
-                </div>
               </section>
             )}
           </div>
@@ -706,13 +714,13 @@ export default function DeployPage() {
 
                   {/* Deploy Button */}
                   <div className="pt-2">
-                    {!selectedPlanId || !selectedOsId || !hostname ? (
+                    {!selectedPlanId || !hostname || !selectedOsId ? (
                       <Button
                         className="w-full h-11"
                         disabled
                         data-testid="button-deploy-disabled"
                       >
-                        {!selectedPlanId ? 'Select plan' : !selectedOsId ? 'Select OS' : 'Enter hostname'}
+                        {!selectedPlanId ? 'Select plan' : !hostname ? 'Enter hostname' : 'Select OS'}
                       </Button>
                     ) : canAfford ? (
                       <Button

@@ -4648,10 +4648,14 @@ export async function registerRoutes(
 
   // Deploy a new VPS (authenticated)
   // osId is optional - if not provided, server is created without OS (awaiting setup)
+  // Hostname can be a single label (myserver) or full domain (test.example.com)
+  // Each label: 1-63 chars, starts/ends with alphanumeric, can contain hyphens
+  const hostnameRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+
   const deploySchema = z.object({
     planId: z.number(),
     osId: z.number().min(1).optional(),
-    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i).optional(),
+    hostname: z.string().min(1).max(253).regex(hostnameRegex).optional(),
     locationCode: z.string().optional(),
   });
 
