@@ -832,18 +832,18 @@ export class VirtFusionClient {
       const commissioned = server.commissioned; // 0 = not built, 1 = building, 2 = paused, 3 = complete
 
       // Check if server is in a transitional/building state
-      // IMPORTANT: commissioned takes priority - if 0 or 1, server is not ready
-      const isTransitionalState = commissioned === 0 || commissioned === 1 || ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
+      // IMPORTANT: commissioned takes priority - if 0, 1, or undefined, server is not ready
+      const isTransitionalState = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null || ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
 
       // Determine the build phase based on VirtFusion state
       // Important: VirtFusion temporarily sets buildFailed=true during rebuilds
       // Only consider it a real error if buildFailed is true AND state is NOT transitional
-      let phase: 'queued' | 'building' | 'complete' | 'error' = 'complete';
+      let phase: 'queued' | 'building' | 'complete' | 'error' = 'building';
 
       if (commissioned === 0) {
         phase = 'queued'; // Not built yet
-      } else if (commissioned === 1 || state === 'queued' || state === 'pending') {
-        phase = 'building'; // Currently building
+      } else if (commissioned === 1 || commissioned === undefined || commissioned === null || state === 'queued' || state === 'pending') {
+        phase = 'building'; // Currently building or commissioned field not available yet
       } else if (state === 'provisioning' || state === 'building' || state === 'installing') {
         phase = 'building';
       } else if ((state === 'complete' || state === 'running') && commissioned === 3) {
