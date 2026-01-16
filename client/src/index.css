@@ -5,59 +5,44 @@
 
 @custom-variant dark (:root.dark &);
 
+/* Define theme tokens that reference CSS custom properties */
 @theme inline {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* DigitalOcean-style Dark Mode Colors */
-  --color-background: hsl(219 95% 7%);
-  --color-foreground: hsl(0 0% 95%);
-  --color-card: hsl(219 95% 10%);
-  --color-card-foreground: hsl(0 0% 95%);
-  --color-sidebar: hsl(219 95% 8%);
-  --color-popover: hsl(219 95% 10%);
-  --color-popover-foreground: hsl(0 0% 95%);
-
-  /* Primary - Bright blue like DO */
-  --color-primary: hsl(211 100% 50%);
-  --color-primary-foreground: hsl(0 0% 100%);
-
-  /* Secondary - subtle gray-blue */
-  --color-secondary: hsl(219 30% 15%);
-  --color-secondary-foreground: hsl(0 0% 95%);
-
-  /* Muted - darker gray */
-  --color-muted: hsl(219 30% 15%);
-  --color-muted-foreground: hsl(215 20% 65%);
-
-  /* Accent */
-  --color-accent: hsl(219 30% 15%);
-  --color-accent-foreground: hsl(0 0% 95%);
-
-  /* Destructive - brighter red */
-  --color-destructive: hsl(0 84% 60%);
-  --color-destructive-foreground: hsl(0 0% 100%);
-
-  /* Borders - subtle in dark mode */
-  --color-border: hsl(219 30% 18%);
-  --color-input: hsl(219 30% 18%);
-  --color-ring: hsl(211 100% 50%);
-
-  /* Status Colors - DigitalOcean style */
-  --color-success: hsl(145 80% 33%);
-  --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(14 100% 60%);
-  --color-warning-foreground: hsl(0 0% 100%);
-  --color-info: hsl(199 95% 48%);
-  --color-info-foreground: hsl(0 0% 100%);
-
-  /* Chart colors - match DO */
-  --color-chart-1: hsl(211 100% 50%);
-  --color-chart-2: hsl(145 80% 33%);
-  --color-chart-3: hsl(14 100% 60%);
-  --color-chart-4: hsl(271 81% 56%);
-  --color-chart-5: hsl(45 93% 47%);
+  /* Reference CSS custom properties for runtime theming */
+  --color-background: var(--theme-background);
+  --color-foreground: var(--theme-foreground);
+  --color-card: var(--theme-card);
+  --color-card-foreground: var(--theme-card-foreground);
+  --color-sidebar: var(--theme-sidebar);
+  --color-popover: var(--theme-popover);
+  --color-popover-foreground: var(--theme-popover-foreground);
+  --color-primary: var(--theme-primary);
+  --color-primary-foreground: var(--theme-primary-foreground);
+  --color-secondary: var(--theme-secondary);
+  --color-secondary-foreground: var(--theme-secondary-foreground);
+  --color-muted: var(--theme-muted);
+  --color-muted-foreground: var(--theme-muted-foreground);
+  --color-accent: var(--theme-accent);
+  --color-accent-foreground: var(--theme-accent-foreground);
+  --color-destructive: var(--theme-destructive);
+  --color-destructive-foreground: var(--theme-destructive-foreground);
+  --color-border: var(--theme-border);
+  --color-input: var(--theme-input);
+  --color-ring: var(--theme-ring);
+  --color-success: var(--theme-success);
+  --color-success-foreground: var(--theme-success-foreground);
+  --color-warning: var(--theme-warning);
+  --color-warning-foreground: var(--theme-warning-foreground);
+  --color-info: var(--theme-info);
+  --color-info-foreground: var(--theme-info-foreground);
+  --color-chart-1: var(--theme-chart-1);
+  --color-chart-2: var(--theme-chart-2);
+  --color-chart-3: var(--theme-chart-3);
+  --color-chart-4: var(--theme-chart-4);
+  --color-chart-5: var(--theme-chart-5);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -72,63 +57,115 @@
     @apply border-border outline-ring/50;
   }
 
-  :root {
+  /* Dark theme (default) */
+  :root,
+  :root.dark {
     color-scheme: dark;
+
+    /* DigitalOcean-style Dark Mode Colors */
+    --theme-background: hsl(219 95% 7%);
+    --theme-foreground: hsl(0 0% 95%);
+    --theme-card: hsl(219 95% 10%);
+    --theme-card-foreground: hsl(0 0% 95%);
+    --theme-sidebar: hsl(219 95% 8%);
+    --theme-popover: hsl(219 95% 10%);
+    --theme-popover-foreground: hsl(0 0% 95%);
+
+    /* Primary - Bright blue like DO */
+    --theme-primary: hsl(211 100% 50%);
+    --theme-primary-foreground: hsl(0 0% 100%);
+
+    /* Secondary - subtle gray-blue */
+    --theme-secondary: hsl(219 30% 15%);
+    --theme-secondary-foreground: hsl(0 0% 95%);
+
+    /* Muted - darker gray */
+    --theme-muted: hsl(219 30% 15%);
+    --theme-muted-foreground: hsl(215 20% 65%);
+
+    /* Accent */
+    --theme-accent: hsl(219 30% 15%);
+    --theme-accent-foreground: hsl(0 0% 95%);
+
+    /* Destructive - brighter red */
+    --theme-destructive: hsl(0 84% 60%);
+    --theme-destructive-foreground: hsl(0 0% 100%);
+
+    /* Borders - subtle in dark mode */
+    --theme-border: hsl(219 30% 18%);
+    --theme-input: hsl(219 30% 18%);
+    --theme-ring: hsl(211 100% 50%);
+
+    /* Status Colors - DigitalOcean style */
+    --theme-success: hsl(145 80% 33%);
+    --theme-success-foreground: hsl(0 0% 100%);
+    --theme-warning: hsl(14 100% 60%);
+    --theme-warning-foreground: hsl(0 0% 100%);
+    --theme-info: hsl(199 95% 48%);
+    --theme-info-foreground: hsl(0 0% 100%);
+
+    /* Chart colors - match DO */
+    --theme-chart-1: hsl(211 100% 50%);
+    --theme-chart-2: hsl(145 80% 33%);
+    --theme-chart-3: hsl(14 100% 60%);
+    --theme-chart-4: hsl(271 81% 56%);
+    --theme-chart-5: hsl(45 93% 47%);
   }
 
+  /* Light theme */
   :root.light {
     color-scheme: light;
 
     /* DigitalOcean-style Light Mode - Pure white, navy text */
-    --color-background: hsl(0 0% 100%);
-    --color-foreground: hsl(219 95% 15%);
-    --color-card: hsl(0 0% 100%);
-    --color-card-foreground: hsl(219 95% 15%);
-    --color-sidebar: hsl(214 15% 97%);
-    --color-popover: hsl(0 0% 100%);
-    --color-popover-foreground: hsl(219 95% 15%);
+    --theme-background: hsl(0 0% 100%);
+    --theme-foreground: hsl(219 95% 15%);
+    --theme-card: hsl(0 0% 100%);
+    --theme-card-foreground: hsl(219 95% 15%);
+    --theme-sidebar: hsl(214 15% 97%);
+    --theme-popover: hsl(0 0% 100%);
+    --theme-popover-foreground: hsl(219 95% 15%);
 
     /* Primary - Bright blue */
-    --color-primary: hsl(211 100% 50%);
-    --color-primary-foreground: hsl(0 0% 100%);
+    --theme-primary: hsl(211 100% 50%);
+    --theme-primary-foreground: hsl(0 0% 100%);
 
     /* Secondary - light gray */
-    --color-secondary: hsl(214 20% 95%);
-    --color-secondary-foreground: hsl(219 95% 15%);
+    --theme-secondary: hsl(214 20% 95%);
+    --theme-secondary-foreground: hsl(219 95% 15%);
 
     /* Muted - subtle gray */
-    --color-muted: hsl(214 15% 95%);
-    --color-muted-foreground: hsl(215 15% 45%);
+    --theme-muted: hsl(214 15% 95%);
+    --theme-muted-foreground: hsl(215 15% 45%);
 
     /* Accent */
-    --color-accent: hsl(214 20% 95%);
-    --color-accent-foreground: hsl(219 95% 15%);
+    --theme-accent: hsl(214 20% 95%);
+    --theme-accent-foreground: hsl(219 95% 15%);
 
     /* Destructive - bright red */
-    --color-destructive: hsl(0 84% 60%);
-    --color-destructive-foreground: hsl(0 0% 100%);
+    --theme-destructive: hsl(0 84% 60%);
+    --theme-destructive-foreground: hsl(0 0% 100%);
 
     /* Borders - very subtle gray */
-    --color-border: hsl(214 15% 91%);
-    --color-input: hsl(214 15% 91%);
-    --color-ring: hsl(211 100% 50%);
+    --theme-border: hsl(214 15% 91%);
+    --theme-input: hsl(214 15% 91%);
+    --theme-ring: hsl(211 100% 50%);
 
     /* Chart colors - same as dark */
-    --color-chart-1: hsl(211 100% 50%);
-    --color-chart-2: hsl(145 80% 33%);
-    --color-chart-3: hsl(14 100% 60%);
-    --color-chart-4: hsl(271 81% 56%);
-    --color-chart-5: hsl(45 93% 47%);
+    --theme-chart-1: hsl(211 100% 50%);
+    --theme-chart-2: hsl(145 80% 33%);
+    --theme-chart-3: hsl(14 100% 60%);
+    --theme-chart-4: hsl(271 81% 56%);
+    --theme-chart-5: hsl(45 93% 47%);
 
     /* Status colors - same as dark */
-    --color-success: hsl(145 80% 33%);
-    --color-success-foreground: hsl(0 0% 100%);
-    --color-warning: hsl(14 100% 60%);
-    --color-warning-foreground: hsl(0 0% 100%);
-    --color-info: hsl(199 95% 48%);
-    --color-info-foreground: hsl(0 0% 100%);
+    --theme-success: hsl(145 80% 33%);
+    --theme-success-foreground: hsl(0 0% 100%);
+    --theme-warning: hsl(14 100% 60%);
+    --theme-warning-foreground: hsl(0 0% 100%);
+    --theme-info: hsl(199 95% 48%);
+    --theme-info-foreground: hsl(0 0% 100%);
   }
-  
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
@@ -155,12 +192,6 @@
     @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
-  /* Light theme global overrides for dialog backgrounds only */
-  .light .bg-zinc-900,
-  .light .bg-gray-900 {
-    background-color: hsl(0 0% 100%) !important;
-  }
-
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
@@ -172,7 +203,7 @@
   [data-testid="vnc-container"] * canvas {
     cursor: crosshair !important;
   }
-  
+
   canvas[class*="vnc"],
   canvas[class*="rfb"],
   .vnc-screen canvas,
