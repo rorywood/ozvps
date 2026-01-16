@@ -333,13 +333,15 @@ export default function ServerDetail() {
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
   // AUTO-DISMISS: When setup completes, automatically dismiss checklist and show server overview
-  // Only trigger after credentials are confirmed (tracked in SetupProgressChecklist component)
+  // Trigger once when status becomes 'complete'
   useEffect(() => {
-    if (reinstallTask.status === 'complete' && reinstallTask.isActive && isSetupMode && server && !server.needsSetup) {
-      console.log('Setup complete! Auto-dismissing checklist and showing server overview...');
+    if (reinstallTask.status === 'complete' && reinstallTask.isActive && isSetupMode) {
+      console.log('[server-detail] Setup complete! Starting auto-dismiss timer...');
 
       // Wait 3 seconds: 1s to show completion message + 2s after confirming credentials
       const timer = setTimeout(() => {
+        console.log('[server-detail] Auto-dismiss timer fired, clearing setup mode...');
+
         // Save credentials if available
         if (reinstallTask.credentials) {
           updateSavedCredentials(reinstallTask.credentials);
@@ -365,12 +367,15 @@ export default function ServerDetail() {
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
 
-        console.log('Checklist dismissed, reinstallTask reset, showing server overview');
+        console.log('[server-detail] Setup mode cleared, queries invalidated');
       }, 3000);
 
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('[server-detail] Cleaning up auto-dismiss timer');
+        clearTimeout(timer);
+      };
     }
-  }, [reinstallTask.status, reinstallTask.isActive, reinstallTask.credentials, isSetupMode, server?.needsSetup, serverId, queryClient, reinstallTask]);
+  }, [reinstallTask.status, reinstallTask.isActive, isSetupMode, serverId]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
@@ -1015,10 +1020,11 @@ export default function ServerDetail() {
 
   if (isError || !server) {
     // Don't show error if we're in active setup mode - server might not be fully provisioned yet
-    // Also check if server has needsSetup flag (even with error, server data might be partial)
-    // CRITICAL: Include isInitialSetup to prevent "not found" flash when navigating back
+    // ONLY show provisioning message if task is actively running (not complete)
     const serverNeedsSetup = server?.needsSetup === true;
-    if (isInitialSetup || (reinstallTask.isActive && reinstallTask.status !== 'failed') || serverNeedsSetup || isLoading) {
+    const taskActivelyProvisioning = reinstallTask.isActive && reinstallTask.status !== 'failed' && reinstallTask.status !== 'complete';
+
+    if (taskActivelyProvisioning || serverNeedsSetup || isLoading) {
       return (
         <AppShell>
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">

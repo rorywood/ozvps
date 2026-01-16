@@ -159,9 +159,11 @@ export function useReinstallTask(serverId: string) {
         phase: buildStatus.phase,
       });
 
-      // COMPLETE: Server is fully built
-      if (buildStatus.isComplete && buildStatus.commissioned === 3) {
-        console.log('[useReinstallTask] Build COMPLETE - stopping polling');
+      // COMPLETE: Server is fully built AND actually online
+      // STRICT CHECK: commissioned === 3 AND isComplete === true
+      // Don't mark complete if still building (commissioned 0 or 1)
+      if (buildStatus.commissioned === 3 && buildStatus.isComplete && !buildStatus.isBuilding) {
+        console.log('[useReinstallTask] Build COMPLETE (commissioned 3, not building) - stopping polling');
         addTimelineEvent('complete', 'Installation complete');
         stopPolling();
         setState(prev => {
