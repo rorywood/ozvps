@@ -823,42 +823,47 @@ export class VirtFusionClient {
     try {
       const response = await this.request<{ data: any }>(`/servers/${serverId}`);
       const server = response.data;
-      
+
       // Extract the raw build state information
       const state = server.state || '';
       const buildFailed = server.buildFailed === true;
       const suspended = server.suspended === true;
       const commissionStatus = server.commissionStatus;
-      
+      const commissioned = server.commissioned; // 0 = not built, 1 = building, 2 = paused, 3 = complete
+
       // Check if server is in a transitional/building state
-      const isTransitionalState = ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
-      
+      // IMPORTANT: commissioned takes priority - if 0 or 1, server is not ready
+      const isTransitionalState = commissioned === 0 || commissioned === 1 || ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
+
       // Determine the build phase based on VirtFusion state
       // Important: VirtFusion temporarily sets buildFailed=true during rebuilds
       // Only consider it a real error if buildFailed is true AND state is NOT transitional
       let phase: 'queued' | 'building' | 'complete' | 'error' = 'complete';
-      
-      if (state === 'queued' || state === 'pending') {
-        phase = 'queued';
+
+      if (commissioned === 0) {
+        phase = 'queued'; // Not built yet
+      } else if (commissioned === 1 || state === 'queued' || state === 'pending') {
+        phase = 'building'; // Currently building
       } else if (state === 'provisioning' || state === 'building' || state === 'installing') {
         phase = 'building';
-      } else if (state === 'complete' || state === 'running') {
-        phase = 'complete';
+      } else if ((state === 'complete' || state === 'running') && commissioned === 3) {
+        phase = 'complete'; // Fully commissioned and complete
       } else if (buildFailed && !isTransitionalState) {
         // Only mark as error if buildFailed is true AND we're not in a building state
         phase = 'error';
       }
-      
+
       // isError should only be true if we have a confirmed error (not during transition)
       const isRealError = buildFailed && !isTransitionalState && state !== 'complete' && state !== 'running';
-      
+
       return {
         state,
         phase,
         buildFailed,
         suspended,
         commissionStatus,
-        isComplete: (state === 'complete' || state === 'running') && !isRealError,
+        commissioned,
+        isComplete: commissioned === 3 && (state === 'complete' || state === 'running') && !isRealError,
         isError: isRealError,
         isBuilding: isTransitionalState,
       };
@@ -1146,18 +1151,26 @@ export class VirtFusionClient {
     // Check remoteState first for live power status from hypervisor
     const remoteState = (server as any).remoteState;
     let status: 'running' | 'stopped' | 'provisioning' | 'error';
-    
+
+    // Check commissioned state FIRST before determining power status
+    // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
+    const rawServerData = server as any;
+    const commissioned = rawServerData.commissioned;
+
     // server.state is the COMMISSION state (queued, building, complete, etc.)
     // remoteState.state is the POWER state from hypervisor (running, stopped, etc.)
     // remoteState.running is a boolean for power state
     const commissionState = server.state?.toLowerCase() || '';
     const powerState = remoteState?.state?.toLowerCase() || '';
-    
-    // Priority: suspended > buildFailed > commission state (if building) > power state
+
+    // Priority: suspended > buildFailed > NOT COMMISSIONED (commissioned === 0 or 1) > commission state (if building) > power state
     if (server.suspended) {
       status = 'stopped';
     } else if (server.buildFailed) {
       status = 'error';
+    } else if (commissioned === 0 || commissioned === 1) {
+      // Server not yet commissioned or currently building - always show as provisioning
+      status = 'provisioning';
     } else if (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying') {
       status = 'provisioning';
     } else if (powerState) {
@@ -1203,18 +1216,10 @@ export class VirtFusionClient {
     const osDistro = qemuAgentOs.dist || server.os?.dist || 'linux';
     
     // A server needs setup if:
-    // - No OS template name is set (server created without OS build)
-    // - Server is not in a transitional building state
-    const rawServerData = server as any;
-    const commissioned = rawServerData.commissioned;
+    // - commissioned === 0 (not built yet)
+    // Note: commissioned is already checked above when determining status
     // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
-    const needsSetup = commissioned === 0 || (
-      !osTemplateName && 
-      !osFullName && 
-      !server.os?.name && 
-      status !== 'error' && 
-      status !== 'provisioning'
-    );
+    const needsSetup = commissioned === 0;
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();

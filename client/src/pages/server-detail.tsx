@@ -2211,9 +2211,9 @@ export default function ServerDetail() {
                         <div className="flex-1">
                           <div className="font-mono font-bold text-lg text-foreground">{server?.name}</div>
                           <div className="text-sm text-muted-foreground space-x-3">
-                            <span>{server?.ipAddress || 'No IP'}</span>
+                            <span>{server?.primaryIp || 'No IP'}</span>
                             <span>•</span>
-                            <span>{server?.image?.name || 'Unknown OS'}</span>
+                            <span>{server?.os?.name || server?.image?.name || 'Unknown OS'}</span>
                           </div>
                         </div>
                       </div>
