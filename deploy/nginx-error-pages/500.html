@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 - Internal Server Error | OzVPS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: hsl(219, 95%, 7%);
+            color: hsl(0, 0%, 95%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .error-code {
+            font-size: 8rem;
+            font-weight: 800;
+            line-height: 1;
+            color: hsl(0, 84%, 60%);
+            margin-bottom: 1rem;
+            text-shadow: 0 0 40px hsla(0, 84%, 60%, 0.3);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: hsl(0, 0%, 95%);
+        }
+
+        p {
+            font-size: 1.125rem;
+            line-height: 1.6;
+            color: hsl(215, 20%, 65%);
+            margin-bottom: 2rem;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 0.875rem 2rem;
+            background: hsl(211, 100%, 50%);
+            color: white;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px hsla(211, 100%, 50%, 0.3);
+            margin-right: 1rem;
+        }
+
+        .button:hover {
+            background: hsl(211, 100%, 45%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px hsla(211, 100%, 50%, 0.4);
+        }
+
+        .button-secondary {
+            display: inline-block;
+            padding: 0.875rem 2rem;
+            background: hsl(219, 30%, 15%);
+            color: hsl(0, 0%, 95%);
+            text-decoration: none;
+            border-radius: 0.5rem;
+            border: 1px solid hsl(219, 30%, 18%);
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .button-secondary:hover {
+            background: hsl(219, 30%, 18%);
+            transform: translateY(-2px);
+        }
+
+        .info-box {
+            background: hsl(219, 30%, 12%);
+            border: 1px solid hsl(219, 30%, 18%);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            text-align: left;
+        }
+
+        .info-box h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: hsl(0, 0%, 95%);
+        }
+
+        .info-box ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .info-box li {
+            font-size: 0.875rem;
+            color: hsl(215, 20%, 65%);
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .info-box li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: hsl(211, 100%, 50%);
+        }
+
+        @media (max-width: 640px) {
+            .error-code {
+                font-size: 5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            p {
+                font-size: 1rem;
+            }
+
+            .button {
+                margin-right: 0;
+                margin-bottom: 0.5rem;
+                display: block;
+            }
+
+            .button-secondary {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-code">500</div>
+        <h1>Internal Server Error</h1>
+        <p>Something went wrong on our end. Our team has been automatically notified and is investigating the issue.</p>
+
+        <a href="javascript:window.location.reload();" class="button">Refresh Page</a>
+        <a href="/" class="button-secondary">Return Home</a>
+
+        <div class="info-box">
+            <h2>What can you do?</h2>
+            <ul>
+                <li>Wait a few moments and refresh the page</li>
+                <li>Clear your browser cache and cookies</li>
+                <li>Try again in a few minutes</li>
+                <li>Contact support if the problem persists</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

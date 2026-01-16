@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>502 - Service Temporarily Unavailable | OzVPS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: hsl(219, 95%, 7%);
+            color: hsl(0, 0%, 95%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .error-code {
+            font-size: 8rem;
+            font-weight: 800;
+            line-height: 1;
+            color: hsl(211, 100%, 50%);
+            margin-bottom: 1rem;
+            text-shadow: 0 0 40px hsla(211, 100%, 50%, 0.3);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: hsl(0, 0%, 95%);
+        }
+
+        p {
+            font-size: 1.125rem;
+            line-height: 1.6;
+            color: hsl(215, 20%, 65%);
+            margin-bottom: 2rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: hsl(219, 30%, 15%);
+            border: 1px solid hsl(219, 30%, 18%);
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: hsl(45, 100%, 60%);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .button {
+            display: inline-block;
+            padding: 0.875rem 2rem;
+            background: hsl(211, 100%, 50%);
+            color: white;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px hsla(211, 100%, 50%, 0.3);
+        }
+
+        .button:hover {
+            background: hsl(211, 100%, 45%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px hsla(211, 100%, 50%, 0.4);
+        }
+
+        .info-box {
+            background: hsl(219, 30%, 12%);
+            border: 1px solid hsl(219, 30%, 18%);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .info-box h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: hsl(0, 0%, 95%);
+        }
+
+        .info-box p {
+            font-size: 0.875rem;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 640px) {
+            .error-code {
+                font-size: 5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            p {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-code">502</div>
+        <h1>Service Temporarily Unavailable</h1>
+
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            <span>Reconnecting to service...</span>
+        </div>
+
+        <p>We're experiencing a temporary connection issue. Our team has been notified and is working to restore service.</p>
+
+        <a href="javascript:window.location.reload();" class="button">Refresh Page</a>
+
+        <div class="info-box">
+            <h2>What's happening?</h2>
+            <p>The application server is currently restarting or updating. This usually takes less than a minute. Please refresh the page shortly.</p>
+        </div>
+    </div>
+</body>
+</html>
