@@ -1192,8 +1192,9 @@ export class VirtFusionClient {
     } else if (commissioned === 0 || commissioned === 1) {
       // Server not yet commissioned or currently building - always show as provisioning
       status = 'provisioning';
-    } else if (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying') {
-      // Commission state indicates building even if commissioned field is set incorrectly
+    } else if (commissioned !== 3 && (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying')) {
+      // Commission state indicates building ONLY if not already commissioned
+      // This prevents FQDN hostnames from getting stuck on 'provisioning' after commission completes
       status = 'provisioning';
     } else if (powerState) {
       // Use remoteState.state for power status - most reliable

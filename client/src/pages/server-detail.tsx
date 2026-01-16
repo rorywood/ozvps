@@ -462,20 +462,20 @@ export default function ServerDetail() {
   
   // Auto-fetch credentials when setup completes but no password was returned from build
   // This handles cases where VirtFusion doesn't include the password in the build response
-  // Triggers on 'rebooting' status (commissioned=3) with delay to wait for server boot
+  // Works for BOTH initial deploys and reinstalls
   useEffect(() => {
     const shouldAutoReset =
-      (reinstallTask.status === 'rebooting' || reinstallTask.status === 'complete') &&
-      !reinstallTask.credentials &&
-      !savedCredentials &&
       serverId &&
       server?.primaryIp &&
-      server?.status === 'running' && // Wait for server to be fully booted
-      server?.needsSetup === false && // Wait for VirtFusion to confirm server is commissioned
+      server?.needsSetup === false && // Server is commissioned
+      server?.status === 'running' && // Server is fully booted
+      !savedCredentials && // No credentials saved yet
+      !reinstallTask.credentials && // No credentials from reinstall
       !autoPasswordResetTriggeredRef.current &&
       !autoPasswordResetInProgressRef.current;
 
     if (shouldAutoReset) {
+      console.log('[AUTO-RESET] Triggering password reset for server without credentials');
       autoPasswordResetTriggeredRef.current = true;
       autoPasswordResetInProgressRef.current = true;
 
@@ -484,8 +484,10 @@ export default function ServerDetail() {
       const timeoutId = setTimeout(() => {
         // Double-check we still need credentials after the delay
         if (!savedCredentials) {
+          console.log('[AUTO-RESET] Calling password reset API');
           api.resetServerPassword(serverId).then(response => {
             if (response.password) {
+              console.log('[AUTO-RESET] Password reset successful, saving credentials');
               const creds = {
                 serverIp: server.primaryIp || 'N/A',
                 username: response.username || 'root',
@@ -494,7 +496,8 @@ export default function ServerDetail() {
               updateSavedCredentials(creds);
               setShowSavedCredentials(true);
             }
-          }).catch(() => {
+          }).catch((error) => {
+            console.error('[AUTO-RESET] Password reset failed:', error);
             // Silent fail - user can manually reset password
             // Guest agent might not be ready yet, user can try manually
           }).finally(() => {
@@ -508,11 +511,11 @@ export default function ServerDetail() {
       return () => clearTimeout(timeoutId);
     }
 
-    // Reset the flag when task is reset
-    if (!reinstallTask.isActive) {
+    // Reset the flag when conditions change
+    if (server?.needsSetup === true || server?.status !== 'running') {
       autoPasswordResetTriggeredRef.current = false;
     }
-  }, [reinstallTask.status, reinstallTask.credentials, reinstallTask.isActive, savedCredentials, serverId, server?.primaryIp, server?.status, server?.needsSetup]);
+  }, [serverId, server?.primaryIp, server?.needsSetup, server?.status, savedCredentials, reinstallTask.credentials]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
