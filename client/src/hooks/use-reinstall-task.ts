@@ -159,38 +159,35 @@ export function useReinstallTask(serverId: string) {
         phase: buildStatus.phase,
       });
 
-      // COMPLETE: Server is fully built AND actually online
-      // STRICT CHECK: commissioned === 3 AND isComplete === true
-      // Don't mark complete if still building (commissioned 0 or 1)
+      // COMMISSIONED: Server is built (commissioned=3) but may still be booting
+      // Show "Starting Server" step while server boots
       if (buildStatus.commissioned === 3 && buildStatus.isComplete && !buildStatus.isBuilding) {
-        console.log('[useReinstallTask] Server commissioned (commissioned 3, not building)');
-        console.log('[useReinstallTask] Continuing to poll until server is fully running...');
+        console.log('[useReinstallTask] Server commissioned (commissioned 3), checking if running...');
 
-        // Mark as complete but DON'T stop polling yet
+        // Mark as 'rebooting' to show "Starting Server" step
         // We'll keep polling until server status becomes 'running'
-        // The auto-dismiss will wait for both complete + running
         setState(prev => {
-          if (prev.status === 'complete') {
-            return prev; // Already marked complete, no update needed
+          if (prev.status === 'rebooting') {
+            return prev; // Already at rebooting, no update needed
           }
 
-          addTimelineEvent('complete', 'Installation complete - waiting for server to boot');
-          const completed = {
+          addTimelineEvent('rebooting', 'Server commissioned - booting up...');
+          const booting = {
             ...prev,
             isActive: true,
-            status: 'complete' as ReinstallStatus,
-            percent: 100,
+            status: 'rebooting' as ReinstallStatus,
+            percent: 95,
           };
           saveTaskState(serverId, {
             isActive: true,
-            status: 'complete',
-            percent: 100,
+            status: 'rebooting',
+            percent: 95,
             credentials: prev.credentials,
           });
-          return completed;
+          return booting;
         });
 
-        // Continue polling - will stop when auto-dismiss triggers
+        // Continue polling - will mark complete when server is running
         return;
       }
 

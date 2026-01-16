@@ -328,19 +328,19 @@ export default function ServerDetail() {
     if (!isSetupMode) return;
 
     // STRICT REQUIREMENTS for dismiss:
-    // 1. reinstallTask must be complete (commissioned === 3)
+    // 1. reinstallTask must be at 'rebooting' (commissioned) or 'complete'
     // 2. Server must be 'running' (fully booted, not just commissioned)
     // 3. needsSetup must be false (VirtFusion confirms ready)
-    const taskComplete = reinstallTask.status === 'complete';
+    const taskAtFinalStage = reinstallTask.status === 'rebooting' || reinstallTask.status === 'complete';
     const serverFullyOnline = server && server.status === 'running';
     const serverCommissioned = server && server.needsSetup === false;
 
     // ALL THREE must be true
-    const allConditionsMet = taskComplete && serverFullyOnline && serverCommissioned;
+    const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned;
 
     if (allConditionsMet) {
-      console.log('[server-detail] All conditions met for auto-dismiss! Waiting 2 seconds to ensure UI is ready...', {
-        taskComplete,
+      console.log('[server-detail] Server is FULLY ONLINE! All conditions met:', {
+        reinstallStatus: reinstallTask.status,
         serverStatus: server?.status,
         needsSetup: server?.needsSetup,
       });
@@ -382,12 +382,14 @@ export default function ServerDetail() {
 
       return () => clearTimeout(timer);
     } else {
-      console.log('[server-detail] Auto-dismiss waiting for all conditions...', {
+      console.log('[server-detail] Auto-dismiss waiting for server to boot...', {
         isSetupMode,
-        taskComplete,
+        reinstallStatus: reinstallTask.status,
         serverStatus: server?.status,
         needsSetup: server?.needsSetup,
-        reinstallStatus: reinstallTask.status,
+        taskAtFinalStage,
+        serverFullyOnline,
+        serverCommissioned,
       });
     }
   }, [reinstallTask.status, isSetupMode, server?.needsSetup, server?.status, serverId]);

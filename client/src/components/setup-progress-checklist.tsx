@@ -54,7 +54,7 @@ const SETUP_STEPS: ChecklistStep[] = [
     id: 'rebooting',
     label: 'Starting Server',
     description: 'Booting up and finalizing setup',
-    statuses: ['rebooting', 'complete'],
+    statuses: ['rebooting'],
   },
 ];
 
@@ -84,7 +84,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
   const [copiedSshCommand, setCopiedSshCommand] = useState(false);
 
-  const isComplete = status === 'complete';
+  const isComplete = status === 'complete' || status === 'rebooting';
   const isFailed = status === 'failed';
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
@@ -138,7 +138,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             )}
           </div>
           <h3 className="text-xl font-display font-semibold text-foreground">
-            {isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
+            {status === 'rebooting' ? 'Server is Booting...' : isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
           </h3>
           {serverName && (
             <p className="text-sm text-muted-foreground">{serverName}</p>
@@ -338,13 +338,24 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         </div>
       )}
 
-      {/* Completion message - credentials will be shown in banner on overview page */}
+      {/* Completion message - show when server is booting or complete */}
       {isComplete && credentials && (
-        <div className="flex items-center gap-2 text-sm text-success py-3 px-4 bg-success/10 border border-success/20 rounded-lg">
-          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-          <span className="font-medium">
-            Setup complete! Credentials have been saved.
-          </span>
+        <div className="flex items-center gap-2 text-sm py-3 px-4 bg-success/10 border border-success/20 rounded-lg">
+          {status === 'rebooting' ? (
+            <>
+              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-success" />
+              <span className="font-medium text-success">
+                Server commissioned! Waiting for boot to complete...
+              </span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" />
+              <span className="font-medium text-success">
+                Setup complete! Credentials have been saved.
+              </span>
+            </>
+          )}
         </div>
       )}
 
