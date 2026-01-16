@@ -143,7 +143,18 @@ export default function ServerDetail() {
     try {
       const stored = sessionStorage.getItem(`credentials:${serverId}`);
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+
+        // Check if credentials have expired (5 minute TTL)
+        if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
+          // Expired - remove from storage and return null
+          sessionStorage.removeItem(`credentials:${serverId}`);
+          return null;
+        }
+
+        // Return credentials without the expiresAt field
+        const { expiresAt, ...credentials } = parsed;
+        return credentials;
       }
     } catch {
       // Ignore parse errors
@@ -174,12 +185,19 @@ export default function ServerDetail() {
   };
   const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
   
-  // Persist credentials to sessionStorage when they change
+  // SECURITY WARNING: Credentials stored in sessionStorage are vulnerable to XSS attacks
+  // We store them temporarily (5 minutes max) for user convenience during server setup
+  // They auto-expire and should be copied by user immediately
   const updateSavedCredentials = (creds: { serverIp: string; username: string; password: string } | null) => {
     setSavedCredentials(creds);
     try {
       if (creds) {
-        sessionStorage.setItem(`credentials:${serverId}`, JSON.stringify(creds));
+        // Add expiration timestamp (5 minutes from now)
+        const credentialsWithExpiry = {
+          ...creds,
+          expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+        };
+        sessionStorage.setItem(`credentials:${serverId}`, JSON.stringify(credentialsWithExpiry));
       } else {
         sessionStorage.removeItem(`credentials:${serverId}`);
       }
@@ -445,10 +463,11 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.credentials, serverId, savedCredentials]);
   
-  // Refetch server data when build completes to update needsSetup status
-  // This ensures the UI transitions properly after a build finishes (even if tabbed out)
+  // Refetch server data when build completes OR enters rebooting status
+  // This ensures needsSetup gets updated from true->false when commissioned=3
+  // (even if tabbed out)
   useEffect(() => {
-    if (reinstallTask.status === 'complete' && serverId) {
+    if ((reinstallTask.status === 'complete' || reinstallTask.status === 'rebooting') && serverId) {
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
@@ -460,22 +479,25 @@ export default function ServerDetail() {
   
   // Auto-fetch credentials when setup completes but no password was returned from build
   // This handles cases where VirtFusion doesn't include the password in the build response
-  // Uses a 2-second delay to allow credentials to be populated from the build response first
+  // Triggers on 'rebooting' status (commissioned=3) with delay to wait for server boot
   useEffect(() => {
-    const shouldAutoReset = 
-      reinstallTask.status === 'complete' && 
-      !reinstallTask.credentials && 
+    const shouldAutoReset =
+      (reinstallTask.status === 'rebooting' || reinstallTask.status === 'complete') &&
+      !reinstallTask.credentials &&
       !savedCredentials &&
-      serverId && 
+      serverId &&
       server?.primaryIp &&
+      server?.status === 'running' && // Wait for server to be fully booted
+      server?.needsSetup === false && // Wait for VirtFusion to confirm server is commissioned
       !autoPasswordResetTriggeredRef.current &&
       !autoPasswordResetInProgressRef.current;
-    
+
     if (shouldAutoReset) {
       autoPasswordResetTriggeredRef.current = true;
       autoPasswordResetInProgressRef.current = true;
-      
-      // Add a short delay before auto-reset to give time for any async credential updates
+
+      // Add 3-second delay to ensure guest agent is ready
+      // Guest agent needs time to start after boot before password reset works
       const timeoutId = setTimeout(() => {
         // Double-check we still need credentials after the delay
         if (!savedCredentials) {
@@ -491,22 +513,23 @@ export default function ServerDetail() {
             }
           }).catch(() => {
             // Silent fail - user can manually reset password
+            // Guest agent might not be ready yet, user can try manually
           }).finally(() => {
             autoPasswordResetInProgressRef.current = false;
           });
         } else {
           autoPasswordResetInProgressRef.current = false;
         }
-      }, 2000);
-      
+      }, 3000);
+
       return () => clearTimeout(timeoutId);
     }
-    
+
     // Reset the flag when task is reset
     if (!reinstallTask.isActive) {
       autoPasswordResetTriggeredRef.current = false;
     }
-  }, [reinstallTask.status, reinstallTask.credentials, reinstallTask.isActive, savedCredentials, serverId, server?.primaryIp]);
+  }, [reinstallTask.status, reinstallTask.credentials, reinstallTask.isActive, savedCredentials, serverId, server?.primaryIp, server?.status, server?.needsSetup]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -1080,9 +1103,13 @@ export default function ServerDetail() {
 
   if (isError || !server) {
     // Don't show error if we're in active setup mode - server might not be fully provisioned yet
-    // ONLY show provisioning message if task is actively running (not complete)
+    // ONLY show provisioning message if task is actively running (not complete/rebooting)
     const serverNeedsSetup = server?.needsSetup === true;
-    const taskActivelyProvisioning = reinstallTask.isActive && reinstallTask.status !== 'failed' && reinstallTask.status !== 'complete';
+    // Exclude 'rebooting' - server is commissioned and booting, not provisioning
+    const taskActivelyProvisioning = reinstallTask.isActive &&
+      reinstallTask.status !== 'failed' &&
+      reinstallTask.status !== 'complete' &&
+      reinstallTask.status !== 'rebooting';
 
     if (taskActivelyProvisioning || serverNeedsSetup || isLoading) {
       return (

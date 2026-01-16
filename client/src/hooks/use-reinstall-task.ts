@@ -177,7 +177,8 @@ export function useReinstallTask(serverId: string) {
 
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
       // Show "Starting Server" step while server boots
-      if (buildStatus.commissioned === 3 && buildStatus.isComplete && !buildStatus.isBuilding) {
+      // NOTE: Don't check isComplete - VirtFusion doesn't set it properly
+      if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
         console.log('[useReinstallTask] Server commissioned (commissioned 3), checking if running...');
 
         // Mark as 'rebooting' to show "Starting Server" step
