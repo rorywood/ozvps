@@ -41,6 +41,7 @@ export default function Dashboard() {
 
   const servers = dashboardData?.servers || [];
   const bandwidthData = dashboardData?.bandwidth;
+  const cancellations = dashboardData?.cancellations || {};
 
   useSyncPowerActions(servers);
 
@@ -163,9 +164,12 @@ export default function Dashboard() {
           ) : (
             <div className="border border-border rounded-lg overflow-hidden bg-card">
               {servers.map((server, index) => {
-                const displayStatus = getDisplayStatus(server.id, server.status);
+                const cancellation = cancellations[server.id];
+                const displayStatus = getDisplayStatus(server.id, server.status, cancellation);
                 const isRunning = displayStatus === 'running';
                 const isStopped = displayStatus === 'stopped';
+                const isDeleting = displayStatus === 'destroying' || displayStatus === 'queued_deletion';
+                const isScheduledDeletion = displayStatus === 'scheduled_deletion';
 
                 return (
                   <Link key={server.id} href={`/servers/${server.id}`}>
@@ -180,7 +184,9 @@ export default function Dashboard() {
                         "h-2 w-2 rounded-full flex-shrink-0",
                         isRunning && "bg-success",
                         isStopped && "bg-muted-foreground",
-                        !isRunning && !isStopped && "bg-warning"
+                        isDeleting && "bg-red-500 animate-pulse",
+                        isScheduledDeletion && "bg-orange-500",
+                        !isRunning && !isStopped && !isDeleting && !isScheduledDeletion && "bg-warning"
                       )} />
 
                       {/* Server name - bold */}
@@ -201,8 +207,19 @@ export default function Dashboard() {
                       </div>
 
                       {/* Status badge - minimal */}
-                      <Badge variant={isRunning ? "success" : "secondary"} className="capitalize">
-                        {displayStatus}
+                      <Badge
+                        variant={
+                          isRunning ? "success" :
+                          isDeleting ? "destructive" :
+                          isScheduledDeletion ? "warning" :
+                          "secondary"
+                        }
+                        className="capitalize"
+                      >
+                        {displayStatus === 'destroying' ? 'Removing' :
+                         displayStatus === 'queued_deletion' ? 'Removing' :
+                         displayStatus === 'scheduled_deletion' ? 'Scheduled' :
+                         displayStatus}
                       </Badge>
 
                       {/* Arrow */}

@@ -15,7 +15,7 @@ interface PowerActionContextType {
   clearPending: (serverId: string) => void;
   isPending: (serverId: string) => boolean;
   getPendingAction: (serverId: string) => string | null;
-  getDisplayStatus: (serverId: string, actualStatus: string) => string;
+  getDisplayStatus: (serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }) => string;
 }
 
 const STORAGE_KEY = "ozvps_pending_power_actions";
@@ -98,7 +98,16 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
     return pendingActions[serverId]?.action || null;
   }, [pendingActions]);
 
-  const getDisplayStatus = useCallback((serverId: string, actualStatus: string): string => {
+  const getDisplayStatus = useCallback((serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }): string => {
+    // Check for deletion status first (highest priority)
+    if (cancellationData) {
+      if (cancellationData.mode === 'immediate') {
+        return cancellationData.status === 'processing' ? 'destroying' : 'queued_deletion';
+      }
+      // Grace period deletions show as scheduled
+      return 'scheduled_deletion';
+    }
+
     const pending = pendingActions[serverId];
     if (!pending) return actualStatus;
 

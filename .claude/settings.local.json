@@ -25,7 +25,8 @@
       "Bash(\"/c/Program Files/nodejs/npm.cmd\" --version)",
       "Bash(\"/c/Program Files/nodejs/npm.cmd\" run build)",
       "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }

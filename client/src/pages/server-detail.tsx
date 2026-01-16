@@ -369,8 +369,14 @@ export default function ServerDetail() {
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
   
   useSyncPowerActions(server ? [server] : []);
-  
-  const displayStatus = server ? getDisplayStatus(server.id, server.status) : 'unknown';
+
+  // Get display status (reboot, starting, stopping, deleting, or actual)
+  const activeCancellation = cancellationData?.cancellation;
+  const displayStatus = server ? getDisplayStatus(
+    server.id,
+    server.status,
+    activeCancellation ? { mode: activeCancellation.mode || 'grace', status: activeCancellation.status } : undefined
+  ) : 'unknown';
   const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
 
   const powerMutation = useMutation({
@@ -1055,71 +1061,92 @@ export default function ServerDetail() {
     const timeRemaining = Math.max(0, scheduledAt.getTime() - now.getTime());
     const minutesRemaining = Math.ceil(timeRemaining / (1000 * 60));
     const isProcessing = activeCancellation.status === 'processing';
-    
+
     return (
       <AppShell>
-        <div className="flex flex-col items-center justify-center py-20 h-[70vh]">
-          <div className="max-w-md mx-auto text-center space-y-6">
-            {/* Animated deletion icon */}
-            <div className="relative mx-auto w-24 h-24">
-              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ animationDuration: '2s' }} />
-              <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-red-500/30 border-2 border-red-500/50">
-                <Trash2 className="h-10 w-10 text-red-400" />
+        <div className="max-w-2xl mx-auto py-12">
+          {/* Back button */}
+          <Link href="/servers">
+            <Button variant="ghost" className="mb-6">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Servers
+            </Button>
+          </Link>
+
+          {/* Server info card */}
+          <Card className="p-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <Server className="h-8 w-8 text-muted-foreground" />
               </div>
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-foreground">{server.name}</h1>
+                <p className="text-sm text-muted-foreground">{server.primaryIp}</p>
+              </div>
+              <Badge variant="destructive" className="h-7">
+                {isProcessing ? 'Removing' : 'Queued'}
+              </Badge>
             </div>
-            
-            <div className="space-y-2">
-              <h2 className="text-2xl font-display font-bold text-foreground">
-                {isProcessing ? 'Server Deletion In Progress' : 'Server Queued for Deletion'}
-              </h2>
-              <p className="text-muted-foreground">
-                <span className="font-semibold text-foreground">{server.name}</span> {isProcessing ? 'is being permanently deleted.' : 'will be permanently deleted shortly.'}
-              </p>
-            </div>
-            
-            {/* Status indicator */}
-            <div className="glass-card rounded-xl border border-red-500/30 p-6 bg-red-500/10">
-              {isProcessing ? (
-                <>
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
-                    <span className="text-red-400 font-medium">Actively deleting...</span>
-                  </div>
+          </Card>
+
+          {/* Status card */}
+          <Card className="p-6 border-red-500/30 bg-red-500/5">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                {isProcessing ? (
+                  <Loader2 className="h-5 w-5 text-red-400 animate-spin mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground mb-1">
+                    {isProcessing ? 'Server Removal in Progress' : 'Server Queued for Removal'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    Your server has been submitted for deletion and is now being removed from our systems.
+                    {isProcessing ? (
+                      'This server is currently being removed from our infrastructure. This process typically completes within 5 minutes.'
+                    ) : timeRemaining > 0 ? (
+                      `Removal will begin in approximately ${minutesRemaining} minute${minutesRemaining !== 1 ? 's' : ''}. Once started, the process cannot be stopped.`
+                    ) : (
+                      'Removal is about to begin. This process cannot be stopped once started.'
+                    )}
                   </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <Clock className="h-5 w-5 text-orange-400" />
-                    <span className="text-orange-400 font-medium">Queued for deletion</span>
+                </div>
+              </div>
+
+              {isProcessing && (
+                <div className="pt-4 border-t border-red-500/20">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className="text-red-400 font-medium">Removing server resources...</span>
                   </div>
-                  {timeRemaining > 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Deletion will begin in approximately {minutesRemaining} minute{minutesRemaining !== 1 ? 's' : ''}. Once started, the server will be fully removed within a few minutes.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Deletion is about to begin. The server will be fully removed within a few minutes.
-                    </p>
-                  )}
-                </>
+                </div>
               )}
             </div>
-            
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>This action cannot be stopped or reversed.</p>
-              <p>All data on this server will be permanently destroyed.</p>
-            </div>
-            
-            <Link href="/servers">
-              <Button variant="outline" className="mt-4 border-border text-foreground hover:bg-muted/50">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Return to Fleet
-              </Button>
-            </Link>
-          </div>
+          </Card>
+
+          {/* Info box */}
+          <Card className="p-6 mt-6 bg-muted/30">
+            <h3 className="font-semibold text-foreground mb-3">What happens next?</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>All data on this server will be permanently deleted</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>The IP address will be released back to the pool</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>You will no longer be charged for this server</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>This action cannot be reversed</span>
+              </li>
+            </ul>
+          </Card>
         </div>
       </AppShell>
     );

@@ -130,6 +130,7 @@ export default function DeployPage() {
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
     queryFn: () => api.getPlans(),
+    refetchInterval: 30000, // Auto-refresh every 30 seconds to catch plan availability changes
   });
 
   const { data: locationsData } = useQuery<{ locations: Location[] }>({
