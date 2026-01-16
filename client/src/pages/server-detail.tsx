@@ -1315,18 +1315,18 @@ export default function ServerDetail() {
                   </div>
                 </div>
 
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
-                  <p className="text-sm text-muted-foreground">
-                    {server.createdAt && !isNaN(new Date(server.createdAt).getTime())
-                      ? new Date(server.createdAt).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })
-                      : 'Unknown'}
-                  </p>
-                </div>
+                {server.billing?.nextBillAt && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Next Due</p>
+                    <p className="text-sm text-foreground font-medium">
+                      {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -1451,14 +1451,6 @@ export default function ServerDetail() {
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
                   <span className="text-foreground">{server.image.name}</span>
-                </div>
-              )}
-              {server.billing?.nextBillAt && (
-                <div className="flex items-center gap-2">
-                  <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
-                  <span className="text-foreground">
-                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
                 </div>
               )}
             </div>
