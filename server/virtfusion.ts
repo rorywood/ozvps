@@ -1558,12 +1558,16 @@ export class VirtFusionClient {
       if (osId) {
         try {
           log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
+          // Use same parameter names as reinstall: operatingSystemId and name
+          const buildBody: Record<string, any> = {
+            operatingSystemId: osId,
+          };
+          if (hostname) {
+            buildBody.name = hostname;
+          }
           await this.request(`/servers/${server.id}/build`, {
             method: 'POST',
-            body: JSON.stringify({
-              osid: osId,
-              hostname: hostname,
-            }),
+            body: JSON.stringify(buildBody),
           });
           log(`Server ${server.id} build initiated`, 'virtfusion');
         } catch (buildError: any) {
