@@ -45,6 +45,10 @@ export const userFlags = pgTable("user_flags", {
   blocked: boolean("blocked").default(false).notNull(),
   blockedReason: text("blocked_reason"),
   blockedAt: timestamp("blocked_at"),
+  // Admin can manually verify email, bypassing Auth0's email_verified status
+  emailVerifiedOverride: boolean("email_verified_override").default(false).notNull(),
+  emailVerifiedOverrideAt: timestamp("email_verified_override_at"),
+  emailVerifiedOverrideBy: text("email_verified_override_by"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

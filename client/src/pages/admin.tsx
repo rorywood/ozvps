@@ -359,30 +359,56 @@ export default function AdminPage() {
 
   const verifyEmailMutation = useMutation({
     mutationFn: async (auth0UserId: string) => {
-      console.log('[Admin] Verifying email for user:', auth0UserId);
+      console.log('[Admin] ========== VERIFY EMAIL START ==========');
+      console.log('[Admin] Auth0 User ID:', auth0UserId);
+      console.log('[Admin] Auth0 User ID type:', typeof auth0UserId);
+      console.log('[Admin] Auth0 User ID length:', auth0UserId?.length);
+
+      if (!auth0UserId) {
+        console.error('[Admin] ERROR: auth0UserId is empty or undefined!');
+        throw new Error('User ID is missing');
+      }
+
+      console.log('[Admin] Making POST request to /api/admin/verify-email...');
       const response = await fetch('/api/admin/verify-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ auth0UserId }),
       });
-      console.log('[Admin] Verify email response status:', response.status);
+
+      console.log('[Admin] Response received:');
+      console.log('[Admin]   - Status:', response.status);
+      console.log('[Admin]   - Status Text:', response.statusText);
+      console.log('[Admin]   - OK:', response.ok);
+
       if (!response.ok) {
         const error = await response.json();
-        console.error('[Admin] Verify email failed:', error);
+        console.error('[Admin] ERROR: Request failed!');
+        console.error('[Admin]   - Error response:', JSON.stringify(error, null, 2));
         throw new Error(error.error || 'Failed to verify email');
       }
+
       const result = await response.json();
-      console.log('[Admin] Verify email success:', result);
+      console.log('[Admin] SUCCESS: Email verified!');
+      console.log('[Admin]   - Result:', JSON.stringify(result, null, 2));
+      console.log('[Admin] ========== VERIFY EMAIL END ==========');
       return result;
     },
+    onMutate: (auth0UserId) => {
+      console.log('[Admin] onMutate: Starting verification for:', auth0UserId);
+      toast.info('Verifying email...', { duration: 2000 });
+    },
     onSuccess: (data, auth0UserId) => {
-      console.log('[Admin] Email verified successfully for:', auth0UserId);
+      console.log('[Admin] onSuccess: Email verified for:', auth0UserId);
+      console.log('[Admin] onSuccess: Invalidating queries...');
       toast.success('Email verified successfully');
       queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
     },
     onError: (error: Error, auth0UserId) => {
-      console.error('[Admin] Verify email mutation error for:', auth0UserId, error);
+      console.error('[Admin] onError: Verification failed for:', auth0UserId);
+      console.error('[Admin] onError: Error details:', error.message);
+      console.error('[Admin] onError: Full error:', error);
       toast.error(error.message || 'Failed to verify email');
     },
   });

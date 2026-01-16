@@ -26,6 +26,10 @@ export interface UserFlags {
   blocked: boolean;
   blockedReason?: string | null;
   blockedAt?: Date | null;
+  // Admin email verification override - bypasses Auth0's email_verified
+  emailVerifiedOverride?: boolean;
+  emailVerifiedOverrideAt?: Date | null;
+  emailVerifiedOverrideBy?: string | null;
 }
 
 export interface IStorage {
@@ -51,6 +55,8 @@ export interface IStorage {
   updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
+  setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void>;
+  getEmailVerifiedOverride(auth0UserId: string): Promise<boolean>;
 }
 
 export class MemoryStorage implements IStorage {
@@ -214,6 +220,28 @@ export class MemoryStorage implements IStorage {
         blockedAt: blocked ? new Date() : null,
       });
     }
+  }
+
+  async setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void> {
+    const existing = this.userFlagsMap.get(auth0UserId);
+    if (existing) {
+      existing.emailVerifiedOverride = verified;
+      existing.emailVerifiedOverrideAt = verified ? new Date() : null;
+      existing.emailVerifiedOverrideBy = verified ? adminEmail : null;
+    } else {
+      this.userFlagsMap.set(auth0UserId, {
+        auth0UserId,
+        blocked: false,
+        emailVerifiedOverride: verified,
+        emailVerifiedOverrideAt: verified ? new Date() : null,
+        emailVerifiedOverrideBy: verified ? adminEmail : null,
+      });
+    }
+  }
+
+  async getEmailVerifiedOverride(auth0UserId: string): Promise<boolean> {
+    const flags = this.userFlagsMap.get(auth0UserId);
+    return flags?.emailVerifiedOverride ?? false;
   }
 }
 
@@ -560,7 +588,12 @@ export class RedisStorage implements IStorage {
     }
 
     try {
+      // Get existing flags first to preserve other settings
+      const existingData = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      const existing: UserFlags = existingData ? JSON.parse(existingData) : { auth0UserId, blocked: false };
+
       const flags: UserFlags = {
+        ...existing,
         auth0UserId,
         blocked,
         blockedReason: blocked ? (reason || null) : null,
@@ -576,6 +609,54 @@ export class RedisStorage implements IStorage {
     } catch (error: any) {
       log(`Redis error in setUserBlocked: ${error.message}`, 'storage');
       return this.memoryFallback.setUserBlocked(auth0UserId, blocked, reason);
+    }
+  }
+
+  async setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.setEmailVerifiedOverride(auth0UserId, verified, adminEmail);
+    }
+
+    try {
+      // Get existing flags first to preserve other settings
+      const existingData = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      const existing: UserFlags = existingData ? JSON.parse(existingData) : { auth0UserId, blocked: false };
+
+      const flags: UserFlags = {
+        ...existing,
+        auth0UserId,
+        emailVerifiedOverride: verified,
+        emailVerifiedOverrideAt: verified ? new Date() : null,
+        emailVerifiedOverrideBy: verified ? adminEmail : null,
+      };
+
+      // Store user flags with 30 day expiry
+      await this.redisClient.setEx(
+        this.userFlagsKey(auth0UserId),
+        30 * 24 * 60 * 60,
+        JSON.stringify(flags)
+      );
+      log(`Set email verified override for ${auth0UserId} to ${verified} by ${adminEmail}`, 'storage');
+    } catch (error: any) {
+      log(`Redis error in setEmailVerifiedOverride: ${error.message}`, 'storage');
+      return this.memoryFallback.setEmailVerifiedOverride(auth0UserId, verified, adminEmail);
+    }
+  }
+
+  async getEmailVerifiedOverride(auth0UserId: string): Promise<boolean> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getEmailVerifiedOverride(auth0UserId);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      if (!data) return false;
+
+      const flags: UserFlags = JSON.parse(data);
+      return flags.emailVerifiedOverride ?? false;
+    } catch (error: any) {
+      log(`Redis error in getEmailVerifiedOverride: ${error.message}`, 'storage');
+      return this.memoryFallback.getEmailVerifiedOverride(auth0UserId);
     }
   }
 }

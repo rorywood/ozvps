@@ -1274,8 +1274,13 @@ export async function registerRoutes(
         log(`Admin user logged in: ${email}`, 'auth');
       }
 
-      // Get email verification status from Auth0
-      const emailVerified = auth0Result.user.email_verified === true;
+      // Get email verification status - check both Auth0 and database override
+      const emailVerifiedFromAuth0 = auth0Result.user.email_verified === true;
+      const emailVerifiedOverride = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
+      const emailVerified = emailVerifiedFromAuth0 || emailVerifiedOverride;
+      if (emailVerifiedOverride && !emailVerifiedFromAuth0) {
+        log(`User ${email} email verified via database override`, 'auth');
+      }
 
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
@@ -1400,10 +1405,16 @@ export async function registerRoutes(
       let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          const [currentAdminStatus, currentEmailVerified] = await Promise.all([
+          // Check database override for email verification first
+          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
+
+          const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
             auth0Client.isUserAdmin(session.auth0UserId),
             auth0Client.isEmailVerified(session.auth0UserId),
           ]);
+
+          // Email is verified if EITHER Auth0 says so OR we have a database override
+          const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
 
           const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
 
@@ -1414,7 +1425,7 @@ export async function registerRoutes(
           }
 
           if (currentEmailVerified !== emailVerified) {
-            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}`, 'auth');
+            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}${emailVerifiedOverride ? ' (override)' : ''}`, 'auth');
             emailVerified = currentEmailVerified;
             updates.emailVerified = currentEmailVerified;
           }
@@ -2145,7 +2156,8 @@ export async function registerRoutes(
           return res.json({ upcoming });
         }
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
-        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+        // Convert server IDs to strings since serverBilling stores virtfusionServerId as text
+        const serverMap = new Map(servers.map(s => [String(s.id), s.name]));
 
         // Only include billing records for servers that actually exist
         upcoming = billingRecords
@@ -2994,22 +3006,40 @@ export async function registerRoutes(
   });
 
   app.post('/api/admin/verify-email', authMiddleware, async (req, res) => {
+    log(`========== ADMIN VERIFY EMAIL START ==========`, 'admin');
+    log(`Request body: ${JSON.stringify(req.body)}`, 'admin');
+    log(`User session: ${JSON.stringify({ email: req.userSession?.email, isAdmin: req.userSession?.isAdmin })}`, 'admin');
+
     try {
       if (!req.userSession?.isAdmin) {
+        log(`REJECTED: User ${req.userSession?.email} is not admin`, 'admin');
         return res.status(403).json({ error: 'Admin access required' });
       }
 
       const result = verifyEmailSchema.safeParse(req.body);
       if (!result.success) {
         const errorMessages = result.error.errors.map(e => e.message).join(', ');
+        log(`REJECTED: Validation failed - ${errorMessages}`, 'admin');
         return res.status(400).json({ error: errorMessages });
       }
 
       const { auth0UserId } = result.data;
       log(`Admin ${req.userSession.email} manually verifying email for Auth0 user ${auth0UserId}`, 'admin');
 
-      // Update Auth0 user to mark email as verified
-      await auth0Client.updateUser(auth0UserId, { email_verified: true });
+      // Set email verified override in our database (bypasses Auth0)
+      log(`Setting email verified override in database...`, 'admin');
+      await storage.setEmailVerifiedOverride(auth0UserId, true, req.userSession.email);
+      log(`Email verified override set successfully`, 'admin');
+
+      // Also try to update Auth0 (but don't fail if it doesn't work)
+      try {
+        log(`Attempting to update Auth0 as well...`, 'admin');
+        await auth0Client.updateUser(auth0UserId, { email_verified: true });
+        log(`Auth0 update succeeded`, 'admin');
+      } catch (auth0Error: any) {
+        log(`Auth0 update failed (using database override instead): ${auth0Error.message}`, 'admin');
+        // Don't throw - the database override will work
+      }
 
       // Audit log
       await dbStorage.createAuditLog({
@@ -3017,14 +3047,17 @@ export async function registerRoutes(
         action: 'EMAIL_VERIFIED_MANUALLY',
         targetType: 'user',
         targetId: auth0UserId,
-        details: `Admin manually verified email for user ${auth0UserId}`,
+        details: `Admin manually verified email for user ${auth0UserId} (database override)`,
         status: 'success',
       });
 
-      log(`Admin ${req.userSession.email} successfully verified email for user ${auth0UserId}`, 'admin');
+      log(`SUCCESS: Admin ${req.userSession.email} verified email for user ${auth0UserId}`, 'admin');
+      log(`========== ADMIN VERIFY EMAIL END ==========`, 'admin');
       res.json({ success: true, message: 'Email verified successfully' });
     } catch (error: any) {
-      log(`Admin email verification failed: ${error.message}`, 'admin');
+      log(`ERROR: Admin email verification failed`, 'admin');
+      log(`Error message: ${error.message}`, 'admin');
+      log(`Error stack: ${error.stack}`, 'admin');
 
       // Audit log for failure
       try {
@@ -3038,7 +3071,8 @@ export async function registerRoutes(
         });
       } catch {}
 
-      res.status(500).json({ error: 'Failed to verify email' });
+      log(`========== ADMIN VERIFY EMAIL END (FAILED) ==========`, 'admin');
+      res.status(500).json({ error: `Failed to verify email: ${error.message}` });
     }
   });
 
@@ -3492,7 +3526,7 @@ export async function registerRoutes(
     try {
       // Get all wallets which represent our user accounts
       const allWallets = await dbStorage.getAllWallets();
-      
+
       // Build user list from wallets, enriching with Auth0 and VirtFusion data
       const users = await Promise.all(
         allWallets.map(async (wallet) => {
@@ -3501,16 +3535,21 @@ export async function registerRoutes(
           let name = 'Unknown User';
           let emailVerified = false;
 
+          // Check database override for email verification first
+          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(wallet.auth0UserId);
+
           // Fetch user info from Auth0 to get email and name
           try {
             const auth0User = await auth0Client.getUserById(wallet.auth0UserId);
             if (auth0User) {
               email = auth0User.email || 'Unknown';
               name = auth0User.name || auth0User.email || 'Unknown User';
-              emailVerified = auth0User.email_verified || false;
+              // Email is verified if EITHER Auth0 says so OR we have a database override
+              emailVerified = auth0User.email_verified || emailVerifiedOverride;
             }
           } catch (e) {
-            // Auth0 user may have been deleted
+            // Auth0 user may have been deleted, but check override
+            emailVerified = emailVerifiedOverride;
           }
 
           // If wallet has a linked VirtFusion user, fetch their server count
