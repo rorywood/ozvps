@@ -436,37 +436,26 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-green-500/10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-green-500/20 via-transparent to-transparent" />
-        
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-background border-r border-border">
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
           <Link href="/">
             <img src={logo} alt="OzVPS" className="h-16 w-auto dark:invert-0 invert mb-12 cursor-pointer" data-testid="img-logo-side" />
           </Link>
-          
+
           <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
             Cloud Servers<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-green-500">
-              Made Simple
-            </span>
+            Made Simple
           </h1>
-          
+
           <p className="text-lg text-muted-foreground mb-12 max-w-md">
-            Deploy high-performance virtual servers with our easy-to-use control panel. 
+            Deploy high-performance virtual servers with our easy-to-use control panel.
             Pay as you go with our prepaid wallet system.
           </p>
-          
+
           <div className="grid grid-cols-2 gap-6">
             {features.map((feature, index) => (
-              <motion.div
+              <div
                 key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 + 0.2 }}
                 className="flex items-start gap-3"
               >
                 <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -476,7 +465,7 @@ export default function RegisterPage() {
                   <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
                   <p className="text-xs text-muted-foreground">{feature.description}</p>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>

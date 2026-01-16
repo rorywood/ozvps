@@ -317,20 +317,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branded Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary/90 to-primary/70 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1)_0%,transparent_50%)] opacity-30"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,255,255,0.08)_0%,transparent_40%)]"></div>
-
+      <div className="hidden lg:flex lg:w-1/2 bg-background relative overflow-hidden border-r border-border">
         {/* Content */}
-        <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo & Brand */}
           <div>
             <Link href="/">
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto cursor-pointer brightness-0 invert"
+                className="h-12 w-auto cursor-pointer dark:invert-0 invert"
                 data-testid="img-logo"
               />
             </Link>
@@ -339,10 +335,10 @@ export default function LoginPage() {
           {/* Main Content */}
           <div className="space-y-8">
             <div>
-              <h1 className="text-4xl font-bold mb-4 tracking-tight">
+              <h1 className="text-4xl font-bold mb-4 tracking-tight text-foreground">
                 Welcome to OzVPS
               </h1>
-              <p className="text-xl text-white/90 leading-relaxed">
+              <p className="text-xl text-muted-foreground leading-relaxed">
                 Enterprise-grade virtual servers with Australian hosting and 24/7 support.
               </p>
             </div>
@@ -350,39 +346,39 @@ export default function LoginPage() {
             {/* Features */}
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                  <CheckCircle2 className="h-5 w-5" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-1">Lightning Fast Deployment</h3>
-                  <p className="text-sm text-white/80">Deploy your server in seconds with our automated platform</p>
+                  <h3 className="font-semibold mb-1 text-foreground">Lightning Fast Deployment</h3>
+                  <p className="text-sm text-muted-foreground">Deploy your server in seconds with our automated platform</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                  <CheckCircle2 className="h-5 w-5" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-1">Australian Data Centers</h3>
-                  <p className="text-sm text-white/80">Low latency and compliance with local data sovereignty</p>
+                  <h3 className="font-semibold mb-1 text-foreground">Australian Data Centers</h3>
+                  <p className="text-sm text-muted-foreground">Low latency and compliance with local data sovereignty</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                  <CheckCircle2 className="h-5 w-5" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-1">24/7 Expert Support</h3>
-                  <p className="text-sm text-white/80">Our team is always here to help when you need us</p>
+                  <h3 className="font-semibold mb-1 text-foreground">24/7 Expert Support</h3>
+                  <p className="text-sm text-muted-foreground">Our team is always here to help when you need us</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-sm text-white/70">
+          <div className="text-sm text-muted-foreground">
             © 2026 OzVPS. All rights reserved.
           </div>
         </div>
