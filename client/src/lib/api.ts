@@ -123,13 +123,21 @@ class ApiClient {
 
   async listServers(): Promise<Server[]> {
     const response = await secureFetch(`${this.baseUrl}/servers`);
-    if (!response.ok) throw new Error('Failed to fetch servers');
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      if (response.status === 500) throw new Error('Unable to load servers. Our servers may be experiencing issues. Please try again in a moment.');
+      throw new Error('Unable to load your servers. Please check your internet connection and try again.');
+    }
     return response.json();
   }
 
   async getServer(id: string): Promise<Server> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch server');
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Server not found. It may have been deleted or you may not have access to it.');
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      throw new Error('Unable to load server details. Please try again.');
+    }
     return response.json();
   }
 
@@ -141,14 +149,23 @@ class ApiClient {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Failed to perform power action');
+      if (response.status === 409) {
+        throw new Error(data.error || 'This server is currently being modified. Please wait a moment and try again.');
+      }
+      if (response.status === 503) {
+        throw new Error('Unable to control the server right now. The infrastructure may be temporarily unavailable.');
+      }
+      throw new Error(data.error || `Unable to ${action} the server. Please try again in a moment.`);
     }
     return response.json();
   }
 
   async getMetrics(id: string): Promise<{ cpu: number[], ram: number[], net: number[] }> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}/metrics`);
-    if (!response.ok) throw new Error('Failed to fetch metrics');
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Server metrics are not available yet. The server may still be setting up.');
+      throw new Error('Unable to load server metrics. Metrics will be available once the server is fully running.');
+    }
     return response.json();
   }
 
@@ -242,7 +259,10 @@ class ApiClient {
     bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
   }> {
     const response = await secureFetch(`${this.baseUrl}/dashboard/overview`);
-    if (!response.ok) throw new Error('Failed to fetch dashboard overview');
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      throw new Error('Unable to load dashboard. Please check your internet connection and try again.');
+    }
     return response.json();
   }
 

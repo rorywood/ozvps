@@ -177,9 +177,10 @@ export default function DeployPage() {
       setLocation(`/servers/${data.serverId}`);
     },
     onError: (error: any) => {
+      const errorMessage = error.message || "Unable to deploy server. Please try again.";
       toast({
-        title: "Deployment failed",
-        description: error.message || "Failed to deploy server",
+        title: "Deployment Failed",
+        description: errorMessage,
         variant: "destructive",
       });
     },
