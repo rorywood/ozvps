@@ -182,11 +182,18 @@ cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/n
 rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
 
 # Add SENTRY_DSN if not present
-if ! grep -q "^SENTRY_DSN=" "$INSTALL_DIR/.env" 2>/dev/null; then
-    echo "" >> "$INSTALL_DIR/.env"
-    echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
-    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
-    success "Added Sentry error tracking"
+info "Checking Sentry configuration..."
+if [ -f "$INSTALL_DIR/.env" ]; then
+    if ! grep -q "SENTRY_DSN" "$INSTALL_DIR/.env"; then
+        echo "" >> "$INSTALL_DIR/.env"
+        echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
+        echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
+        success "Added Sentry DSN to .env"
+    else
+        success "Sentry DSN already configured"
+    fi
+else
+    warning ".env file not found, will add Sentry DSN later"
 fi
 
 # Update custom error pages
@@ -321,6 +328,14 @@ sleep 1
 
 # ============================================================================
 step_header 6 6 "Restarting Application"
+
+# Final check - ensure SENTRY_DSN is configured (failsafe for bootstrap issue)
+if [ -f "$INSTALL_DIR/.env" ] && ! grep -q "SENTRY_DSN" "$INSTALL_DIR/.env"; then
+    echo "" >> "$INSTALL_DIR/.env"
+    echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
+    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
+    success "Added Sentry DSN to .env (failsafe)"
+fi
 
 info "Stopping old instance..."
 pm2 delete "$SERVICE_NAME" 2>/dev/null || true
