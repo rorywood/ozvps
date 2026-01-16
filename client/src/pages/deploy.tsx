@@ -279,7 +279,11 @@ export default function DeployPage() {
   }
 
   // If email is not verified, show only the verification message
-  if (authData && !authData.emailVerified) {
+  // Handle both data structures: { emailVerified, email } or { user: { emailVerified, email } }
+  const isEmailVerified = authData?.emailVerified || authData?.user?.emailVerified;
+  const userEmail = authData?.email || authData?.user?.email;
+
+  if (authData && !isEmailVerified) {
     return (
       <AppShell>
         <div className="max-w-3xl mx-auto py-12">
@@ -292,7 +296,7 @@ export default function DeployPage() {
                 </h2>
                 <p className="text-muted-foreground mb-4">
                   You need to verify your email address before you can deploy servers.
-                  We've sent a verification link to <span className="font-medium text-foreground">{authData?.email}</span>.
+                  We've sent a verification link to <span className="font-medium text-foreground">{userEmail}</span>.
                 </p>
                 <p className="text-sm text-muted-foreground mb-6">
                   Please check your inbox and spam folder for the verification email. If you haven't received it, you can request a new one.

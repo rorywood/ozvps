@@ -43,7 +43,9 @@ export function EmailVerificationBanner() {
   });
 
   // Don't show if email is verified, user is not logged in, or banner was dismissed
-  if (!authData || authData.emailVerified || dismissed) {
+  // Handle both data structures: { emailVerified } or { user: { emailVerified } }
+  const isEmailVerified = authData?.emailVerified || authData?.user?.emailVerified;
+  if (!authData || isEmailVerified || dismissed) {
     return null;
   }
 
@@ -64,7 +66,7 @@ export function EmailVerificationBanner() {
             Email Verification Required
           </h3>
           <p className="text-sm text-muted-foreground mb-3">
-            Please verify your email address <span className="font-medium text-foreground">{authData.email}</span> to access all features and deploy servers.
+            Please verify your email address <span className="font-medium text-foreground">{authData?.email || authData?.user?.email}</span> to access all features and deploy servers.
           </p>
           <div className="flex items-center gap-3">
             <Button
