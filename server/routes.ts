@@ -717,28 +717,6 @@ export async function registerRoutes(
     }
   });
 
-  // Sentry test endpoint - triggers a test error to verify Sentry integration
-  app.get('/api/sentry-test', (req, res) => {
-    if (!isSentryEnabled()) {
-      return res.status(503).json({
-        status: 'error',
-        message: 'Sentry is not configured. Set SENTRY_DSN in your .env file.'
-      });
-    }
-
-    try {
-      // Intentionally throw an error to test Sentry
-      throw new Error('Sentry test error - this is intentional!');
-    } catch (e: any) {
-      captureException(e, { test: true, endpoint: '/api/sentry-test' });
-      log('Sentry test error captured', 'sentry');
-      res.json({
-        status: 'ok',
-        message: 'Test error sent to Sentry. Check your Sentry dashboard.'
-      });
-    }
-  });
-
   // Seed plans from static config on startup (non-blocking)
   (async () => {
     try {
