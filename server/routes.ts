@@ -1069,12 +1069,6 @@ export async function registerRoutes(
         });
       }
 
-      // Apply progressive delay based on failed attempts
-      const delay = await getProgressiveDelay(email, clientIp);
-      if (delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-
       // Check if user exists in Auth0 first
       const existingUser = await auth0Client.getUserByEmail(email);
 
@@ -1084,6 +1078,13 @@ export async function registerRoutes(
         // Only record failed login if it's an authentication failure, not a connection error
         if (!auth0Result.isConnectionError) {
           await recordFailedLogin(email, clientIp);
+        }
+
+        // Apply progressive delay ONLY on failed login attempts (after authentication fails)
+        // This prevents legitimate users from experiencing delays on successful logins
+        const delay = await getProgressiveDelay(email, clientIp);
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
 
         // If user doesn't exist, return a specific code for the frontend

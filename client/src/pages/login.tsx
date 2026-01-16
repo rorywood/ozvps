@@ -32,75 +32,54 @@ function WelcomeBackScreen({ displayName, onComplete, onLogout }: { displayName:
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasCompleted, setHasCompleted] = useState(false);
   const [controlHostError, setControlHostError] = useState(false);
-  const [hasCheckedHealth, setHasCheckedHealth] = useState(false);
-  const [healthCheckPassed, setHealthCheckPassed] = useState(false);
 
-  // Check VirtFusion health when we reach the "control" step
+  // Non-blocking health check - runs in background but doesn't block redirect
   useEffect(() => {
-    if (currentIndex === 2 && !hasCheckedHealth) {
-      setHasCheckedHealth(true);
+    // Start health check immediately but don't wait for it
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
 
-      // Add timeout controller for the health check
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    fetch('/api/health', { signal: controller.signal })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          throw new Error('Control host unreachable');
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.status !== 'ok') {
+          throw new Error('Control host error');
+        }
+        // Health check passed - just update UI, don't block
+      })
+      .catch(() => {
+        clearTimeout(timeoutId);
+        // Health check failed - just log it, don't block login
+        console.warn('Health check failed, but continuing with login');
+      });
 
-      fetch('/api/health', { signal: controller.signal })
-        .then(res => {
-          clearTimeout(timeoutId);
-          if (!res.ok) {
-            throw new Error('Control host unreachable');
-          }
-          return res.json();
-        })
-        .then(data => {
-          if (data.status !== 'ok') {
-            throw new Error('Control host error');
-          }
-          // Health check passed, mark step complete and continue
-          setHealthCheckPassed(true);
-          setItems(prev => prev.map((item, idx) =>
-            idx === 2 ? { ...item, completed: true } : item
-          ));
-          setCurrentIndex(3);
-        })
-        .catch(() => {
-          clearTimeout(timeoutId);
-          // Mark the control step as failed
-          setItems(prev => prev.map((item, idx) =>
-            idx === 2 ? { ...item, failed: true } : item
-          ));
-          setControlHostError(true);
-        });
-    }
-  }, [currentIndex, hasCheckedHealth]);
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
-  // Fallback navigation - only run if health check passed (prevents redirect during pending/failed health check)
-  useEffect(() => {
-    if (controlHostError || !healthCheckPassed) return;
-    const fallbackTimer = setTimeout(() => {
-      if (!hasCompleted && !controlHostError) {
-        onComplete();
-      }
-    }, 5000); // 5 seconds after health check passes
-    return () => clearTimeout(fallbackTimer);
-  }, [onComplete, hasCompleted, controlHostError, healthCheckPassed]);
-
+  // Quick progression through welcome steps without waiting for health check
   useEffect(() => {
     if (controlHostError) return;
     if (currentIndex >= items.length) {
       const timer = setTimeout(() => {
         setHasCompleted(true);
         onComplete();
-      }, 500);
+      }, 300); // Reduced from 500ms
       return () => clearTimeout(timer);
     }
 
-    // For the "control" step (index 2), we wait for the health check
-    if (currentIndex === 2) return;
-
-    const delay = currentIndex === 0 ? 600 : 800 + Math.random() * 400;
+    // Faster delays for all steps
+    const delay = currentIndex === 0 ? 300 : 400; // Reduced from 600-1200ms
     const timer = setTimeout(() => {
-      setItems(prev => prev.map((item, idx) => 
+      setItems(prev => prev.map((item, idx) =>
         idx === currentIndex ? { ...item, completed: true } : item
       ));
       setCurrentIndex(prev => prev + 1);
@@ -314,7 +293,7 @@ export default function LoginPage() {
     }
 
     let attempts = 0;
-    const maxAttempts = 40; // 10 seconds total
+    const maxAttempts = 12; // 3 seconds total (reduced from 40/10s for better UX)
     let retryTimer: NodeJS.Timeout | null = null;
     let scriptErrored = false;
     const version = recaptchaConfig.version || 'v3';
