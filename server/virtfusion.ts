@@ -1086,11 +1086,28 @@ export class VirtFusionClient {
           expectedPassword?: string;
           password?: string;
           decryptedPassword?: string;
+          system?: {
+            success?: boolean;
+            data?: {
+              reset_password?: boolean;
+            };
+          };
         }
       }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ user: resetUser, sendMail: false }),
       });
+
+      // Log full response to debug structure
+      log(`[PASSWORD RESET] Full response for ${serverId}: ${JSON.stringify(data.data)}`, 'virtfusion');
+
+      // Check if guest agent responded successfully
+      // VirtFusion returns data.system.data.reset_password: false when guest agent fails
+      const resetPasswordSuccess = data.data?.system?.data?.reset_password;
+      if (resetPasswordSuccess === false) {
+        log(`Password reset for server ${serverId} failed: Guest agent not responding (reset_password=false)`, 'virtfusion');
+        throw new Error('Password reset failed. The QEMU guest agent is not responding. Please wait 30-60 seconds after deployment and try again.');
+      }
 
       // VirtFusion returns the new password via expectedPassword
       // Response includes: { queueId: number, expectedPassword: string }
