@@ -344,7 +344,7 @@ export default function LoginPage() {
                 Welcome to OzVPS
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed">
-                Enterprise-grade virtual servers with Australian hosting and 24/7 support.
+                Enterprise grade virtual servers with Australian hosting and 24/7 support.
               </p>
             </div>
 
