@@ -717,10 +717,7 @@ export const dbStorage = {
         if (planData.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
           updateData.priceMonthly = existingByVfId.priceMonthly;
         }
-        // Preserve manually-disabled plans (don't re-enable from VirtFusion sync)
-        if (existingByVfId.active === false) {
-          updateData.active = false;
-        }
+        // Allow plan active status to be updated from static config and VirtFusion sync
 
         const [updated] = await db
           .update(plans)
@@ -739,10 +736,7 @@ export const dbStorage = {
       if (planData.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
         updateData.priceMonthly = existing.priceMonthly;
       }
-      // Preserve manually-disabled plans
-      if (existing.active === false) {
-        updateData.active = false;
-      }
+      // Allow plan active status to be updated
 
       const [updated] = await db
         .update(plans)
