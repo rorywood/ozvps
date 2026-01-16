@@ -3,14 +3,14 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { 
-  ArrowLeft, 
-  Power, 
-  RotateCw, 
-  TerminalSquare, 
-  Cpu, 
-  HardDrive, 
-  Network, 
+import {
+  ArrowLeft,
+  Power,
+  RotateCw,
+  TerminalSquare,
+  Cpu,
+  HardDrive,
+  Network,
   Activity,
   HardDrive as StorageIcon,
   Loader2,
@@ -37,7 +37,8 @@ import {
   Key,
   Eye,
   EyeOff,
-  Shield
+  Shield,
+  Server
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -123,7 +124,6 @@ export default function ServerDetail() {
   
   // Cancellation state
   const [cancellationReason, setCancellationReason] = useState<string>("");
-  const [immediateConfirmOpen, setImmediateConfirmOpen] = useState(false);
   const [immediateConfirmText, setImmediateConfirmText] = useState("");
   
   // Password reset state
@@ -2001,102 +2001,84 @@ export default function ServerDetail() {
               </div>
             </Card>
 
-            {/* Cancellation Section */}
+            {/* Destroy Server Section - DigitalOcean Style */}
             <Card className="p-6 border-destructive/50">
               <div className="space-y-6">
                 {cancellationData?.cancellation ? (
-                  // Show existing cancellation request
+                  // Show existing deletion status
                   <>
-                    <div className="flex items-start gap-4">
-                      <div className={cn("p-3 rounded-lg", cancellationData.cancellation.mode === 'immediate' ? "bg-red-500/20" : "bg-orange-500/20")}>
-                        {cancellationData.cancellation.mode === 'immediate' ? (
-                          <Trash2 className="h-6 w-6 text-red-400" />
-                        ) : (
-                          <Calendar className="h-6 w-6 text-orange-400" />
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-foreground mb-1">
-                          {cancellationData.cancellation.mode === 'immediate' ? 'Immediate Deletion in Progress' : 'Cancellation Scheduled'}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {cancellationData.cancellation.mode === 'immediate' ? (
-                            <>This server will be permanently deleted within 5 minutes.</>
-                          ) : (
-                            <>
-                              This server is scheduled for deletion on{' '}
-                              <span className="text-orange-400 font-medium">
-                                {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
-                                  weekday: 'long',
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric'
-                                })}
-                              </span>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    
                     {cancellationData.cancellation.mode === 'immediate' ? (
-                      <div className="p-4 bg-gradient-to-br from-red-500/15 to-red-600/10 border-2 border-red-500/40 rounded-xl animate-pulse-slow">
-                        <div className="flex items-start gap-3">
-                          <div className="bg-red-500/20 p-2 rounded-lg">
-                            <Trash2 className="h-5 w-5 text-red-400" />
+                      // Immediate deletion in progress
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-red-500/20 rounded-lg">
+                            <Trash2 className="h-6 w-6 text-red-400" />
                           </div>
-                          <div className="flex-1">
-                            <div className="font-bold text-red-400 text-base flex items-center gap-2">
-                              Deletion In Progress
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            </div>
-                            <div className="text-sm text-red-400/90 mt-1">
-                              <span className="font-semibold">{server?.name}</span> is being permanently deleted. This process cannot be stopped.
-                            </div>
-                            <div className="text-xs text-red-400/70 mt-2">
-                              • All data will be destroyed within 5 minutes
-                              <br />• Backups will not be available after deletion
-                            </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-red-400">Server Being Destroyed</h3>
+                            <p className="text-sm text-muted-foreground">This process cannot be stopped</p>
                           </div>
+                        </div>
+
+                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+                            <span className="font-semibold text-red-400">Destruction in progress...</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-mono font-bold text-foreground">{server?.name}</span> and all associated data will be permanently destroyed within 5 minutes.
+                          </p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 bg-gradient-to-br from-amber-500/15 to-yellow-600/10 border-2 border-amber-500/30 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <div className="bg-amber-500/20 p-2 rounded-lg">
-                            <Clock className="h-5 w-5 text-amber-400" />
+                      // Scheduled deletion (grace period)
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-amber-500/20 rounded-lg">
+                            <Calendar className="h-6 w-6 text-amber-400" />
                           </div>
-                          <div className="flex-1">
-                            <div className="font-bold text-amber-400 text-base">Grace Period Active</div>
-                            <div className="text-sm text-amber-400/90 mt-1">
-                              <span className="font-semibold">{Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days</span> remaining until <span className="font-semibold">{server?.name}</span> is deleted
+                          <div>
+                            <h3 className="text-xl font-bold text-amber-400">Scheduled for Destruction</h3>
+                            <p className="text-sm text-muted-foreground">You can cancel this before the scheduled date</p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Server</span>
+                              <span className="font-mono font-bold text-foreground">{server?.name}</span>
                             </div>
-                            <div className="text-xs text-amber-400/70 mt-2">
-                              Scheduled deletion: {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Destruction Date</span>
+                              <span className="font-semibold text-amber-400">
+                                {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
+                                  weekday: 'short',
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Time Remaining</span>
+                              <span className="font-semibold text-amber-400">
+                                {Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                              </span>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    
-                    {cancellationData.cancellation.reason && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground block mb-2">Reason for Cancellation</label>
-                        <div className="p-3 bg-muted/50 rounded-md border border-border">
-                          <span className="text-foreground text-sm">{cancellationData.cancellation.reason}</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Only show revoke option for grace period cancellations */}
-                    {cancellationData.cancellation.mode !== 'immediate' && (
-                      <div className="pt-4 border-t border-border">
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Changed your mind? You can revoke the cancellation request and keep your server.
-                        </p>
-                        <Button 
+
+                        {cancellationData.cancellation.reason && (
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Reason: </span>
+                            <span className="text-foreground">{cancellationData.cancellation.reason}</span>
+                          </div>
+                        )}
+
+                        <Button
                           variant="outline"
-                          className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                          className="w-full border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
                           onClick={() => serverId && revokeCancellationMutation.mutate(serverId)}
                           disabled={revokeCancellationMutation.isPending}
                           data-testid="button-revoke-cancellation"
@@ -2104,12 +2086,12 @@ export default function ServerDetail() {
                           {revokeCancellationMutation.isPending ? (
                             <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Revoking...
+                              Cancelling...
                             </>
                           ) : (
                             <>
                               <XCircle className="h-4 w-4 mr-2" />
-                              Revoke Cancellation
+                              Cancel Scheduled Destruction
                             </>
                           )}
                         </Button>
@@ -2117,68 +2099,125 @@ export default function ServerDetail() {
                     )}
                   </>
                 ) : (
-                  // Show cancellation options
+                  // Show destroy options - DigitalOcean style
                   <>
                     <div>
-                      <h3 className="text-lg font-bold text-foreground mb-2">Cancel This Server</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Choose how you want to cancel this server. Once cancelled, your data will be permanently deleted.
+                      <h3 className="text-xl font-bold text-red-400 mb-2">Destroy Server</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Once you destroy a server, there is no going back. Please be certain.
                       </p>
                     </div>
-                    
-                    {/* Global Warning */}
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-6">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="font-bold text-red-400">No Refunds</div>
-                          <div className="text-sm text-red-400/80">
-                            Cancelling your server does not entitle you to any refunds. All prepaid credit will remain in your wallet for future use.
+
+                    {/* Server Info Card */}
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-background rounded-lg border border-border">
+                          <Server className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-mono font-bold text-lg text-foreground">{server?.name}</div>
+                          <div className="text-sm text-muted-foreground space-x-3">
+                            <span>{server?.ipAddress || 'No IP'}</span>
+                            <span>•</span>
+                            <span>{server?.image?.name || 'Unknown OS'}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Reason Input */}
-                    <div className="mb-6">
-                      <Label className="text-sm font-medium text-foreground mb-2 block">
-                        Reason for Cancellation (Optional)
+                    {/* Warning Box */}
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                        <div className="space-y-2">
+                          <div className="font-semibold text-red-400">This action is irreversible</div>
+                          <ul className="text-sm text-red-400/80 space-y-1">
+                            <li>• All data on this server will be permanently destroyed</li>
+                            <li>• The server's IP address will be released</li>
+                            <li>• Any associated configurations will be lost</li>
+                            <li>• No refunds will be provided for remaining credit</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Confirmation Input */}
+                    <div className="space-y-3">
+                      <Label className="text-sm text-foreground block">
+                        Enter the server name <span className="font-mono font-bold text-red-400">{server?.name}</span> to confirm:
                       </Label>
                       <Input
-                        value={cancellationReason}
-                        onChange={(e) => setCancellationReason(e.target.value)}
-                        placeholder="e.g., No longer needed, switching providers..."
-                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
-                        data-testid="input-cancellation-reason"
+                        value={immediateConfirmText}
+                        onChange={(e) => setImmediateConfirmText(e.target.value)}
+                        placeholder={server?.name || "server name"}
+                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
+                        data-testid="input-confirm-delete"
+                        autoComplete="off"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Help us improve by sharing why you're cancelling.
-                      </p>
                     </div>
-                    
-                    {/* Two Options */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {/* Option 1: 30-Day Grace Period */}
-                      <div className="p-4 bg-muted/50 border border-border rounded-lg space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-5 w-5 text-orange-400" />
-                          <h4 className="font-semibold text-foreground">30-Day Grace Period</h4>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Your server will remain active for 30 days. You can revoke the cancellation at any time during this period.
-                        </p>
-                        <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded text-xs text-orange-400">
-                          Server deleted after 30 days. Can be revoked.
-                        </div>
-                        <Button 
+
+                    {/* Destroy Button */}
+                    <Button
+                      className={cn(
+                        "w-full h-12 text-base font-semibold",
+                        immediateConfirmText === server?.name && !isSuspended
+                          ? "bg-red-600 hover:bg-red-700 text-white"
+                          : "bg-red-600/30 text-red-400/50 cursor-not-allowed"
+                      )}
+                      disabled={immediateConfirmText !== server?.name || isSuspended || requestCancellationMutation.isPending}
+                      onClick={() => serverId && requestCancellationMutation.mutate({
+                        id: serverId,
+                        reason: cancellationReason || undefined,
+                        mode: 'immediate'
+                      })}
+                      data-testid="button-destroy-server"
+                    >
+                      {requestCancellationMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Destroying Server...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-5 w-5 mr-2" />
+                          Destroy this Server
+                        </>
+                      )}
+                    </Button>
+
+                    {isSuspended && (
+                      <p className="text-sm text-yellow-400/80 text-center">
+                        Contact support to destroy a suspended server.
+                      </p>
+                    )}
+
+                    {/* Alternative: Schedule Deletion */}
+                    <div className="pt-6 border-t border-border">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Prefer to schedule deletion?</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Schedule your server for deletion in 30 days. You can cancel anytime during this period.
+                      </p>
+                      <div className="flex gap-3 items-center">
+                        <Input
+                          value={cancellationReason}
+                          onChange={(e) => setCancellationReason(e.target.value)}
+                          placeholder="Reason (optional)"
+                          className="flex-1 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-sm"
+                          data-testid="input-cancellation-reason"
+                        />
+                        <Button
+                          variant="outline"
                           className={cn(
-                            "w-full text-foreground",
-                            isSuspended 
-                              ? "bg-muted text-muted-foreground cursor-not-allowed"
-                              : "bg-orange-600 hover:bg-orange-700"
+                            "shrink-0",
+                            isSuspended
+                              ? "border-border text-muted-foreground cursor-not-allowed"
+                              : "border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
                           )}
-                          onClick={() => serverId && requestCancellationMutation.mutate({ 
-                            id: serverId, 
+                          onClick={() => serverId && requestCancellationMutation.mutate({
+                            id: serverId,
                             reason: cancellationReason || undefined,
                             mode: 'grace'
                           })}
@@ -2186,54 +2225,16 @@ export default function ServerDetail() {
                           data-testid="button-cancel-grace"
                         >
                           {requestCancellationMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Processing...
-                            </>
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
-                              <Clock className="h-4 w-4 mr-2" />
-                              Cancel with Grace Period
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Schedule Deletion
                             </>
                           )}
-                        </Button>
-                      </div>
-
-                      {/* Option 2: Delete Immediately */}
-                      <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-lg space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Trash2 className="h-5 w-5 text-red-400" />
-                          <h4 className="font-semibold text-foreground">Delete Immediately</h4>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Your server will be permanently deleted within 5 minutes. This action cannot be undone or revoked.
-                        </p>
-                        <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 font-medium">
-                          WARNING: Cannot be undone. All data will be lost.
-                        </div>
-                        <Button 
-                          variant="outline"
-                          className={cn(
-                            "w-full",
-                            isSuspended 
-                              ? "bg-muted text-muted-foreground cursor-not-allowed border-border"
-                              : "border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                          )}
-                          onClick={() => setImmediateConfirmOpen(true)}
-                          disabled={isSuspended || requestCancellationMutation.isPending}
-                          data-testid="button-cancel-immediate"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Now
                         </Button>
                       </div>
                     </div>
-                    
-                    {isSuspended && (
-                      <p className="text-sm text-yellow-400/80 mt-4">
-                        Contact support to cancel a suspended server.
-                      </p>
-                    )}
                   </>
                 )}
               </div>
@@ -2384,93 +2385,6 @@ export default function ServerDetail() {
                 Enter a hostname to continue
               </p>
             )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Immediate Deletion Confirmation Dialog */}
-      <Dialog open={immediateConfirmOpen} onOpenChange={(open) => {
-        setImmediateConfirmOpen(open);
-        if (!open) setImmediateConfirmText("");
-      }}>
-        <DialogContent className="bg-background border-border text-foreground max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-400">
-              <AlertTriangle className="h-5 w-5" />
-              Confirm Immediate Deletion
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              This action is permanent and cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-2">
-              <p className="text-sm text-red-400 font-medium">
-                You are about to permanently delete this server:
-              </p>
-              <p className="text-foreground font-bold">{server?.name || serverId}</p>
-              <ul className="text-sm text-red-400/80 space-y-1 mt-3">
-                <li>• All data will be permanently destroyed</li>
-                <li>• This action cannot be revoked or undone</li>
-                <li>• The server will be deleted within 5 minutes</li>
-                <li>• No refunds will be provided</li>
-              </ul>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-foreground mb-2 block">
-                Type <span className="font-mono font-bold text-red-400">{server?.name}</span> to confirm deletion:
-              </Label>
-              <Input
-                value={immediateConfirmText}
-                onChange={(e) => setImmediateConfirmText(e.target.value)}
-                placeholder={server?.name || "server name"}
-                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
-                data-testid="input-confirm-delete"
-                autoComplete="off"
-                autoFocus
-              />
-              <p className="text-xs text-red-400/60 mt-1.5">
-                ⚠️ This confirmation is case-sensitive and must match exactly.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 border-border hover:bg-muted"
-              onClick={() => {
-                setImmediateConfirmOpen(false);
-                setImmediateConfirmText("");
-              }}
-              data-testid="button-cancel-confirm"
-            >
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              disabled={immediateConfirmText !== server?.name || requestCancellationMutation.isPending}
-              onClick={() => serverId && requestCancellationMutation.mutate({
-                id: serverId,
-                reason: cancellationReason || undefined,
-                mode: 'immediate'
-              })}
-              data-testid="button-confirm-delete"
-            >
-              {requestCancellationMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting Server...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete {server?.name}
-                </>
-              )}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
