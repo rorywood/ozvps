@@ -1163,15 +1163,20 @@ export class VirtFusionClient {
     const commissionState = server.state?.toLowerCase() || '';
     const powerState = remoteState?.state?.toLowerCase() || '';
 
-    // Priority: suspended > buildFailed > NOT COMMISSIONED (commissioned === 0 or 1) > commission state (if building) > power state
+    // Priority: suspended > buildFailed > commissioned undefined/null > NOT COMMISSIONED (0 or 1) > commission state > power state
     if (server.suspended) {
       status = 'stopped';
     } else if (server.buildFailed) {
       status = 'error';
+    } else if (commissioned === undefined || commissioned === null) {
+      // CRITICAL: If commissioned field is not set yet (very new server), assume provisioning
+      // This handles race condition where server is created but VirtFusion hasn't populated fields yet
+      status = 'provisioning';
     } else if (commissioned === 0 || commissioned === 1) {
       // Server not yet commissioned or currently building - always show as provisioning
       status = 'provisioning';
     } else if (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying') {
+      // Commission state indicates building even if commissioned field is set incorrectly
       status = 'provisioning';
     } else if (powerState) {
       // Use remoteState.state for power status - most reliable
@@ -1217,9 +1222,10 @@ export class VirtFusionClient {
     
     // A server needs setup if:
     // - commissioned === 0 (not built yet)
+    // - commissioned is undefined/null (very new server, fields not populated yet)
     // Note: commissioned is already checked above when determining status
     // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
-    const needsSetup = commissioned === 0;
+    const needsSetup = commissioned === 0 || commissioned === undefined || commissioned === null;
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();

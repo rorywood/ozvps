@@ -1002,66 +1002,15 @@ export default function ServerDetail() {
     (reinstallTask.isActive && reinstallTask.status !== 'complete');
 
   // Check if initial setup is in progress (blocks server usage until complete)
-  // reinstallTask now hydrates from backend on mount, so isActive is authoritative
-  // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
-  // Don't show as "setting up" if status is complete - server is ready
-  const isSettingUp = isProvisioningOrBuilding || (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode));
+  // CRITICAL: Include isInitialSetup to prevent ANY overview flash
+  // If setupMode flag is set OR needsSetup is true, ALWAYS show checklist
+  const isSettingUp = isInitialSetup || needsSetup || isProvisioningOrBuilding || (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode));
 
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
 
-  // If server needs setup but provisioning hasn't started, show waiting message
-  if (needsSetup && !reinstallTask.isActive && server?.status !== 'provisioning') {
-    return (
-      <AppShell>
-        <div className="max-w-2xl mx-auto py-12 space-y-6">
-          <div className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 text-primary animate-spin" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                {server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
-              </h1>
-              <p className="text-muted-foreground">
-                Server is being prepared. Provisioning will begin automatically.
-              </p>
-            </div>
-          </div>
-
-          <div className="border border-border rounded-lg p-6 bg-card space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Plan</div>
-                <div className="font-medium text-foreground">{server.plan.name}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Location</div>
-                <div className="font-medium text-foreground">{server.location.name}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">IP Address</div>
-                <div className="font-mono text-sm text-foreground">{server.primaryIp}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Status</div>
-                <div className="font-medium text-warning">Awaiting Provisioning</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <Link href="/servers">
-              <Button variant="outline">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Servers
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
+  // REMOVED: This "waiting" screen causes an extra flash
+  // Instead, we go straight to the checklist which handles all states
 
   // If server is being provisioned, show full-page provisioning view (DO style)
   if (isSettingUp) {
