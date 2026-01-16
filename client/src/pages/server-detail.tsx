@@ -214,9 +214,9 @@ export default function ServerDetail() {
   
   const reinstallTask = useReinstallTask(serverId || '');
 
-  // Check setupMode flag IMMEDIATELY - this is set by deploy page before navigation
-  // If true, we're in initial setup and should NEVER show overview
-  const isInitialSetup = isSetupMode || (typeof window !== 'undefined' && sessionStorage.getItem(`setupMode:${serverId}`) === 'true');
+  // FIXED: Simplified - isSetupMode is already synced with sessionStorage on mount
+  // No need to check sessionStorage again, trust the state
+  const isInitialSetup = isSetupMode;
 
   // Check if we're in setup mode before loading server data
   // This prevents the flash of server overview before showing checklist
@@ -227,13 +227,14 @@ export default function ServerDetail() {
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
     refetchInterval: (data) => {
-      // During provisioning/setup, poll very aggressively (500ms)
-      // This ensures status updates appear immediately without manual refresh
-      if (data?.needsSetup || reinstallTask.isActive || isInitialSetup) {
-        return 500;
+      // During provisioning/setup, poll aggressively (1 second)
+      // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
+      // If server needs setup or is provisioning, poll faster
+      if (data?.needsSetup || data?.status === 'provisioning') {
+        return 1000; // REDUCED from 500ms to 1s to be less aggressive
       }
-      // Normal operation: poll every 1 second for real-time updates
-      return 1000;
+      // Normal operation: poll every 2 seconds for real-time updates
+      return 2000; // REDUCED from 1s to 2s for better performance
     },
   });
 
@@ -407,13 +408,15 @@ export default function ServerDetail() {
       // set a timer to re-check after the remaining time
       if (taskAtFinalStage && serverFullyOnline && serverCommissioned && !hasBeenRebootingLongEnough && reinstallTask.rebootingStartTime) {
         const remainingTime = minimumRebootingTime - timeInRebooting;
-        console.log(`[server-detail] Setting timer to re-check in ${remainingTime}ms`);
+        // CRITICAL FIX: Prevent negative delay (edge case where time already passed)
+        const safeDelay = Math.max(0, remainingTime) + 100;
+        console.log(`[server-detail] Setting timer to re-check in ${safeDelay}ms`);
 
         const recheckTimer = setTimeout(() => {
           console.log('[server-detail] Re-checking after waiting period...');
           // Force a re-render by invalidating queries
           queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        }, remainingTime + 100); // Add 100ms buffer
+        }, safeDelay);
 
         return () => clearTimeout(recheckTimer);
       }

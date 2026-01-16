@@ -137,10 +137,23 @@ export function useReinstallTask(serverId: string) {
           ...prev.timeline,
           { status, timestamp: Date.now(), message }
         ];
-        return { ...prev, timeline: newTimeline };
+        const updated = { ...prev, timeline: newTimeline };
+
+        // CRITICAL FIX: Persist timeline to sessionStorage immediately
+        saveTaskState(serverId, {
+          isActive: prev.isActive,
+          taskId: prev.taskId,
+          status: prev.status,
+          percent: prev.percent,
+          timeline: newTimeline,
+          credentials: prev.credentials,
+          rebootingStartTime: prev.rebootingStartTime,
+        });
+
+        return updated;
       });
     }
-  }, []);
+  }, [serverId]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -186,8 +199,10 @@ export function useReinstallTask(serverId: string) {
           };
           saveTaskState(serverId, {
             isActive: true,
+            taskId: prev.taskId,
             status: 'rebooting',
             percent: 95,
+            timeline: prev.timeline,
             credentials: prev.credentials,
             rebootingStartTime: bootingStartTime,
           });
@@ -258,6 +273,7 @@ export function useReinstallTask(serverId: string) {
             percent: finalPercent,
             timeline: prev.timeline,
             credentials: prev.credentials,
+            rebootingStartTime: prev.rebootingStartTime,
           });
 
           return updated;
