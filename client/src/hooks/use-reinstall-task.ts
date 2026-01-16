@@ -167,6 +167,15 @@ export function useReinstallTask(serverId: string) {
     try {
       const buildStatus = await api.getBuildStatus(serverId);
 
+      console.log('[useReinstallTask] 📊 Build Status Poll:', {
+        commissioned: buildStatus.commissioned,
+        isBuilding: buildStatus.isBuilding,
+        isComplete: buildStatus.isComplete,
+        isError: buildStatus.isError,
+        phase: buildStatus.phase,
+        state: buildStatus.state,
+      });
+
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
       // Show "Starting Server" step while server boots
       // NOTE: Don't check isComplete - VirtFusion doesn't set it properly
