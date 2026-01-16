@@ -418,7 +418,7 @@ export default function ServerDetail() {
         return () => clearTimeout(recheckTimer);
       }
     }
-  }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server?.needsSetup, server?.status, serverId]);
+  }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
