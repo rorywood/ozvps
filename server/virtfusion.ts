@@ -1031,21 +1031,23 @@ export class VirtFusionClient {
       this.invalidateServerCache(serverId);
       
       // Log the response structure to debug password location
-      log(`Build response for server ${serverId}: settings keys = ${Object.keys(data.data?.settings || {}).join(', ')}`, 'virtfusion');
-      
+      log(`[BUILD DEBUG] Full response keys for server ${serverId}: ${Object.keys(data.data || {}).join(', ')}`, 'virtfusion');
+      log(`[BUILD DEBUG] Settings keys for server ${serverId}: ${Object.keys(data.data?.settings || {}).join(', ')}`, 'virtfusion');
+      log(`[BUILD DEBUG] Full response data: ${JSON.stringify(data.data)}`, 'virtfusion');
+
       // VirtFusion may return password in various fields depending on version
       // Check settings.decryptedPassword, settings.password, or root level
-      const generatedPassword = 
-        data.data?.settings?.decryptedPassword || 
+      const generatedPassword =
+        data.data?.settings?.decryptedPassword ||
         data.data?.settings?.password ||
         data.data?.decryptedPassword ||
         data.data?.password ||
         null;
-      
+
       if (generatedPassword) {
-        log(`Password found for server ${serverId} in build response`, 'virtfusion');
+        log(`[BUILD DEBUG] ✅ Password found for server ${serverId} in build response`, 'virtfusion');
       } else {
-        log(`No password returned in build response for server ${serverId}`, 'virtfusion');
+        log(`[BUILD DEBUG] ❌ No password returned in build response for server ${serverId}`, 'virtfusion');
       }
       
       return { ...data.data, generatedPassword };

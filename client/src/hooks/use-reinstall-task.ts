@@ -284,7 +284,13 @@ export function useReinstallTask(serverId: string) {
   }, [serverId, addTimelineEvent, stopPolling]);
 
   const startTask = useCallback((taskId?: string, password?: string, serverIp?: string) => {
+    console.log('[useReinstallTask] startTask called with:', {
+      hasPassword: !!password,
+      serverIp,
+      taskId
+    });
     const credentials = password ? { serverIp: serverIp || 'N/A', username: 'root', password } : null;
+    console.log('[useReinstallTask] Credentials created:', credentials ? '✅ YES' : '❌ NO');
     const initialState: ReinstallTaskState = {
       isActive: true,
       taskId: taskId || null,

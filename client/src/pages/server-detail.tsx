@@ -613,6 +613,8 @@ export default function ServerDetail() {
       
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
+      console.log('[DEPLOY] Password from build response:', password ? '✅ PRESENT' : '❌ MISSING');
+      console.log('[DEPLOY] Full response.data:', response.data);
       reinstallTask.startTask(undefined, password, server?.primaryIp);
 
       // Start console lock (server will reboot after reinstall)
@@ -649,6 +651,8 @@ export default function ServerDetail() {
       
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
+      console.log('[DEPLOY] Password from build response:', password ? '✅ PRESENT' : '❌ MISSING');
+      console.log('[DEPLOY] Full response.data:', response.data);
       reinstallTask.startTask(undefined, password, server?.primaryIp);
       
       // Refetch server data to update the UI
