@@ -13,60 +13,60 @@ export interface StaticPlan {
 
 export const STATIC_PLANS: StaticPlan[] = [
   {
-    code: 'nano',
-    name: 'Nano',
+    code: 'micro',
+    name: 'Micro',
     vcpu: 1,
-    ramMb: 512,
-    storageGb: 15,
-    transferGb: 500,
-    priceMonthly: 700,
+    ramMb: 1024, // 1 GB
+    storageGb: 20,
+    transferGb: 1000, // 1 TB
+    priceMonthly: 700, // $7.00
     virtfusionPackageId: 1,
-    active: true,
+    active: false, // Out of Stock
   },
   {
-    code: 'starter',
-    name: 'Starter',
-    vcpu: 1,
-    ramMb: 1024,
-    storageGb: 30,
-    transferGb: 1000,
-    priceMonthly: 1200,
+    code: 'mini',
+    name: 'Mini',
+    vcpu: 2,
+    ramMb: 2048, // 2 GB
+    storageGb: 40,
+    transferGb: 2000, // 2 TB
+    priceMonthly: 1200, // $12.00
     virtfusionPackageId: 2,
-    active: true,
+    active: false, // Out of Stock
   },
   {
-    code: 'dev',
-    name: 'Dev',
-    vcpu: 2,
-    ramMb: 2048,
-    storageGb: 60,
-    transferGb: 2000,
-    priceMonthly: 1800,
-    virtfusionPackageId: 3,
-    active: true,
-  },
-  {
-    code: 'lite',
-    name: 'Lite',
-    vcpu: 2,
-    ramMb: 3072,
+    code: 'core',
+    name: 'Core',
+    vcpu: 3,
+    ramMb: 4096, // 4 GB
     storageGb: 80,
-    transferGb: 3000,
-    priceMonthly: 2400,
-    virtfusionPackageId: 4,
-    active: true,
+    transferGb: 3000, // 3 TB
+    priceMonthly: 1800, // $18.00
+    virtfusionPackageId: 3,
+    active: false, // Out of Stock
     popular: true,
   },
   {
-    code: 'value',
-    name: 'Value',
-    vcpu: 3,
-    ramMb: 4096,
+    code: 'pro',
+    name: 'Pro',
+    vcpu: 4,
+    ramMb: 6144, // 6 GB
     storageGb: 120,
-    transferGb: 5000,
-    priceMonthly: 3500,
+    transferGb: 4000, // 4 TB
+    priceMonthly: 2600, // $26.00
+    virtfusionPackageId: 4,
+    active: false, // Out of Stock
+  },
+  {
+    code: 'max',
+    name: 'Max',
+    vcpu: 6,
+    ramMb: 8192, // 8 GB
+    storageGb: 160,
+    transferGb: 5000, // 5 TB
+    priceMonthly: 3800, // $38.00
     virtfusionPackageId: 5,
-    active: true,
+    active: true, // Available
   },
 ];
 
