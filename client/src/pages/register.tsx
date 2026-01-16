@@ -436,37 +436,43 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-background border-r border-border">
-        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
-          <Link href="/">
-            <img src={logo} alt="OzVPS" className="h-16 w-auto dark:invert-0 invert mb-12 cursor-pointer" data-testid="img-logo-side" />
-          </Link>
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-background">
+        <div className="relative z-10 flex flex-col justify-between p-12 xl:px-20 w-full">
+          <div>
+            <Link href="/">
+              <img src={logo} alt="OzVPS" className="h-20 w-auto dark:invert-0 invert mb-12 cursor-pointer" data-testid="img-logo-side" />
+            </Link>
 
-          <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
-            Cloud Servers<br />
-            Made Simple
-          </h1>
+            <h1 className="text-4xl xl:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
+              Start your cloud<br />
+              journey today
+            </h1>
 
-          <p className="text-lg text-muted-foreground mb-12 max-w-md">
-            Deploy high-performance virtual servers with our easy-to-use control panel.
-            Pay as you go with our prepaid wallet system.
-          </p>
+            <p className="text-lg text-muted-foreground mb-12 max-w-md">
+              Join thousands of developers and businesses who trust OzVPS for reliable, high-performance cloud infrastructure.
+            </p>
 
-          <div className="grid grid-cols-2 gap-6">
-            {features.map((feature, index) => (
-              <div
-                key={feature.title}
-                className="flex items-start gap-3"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-                  <feature.icon className="w-5 h-5 text-primary" />
+            <div className="grid grid-cols-2 gap-6">
+              {features.map((feature, index) => (
+                <div
+                  key={feature.title}
+                  className="flex items-start gap-3"
+                >
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <feature.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
+                    <p className="text-xs text-muted-foreground">{feature.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
-                  <p className="text-xs text-muted-foreground">{feature.description}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-sm text-muted-foreground">
+            © 2026 OzVPS. All rights reserved.
           </div>
         </div>
       </div>
@@ -494,7 +500,7 @@ export default function RegisterPage() {
             >
               <div className="lg:hidden flex justify-center mb-8">
                 <Link href="/">
-                  <img src={logo} alt="OzVPS" className="h-12 w-auto dark:invert-0 invert cursor-pointer" data-testid="img-logo" />
+                  <img src={logo} alt="OzVPS" className="h-14 w-auto dark:invert-0 invert cursor-pointer" data-testid="img-logo" />
                 </Link>
               </div>
 

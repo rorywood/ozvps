@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto dark:invert-0 invert mx-auto mb-6 cursor-pointer"
+                className="h-16 w-auto dark:invert-0 invert mx-auto mb-6 cursor-pointer"
               />
             </Link>
             <h1 className="text-3xl font-bold text-foreground mb-2">Reset your password</h1>

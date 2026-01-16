@@ -317,7 +317,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branded Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-background relative overflow-hidden border-r border-border">
+      <div className="hidden lg:flex lg:w-1/2 bg-background relative overflow-hidden">
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo & Brand */}
@@ -326,7 +326,7 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto cursor-pointer dark:invert-0 invert"
+                className="h-16 w-auto cursor-pointer dark:invert-0 invert"
                 data-testid="img-logo"
               />
             </Link>
@@ -393,7 +393,7 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-10 w-auto mx-auto cursor-pointer dark:invert-0 invert"
+                className="h-14 w-auto mx-auto cursor-pointer dark:invert-0 invert"
                 data-testid="img-logo-mobile"
               />
             </Link>
