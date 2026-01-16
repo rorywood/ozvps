@@ -717,16 +717,40 @@ export async function registerRoutes(
     }
   });
 
-  // Seed plans from static config on startup (non-blocking)
+  // Sync plans from VirtFusion on startup (non-blocking)
   (async () => {
     try {
-      const result = await dbStorage.seedPlansFromConfig();
-      log(`Plans seeded: ${result.seeded} plans`, 'startup');
-      if (result.errors.length > 0) {
-        result.errors.forEach(err => log(`Plan seed error: ${err}`, 'startup'));
+      log('Syncing plans from VirtFusion...', 'startup');
+
+      // First seed from static config to ensure base plans exist
+      const seedResult = await dbStorage.seedPlansFromConfig();
+      log(`Plans seeded: ${seedResult.seeded} plans from static config`, 'startup');
+
+      // Then sync enabled/disabled status from VirtFusion
+      const vfPackages = await virtfusionClient.getPackages();
+      log(`Fetched ${vfPackages.length} packages from VirtFusion`, 'startup');
+
+      const currentPlans = await db.select().from(plans);
+      const plansMap = new Map(currentPlans.map(p => [p.virtfusionPackageId, p]));
+
+      let synced = 0;
+      for (const vfPkg of vfPackages) {
+        const existingPlan = plansMap.get(vfPkg.id);
+        if (existingPlan && existingPlan.active !== vfPkg.enabled) {
+          await db
+            .update(plans)
+            .set({ active: vfPkg.enabled, name: vfPkg.name })
+            .where(eq(plans.virtfusionPackageId, vfPkg.id));
+
+          log(`Plan ${existingPlan.code}: ${existingPlan.active ? 'enabled' : 'disabled'} → ${vfPkg.enabled ? 'enabled' : 'disabled'}`, 'startup');
+          synced++;
+        }
       }
+
+      log(`Plans sync complete: ${synced} plans updated from VirtFusion`, 'startup');
     } catch (error: any) {
-      log(`Failed to seed plans: ${error.message}`, 'startup');
+      log(`Failed to sync plans from VirtFusion: ${error.message}`, 'startup');
+      log('Falling back to static plan config', 'startup');
     }
   })();
 
