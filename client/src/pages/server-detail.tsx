@@ -462,7 +462,7 @@ export default function ServerDetail() {
   
   // Auto-fetch credentials when setup completes but no password was returned from build
   // This handles cases where VirtFusion doesn't include the password in the build response
-  // Works for BOTH initial deploys and reinstalls
+  // Works for BOTH initial deploys and reinstalls with retry logic
   useEffect(() => {
     const shouldAutoReset =
       serverId &&
@@ -475,40 +475,65 @@ export default function ServerDetail() {
       !autoPasswordResetInProgressRef.current;
 
     if (shouldAutoReset) {
-      console.log('[AUTO-RESET] Triggering password reset for server without credentials');
+      console.log('[AUTO-RESET] Starting password reset with retry logic');
       autoPasswordResetTriggeredRef.current = true;
       autoPasswordResetInProgressRef.current = true;
 
-      // Add 3-second delay to ensure guest agent is ready
-      // Guest agent needs time to start after boot before password reset works
-      const timeoutId = setTimeout(() => {
-        // Double-check we still need credentials after the delay
-        if (!savedCredentials) {
-          console.log('[AUTO-RESET] Calling password reset API');
-          api.resetServerPassword(serverId).then(response => {
-            if (response.password) {
-              console.log('[AUTO-RESET] Password reset successful, saving credentials');
-              const creds = {
-                serverIp: server.primaryIp || 'N/A',
-                username: response.username || 'root',
-                password: response.password
-              };
-              updateSavedCredentials(creds);
-              setShowSavedCredentials(true);
-            }
-          }).catch((error) => {
-            console.error('[AUTO-RESET] Password reset failed:', error);
-            // Silent fail - user can manually reset password
-            // Guest agent might not be ready yet, user can try manually
-          }).finally(() => {
-            autoPasswordResetInProgressRef.current = false;
-          });
-        } else {
-          autoPasswordResetInProgressRef.current = false;
-        }
-      }, 3000);
+      // Retry delays: 5s, 10s, 15s, 20s (guest agent needs time to start)
+      const retryDelays = [5000, 10000, 15000, 20000];
+      let currentRetry = 0;
+      const timeouts: NodeJS.Timeout[] = [];
 
-      return () => clearTimeout(timeoutId);
+      const attemptPasswordReset = () => {
+        // Check if we already have credentials (from another source)
+        if (savedCredentials) {
+          console.log('[AUTO-RESET] Credentials already available, cancelling retries');
+          autoPasswordResetInProgressRef.current = false;
+          return;
+        }
+
+        const attemptNumber = currentRetry + 1;
+        console.log(`[AUTO-RESET] Attempt ${attemptNumber}/${retryDelays.length}: Calling password reset API`);
+
+        api.resetServerPassword(serverId).then(response => {
+          if (response.password) {
+            console.log('[AUTO-RESET] ✅ Password reset successful, saving credentials');
+            const creds = {
+              serverIp: server.primaryIp || 'N/A',
+              username: response.username || 'root',
+              password: response.password
+            };
+            updateSavedCredentials(creds);
+            setShowSavedCredentials(true);
+            autoPasswordResetInProgressRef.current = false;
+            // Clear any pending retries
+            timeouts.forEach(t => clearTimeout(t));
+          }
+        }).catch((error) => {
+          console.warn(`[AUTO-RESET] ❌ Attempt ${attemptNumber} failed:`, error.message || error);
+
+          // Schedule next retry if available
+          if (currentRetry < retryDelays.length - 1) {
+            currentRetry++;
+            const nextDelay = retryDelays[currentRetry] - retryDelays[currentRetry - 1];
+            console.log(`[AUTO-RESET] Scheduling retry ${currentRetry + 1} in ${nextDelay/1000}s`);
+            const timeoutId = setTimeout(attemptPasswordReset, nextDelay);
+            timeouts.push(timeoutId);
+          } else {
+            console.error('[AUTO-RESET] All retry attempts exhausted. Guest agent may not be available. User can manually reset password.');
+            autoPasswordResetInProgressRef.current = false;
+          }
+        });
+      };
+
+      // Start first attempt after initial delay
+      const initialTimeout = setTimeout(attemptPasswordReset, retryDelays[0]);
+      timeouts.push(initialTimeout);
+
+      return () => {
+        // Cleanup all pending timeouts
+        timeouts.forEach(t => clearTimeout(t));
+      };
     }
 
     // Reset the flag when conditions change
