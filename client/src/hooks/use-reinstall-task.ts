@@ -15,6 +15,7 @@ export interface ReinstallTaskState {
   error: string | null;
   timeline: TimelineEvent[];
   credentials: ReinstallCredentials | null;
+  rebootingStartTime?: number; // Timestamp when we entered 'rebooting' status
 }
 
 export type ReinstallStatus = 
@@ -109,6 +110,7 @@ export function useReinstallTask(serverId: string) {
         error: null,
         timeline: stored.timeline || [],
         credentials: stored.credentials || null,
+        rebootingStartTime: stored.rebootingStartTime,
       };
     }
     return {
@@ -119,6 +121,7 @@ export function useReinstallTask(serverId: string) {
       error: null,
       timeline: [],
       credentials: null,
+      rebootingStartTime: undefined,
     };
   });
 
@@ -171,18 +174,22 @@ export function useReinstallTask(serverId: string) {
             return prev; // Already at rebooting, no update needed
           }
 
+          console.log('[useReinstallTask] Transitioning to REBOOTING status - will show for minimum 4 seconds');
           addTimelineEvent('rebooting', 'Server commissioned - booting up...');
+          const bootingStartTime = Date.now();
           const booting = {
             ...prev,
             isActive: true,
             status: 'rebooting' as ReinstallStatus,
             percent: 95,
+            rebootingStartTime: bootingStartTime,
           };
           saveTaskState(serverId, {
             isActive: true,
             status: 'rebooting',
             percent: 95,
             credentials: prev.credentials,
+            rebootingStartTime: bootingStartTime,
           });
           return booting;
         });
@@ -277,6 +284,7 @@ export function useReinstallTask(serverId: string) {
       error: null,
       timeline: [{ status: 'queued', timestamp: Date.now(), message: 'Installation started' }],
       credentials,
+      rebootingStartTime: undefined,
     };
 
     setState(initialState);
@@ -312,6 +320,7 @@ export function useReinstallTask(serverId: string) {
       error: null,
       timeline: [],
       credentials: null,
+      rebootingStartTime: undefined,
     });
     lastStatusRef.current = 'idle';
   }, [serverId, stopPolling]);

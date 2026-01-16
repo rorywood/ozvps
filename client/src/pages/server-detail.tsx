@@ -331,21 +331,29 @@ export default function ServerDetail() {
     // 1. reinstallTask must be at 'rebooting' (commissioned) or 'complete'
     // 2. Server must be 'running' (fully booted, not just commissioned)
     // 3. needsSetup must be false (VirtFusion confirms ready)
+    // 4. MINIMUM 4 seconds must have passed since entering 'rebooting' status
     const taskAtFinalStage = reinstallTask.status === 'rebooting' || reinstallTask.status === 'complete';
     const serverFullyOnline = server && server.status === 'running';
     const serverCommissioned = server && server.needsSetup === false;
 
-    // ALL THREE must be true
-    const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned;
+    // Check if enough time has passed since entering 'rebooting' status
+    const rebootingStartTime = reinstallTask.rebootingStartTime || 0;
+    const timeInRebooting = Date.now() - rebootingStartTime;
+    const minimumRebootingTime = 4000; // 4 seconds minimum
+    const hasBeenRebootingLongEnough = timeInRebooting >= minimumRebootingTime;
+
+    // ALL conditions must be true
+    const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 
     if (allConditionsMet) {
       console.log('[server-detail] Server is FULLY ONLINE! All conditions met:', {
         reinstallStatus: reinstallTask.status,
         serverStatus: server?.status,
         needsSetup: server?.needsSetup,
+        timeInRebooting: `${timeInRebooting}ms`,
       });
 
-      // Wait 2 seconds to ensure:
+      // Wait 2 more seconds to ensure:
       // - Server is fully booted
       // - All buttons are active
       // - Status is green everywhere
@@ -382,7 +390,7 @@ export default function ServerDetail() {
 
       return () => clearTimeout(timer);
     } else {
-      console.log('[server-detail] Auto-dismiss waiting for server to boot...', {
+      console.log('[server-detail] Auto-dismiss waiting...', {
         isSetupMode,
         reinstallStatus: reinstallTask.status,
         serverStatus: server?.status,
@@ -390,9 +398,11 @@ export default function ServerDetail() {
         taskAtFinalStage,
         serverFullyOnline,
         serverCommissioned,
+        hasBeenRebootingLongEnough,
+        timeInRebooting: `${timeInRebooting}ms`,
       });
     }
-  }, [reinstallTask.status, isSetupMode, server?.needsSetup, server?.status, serverId]);
+  }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server?.needsSetup, server?.status, serverId]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
