@@ -177,8 +177,15 @@ export function useReinstallTask(serverId: string) {
           isActive: true, // Keep active so dialog stays open for user to see success
           status: 'complete',
           percent: 100,
+          // Preserve credentials when completing
         }));
-        clearTaskState(serverId);
+        // Keep credentials in session storage for completed builds
+        saveTaskState(serverId, {
+          isActive: true,
+          status: 'complete',
+          percent: 100,
+          credentials: state.credentials,
+        });
         return;
       } else if (buildStatus.isBuilding) {
         newStatus = mapVirtFusionStatus(buildStatus.phase);
@@ -201,6 +208,7 @@ export function useReinstallTask(serverId: string) {
         status: newStatus,
         percent: newPercent,
         timeline: state.timeline,
+        credentials: state.credentials, // Persist credentials across polling updates
       });
 
     } catch (e) {
@@ -290,9 +298,16 @@ export function useReinstallTask(serverId: string) {
             status: 'complete',
             percent: 100,
             isActive: true, // Keep open to show completion
+            // Preserve credentials when build completes
           }));
           stopPolling();
-          clearTaskState(serverId);
+          // Keep credentials in session storage for completed builds
+          saveTaskState(serverId, {
+            isActive: true,
+            status: 'complete',
+            percent: 100,
+            credentials: state.credentials,
+          });
         } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
           // No active task at all - force reset
           reset();
