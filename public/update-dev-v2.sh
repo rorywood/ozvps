@@ -102,6 +102,15 @@ cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
 cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
+
+# Add SENTRY_DSN if not present
+if ! grep -q "^SENTRY_DSN=" "$INSTALL_DIR/.env" 2>/dev/null; then
+    echo "" >> "$INSTALL_DIR/.env"
+    echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
+    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
+    echo -e "${CYAN}→ Added Sentry error tracking${NC}"
+fi
+
 echo -e "${GREEN}✓ Code updated${NC}"
 
 # STEP 3: Build
