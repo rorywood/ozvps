@@ -456,99 +456,47 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.status, serverId, queryClient]);
   
-  // Track if we've already triggered auto-password-reset to avoid duplicates
-  const autoPasswordResetTriggeredRef = useRef(false);
-  const autoPasswordResetInProgressRef = useRef(false);
-  
-  // Auto-fetch credentials when setup completes but no password was returned from build
-  // This handles cases where VirtFusion doesn't include the password in the build response
-  // Works for BOTH initial deploys and reinstalls with retry logic
-  useEffect(() => {
-    const shouldAutoReset =
-      serverId &&
-      server?.primaryIp &&
-      server?.needsSetup === false && // Server is commissioned
-      server?.status === 'running' && // Server is fully booted
-      !savedCredentials && // No credentials saved yet
-      !reinstallTask.credentials && // No credentials from reinstall
-      !autoPasswordResetTriggeredRef.current &&
-      !autoPasswordResetInProgressRef.current;
+  // Manual password reset state for "Get SSH Credentials" button
+  const [manualResetLoading, setManualResetLoading] = useState(false);
+  const [manualResetError, setManualResetError] = useState<string | null>(null);
 
-    if (shouldAutoReset) {
-      console.log('[AUTO-RESET] Starting password reset with retry logic');
-      autoPasswordResetTriggeredRef.current = true;
-      autoPasswordResetInProgressRef.current = true;
+  // Manual password reset handler
+  const handleGetCredentials = async () => {
+    if (!serverId || !server?.primaryIp) return;
 
-      // Retry delays: 5s, 10s, 15s, 20s (guest agent needs time to start)
-      const retryDelays = [5000, 10000, 15000, 20000];
-      let currentRetry = 0;
-      const timeouts: NodeJS.Timeout[] = [];
+    setManualResetLoading(true);
+    setManualResetError(null);
 
-      const attemptPasswordReset = () => {
-        // Check if we already have credentials (from another source)
-        if (savedCredentials) {
-          console.log('[AUTO-RESET] Credentials already available, cancelling retries');
-          autoPasswordResetInProgressRef.current = false;
-          return;
-        }
+    try {
+      const response = await api.resetServerPassword(serverId);
 
-        const attemptNumber = currentRetry + 1;
-        console.log(`[AUTO-RESET] Attempt ${attemptNumber}/${retryDelays.length}: Calling password reset API`);
-
-        api.resetServerPassword(serverId).then(response => {
-          console.log('[AUTO-RESET] API Response:', JSON.stringify(response));
-
-          if (response.password) {
-            console.log('[AUTO-RESET] ✅ Password reset successful, saving credentials');
-            const creds = {
-              serverIp: server.primaryIp || 'N/A',
-              username: response.username || 'root',
-              password: response.password
-            };
-            updateSavedCredentials(creds);
-            setShowSavedCredentials(true);
-            autoPasswordResetInProgressRef.current = false;
-            // Clear any pending retries
-            timeouts.forEach(t => clearTimeout(t));
-          } else {
-            console.error('[AUTO-RESET] ❌ Response missing password field:', response);
-            // Don't retry if response succeeded but has no password - this is a backend issue
-            autoPasswordResetInProgressRef.current = false;
-            timeouts.forEach(t => clearTimeout(t));
-          }
-        }).catch((error) => {
-          console.warn(`[AUTO-RESET] ❌ Attempt ${attemptNumber} failed:`, error.message || error);
-          console.warn('[AUTO-RESET] Full error object:', error);
-
-          // Schedule next retry if available
-          if (currentRetry < retryDelays.length - 1) {
-            currentRetry++;
-            const nextDelay = retryDelays[currentRetry] - retryDelays[currentRetry - 1];
-            console.log(`[AUTO-RESET] Scheduling retry ${currentRetry + 1} in ${nextDelay/1000}s`);
-            const timeoutId = setTimeout(attemptPasswordReset, nextDelay);
-            timeouts.push(timeoutId);
-          } else {
-            console.error('[AUTO-RESET] All retry attempts exhausted. Guest agent may not be available. User can manually reset password.');
-            autoPasswordResetInProgressRef.current = false;
-          }
+      if (response.password) {
+        const creds = {
+          serverIp: server.primaryIp || 'N/A',
+          username: response.username || 'root',
+          password: response.password
+        };
+        updateSavedCredentials(creds);
+        setShowSavedCredentials(true);
+        toast({
+          title: "Credentials Retrieved",
+          description: "Your SSH credentials are now available below.",
         });
-      };
-
-      // Start first attempt after initial delay
-      const initialTimeout = setTimeout(attemptPasswordReset, retryDelays[0]);
-      timeouts.push(initialTimeout);
-
-      return () => {
-        // Cleanup all pending timeouts
-        timeouts.forEach(t => clearTimeout(t));
-      };
+      } else {
+        throw new Error('No password returned from server');
+      }
+    } catch (error: any) {
+      const errorMsg = error.message || 'Failed to get credentials';
+      setManualResetError(errorMsg);
+      toast({
+        title: "Failed to Get Credentials",
+        description: errorMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setManualResetLoading(false);
     }
-
-    // Reset the flag when conditions change
-    if (server?.needsSetup === true || server?.status !== 'running') {
-      autoPasswordResetTriggeredRef.current = false;
-    }
-  }, [serverId, server?.primaryIp, server?.needsSetup, server?.status, savedCredentials, reinstallTask.credentials]);
+  };
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -1454,7 +1402,67 @@ export default function ServerDetail() {
             </div>
           </div>
         )}
-        
+
+        {/* Get SSH Credentials Button - Show when server is ready but no credentials saved */}
+        {server?.status === 'running' &&
+         server?.needsSetup === false &&
+         !savedCredentials &&
+         !reinstallTask.credentials &&
+         (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 space-y-4" data-testid="banner-get-credentials">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-primary flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-primary">Get SSH Credentials</h3>
+                <p className="text-sm text-muted-foreground">
+                  Retrieve your server credentials to access via SSH
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                <strong>Note:</strong> The guest agent needs 30-60 seconds to start after deployment.
+                If this fails, please wait a moment and try again.
+              </p>
+
+              {manualResetError && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm text-destructive font-medium">Failed to retrieve credentials</p>
+                    <p className="text-xs text-muted-foreground mt-1">{manualResetError}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The guest agent may not be ready yet. Please wait 30-60 seconds and try again.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleGetCredentials}
+                  disabled={manualResetLoading}
+                  className="bg-primary hover:bg-primary/90"
+                  data-testid="button-get-credentials"
+                >
+                  {manualResetLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Retrieving...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="h-4 w-4 mr-2" />
+                      Get SSH Credentials
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Suspension Banner */}
         {isSuspended && (
           <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
