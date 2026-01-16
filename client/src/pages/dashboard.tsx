@@ -165,7 +165,7 @@ export default function Dashboard() {
             <div className="border border-border rounded-lg overflow-hidden bg-card">
               {servers.map((server, index) => {
                 const cancellation = cancellations[server.id];
-                const displayStatus = getDisplayStatus(server.id, server.status, cancellation);
+                const displayStatus = getDisplayStatus(server.id, server.status, cancellation, server.needsSetup);
                 const isRunning = displayStatus === 'running';
                 const isStopped = displayStatus === 'stopped';
                 const isDeleting = displayStatus === 'destroying' || displayStatus === 'queued_deletion';

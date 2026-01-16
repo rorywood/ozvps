@@ -15,7 +15,7 @@ interface PowerActionContextType {
   clearPending: (serverId: string) => void;
   isPending: (serverId: string) => boolean;
   getPendingAction: (serverId: string) => string | null;
-  getDisplayStatus: (serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }) => string;
+  getDisplayStatus: (serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }, needsSetup?: boolean) => string;
 }
 
 const STORAGE_KEY = "ozvps_pending_power_actions";
@@ -98,7 +98,7 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
     return pendingActions[serverId]?.action || null;
   }, [pendingActions]);
 
-  const getDisplayStatus = useCallback((serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }): string => {
+  const getDisplayStatus = useCallback((serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }, needsSetup?: boolean): string => {
     // Check for deletion status first (highest priority)
     if (cancellationData) {
       if (cancellationData.mode === 'immediate') {
@@ -109,7 +109,8 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
     }
 
     // Map provisioning status to "setting up" for better UX
-    if (actualStatus === 'provisioning') {
+    // Also check needsSetup flag - if server needs setup, show as "setting up" regardless of status
+    if (actualStatus === 'provisioning' || needsSetup) {
       return 'setting up';
     }
 

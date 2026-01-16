@@ -19,7 +19,8 @@ export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
   const displayStatus = getDisplayStatus(
     server.id,
     server.status,
-    cancellation
+    cancellation,
+    server.needsSetup
   );
 
   // Map display status to StatusBadge status type
