@@ -438,6 +438,10 @@ export default function RegisterPage() {
     <div className="min-h-screen flex bg-background">
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-background">
         <div className="relative z-10 flex flex-col justify-between p-12 xl:px-20 w-full">
+          {/* Spacer to push content to center */}
+          <div></div>
+
+          {/* Main content - centered */}
           <div>
             <Link href="/">
               <img src={logo} alt="OzVPS" className="h-20 w-auto dark:invert-0 invert mb-12 cursor-pointer" data-testid="img-logo-side" />
