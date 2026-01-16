@@ -837,8 +837,9 @@ export class VirtFusionClient {
       const state = server.state || '';
       const buildFailed = server.buildFailed === true;
       const suspended = server.suspended === true;
-      const commissionStatus = server.commissionStatus;
-      const commissioned = server.commissioned; // 0 = not built, 1 = building, 2 = paused, 3 = complete
+      const commissionStatus = server.commissionStatus; // 0 = not built, 1 = building, 2 = paused, 3 = complete
+      // CRITICAL FIX: Field is commissionStatus, not commissioned!
+      const commissioned = commissionStatus;
 
       // Check if server is in a transitional/building state
       // IMPORTANT: commissioned takes priority - if 0, 1, or undefined, server is not ready
