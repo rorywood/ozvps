@@ -264,32 +264,50 @@ export function useReinstallTask(serverId: string) {
   // Check build status - used on mount and when tab becomes visible
   const checkBuildStatus = useCallback(async () => {
     if (!serverId) return;
-    
+
     try {
       const buildStatus = await api.getBuildStatus(serverId);
-      
-      // If there's an active build but we have no local state, hydrate from backend
-      if (buildStatus.isBuilding && !state.isActive) {
+
+      // If there's an active build, sync with backend (always update to get latest progress)
+      if (buildStatus.isBuilding) {
         const newStatus = mapVirtFusionStatus(buildStatus.phase);
         const newPercent = STATUS_PERCENT_MAP[newStatus];
-        setState({
-          isActive: true,
-          taskId: null,
-          status: newStatus,
-          percent: newPercent,
-          error: null,
-          timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
-          credentials: null, // No credentials available from other sessions
-        });
-        lastStatusRef.current = newStatus;
-        // Start polling
-        if (!pollRef.current) {
-          pollRef.current = setInterval(poll, 5000);
+
+        // If we already have an active task, UPDATE it (don't restart)
+        if (state.isActive) {
+          // Sync with VirtFusion's current status without restarting timeline
+          setState(prev => ({
+            ...prev,
+            status: newStatus,
+            percent: newPercent,
+            // Keep existing timeline and credentials
+          }));
+          lastStatusRef.current = newStatus;
+          // Make sure polling is active
+          if (!pollRef.current) {
+            pollRef.current = setInterval(poll, 5000);
+          }
+        } else {
+          // No local state, hydrate from backend
+          setState({
+            isActive: true,
+            taskId: null,
+            status: newStatus,
+            percent: newPercent,
+            error: null,
+            timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
+            credentials: null, // No credentials available from other sessions
+          });
+          lastStatusRef.current = newStatus;
+          // Start polling
+          if (!pollRef.current) {
+            pollRef.current = setInterval(poll, 5000);
+          }
         }
         return;
       }
-      
-      // If no active build and we have a stored state showing active, reset it
+
+      // If no active build and we have a stored state showing active, handle completion or reset
       if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
         // Check if the build completed while we were away
         if (buildStatus.isComplete) {
@@ -309,14 +327,23 @@ export function useReinstallTask(serverId: string) {
             credentials: state.credentials,
           });
         } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
-          // No active task at all - force reset
-          reset();
+          // CRITICAL: Only reset if server is not in needsSetup state
+          // Check commissioned field to see if server still needs building
+          // If commissioned is 0, 1, or undefined, server is still being built - don't reset!
+          const commissioned = buildStatus.commissioned;
+          const stillNeedsBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
+
+          if (!stillNeedsBuilding) {
+            // Server is fully built (commissioned = 3) but no active task - safe to reset
+            reset();
+          }
+          // Otherwise, keep the task active and let polling continue
         }
       }
     } catch (e) {
       console.error('Failed to verify reinstall task state:', e);
     }
-  }, [serverId, state.isActive, state.status, poll, reset, stopPolling]);
+  }, [serverId, state.isActive, state.status, state.credentials, poll, reset, stopPolling]);
 
   // On mount, verify if there's actually an active task from VirtFusion
   // This prevents stale UI when user refreshes after reinstall completes
