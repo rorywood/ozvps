@@ -1140,10 +1140,16 @@ export default function AdminPage() {
                                     const userId = user.auth0UserId;
                                     const email = user.email;
 
-                                    // Use window.fetch directly and handle async
+                                    // Get CSRF token from localStorage or cookie
+                                    const csrfToken = localStorage.getItem('csrfToken') ||
+                                      document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+
                                     window.fetch('/api/admin/verify-email', {
                                       method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-Token': csrfToken,
+                                      },
                                       credentials: 'include',
                                       body: JSON.stringify({ auth0UserId: userId }),
                                     })
