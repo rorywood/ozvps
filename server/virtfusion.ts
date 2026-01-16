@@ -1170,8 +1170,9 @@ export class VirtFusionClient {
 
     // Check commissioned state FIRST before determining power status
     // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
+    // CRITICAL: VirtFusion returns "commissionStatus" not "commissioned"!
     const rawServerData = server as any;
-    const commissioned = rawServerData.commissioned;
+    const commissioned = rawServerData.commissionStatus ?? rawServerData.commissioned;
 
     // server.state is the COMMISSION state (queued, building, complete, etc.)
     // remoteState.state is the POWER state from hypervisor (running, stopped, etc.)
