@@ -249,6 +249,12 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
           }}
         />
       </div>
+      <div className="flex items-start gap-2 p-3 rounded-md bg-primary/5 border border-primary/20">
+        <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Your card information is securely processed and stored by Stripe. We never store your full card details on our servers.
+        </p>
+      </div>
       {error && (
         <p className="text-sm text-destructive">{error}</p>
       )}
