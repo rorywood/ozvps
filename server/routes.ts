@@ -9,6 +9,7 @@ import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpc
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from "./index";
+import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
@@ -712,6 +713,28 @@ export async function registerRoutes(
         status: 'error',
         errorCode: 'SYSTEM_ERROR',
         message: 'System health check failed'
+      });
+    }
+  });
+
+  // Sentry test endpoint - triggers a test error to verify Sentry integration
+  app.get('/api/sentry-test', (req, res) => {
+    if (!isSentryEnabled()) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Sentry is not configured. Set SENTRY_DSN in your .env file.'
+      });
+    }
+
+    try {
+      // Intentionally throw an error to test Sentry
+      throw new Error('Sentry test error - this is intentional!');
+    } catch (e: any) {
+      captureException(e, { test: true, endpoint: '/api/sentry-test' });
+      log('Sentry test error captured', 'sentry');
+      res.json({
+        status: 'ok',
+        message: 'Test error sent to Sentry. Check your Sentry dashboard.'
       });
     }
   });
