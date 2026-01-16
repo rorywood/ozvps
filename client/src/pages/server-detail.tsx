@@ -1051,8 +1051,7 @@ export default function ServerDetail() {
   }
 
   // If server has immediate mode cancellation OR is in processing status (VirtFusion deleting), show locked deletion state
-  const activeCancellation = cancellationData?.cancellation;
-  const isBeingDeleted = activeCancellation && 
+  const isBeingDeleted = activeCancellation &&
     (activeCancellation.mode === 'immediate' || activeCancellation.status === 'processing');
   
   if (isBeingDeleted && activeCancellation) {
