@@ -1277,7 +1277,9 @@ export default function ServerDetail() {
                     {server.location?.country === 'Australia' && (
                       <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
                     )}
-                    <span className="text-sm text-foreground">{server.location?.city}, {server.location?.country}</span>
+                    <span className="text-sm text-foreground">
+                      {server.location?.name || server.location?.city || 'Unknown'}{server.location?.country ? `, ${server.location.country}` : ''}
+                    </span>
                   </div>
                 </div>
 
@@ -1303,11 +1305,13 @@ export default function ServerDetail() {
                 <div className="border-t border-border pt-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(server.createdAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
+                    {server.createdAt && !isNaN(new Date(server.createdAt).getTime())
+                      ? new Date(server.createdAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })
+                      : 'Unknown'}
                   </p>
                 </div>
               </div>
