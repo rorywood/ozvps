@@ -499,52 +499,54 @@ export default function DeployPage() {
               )}
             </section>
 
-            {/* Step 2: Choose Region */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <MapPin className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold text-foreground">Choose a Region</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {locations.map((location) => (
-                  <button
-                    key={location.code}
-                    type="button"
-                    disabled={!location.enabled}
-                    onClick={() => location.enabled && setSelectedLocationCode(location.code)}
-                    className={cn(
-                      "flex items-center gap-3 p-4 rounded-lg border transition-all",
-                      !location.enabled
-                        ? "opacity-50 cursor-not-allowed bg-muted/30 border-border"
-                        : selectedLocationCode === location.code
-                          ? "bg-primary/5 border-primary shadow-sm"
-                          : "bg-card border-border hover:border-primary/50"
-                    )}
-                    data-testid={`radio-location-${location.code.toLowerCase()}`}
-                  >
-                    <img
-                      src={flagAU}
-                      alt={location.countryCode}
-                      className="h-8 w-12 object-cover rounded"
-                    />
-                    <div className="flex-1 text-left">
-                      <div className="font-medium text-foreground">{location.name}</div>
-                      <div className="text-xs text-muted-foreground">{location.country}</div>
-                    </div>
-                    {selectedLocationCode === location.code && (
-                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                    )}
-                    {!location.enabled && (
-                      <span className="text-xs text-muted-foreground">Soon</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Step 3: Set Hostname */}
+            {/* Step 2: Choose Region - Only show after plan is selected */}
             {selectedPlanId && (
-              <section>
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-2 mb-4">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Choose a Region</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {locations.map((location) => (
+                    <button
+                      key={location.code}
+                      type="button"
+                      disabled={!location.enabled}
+                      onClick={() => location.enabled && setSelectedLocationCode(location.code)}
+                      className={cn(
+                        "flex items-center gap-3 p-4 rounded-lg border transition-all",
+                        !location.enabled
+                          ? "opacity-50 cursor-not-allowed bg-muted/30 border-border"
+                          : selectedLocationCode === location.code
+                            ? "bg-primary/5 border-primary shadow-sm"
+                            : "bg-card border-border hover:border-primary/50"
+                      )}
+                      data-testid={`radio-location-${location.code.toLowerCase()}`}
+                    >
+                      <img
+                        src={flagAU}
+                        alt={location.countryCode}
+                        className="h-8 w-12 object-cover rounded"
+                      />
+                      <div className="flex-1 text-left">
+                        <div className="font-medium text-foreground">{location.name}</div>
+                        <div className="text-xs text-muted-foreground">{location.country}</div>
+                      </div>
+                      {selectedLocationCode === location.code && (
+                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      )}
+                      {!location.enabled && (
+                        <span className="text-xs text-muted-foreground">Soon</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Step 3: Set Hostname - Only show after region is selected */}
+            {selectedPlanId && selectedLocationCode && (
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center gap-2 mb-4">
                   <Server className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold text-foreground">Set Hostname</h2>
@@ -572,9 +574,9 @@ export default function DeployPage() {
               </section>
             )}
 
-            {/* Step 4: Choose OS */}
-            {selectedPlanId && hostname && (
-              <section>
+            {/* Step 4: Choose OS - Only show after hostname is entered */}
+            {selectedPlanId && selectedLocationCode && hostname && (
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center gap-2 mb-4">
                   <HardDrive className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold text-foreground">Choose Operating System</h2>

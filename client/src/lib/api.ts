@@ -1,7 +1,15 @@
 import { Server, SupportTicket, TicketMessage } from "./types";
+import { SessionError } from "./queryClient";
 
 // CSRF token management
 const CSRF_COOKIE = 'ozvps_csrf';
+
+// Session error callback (set by App.tsx)
+let sessionErrorCallback: ((error: SessionError) => void) | null = null;
+
+export function setApiSessionErrorCallback(callback: (error: SessionError) => void) {
+  sessionErrorCallback = callback;
+}
 
 function getCsrfToken(): string | null {
   // Get CSRF token from cookie
@@ -41,7 +49,28 @@ async function secureFetch(url: string, options: RequestInit = {}): Promise<Resp
     }
   }
 
-  return fetch(url, options);
+  const response = await fetch(url, options);
+
+  // Handle 401 errors - trigger session error callback to redirect to login
+  if (response.status === 401) {
+    let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
+    try {
+      const clone = response.clone();
+      errorData = await clone.json();
+    } catch (e) {
+      // Failed to parse JSON, use default error
+    }
+
+    // Trigger session error callback (will redirect to login)
+    if (sessionErrorCallback) {
+      sessionErrorCallback({
+        error: errorData.error || 'Authentication required',
+        code: errorData.code || 'UNAUTHORIZED'
+      });
+    }
+  }
+
+  return response;
 }
 
 export interface NetworkInterface {

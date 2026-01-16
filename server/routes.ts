@@ -4383,7 +4383,19 @@ export async function registerRoutes(
       }
 
       const { amountCents } = result.data;
-      
+
+      // Check if Stripe is configured before proceeding
+      let stripe;
+      try {
+        stripe = await getUncachableStripeClient();
+      } catch (stripeError: any) {
+        log(`Stripe not configured for topup: ${stripeError.message}`, 'api');
+        return res.status(503).json({
+          error: 'Payment system is temporarily unavailable. Please contact support.',
+          code: 'STRIPE_NOT_CONFIGURED'
+        });
+      }
+
       // Ensure Stripe customer exists
       const { stripeCustomerId } = await ensureStripeCustomer({
         auth0UserId: req.userSession!.auth0UserId,
@@ -4391,8 +4403,7 @@ export async function registerRoutes(
         name: req.userSession!.name,
         userId: req.userSession!.userId,
       });
-      
-      const stripe = await getUncachableStripeClient();
+
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
@@ -4441,13 +4452,16 @@ export async function registerRoutes(
       res.json({ url: session.url });
     } catch (error: any) {
       if (error instanceof StripeCustomerError) {
-        return res.status(error.httpStatus).json({ 
-          error: error.message, 
-          code: error.code 
+        return res.status(error.httpStatus).json({
+          error: error.message,
+          code: error.code
         });
       }
       log(`Error creating checkout session: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to create checkout session' });
+      res.status(500).json({
+        error: 'Failed to create checkout session. Please try again or contact support.',
+        code: 'CHECKOUT_CREATION_FAILED'
+      });
     }
   });
 

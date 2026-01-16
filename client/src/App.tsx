@@ -27,7 +27,7 @@ import Admin from "@/pages/admin";
 import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
-import { api } from "@/lib/api";
+import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2 } from "lucide-react"; // Still used in AuthGuard
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
 
@@ -195,15 +195,22 @@ function SessionErrorHandler() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    setSessionErrorCallback((error: SessionError) => {
-      // Always redirect to login on any 401 error (e.g., when PM2 restarts)
+    const handleSessionError = (error: SessionError) => {
+      // Always redirect to login on any 401 error (e.g., when PM2 restarts or session expires)
       sessionStorage.setItem('sessionError', JSON.stringify(error));
       queryClient.clear();
       // Use window.location for clean redirect that resets all state
       window.location.href = '/login';
-    });
+    };
 
-    return () => setSessionErrorCallback(() => {});
+    // Set callback for both query client and API client
+    setSessionErrorCallback(handleSessionError);
+    setApiSessionErrorCallback(handleSessionError);
+
+    return () => {
+      setSessionErrorCallback(() => {});
+      setApiSessionErrorCallback(() => {});
+    };
   }, [setLocation]);
 
   return null;
