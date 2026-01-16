@@ -1204,7 +1204,7 @@ export default function ServerDetail() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(`ssh ${savedCredentials.username}@{savedCredentials.serverIp}`);
+                    navigator.clipboard.writeText(`ssh ${savedCredentials.username}@${savedCredentials.serverIp}`);
                     toast({ title: "Copied", description: "SSH command copied to clipboard" });
                   }}
                   title="Copy SSH command"
@@ -2243,7 +2243,370 @@ export default function ServerDetail() {
       </div>
       {/* End of grid layout (sidebar + main content) */}
 
+      {/* Reinstall Dialog - Searchable Template Picker */}
+      <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
+        setReinstallDialogOpen(open);
+        if (!open) {
+          setSelectedOs("");
+          setHostname("");
+          setHostnameError("");
+          setOsSearchQuery("");
+          setSelectedCategory("All");
+        }
+      }}>
+        <DialogContent className="bg-background border-border text-foreground max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="p-6 pb-4 border-b border-border">
+            <DialogTitle className="text-xl">Reinstall Server</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Select an operating system to install on your server.
+            </DialogDescription>
+          </DialogHeader>
 
+          {/* Warning Banner */}
+          <div className="mx-6 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-400">Warning: All data will be erased</p>
+              <p className="text-xs text-red-400/80 mt-0.5">
+                Reinstalling will completely wipe the disk. Make sure to backup any important data first.
+              </p>
+            </div>
+          </div>
+
+          {/* Hostname Input - Required */}
+          <div className="px-6 pt-4">
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Hostname <span className="text-red-400">*</span>
+            </label>
+            <Input
+              value={hostname}
+              onChange={(e) => handleHostnameChange(e.target.value)}
+              placeholder="e.g., myserver"
+              className={cn(
+                "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground",
+                hostnameError && "border-red-500/50 focus-visible:ring-red-500"
+              )}
+              data-testid="input-hostname"
+            />
+            {hostnameError ? (
+              <p className="text-xs text-red-400 mt-1">{hostnameError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
+              </p>
+            )}
+          </div>
+          
+          {/* Search and Category Filter */}
+          <div className="px-6 pt-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={osSearchQuery}
+                onChange={(e) => setOsSearchQuery(e.target.value)}
+                placeholder="Search templates..."
+                className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                data-testid="input-os-search"
+              />
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                    selectedCategory === cat
+                      ? "bg-primary text-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  data-testid={`button-category-${cat.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Template List */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {filteredTemplates.length > 0 ? (
+              <div className="space-y-2">
+                {filteredTemplates.map((template) => (
+                  <OsTemplateRow
+                    key={template.uuid || template.id}
+                    template={template}
+                    isSelected={selectedOs === template.id.toString()}
+                    onSelect={() => setSelectedOs(template.id.toString())}
+                  />
+                ))}
+              </div>
+            ) : osTemplates && osTemplates.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-yellow-500" />
+                <p className="font-medium">No OS templates available</p>
+                <p className="text-sm mt-1">There are no templates available for this server.</p>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>No operating systems found matching your search.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer with Install Button */}
+          <div className="border-t border-border p-6">
+            <Button 
+              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold disabled:opacity-50"
+              onClick={handleReinstall}
+              disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
+              data-testid="button-confirm-reinstall"
+            >
+              {reinstallMutation.isPending ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Installing...
+                </>
+              ) : (
+                'Reinstall Server'
+              )}
+            </Button>
+            {!isHostnameValid && hostname.trim() === '' && (
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Enter a hostname to continue
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Immediate Deletion Confirmation Dialog */}
+      <Dialog open={immediateConfirmOpen} onOpenChange={(open) => {
+        setImmediateConfirmOpen(open);
+        if (!open) setImmediateConfirmText("");
+      }}>
+        <DialogContent className="bg-background border-border text-foreground max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Immediate Deletion
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              This action is permanent and cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-2">
+              <p className="text-sm text-red-400 font-medium">
+                You are about to permanently delete this server:
+              </p>
+              <p className="text-foreground font-bold">{server?.name || serverId}</p>
+              <ul className="text-sm text-red-400/80 space-y-1 mt-3">
+                <li>• All data will be permanently destroyed</li>
+                <li>• This action cannot be revoked or undone</li>
+                <li>• The server will be deleted within 5 minutes</li>
+                <li>• No refunds will be provided</li>
+              </ul>
+            </div>
+            
+            <div>
+              <Label className="text-sm text-foreground mb-2 block">
+                Type <span className="font-mono font-bold text-red-400">{server?.name}</span> to confirm deletion:
+              </Label>
+              <Input
+                value={immediateConfirmText}
+                onChange={(e) => setImmediateConfirmText(e.target.value)}
+                placeholder={server?.name || "server name"}
+                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
+                data-testid="input-confirm-delete"
+                autoComplete="off"
+                autoFocus
+              />
+              <p className="text-xs text-red-400/60 mt-1.5">
+                ⚠️ This confirmation is case-sensitive and must match exactly.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 border-border hover:bg-muted"
+              onClick={() => {
+                setImmediateConfirmOpen(false);
+                setImmediateConfirmText("");
+              }}
+              data-testid="button-cancel-confirm"
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              disabled={immediateConfirmText !== server?.name || requestCancellationMutation.isPending}
+              onClick={() => serverId && requestCancellationMutation.mutate({
+                id: serverId,
+                reason: cancellationReason || undefined,
+                mode: 'immediate'
+              })}
+              data-testid="button-confirm-delete"
+            >
+              {requestCancellationMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting Server...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {server?.name}
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Provisioning dialog removed - now showing full-page view */}
+
+      {/* Password Reset Dialog */}
+      <Dialog 
+        open={passwordResetDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            // Clear password when dialog closes
+            setNewPassword(null);
+            setPasswordCopied(false);
+          }
+          setPasswordResetDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Key className="h-5 w-5 text-blue-400" />
+              {newPassword ? "New Password Generated" : "Reset Server Password"}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {newPassword 
+                ? "Your new password has been generated. Copy it now - it will not be shown again."
+                : "This will generate a new root/administrator password for your server."
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {newPassword ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Check className="h-5 w-5 text-green-400 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-green-400">Password Reset Successful</div>
+                    <div className="text-sm text-green-400/80 mt-1">
+                      Your server password has been changed. Use the password below to log in.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">New Password</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 p-3 bg-muted rounded-md border border-border font-mono text-sm text-foreground break-all">
+                    {newPassword}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 border-border"
+                    onClick={() => {
+                      navigator.clipboard.writeText(newPassword);
+                      setPasswordCopied(true);
+                      toast({
+                        title: "Password Copied",
+                        description: "The password has been copied to your clipboard.",
+                      });
+                    }}
+                    data-testid="button-copy-password"
+                  >
+                    {passwordCopied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-400/80">
+                    This password will not be shown again. Make sure to save it in a secure location before closing this dialog.
+                  </p>
+                </div>
+              </div>
+              
+              <Button 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => {
+                  setPasswordResetDialogOpen(false);
+                  setNewPassword(null);
+                  setPasswordCopied(false);
+                }}
+                data-testid="button-done-password"
+              >
+                Done
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-amber-400">Confirm Password Reset</div>
+                    <div className="text-sm text-amber-400/80">
+                      This will immediately change the root/administrator password on your server. 
+                      Any existing SSH sessions may be affected.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-border"
+                  onClick={() => setPasswordResetDialogOpen(false)}
+                  data-testid="button-cancel-password-reset"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => {
+                    if (serverId) {
+                      passwordResetMutation.mutate(serverId);
+                    }
+                  }}
+                  disabled={passwordResetMutation.isPending}
+                  data-testid="button-confirm-password-reset"
+                >
+                  {passwordResetMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Key className="h-4 w-4 mr-2" />
+                  )}
+                  Reset Password
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
+
