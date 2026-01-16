@@ -315,51 +315,129 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/">
-            <img
-              src={logo}
-              alt="OzVPS"
-              className="h-10 w-auto mx-auto cursor-pointer dark:invert-0 invert mb-8"
-              data-testid="img-logo"
-            />
-          </Link>
-          <h1 className="text-2xl font-bold text-foreground mb-2">
-            {requires2FA ? "Two-Factor Authentication" : "Sign in to OzVPS"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {requires2FA
-              ? useBackupCode
-                ? "Enter your backup code to continue"
-                : "Enter your authentication code to continue"
-              : "Welcome back! Please enter your credentials"
-            }
-          </p>
-        </div>
+    <div className="min-h-screen flex">
+      {/* Left Side - Branded Panel */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary/90 to-primary/70 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1)_0%,transparent_50%)] opacity-30"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,255,255,0.08)_0%,transparent_40%)]"></div>
 
-        {/* Main Card */}
-        <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
+          {/* Logo & Brand */}
+          <div>
+            <Link href="/">
+              <img
+                src={logo}
+                alt="OzVPS"
+                className="h-12 w-auto cursor-pointer brightness-0 invert"
+                data-testid="img-logo"
+              />
+            </Link>
+          </div>
+
+          {/* Main Content */}
+          <div className="space-y-8">
+            <div>
+              <h1 className="text-4xl font-bold mb-4 tracking-tight">
+                Welcome to OzVPS
+              </h1>
+              <p className="text-xl text-white/90 leading-relaxed">
+                Enterprise-grade virtual servers with Australian hosting and 24/7 support.
+              </p>
+            </div>
+
+            {/* Features */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Lightning Fast Deployment</h3>
+                  <p className="text-sm text-white/80">Deploy your server in seconds with our automated platform</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Australian Data Centers</h3>
+                  <p className="text-sm text-white/80">Low latency and compliance with local data sovereignty</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">24/7 Expert Support</h3>
+                  <p className="text-sm text-white/80">Our team is always here to help when you need us</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-sm text-white/70">
+            © 2026 OzVPS. All rights reserved.
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Login Form */}
+      <div className="flex-1 flex items-center justify-center bg-background p-8">
+        <div className="w-full max-w-md">
+          {/* Mobile Logo */}
+          <div className="lg:hidden text-center mb-8">
+            <Link href="/">
+              <img
+                src={logo}
+                alt="OzVPS"
+                className="h-10 w-auto mx-auto cursor-pointer dark:invert-0 invert"
+                data-testid="img-logo-mobile"
+              />
+            </Link>
+          </div>
+
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              {requires2FA ? "Two-Factor Authentication" : "Sign in to your account"}
+            </h1>
+            <p className="text-muted-foreground">
+              {requires2FA
+                ? useBackupCode
+                  ? "Enter your backup code to continue"
+                  : "Enter your authentication code to continue"
+                : "Welcome back! Enter your credentials to continue"
+              }
+            </p>
+          </div>
+
+          {/* Form Card */}
+          <div className="space-y-6">
           {!requires2FA ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {/* Session Message */}
               {sessionMessage && (
-                <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-md p-3">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{sessionMessage.error}</span>
                 </div>
               )}
 
               {/* User Not Found */}
               {showUserNotFound && (
-                <div className="flex flex-col gap-3 text-sm bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-md p-3">
-                  <div className="flex items-start gap-2 text-blue-700 dark:text-blue-400">
-                    <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-3 text-sm bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg p-4">
+                  <div className="flex items-start gap-3 text-blue-700 dark:text-blue-400">
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">No account found with this email</span>
                   </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-500">
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
                     Ready to get started? Create your account in seconds.
                   </p>
                   <Button
@@ -367,7 +445,7 @@ export default function LoginPage() {
                     variant="outline"
                     size="sm"
                     asChild
-                    className="w-full"
+                    className="w-full mt-1"
                   >
                     <Link href="/register">
                       Create your account
@@ -378,22 +456,22 @@ export default function LoginPage() {
 
               {/* Error Message */}
               {error && (
-                <div className="flex items-start gap-2 text-sm text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-md p-3">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg p-4">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-foreground">Email Address</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="you@example.com"
-                    className="pl-10"
+                    className="pl-11 h-12 text-base"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setShowUserNotFound(false); setError(""); }}
                     autoComplete="email"
@@ -406,22 +484,22 @@ export default function LoginPage() {
               {/* Password */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-sm font-medium text-foreground">Password</Label>
                   <Link
                     href="/forgot-password"
-                    className="text-xs text-primary hover:underline"
+                    className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
                     data-testid="link-forgot-password"
                   >
                     Forgot password?
                   </Link>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                   <Input
                     id="password"
                     type="password"
                     placeholder="Enter your password"
-                    className="pl-10"
+                    className="pl-11 h-12 text-base"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(""); }}
                     autoComplete="current-password"
@@ -459,17 +537,17 @@ export default function LoginPage() {
               {/* Submit Button */}
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full h-12 text-base font-semibold"
                 disabled={isSubmitting || loginMutation.isPending}
                 data-testid="button-submit"
               >
                 {(isSubmitting || loginMutation.isPending) ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                     Signing in...
                   </>
                 ) : (
-                  "Sign in"
+                  "Sign in to your account"
                 )}
               </Button>
 
@@ -477,11 +555,11 @@ export default function LoginPage() {
               {recaptchaEnabled && (
                 <p className="text-xs text-muted-foreground text-center">
                   Protected by reCAPTCHA.{' '}
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">
                     Privacy
                   </a>
-                  {' '}&{' '}
-                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  {' '}·{' '}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">
                     Terms
                   </a>
                 </p>
@@ -489,15 +567,15 @@ export default function LoginPage() {
             </form>
           ) : (
             /* 2FA Form */
-            <form onSubmit={handle2FASubmit} className="space-y-4">
+            <form onSubmit={handle2FASubmit} className="space-y-5">
               {/* 2FA Info */}
-              <div className="flex items-start gap-3 p-3 bg-primary/5 border border-primary/20 rounded-md">
-                <Smartphone className="h-5 w-5 text-primary mt-0.5" />
+              <div className="flex items-start gap-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <Smartphone className="h-6 w-6 text-primary flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-base font-semibold text-foreground mb-1">
                     {useBackupCode ? "Use a backup code" : "Verify your identity"}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="text-sm text-muted-foreground">
                     {useBackupCode
                       ? "Enter one of your backup codes"
                       : "Enter the 6-digit code from your authenticator app"}
@@ -507,22 +585,22 @@ export default function LoginPage() {
 
               {/* Error */}
               {error && (
-                <div className="flex items-start gap-2 text-sm text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-md p-3">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg p-4">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* 2FA Code Input */}
               <div className="space-y-2">
-                <Label htmlFor="twofa-code">
+                <Label htmlFor="twofa-code" className="text-sm font-medium text-foreground">
                   {useBackupCode ? "Backup Code" : "Verification Code"}
                 </Label>
                 <Input
                   id="twofa-code"
                   type="text"
                   placeholder={useBackupCode ? "XXXXXXXX" : "000000"}
-                  className="text-center text-xl tracking-widest font-mono"
+                  className="text-center text-2xl tracking-widest font-mono h-14"
                   value={twoFAToken}
                   onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
                   maxLength={useBackupCode ? 8 : 6}
@@ -535,33 +613,33 @@ export default function LoginPage() {
               {/* Verify Button */}
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full h-12 text-base font-semibold"
                 disabled={isSubmitting || loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
                 data-testid="button-verify-2fa"
               >
                 {(isSubmitting || loginMutation.isPending) ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                     Verifying...
                   </>
                 ) : (
-                  "Verify"
+                  "Verify and continue"
                 )}
               </Button>
 
               {/* 2FA Options */}
-              <div className="flex flex-col gap-2 pt-2 text-center">
+              <div className="flex flex-col gap-3 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setUseBackupCode(!useBackupCode)}
-                  className="text-sm text-primary hover:underline"
+                  className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
                 >
-                  {useBackupCode ? "Use authenticator app" : "Use a backup code"}
+                  {useBackupCode ? "Use authenticator app instead" : "Use a backup code instead"}
                 </button>
                 <button
                   type="button"
                   onClick={handleBack2FA}
-                  className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to sign in
@@ -569,24 +647,34 @@ export default function LoginPage() {
               </div>
             </form>
           )}
-        </div>
-
-        {/* Footer Links */}
-        {!requires2FA && (
-          <div className="mt-6 text-center space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link href="/register" className="text-primary hover:underline font-medium" data-testid="link-register">
-                Create one
-              </Link>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              <a href="https://ozvps.com.au" className="hover:underline" data-testid="link-back-to-website">
-                ← Back to ozvps.com.au
-              </a>
-            </p>
           </div>
-        )}
+
+          {/* Footer Links */}
+          {!requires2FA && (
+            <div className="mt-8 text-center space-y-4">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-background px-4 text-muted-foreground">
+                    New to OzVPS?
+                  </span>
+                </div>
+              </div>
+              <p className="text-sm">
+                <Link href="/register" className="text-primary hover:text-primary/80 font-semibold transition-colors" data-testid="link-register">
+                  Create your free account
+                </Link>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <a href="https://ozvps.com.au" className="hover:text-foreground transition-colors" data-testid="link-back-to-website">
+                  ← Back to ozvps.com.au
+                </a>
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
