@@ -1134,28 +1134,32 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   className="inline-flex items-center h-7 px-2 text-xs font-medium text-warning hover:text-warning hover:bg-warning/10 rounded-md transition-colors"
-                                  onClick={async (e) => {
+                                  onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     const userId = user.auth0UserId;
-                                    toast.info(`Verifying ${user.email}...`);
-                                    try {
-                                      const res = await fetch('/api/admin/verify-email', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        credentials: 'include',
-                                        body: JSON.stringify({ auth0UserId: userId }),
-                                      });
-                                      const data = await res.json();
+                                    const email = user.email;
+
+                                    // Use window.fetch directly and handle async
+                                    window.fetch('/api/admin/verify-email', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      credentials: 'include',
+                                      body: JSON.stringify({ auth0UserId: userId }),
+                                    })
+                                    .then((res) => {
                                       if (res.ok) {
-                                        toast.success('Email verified!');
-                                        queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
+                                        alert('Success! Email verified for ' + email);
+                                        window.location.reload();
                                       } else {
-                                        toast.error(data.error || 'Failed to verify');
+                                        return res.json().then((data) => {
+                                          alert('Error: ' + (data.error || 'Failed to verify'));
+                                        });
                                       }
-                                    } catch (err: any) {
-                                      toast.error(err.message || 'Request failed');
-                                    }
+                                    })
+                                    .catch((err) => {
+                                      alert('Request failed: ' + err.message);
+                                    });
                                   }}
                                   title="Verify email on user's behalf"
                                 >
