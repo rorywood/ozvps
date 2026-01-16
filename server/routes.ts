@@ -2115,6 +2115,14 @@ export async function registerRoutes(
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
       const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+
+      // CRITICAL: Invalidate server cache when commissioned=3 to ensure fresh data
+      // This prevents the frontend from seeing stale needsSetup=true after commission completes
+      if (buildStatus.commissioned === 3) {
+        log(`Server ${req.params.id} is commissioned, invalidating cache to refresh needsSetup flag`, 'virtfusion');
+        virtfusionClient.invalidateServerCache(req.params.id);
+      }
+
       res.json(buildStatus);
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');

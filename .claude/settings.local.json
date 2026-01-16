@@ -29,7 +29,8 @@
       "Bash(git fetch:*)",
       "Bash(ssh root@198.251.87.100 'cat /opt/ozvps-panel/.env 2>/dev/null | grep -i sentry || echo \"\"NOT FOUND\"\"')",
       "Bash(ssh root@198.251.87.100 'cd /opt/ozvps-panel && echo \"\"SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352\"\" >> .env && echo \"\"SENTRY_ENVIRONMENT=production\"\" >> .env && echo \"\"Added Sentry config\"\"')",
-      "Bash(ssh root@198.251.87.100 'cd /opt/ozvps-panel && pm2 restart ozvps-panel && pm2 logs ozvps-panel --lines 20 --nostream | grep -i sentry')"
+      "Bash(ssh root@198.251.87.100 'cd /opt/ozvps-panel && pm2 restart ozvps-panel && pm2 logs ozvps-panel --lines 20 --nostream | grep -i sentry')",
+      "Bash(pm2 logs:*)"
     ]
   }
 }

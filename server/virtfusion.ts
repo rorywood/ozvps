@@ -153,6 +153,13 @@ export class VirtFusionClient {
     }
   }
 
+  // Invalidate server cache to force fresh data fetch
+  // Used when we know server state has changed (e.g., commissioned, status change)
+  invalidateServerCache(serverId: string): void {
+    apiCache.invalidate(`server:${serverId}`);
+    log(`Invalidated cache for server ${serverId}`, 'virtfusion');
+  }
+
   // Generate a deterministic numeric ID from a string (for VirtFusion extRelationId which must be numeric)
   // Uses a stable hash algorithm so the same email always produces the same ID
   // VirtFusion extRelationId must be between 1 and 18446744073709551615
