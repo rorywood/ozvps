@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OzVPS Development Update Script
-# Version: 3.1.0
+# Version: 3.2.0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,6 +16,8 @@ INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 GITHUB_BRANCH="claude/dev-l5488"
 GITHUB_REPO="rorywood/ozvps"
+SCRIPT_NAME="update-ozvps-dev.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${SCRIPT_NAME}"
 
 error() { echo -e "${RED}✗${NC} $1"; }
 success() { echo -e "${GREEN}✓${NC} $1"; }
@@ -29,6 +31,60 @@ step_header() {
     echo -e "${BLUE}╰$( printf '─%.0s' {1..60} )╯${NC}"
 }
 
+# Self-update function - updates the script itself before running
+self_update() {
+    local SELF_PATH="$1"
+    local TEMP_SCRIPT=$(mktemp)
+
+    info "Checking for script updates..."
+
+    if curl -fsSL "$SCRIPT_URL" -o "$TEMP_SCRIPT" 2>/dev/null; then
+        # Check if downloaded file is valid (starts with shebang)
+        if head -1 "$TEMP_SCRIPT" | grep -q "^#!/bin/bash"; then
+            # Compare checksums
+            local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
+            local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
+
+            if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
+                success "New script version found, updating..."
+                cp "$TEMP_SCRIPT" "$SELF_PATH"
+                chmod +x "$SELF_PATH"
+                rm -f "$TEMP_SCRIPT"
+
+                # Re-execute the updated script with --no-self-update flag
+                exec "$SELF_PATH" --no-self-update "$@"
+            else
+                success "Script is up to date"
+            fi
+        else
+            warning "Downloaded script appears invalid, skipping self-update"
+        fi
+    else
+        warning "Could not check for script updates, continuing..."
+    fi
+
+    rm -f "$TEMP_SCRIPT" 2>/dev/null
+}
+
+# Check for --no-self-update flag (used after self-update to prevent loop)
+SKIP_SELF_UPDATE=false
+SCRIPT_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--no-self-update" ]; then
+        SKIP_SELF_UPDATE=true
+    else
+        SCRIPT_ARGS+=("$arg")
+    fi
+done
+
+# Get the path to this script
+SELF_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+
+# Perform self-update if not skipped
+if [ "$SKIP_SELF_UPDATE" = false ] && [ -f "$SELF_PATH" ]; then
+    self_update "$SELF_PATH" "${SCRIPT_ARGS[@]}"
+fi
+
 clear
 echo -e "${CYAN}${BOLD}"
 cat << "EOF"
@@ -39,7 +95,7 @@ cat << "EOF"
 ║  ██║   ██║ ███╔╝  ╚██╗ ██╔╝██╔═══╝ ╚════██║              ║
 ║  ╚██████╔╝███████╗ ╚████╔╝ ██║     ███████║              ║
 ║   ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚══════╝              ║
-║           Development Update System v3.1                 ║
+║           Development Update System v3.2                 ║
 ╚═══════════════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
