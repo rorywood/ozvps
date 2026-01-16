@@ -289,14 +289,16 @@ export default function ServerDetail() {
   // ALSO: Clear if user navigates back after setup is complete
   useEffect(() => {
     if (server && !server.needsSetup && serverId) {
-      // CRITICAL: Don't clear flags if reinstallTask status is 'complete'
-      // Let the auto-dismiss effect handle the cleanup after showing credentials
-      // Only clear flags if task is completely inactive or in other terminal states
-      const shouldClearFlags = !reinstallTask.isActive ||
-                               (reinstallTask.status !== 'complete' &&
-                                reinstallTask.status !== 'queued' &&
-                                reinstallTask.status !== 'provisioning' &&
-                                reinstallTask.status !== 'installing');
+      // CRITICAL: Only clear flags/state if:
+      // 1. Task is completely inactive (not running), OR
+      // 2. Setup mode is already off AND task is complete (cleanup after auto-dismiss)
+      const isTaskComplete = reinstallTask.status === 'complete';
+      const isSetupModeOff = !isSetupMode;
+
+      // Don't clean up if setup mode is still on (let auto-dismiss handle it)
+      // DO clean up if setup mode is off and task is complete (after auto-dismiss fired)
+      const shouldClearFlags = (!reinstallTask.isActive && !isTaskComplete) ||
+                               (isTaskComplete && isSetupModeOff);
 
       if (shouldClearFlags) {
         try {
@@ -304,16 +306,16 @@ export default function ServerDetail() {
           const hasSetupFlags = sessionStorage.getItem(`setupMode:${serverId}`) ||
                                 sessionStorage.getItem(`setupMinimized:${serverId}`);
 
-          if (hasSetupFlags || isSetupMode) {
-            console.log('[server-detail] Server fully online, clearing stale setup flags');
+          if (hasSetupFlags || isSetupMode || reinstallTask.isActive) {
+            console.log('[server-detail] Server fully online, clearing stale setup state');
             sessionStorage.removeItem(`setupMode:${serverId}`);
             sessionStorage.removeItem(`setupMinimized:${serverId}`);
             setIsSetupMode(false);
             setSetupMinimized(false);
 
-            // If reinstallTask is still showing as active, reset it
-            if (reinstallTask.isActive) {
-              console.log('[server-detail] Resetting stale reinstallTask state');
+            // Reset reinstallTask to clear the 'complete' status and clean up state
+            if (reinstallTask.isActive || isTaskComplete) {
+              console.log('[server-detail] Resetting reinstallTask state (cleanup after completion)');
               reinstallTask.reset();
             }
           }
@@ -354,8 +356,9 @@ export default function ServerDetail() {
           setShowSavedCredentials(true);
         }
 
-        // CRITICAL: Reset the reinstallTask to clear all state
-        reinstallTask.reset();
+        // IMPORTANT: Don't call reset() here - it would change status to 'idle'
+        // and cause a visual flicker. Just clear the setup mode flags.
+        // The reinstallTask state will be cleaned up by auto-clear effect later.
 
         // Clear setup mode flags (this will cause re-render to show overview)
         updateSetupMode(false);
