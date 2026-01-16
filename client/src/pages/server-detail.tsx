@@ -338,6 +338,18 @@ export default function ServerDetail() {
   // CRITICAL: Start reinstall task immediately when server needsSetup is detected
   // This ensures the checklist UI activates immediately without any flash of overview
   useEffect(() => {
+    // CRITICAL: Don't restart setup if it was already completed once
+    // Check sessionStorage for completion flag to prevent race conditions during query refetches
+    try {
+      const setupCompleted = sessionStorage.getItem(`setupCompleted:${serverId}`) === 'true';
+      if (setupCompleted) {
+        // Setup was already completed, don't restart
+        return;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+
     if (server && server.needsSetup && !reinstallTask.isActive) {
       // Server needs setup but task isn't tracking it yet
       // Start tracking immediately to show checklist
@@ -405,10 +417,12 @@ export default function ServerDetail() {
         updateSetupMode(false);
         updateSetupMinimized(false);
 
-        // Clear sessionStorage flags
+        // Clear sessionStorage flags and mark setup as completed
         try {
           sessionStorage.removeItem(`setupMode:${serverId}`);
           sessionStorage.removeItem(`setupMinimized:${serverId}`);
+          // Mark setup as completed to prevent restarting on query refetch
+          sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
         } catch (e) {
           // Ignore
         }
@@ -648,7 +662,14 @@ export default function ServerDetail() {
       
       // Mark as setup mode (initial setup, not reinstall)
       updateSetupMode(true);
-      
+
+      // Clear setupCompleted flag to allow checklist to show
+      try {
+        sessionStorage.removeItem(`setupCompleted:${serverId}`);
+      } catch {
+        // Ignore storage errors
+      }
+
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       console.log('[DEPLOY] Password from build response:', password ? '✅ PRESENT' : '❌ MISSING');
@@ -1291,7 +1312,7 @@ export default function ServerDetail() {
 
         {/* Building banner removed - showing full-page provisioning view instead */}
         {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
-        {showSavedCredentials && savedCredentials && server?.status === 'running' && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
           <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-success flex-shrink-0" />
