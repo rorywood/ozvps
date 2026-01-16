@@ -83,6 +83,15 @@ echo "✓ Files copied"
 
 # Restore configuration
 cp .env.backup .env 2>/dev/null || true
+
+# Add SENTRY_DSN if not present
+if ! grep -q "^SENTRY_DSN=" .env 2>/dev/null; then
+    echo "" >> .env
+    echo "# Error Tracking (Sentry)" >> .env
+    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> .env
+    echo "✓ Added Sentry error tracking"
+fi
+
 echo "✓ Code updated"
 
 # Update custom error pages

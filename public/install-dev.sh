@@ -309,6 +309,9 @@ AUTH0_CLIENT_SECRET=${AUTH0_CSEC}
 # Application Settings
 NODE_ENV=development
 PORT=3000
+
+# Error Tracking (Sentry)
+SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352
 ENVEOF
 chmod 600 "$INSTALL_DIR/.env"
 echo -e "${GREEN}✓ Configuration file created (.env)${NC}"
