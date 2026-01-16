@@ -85,6 +85,16 @@ echo "✓ Files copied"
 cp .env.backup .env 2>/dev/null || true
 echo "✓ Code updated"
 
+# Update custom error pages
+if [ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]; then
+    echo "Updating custom error pages..."
+    ERROR_PAGES_DIR="/var/www/ozvps-errors"
+    mkdir -p "$ERROR_PAGES_DIR"
+    cp "$INSTALL_DIR/deploy/nginx-error-pages"/*.html "$ERROR_PAGES_DIR/" 2>/dev/null || true
+    chmod 644 "$ERROR_PAGES_DIR"/*.html 2>/dev/null || true
+    echo "✓ Error pages updated"
+fi
+
 # Save commit hash
 if [ -n "$LATEST_COMMIT" ]; then
     echo "$LATEST_COMMIT" > "$INSTALL_DIR/.commit"

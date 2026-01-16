@@ -563,6 +563,20 @@ PMEOF
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Configuring PM2"
 
+    # Setup custom error pages
+    (
+        set -e
+        ERROR_PAGES_DIR="/var/www/ozvps-errors"
+        mkdir -p "$ERROR_PAGES_DIR"
+
+        # Copy error pages if they exist
+        if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
+            cp "$INSTALL_DIR/deploy/nginx-error-pages"/*.html "$ERROR_PAGES_DIR/"
+            chmod 644 "$ERROR_PAGES_DIR"/*.html
+        fi
+    ) >>"$LOG_FILE" 2>&1 &
+    spinner $! "Installing custom error pages"
+
     # Configure NGINX
     (
         set -e
@@ -572,10 +586,24 @@ PMEOF
             NGINX_CONF="ozvps-dev"
         fi
 
+        ERROR_PAGES_DIR="/var/www/ozvps-errors"
+
         cat > "/etc/nginx/sites-available/$NGINX_CONF" << EOF
 server {
     listen 80;
     server_name $PANEL_DOMAIN;
+
+    # Custom error pages
+    error_page 404 /404.html;
+    error_page 500 /500.html;
+    error_page 502 /502.html;
+    error_page 503 /503.html;
+
+    # Error page locations
+    location ~ ^/(404|500|502|503)\.html$ {
+        root $ERROR_PAGES_DIR;
+        internal;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -634,6 +662,8 @@ EOF
                     NGINX_CONF="ozvps-dev"
                 fi
 
+                ERROR_PAGES_DIR="/var/www/ozvps-errors"
+
                 cat > "/etc/nginx/sites-available/$NGINX_CONF" << SSLEOF
 # Redirect HTTP to HTTPS
 server {
@@ -657,6 +687,18 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
+
+    # Custom error pages
+    error_page 404 /404.html;
+    error_page 500 /500.html;
+    error_page 502 /502.html;
+    error_page 503 /503.html;
+
+    # Error page locations
+    location ~ ^/(404|500|502|503)\.html$ {
+        root $ERROR_PAGES_DIR;
+        internal;
+    }
 
     # Proxy to Node.js application
     location / {

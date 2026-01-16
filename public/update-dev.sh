@@ -181,6 +181,16 @@ cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
 
+# Update custom error pages
+if [ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]; then
+    info "Updating custom error pages..."
+    ERROR_PAGES_DIR="/var/www/ozvps-errors"
+    mkdir -p "$ERROR_PAGES_DIR"
+    cp "$INSTALL_DIR/deploy/nginx-error-pages"/*.html "$ERROR_PAGES_DIR/" 2>/dev/null || true
+    chmod 644 "$ERROR_PAGES_DIR"/*.html 2>/dev/null || true
+    success "Error pages updated"
+fi
+
 # Ensure ecosystem.config.cjs exists (create if missing from repo)
 if [ ! -f "$INSTALL_DIR/ecosystem.config.cjs" ]; then
     info "Creating ecosystem.config.cjs..."
