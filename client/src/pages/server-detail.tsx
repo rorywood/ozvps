@@ -2243,6 +2243,9 @@ export default function ServerDetail() {
       </div>
       {/* End of grid layout (sidebar + main content) */}
 
+      </div>
+      {/* End of main wrapper (space-y-6 pb-20) */}
+
       {/* Reinstall Dialog - Searchable Template Picker */}
       <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
         setReinstallDialogOpen(open);
