@@ -15,6 +15,10 @@ import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
 import { startBillingProcessor } from "./billing-processor";
 import { connectRedis, disconnectRedis, redisClient } from "./redis";
 import { validateOrExit, getEnvironmentSummary } from "./env-validator";
+import { initSentry, sentryRequestHandler, sentryErrorHandler, captureException } from "./sentry";
+
+// CRITICAL: Initialize Sentry first (before anything else can fail)
+initSentry();
 
 // CRITICAL: Validate environment before doing anything else
 // This prevents the app from starting with invalid/missing configuration
@@ -87,6 +91,9 @@ if (process.env.NODE_ENV === 'production') {
     next();
   });
 }
+
+// Sentry request handler - must be first middleware
+app.use(sentryRequestHandler);
 
 // Security headers with enhanced configuration
 app.use(helmet({
@@ -258,16 +265,14 @@ function sanitizeForLogging(obj: any): any {
   return sanitized;
 }
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+// Re-export log from logger module for backwards compatibility
+import { log as structuredLog, logger } from "./logger";
 
-  console.log(`${formattedTime} [${source}] ${message}`);
+export function log(message: string, source = "express") {
+  structuredLog(message, source);
 }
+
+export { logger };
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -345,12 +350,19 @@ app.use((req, res, next) => {
     log(`Warning: Failed to initialize reCAPTCHA cache: ${error.message}`, 'security');
   }
 
+  // Sentry error handler - must be before other error handlers
+  app.use(sentryErrorHandler);
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Capture server errors (5xx) with Sentry
+    if (status >= 500) {
+      captureException(err, { status, message });
+    }
+
     res.status(status).json({ message });
-    throw err;
   });
 
   registerInstallAssets(app);
