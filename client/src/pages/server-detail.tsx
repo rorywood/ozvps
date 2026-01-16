@@ -316,6 +316,43 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
+  // AUTO-DISMISS: When setup completes, automatically dismiss checklist and show server overview
+  // Only trigger after credentials are confirmed (tracked in SetupProgressChecklist component)
+  useEffect(() => {
+    if (reinstallTask.status === 'complete' && reinstallTask.isActive && isSetupMode && server && !server.needsSetup) {
+      console.log('Setup complete! Auto-dismissing checklist and showing server overview...');
+
+      // Wait 3 seconds: 1s to show completion message + 2s after confirming credentials
+      const timer = setTimeout(() => {
+        // Save credentials if available
+        if (reinstallTask.credentials) {
+          updateSavedCredentials(reinstallTask.credentials);
+          setShowSavedCredentials(true);
+        }
+
+        // Clear setup mode flags (this will cause re-render to show overview)
+        updateSetupMode(false);
+        updateSetupMinimized(false);
+
+        // Clear sessionStorage flags
+        try {
+          sessionStorage.removeItem(`setupMode:${serverId}`);
+          sessionStorage.removeItem(`setupMinimized:${serverId}`);
+        } catch (e) {
+          // Ignore
+        }
+
+        // Invalidate queries to refresh server data
+        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        queryClient.invalidateQueries({ queryKey: ['servers'] });
+
+        console.log('Checklist dismissed, showing server overview');
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [reinstallTask.status, reinstallTask.isActive, reinstallTask.credentials, isSetupMode, server?.needsSetup, serverId, queryClient]);
+
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
     if (reinstallTask.credentials && serverId && !savedCredentials) {

@@ -112,7 +112,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
 
   return (
     <div className="space-y-6">
-      {/* Header with minimize/close button */}
+      {/* Header with minimize button (only during active setup, not on complete) */}
       <div className="relative">
         {onMinimize && !isComplete && !isFailed && (
           <button
@@ -124,16 +124,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             <X className="h-5 w-5" />
           </button>
         )}
-        {onClose && (isComplete || isFailed) && (
-          <button
-            onClick={onClose}
-            className="absolute top-0 right-0 p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-            title="Close"
-            data-testid="button-close-setup"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        )}
+        {/* REMOVED: Close button - now auto-dismisses after completion */}
         <div className="text-center space-y-2">
           <div className={cn(
             "mx-auto w-16 h-16 rounded-full flex items-center justify-center",
@@ -356,19 +347,26 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         </div>
       )}
 
-      {/* Action Button - Only show after credentials are acknowledged or on failure */}
-      {((isComplete && credentials && confirmedSaved) || isFailed) && onDismiss && (
+      {/* Auto-redirect message for completion */}
+      {isComplete && (
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-3 bg-success/10 border border-success/20 rounded-lg">
+          <Loader2 className="h-4 w-4 animate-spin text-success" />
+          <span>
+            {credentials && !confirmedSaved
+              ? 'Please confirm you saved the credentials above'
+              : 'Redirecting to server overview...'}
+          </span>
+        </div>
+      )}
+
+      {/* Action Button - Only show for failed state */}
+      {isFailed && onDismiss && (
         <Button
           onClick={onDismiss}
-          className={cn(
-            "w-full",
-            isComplete
-              ? "bg-success hover:bg-success/90 text-success-foreground"
-              : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-          )}
+          className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
           data-testid="button-dismiss-setup"
         >
-          {isComplete ? 'Continue to Server' : 'Close'}
+          Close
         </Button>
       )}
     </div>
