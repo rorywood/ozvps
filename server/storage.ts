@@ -1185,7 +1185,8 @@ export const dbStorage = {
     auth0UserId: string,
     planId: number,
     priceCents: number,
-    hostname?: string
+    hostname?: string,
+    planName?: string
   ): Promise<{ success: boolean; order?: DeployOrder; error?: string }> {
     await this.getOrCreateWallet(auth0UserId);
     
@@ -1218,12 +1219,17 @@ export const dbStorage = {
       status: 'paid',
     });
 
-    // Insert debit transaction
+    // Insert debit transaction with server details for display
     await db.insert(walletTransactions).values({
       auth0UserId,
       type: 'debit',
       amountCents: -priceCents,
-      metadata: { deployOrderId: order.id },
+      metadata: {
+        deployOrderId: order.id,
+        serverName: hostname,
+        planName: planName,
+        reason: 'Server deployment'
+      },
     });
 
     return { success: true, order };

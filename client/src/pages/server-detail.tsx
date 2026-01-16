@@ -152,11 +152,25 @@ export default function ServerDetail() {
   const [showSavedCredentials, setShowSavedCredentials] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
+      // Don't show if credentials were dismissed
+      if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
+        return false;
+      }
       return !!sessionStorage.getItem(`credentials:${serverId}`);
     } catch {
       return false;
     }
   });
+
+  // Persist credentials dismissal
+  const dismissCredentials = () => {
+    setShowSavedCredentials(false);
+    try {
+      sessionStorage.setItem(`credentialsDismissed:${serverId}`, 'true');
+    } catch {
+      // Ignore storage errors
+    }
+  };
   const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
   
   // Persist credentials to sessionStorage when they change
@@ -1233,7 +1247,7 @@ export default function ServerDetail() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowSavedCredentials(false)}
+                onClick={dismissCredentials}
               >
                 Dismiss
               </Button>

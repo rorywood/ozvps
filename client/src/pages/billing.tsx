@@ -1321,16 +1321,24 @@ export default function BillingPage() {
                                   </div>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-foreground text-sm">
+                                  <div className="font-medium text-foreground text-base">
                                     {getTransactionType(tx.type, tx.metadata, tx.amountCents)}
+                                    {/* Show server name for debits */}
+                                    {tx.type === 'debit' && tx.metadata && (tx.metadata as Record<string, string>).serverName && (
+                                      <span className="text-muted-foreground font-normal"> · {(tx.metadata as Record<string, string>).serverName}</span>
+                                    )}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-sm text-muted-foreground">
                                     {formatDate(tx.createdAt)}
                                     {tx.description && <> · {tx.description}</>}
+                                    {/* Show reason for debits if available */}
+                                    {tx.type === 'debit' && tx.metadata && (tx.metadata as Record<string, string>).reason && (
+                                      <> · {(tx.metadata as Record<string, string>).reason}</>
+                                    )}
                                   </div>
                                   {/* Show admin reason for admin adjustments */}
                                   {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
-                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                    <div className="text-sm text-muted-foreground mt-0.5">
                                       <span className="text-primary">Reason:</span> {(tx.metadata as Record<string, string>).reason}
                                     </div>
                                   ) : null}

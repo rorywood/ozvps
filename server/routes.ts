@@ -4721,7 +4721,8 @@ export async function registerRoutes(
         auth0UserId,
         planId,
         plan.priceMonthly,
-        serverHostname
+        serverHostname,
+        plan.name
       );
 
       if (!deployResult.success || !deployResult.order) {
