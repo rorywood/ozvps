@@ -3043,11 +3043,12 @@ export async function registerRoutes(
 
       // Audit log
       await dbStorage.createAuditLog({
+        adminAuth0UserId: req.userSession.auth0UserId!,
         adminEmail: req.userSession.email,
         action: 'EMAIL_VERIFIED_MANUALLY',
         targetType: 'user',
         targetId: auth0UserId,
-        details: `Admin manually verified email for user ${auth0UserId} (database override)`,
+        reason: `Admin manually verified email for user ${auth0UserId} (database override)`,
         status: 'success',
       });
 
@@ -3062,11 +3063,12 @@ export async function registerRoutes(
       // Audit log for failure
       try {
         await dbStorage.createAuditLog({
+          adminAuth0UserId: req.userSession!.auth0UserId!,
           adminEmail: req.userSession!.email,
           action: 'EMAIL_VERIFIED_MANUALLY',
           targetType: 'user',
           targetId: req.body.auth0UserId,
-          details: `Failed to verify email: ${error.message}`,
+          reason: `Failed to verify email: ${error.message}`,
           status: 'failed',
         });
       } catch {}
