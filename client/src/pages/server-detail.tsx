@@ -402,6 +402,21 @@ export default function ServerDetail() {
         hasBeenRebootingLongEnough,
         timeInRebooting: `${timeInRebooting}ms`,
       });
+
+      // CRITICAL: If we're in rebooting status but haven't waited long enough,
+      // set a timer to re-check after the remaining time
+      if (taskAtFinalStage && serverFullyOnline && serverCommissioned && !hasBeenRebootingLongEnough && reinstallTask.rebootingStartTime) {
+        const remainingTime = minimumRebootingTime - timeInRebooting;
+        console.log(`[server-detail] Setting timer to re-check in ${remainingTime}ms`);
+
+        const recheckTimer = setTimeout(() => {
+          console.log('[server-detail] Re-checking after waiting period...');
+          // Force a re-render by invalidating queries
+          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        }, remainingTime + 100); // Add 100ms buffer
+
+        return () => clearTimeout(recheckTimer);
+      }
     }
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server?.needsSetup, server?.status, serverId]);
 
