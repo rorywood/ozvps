@@ -294,7 +294,17 @@ export default function ServerDetail() {
       }
     }
   }, [server?.needsSetup, serverId, reinstallTask.isActive]);
-  
+
+  // Auto-start reinstall task polling when server is provisioning but task isn't active
+  useEffect(() => {
+    if (server && server.status === 'provisioning' && !reinstallTask.isActive && !needsSetup) {
+      // Server is actively building but reinstallTask isn't tracking it
+      // This can happen if user navigated away during deploy and came back
+      console.log('Server is provisioning but task not active, starting task tracking');
+      reinstallTask.start();
+    }
+  }, [server?.status, reinstallTask.isActive, needsSetup, reinstallTask]);
+
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
     if (reinstallTask.credentials && serverId && !savedCredentials) {
