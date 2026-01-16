@@ -733,7 +733,12 @@ export default function DeployPage() {
                         "font-mono font-medium",
                         canAfford ? "text-success" : "text-foreground"
                       )}>
-                        {loadingWallet ? "..." : formatCurrency(wallet?.balanceCents || 0)}
+                        {loadingWallet ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading...
+                          </span>
+                        ) : formatCurrency(wallet?.balanceCents || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-border">
