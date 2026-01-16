@@ -116,16 +116,26 @@ export function addBreadcrumb(breadcrumb: Sentry.Breadcrumb): void {
 }
 
 /**
+ * No-op middleware for when Sentry is not available
+ */
+const noopMiddleware = (_req: any, _res: any, next: any) => next();
+const noopErrorMiddleware = (err: any, _req: any, _res: any, next: any) => next(err);
+
+/**
  * Express error handler middleware for Sentry
  * Must be added after all routes
+ * Returns no-op if Sentry Handlers not available
  */
-export const sentryErrorHandler = Sentry.Handlers.errorHandler();
+export const sentryErrorHandler =
+  (Sentry as any).Handlers?.errorHandler?.() ?? noopErrorMiddleware;
 
 /**
  * Express request handler middleware for Sentry
  * Must be added before all routes
+ * Returns no-op if Sentry Handlers not available
  */
-export const sentryRequestHandler = Sentry.Handlers.requestHandler();
+export const sentryRequestHandler =
+  (Sentry as any).Handlers?.requestHandler?.() ?? noopMiddleware;
 
 /**
  * Check if Sentry is initialized
