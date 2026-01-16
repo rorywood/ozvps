@@ -64,6 +64,7 @@ export const plans = pgTable("plans", {
   priceMonthly: integer("price_monthly_cents").notNull(),
   virtfusionPackageId: integer("virtfusion_package_id"),
   active: boolean("active").default(true).notNull(),
+  popular: boolean("popular").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

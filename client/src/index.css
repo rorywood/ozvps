@@ -52,6 +52,18 @@
   --animate-out: fade-out 0.2s ease-in;
 }
 
+@layer components {
+  /* Glass panel effect for headers/navs */
+  .glass-panel {
+    @apply bg-background/95 backdrop-blur-md;
+  }
+
+  /* Solid version when scrolled */
+  .glass-panel-scrolled {
+    @apply bg-background;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

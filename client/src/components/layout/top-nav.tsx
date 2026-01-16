@@ -206,6 +206,16 @@ function ProfileDropdown() {
 
 function DesktopNav() {
   const [location] = useLocation();
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -253,7 +263,8 @@ function DesktopNav() {
 
   return (
     <header className={cn(
-      "hidden lg:block fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      "hidden lg:block fixed left-0 right-0 z-50 border-b border-border/50 transition-colors duration-200",
+      isScrolled ? "bg-background" : "glass-panel",
       isDev ? "top-14" : "top-0"
     )}>
       <div className="container mx-auto max-w-7xl px-6">
@@ -344,7 +355,17 @@ function DesktopNav() {
 function MobileNav() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -409,7 +430,8 @@ function MobileNav() {
 
   return (
     <header className={cn(
-      "lg:hidden fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      "lg:hidden fixed left-0 right-0 z-50 border-b border-border/50 transition-colors duration-200",
+      isScrolled ? "bg-background" : "glass-panel",
       isDev ? "top-14" : "top-0"
     )}>
       <div className="flex items-center justify-between p-4">

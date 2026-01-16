@@ -34,6 +34,7 @@ interface Plan {
   transferGb: number;
   priceMonthly: number;
   active: boolean;
+  popular?: boolean;
 }
 
 interface Location {
@@ -410,7 +411,7 @@ export default function DeployPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {plans.map((plan) => {
                     const isSelected = selectedPlanId === plan.id;
-                    const isPopular = plan.code === 'lite';
+                    const isPopular = plan.popular;
 
                     return (
                       <button

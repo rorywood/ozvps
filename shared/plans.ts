@@ -50,7 +50,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     code: 'pro',
     name: 'Pro',
     vcpu: 4,
-    ramMb: 6144, // 6 GB
+    ramMb: 8192, // 8 GB
     storageGb: 120,
     transferGb: 4000, // 4 TB
     priceMonthly: 2600, // $26.00
@@ -60,8 +60,8 @@ export const STATIC_PLANS: StaticPlan[] = [
   {
     code: 'max',
     name: 'Max',
-    vcpu: 6,
-    ramMb: 8192, // 8 GB
+    vcpu: 4,
+    ramMb: 12288, // 12 GB
     storageGb: 160,
     transferGb: 5000, // 5 TB
     priceMonthly: 3800, // $38.00

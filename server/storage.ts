@@ -767,6 +767,7 @@ export const dbStorage = {
           priceMonthly: plan.priceMonthly,
           virtfusionPackageId: plan.virtfusionPackageId,
           active: plan.active,
+          popular: plan.popular ?? false,
         });
         seeded++;
       } catch (error: any) {
