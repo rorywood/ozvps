@@ -286,22 +286,38 @@ export default function ServerDetail() {
   const consoleLock = useConsoleLock(serverId || '', server?.status);
   
   // Clear building flags when server no longer needs setup AND reinstall task is complete
+  // ALSO: Clear if user navigates back after setup is complete
   useEffect(() => {
-    if (server && !server.needsSetup && serverId && !reinstallTask.isActive) {
-      try {
-        // Server setup is complete and task is done, clear any leftover building flags
-        if (sessionStorage.getItem(`setupMode:${serverId}`) || 
-            sessionStorage.getItem(`setupMinimized:${serverId}`)) {
-          sessionStorage.removeItem(`setupMode:${serverId}`);
-          sessionStorage.removeItem(`setupMinimized:${serverId}`);
-          setIsSetupMode(false);
-          setSetupMinimized(false);
+    if (server && !server.needsSetup && serverId) {
+      // If reinstallTask is complete or not active, and server doesn't need setup, clear flags
+      const shouldClearFlags = !reinstallTask.isActive || reinstallTask.status === 'complete';
+
+      if (shouldClearFlags) {
+        try {
+          // Server setup is complete, clear any leftover building flags
+          const hasSetupFlags = sessionStorage.getItem(`setupMode:${serverId}`) ||
+                                sessionStorage.getItem(`setupMinimized:${serverId}`);
+
+          if (hasSetupFlags || isSetupMode) {
+            console.log('[server-detail] Server fully online, clearing setup flags');
+            sessionStorage.removeItem(`setupMode:${serverId}`);
+            sessionStorage.removeItem(`setupMinimized:${serverId}`);
+            setIsSetupMode(false);
+            setSetupMinimized(false);
+
+            // If reinstallTask is still showing as active/complete, reset it
+            if (reinstallTask.isActive) {
+              console.log('[server-detail] Resetting stale reinstallTask state');
+              reinstallTask.reset();
+            }
+          }
+        } catch (e) {
+          // Ignore storage errors
+          console.error('Error clearing setup flags:', e);
         }
-      } catch {
-        // Ignore storage errors
       }
     }
-  }, [server?.needsSetup, serverId, reinstallTask.isActive]);
+  }, [server?.needsSetup, serverId, reinstallTask.isActive, reinstallTask.status, isSetupMode, reinstallTask]);
 
   // CRITICAL: Start reinstall task immediately when server needsSetup is detected
   // This ensures the checklist UI activates immediately without any flash of overview
@@ -330,6 +346,9 @@ export default function ServerDetail() {
           setShowSavedCredentials(true);
         }
 
+        // CRITICAL: Reset the reinstallTask to clear all state
+        reinstallTask.reset();
+
         // Clear setup mode flags (this will cause re-render to show overview)
         updateSetupMode(false);
         updateSetupMinimized(false);
@@ -342,16 +361,16 @@ export default function ServerDetail() {
           // Ignore
         }
 
-        // Invalidate queries to refresh server data
+        // Invalidate queries to refresh server data with latest status
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
 
-        console.log('Checklist dismissed, showing server overview');
+        console.log('Checklist dismissed, reinstallTask reset, showing server overview');
       }, 3000);
 
       return () => clearTimeout(timer);
     }
-  }, [reinstallTask.status, reinstallTask.isActive, reinstallTask.credentials, isSetupMode, server?.needsSetup, serverId, queryClient]);
+  }, [reinstallTask.status, reinstallTask.isActive, reinstallTask.credentials, isSetupMode, server?.needsSetup, serverId, queryClient, reinstallTask]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
@@ -1041,8 +1060,15 @@ export default function ServerDetail() {
 
   // Check if initial setup is in progress (blocks server usage until complete)
   // CRITICAL: Include isInitialSetup to prevent ANY overview flash
-  // If setupMode flag is set OR needsSetup is true, ALWAYS show checklist
-  const isSettingUp = isInitialSetup || needsSetup || isProvisioningOrBuilding || (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode));
+  // BUT: Don't show checklist if user navigates away and comes back after completion
+  // If reinstallTask is complete AND server doesn't need setup, show overview (not checklist)
+  const setupActuallyComplete = reinstallTask.status === 'complete' && !needsSetup && server?.status !== 'provisioning';
+  const isSettingUp = !setupActuallyComplete && (
+    isInitialSetup ||
+    needsSetup ||
+    isProvisioningOrBuilding ||
+    (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode))
+  );
 
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
