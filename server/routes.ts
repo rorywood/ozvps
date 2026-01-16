@@ -3698,6 +3698,101 @@ export async function registerRoutes(
     }
   });
 
+  // Sync plans from VirtFusion packages (admin)
+  app.post('/api/admin/plans/sync-from-virtfusion', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      // Fetch packages from VirtFusion
+      const vfPackages = await virtfusionClient.getPackages();
+      log(`Fetched ${vfPackages.length} packages from VirtFusion for sync`, 'admin');
+
+      // Fetch current plans from database
+      const currentPlans = await db.select().from(plans);
+      const plansMap = new Map(currentPlans.map(p => [p.virtfusionPackageId, p]));
+
+      let synced = 0;
+      let created = 0;
+      let updated = 0;
+      const errors: string[] = [];
+
+      // Sync each VirtFusion package
+      for (const vfPkg of vfPackages) {
+        try {
+          const existingPlan = plansMap.get(vfPkg.id);
+
+          if (existingPlan) {
+            // Update existing plan's active status from VirtFusion enabled status
+            const [updatedPlan] = await db
+              .update(plans)
+              .set({
+                active: vfPkg.enabled,
+                name: vfPkg.name, // Update name too
+              })
+              .where(eq(plans.virtfusionPackageId, vfPkg.id))
+              .returning();
+
+            log(`Updated plan ${existingPlan.code}: active=${vfPkg.enabled} (was ${existingPlan.active})`, 'admin');
+            updated++;
+            synced++;
+          } else {
+            // Create new plan from VirtFusion package
+            const monthlyPrice = vfPkg.prices?.find(p =>
+              p.billingPeriod?.toLowerCase().includes('month')
+            )?.price || 0;
+
+            const [newPlan] = await db.insert(plans).values({
+              code: vfPkg.code,
+              name: vfPkg.name,
+              vcpu: vfPkg.cpuCores,
+              ramMb: vfPkg.memory,
+              storageGb: vfPkg.primaryStorage,
+              transferGb: vfPkg.traffic,
+              priceMonthly: monthlyPrice,
+              virtfusionPackageId: vfPkg.id,
+              active: vfPkg.enabled,
+            }).returning();
+
+            log(`Created new plan ${newPlan.code} from VirtFusion package ${vfPkg.id}`, 'admin');
+            created++;
+            synced++;
+          }
+        } catch (error: any) {
+          const errorMsg = `Failed to sync package ${vfPkg.id}: ${error.message}`;
+          errors.push(errorMsg);
+          log(errorMsg, 'admin');
+        }
+      }
+
+      // Audit log
+      await dbStorage.createAdminAuditLog({
+        adminAuth0UserId: session.auth0UserId!,
+        adminEmail: session.email,
+        action: 'plans.sync_from_virtfusion',
+        targetType: 'plans',
+        targetId: 'all',
+        targetLabel: `Synced ${synced} plans`,
+        result: { synced, created, updated, errors },
+        status: errors.length > 0 ? 'partial' : 'success',
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'],
+      });
+
+      log(`Plans sync completed: ${synced} synced (${created} created, ${updated} updated), ${errors.length} errors`, 'admin');
+
+      res.json({
+        success: true,
+        synced,
+        created,
+        updated,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      log(`Admin: Error syncing plans from VirtFusion: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to sync plans from VirtFusion' });
+    }
+  });
+
   // Get OS templates for package (admin)
   app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, requireAdmin, async (req, res) => {
     try {
