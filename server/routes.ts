@@ -68,6 +68,7 @@ function handleApiError(
   // Handle VirtFusion timeout specifically
   if (error instanceof VirtFusionTimeoutError) {
     log(`VirtFusion timeout${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionTimeout' });
     return res.status(504).json({
       error: 'The server management service is taking too long to respond. Please try again in a moment.',
       code: ErrorCodes.EXTERNAL_SERVICE_TIMEOUT,
@@ -77,6 +78,7 @@ function handleApiError(
   // Handle VirtFusion connection errors
   if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
     log(`VirtFusion connection error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionConnection' });
     return res.status(503).json({
       error: 'Unable to connect to the server management service. Please try again later.',
       code: ErrorCodes.SERVICE_UNAVAILABLE,
@@ -86,6 +88,7 @@ function handleApiError(
   // Handle VirtFusion API errors (often contain status codes)
   if (error.message?.includes('VirtFusion API error') || error.message?.includes('status')) {
     log(`VirtFusion API error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionAPI' });
     return res.status(502).json({
       error: 'The server management service returned an error. Please try again.',
       code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
@@ -95,6 +98,7 @@ function handleApiError(
   // Handle database errors
   if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
     log(`Database constraint error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'DatabaseConstraint' });
     return res.status(409).json({
       error: 'This resource already exists or conflicts with existing data.',
       code: ErrorCodes.RESOURCE_CONFLICT,
@@ -103,6 +107,7 @@ function handleApiError(
 
   if (error.code?.startsWith('2') || error.code?.startsWith('SQLITE')) {
     log(`Database error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'Database' });
     return res.status(500).json({
       error: 'A database error occurred. Please try again later.',
       code: ErrorCodes.DATABASE_ERROR,
@@ -111,6 +116,9 @@ function handleApiError(
 
   // Log the error for debugging
   log(`API Error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+
+  // Send to Sentry for all unhandled errors
+  captureException(error, { context: context || 'unknown', errorType: 'Unhandled' });
 
   // Return generic error with default message
   return res.status(500).json({
@@ -2110,17 +2118,20 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/build-status', authMiddleware, async (req, res) => {
     try {
+      // CRITICAL FIX: Get build status FIRST to check if commissioned
+      // This prevents caching stale data before we know to invalidate
+      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+
+      // If commissioned, invalidate cache BEFORE ownership check to prevent stale data
+      if (buildStatus.commissioned === 3) {
+        log(`Server ${req.params.id} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
+        virtfusionClient.invalidateServerCache(req.params.id);
+      }
+
+      // Now do ownership check - will fetch fresh data if cache was invalidated
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
-      }
-      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
-
-      // CRITICAL: Invalidate server cache when commissioned=3 to ensure fresh data
-      // This prevents the frontend from seeing stale needsSetup=true after commission completes
-      if (buildStatus.commissioned === 3) {
-        log(`Server ${req.params.id} is commissioned, invalidating cache to refresh needsSetup flag`, 'virtfusion');
-        virtfusionClient.invalidateServerCache(req.params.id);
       }
 
       res.json(buildStatus);
