@@ -343,19 +343,27 @@ export default function ServerDetail() {
   // AUTO-DISMISS: When setup completes, immediately show server overview
   // Dismiss as soon as server is active in VirtFusion (no delay)
   useEffect(() => {
-    // Dismiss if EITHER:
-    // 1. reinstallTask marks as complete, OR
-    // 2. Server data shows needsSetup=false and not provisioning (VirtFusion confirms ready)
+    // Only run if setup mode is currently on
+    if (!isSetupMode) return;
+
+    // Dismiss if ANY of these conditions are met:
+    // 1. reinstallTask marks as complete
+    // 2. Server data shows needsSetup=false (VirtFusion confirms commissioned)
+    // 3. Server status is 'running' or 'stopped' (not provisioning)
     const taskComplete = reinstallTask.status === 'complete';
-    const serverReady = server && !server.needsSetup && server.status !== 'provisioning';
-    const shouldDismiss = (taskComplete || serverReady) && isSetupMode;
+    const serverCommissioned = server && server.needsSetup === false;
+    const serverActive = server && (server.status === 'running' || server.status === 'stopped');
+
+    const shouldDismiss = taskComplete || serverCommissioned || serverActive;
 
     if (shouldDismiss) {
-      console.log('[server-detail] Setup complete! Dismissing setup mode immediately...', {
+      console.log('[server-detail] AUTO-DISMISS TRIGGERED!', {
         taskComplete,
-        serverReady,
+        serverCommissioned,
+        serverActive,
         needsSetup: server?.needsSetup,
         serverStatus: server?.status,
+        reinstallStatus: reinstallTask.status,
       });
 
       // Save credentials if available (will be shown in banner later)
@@ -380,7 +388,14 @@ export default function ServerDetail() {
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
 
-      console.log('[server-detail] Setup mode cleared, showing server overview now');
+      console.log('[server-detail] Setup mode cleared - overview will show now');
+    } else {
+      console.log('[server-detail] Auto-dismiss waiting...', {
+        isSetupMode,
+        taskStatus: reinstallTask.status,
+        needsSetup: server?.needsSetup,
+        serverStatus: server?.status,
+      });
     }
   }, [reinstallTask.status, isSetupMode, server?.needsSetup, server?.status, serverId]);
 
@@ -1071,17 +1086,9 @@ export default function ServerDetail() {
     serverDisplayStatus === 'setting up' ||
     (reinstallTask.isActive && reinstallTask.status !== 'complete');
 
-  // Check if initial setup is in progress (blocks server usage until complete)
-  // CRITICAL: Include isInitialSetup to prevent ANY overview flash
-  // BUT: Don't show checklist if user navigates away and comes back after completion
-  // If reinstallTask is complete AND server doesn't need setup, show overview (not checklist)
-  const setupActuallyComplete = reinstallTask.status === 'complete' && !needsSetup && server?.status !== 'provisioning';
-  const isSettingUp = !setupActuallyComplete && (
-    isInitialSetup ||
-    needsSetup ||
-    isProvisioningOrBuilding ||
-    (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode))
-  );
+  // SIMPLE LOGIC: Show checklist if setup mode is on AND server isn't ready yet
+  // As soon as setup mode is cleared (by auto-dismiss), show overview
+  const isSettingUp = isSetupMode && (needsSetup || server?.status === 'provisioning' || reinstallTask.isActive);
 
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
