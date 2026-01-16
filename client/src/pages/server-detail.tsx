@@ -1412,7 +1412,14 @@ export default function ServerDetail() {
          server?.needsSetup === false &&
          !savedCredentials &&
          !reinstallTask.credentials &&
-         (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+         (!reinstallTask.isActive || reinstallTask.status === 'complete') &&
+         (() => {
+           try {
+             return sessionStorage.getItem(`credentialsDismissed:${serverId}`) !== 'true';
+           } catch {
+             return true;
+           }
+         })() && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 space-y-4" data-testid="banner-get-credentials">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-primary flex-shrink-0" />
