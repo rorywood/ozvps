@@ -117,10 +117,15 @@ export function useConsoleLock(serverId: string, serverStatus?: string) {
   }, [serverId, clearLock]);
 
   useEffect(() => {
-    if (serverStatus === 'stopped' || serverStatus === 'suspended') {
+    // Only clear lock when server is stopped/suspended if we're waiting for a boot
+    // Don't clear during reboot (server goes stopped -> running) or reinstall
+    const lockData = getLockData(serverId);
+    const currentAction = lockData.action;
+
+    if ((serverStatus === 'stopped' || serverStatus === 'suspended') && currentAction === 'boot') {
       clearLock();
     }
-  }, [serverStatus, clearLock]);
+  }, [serverStatus, serverId, clearLock]);
 
   useEffect(() => {
     const lockData = getLockData(serverId);
