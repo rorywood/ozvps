@@ -4522,10 +4522,21 @@ export async function registerRoutes(
       if (paymentIntent.status === 'succeeded') {
         log(`[Direct Topup] Payment succeeded, crediting wallet`, 'api');
         // Add credits to wallet and record transaction in one call
+        // Include card info for display in transaction history
+        const cardBrand = paymentMethod.card?.brand ?
+          paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1) :
+          undefined;
+        const cardLast4 = paymentMethod.card?.last4;
+
         const updatedWallet = await dbStorage.creditWallet(auth0UserId, amountCents, {
           type: 'credit',
           stripePaymentIntentId: paymentIntent.id,
-          metadata: { source: 'direct_charge' },
+          metadata: {
+            source: 'direct_charge',
+            cardBrand,
+            cardLast4,
+            reason: 'Wallet top-up',
+          },
         });
 
         log(`[Direct Topup] Wallet credited. New balance: $${((updatedWallet?.balanceCents || 0) / 100).toFixed(2)}`, 'api');

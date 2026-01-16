@@ -922,20 +922,6 @@ export default function ServerDetail() {
   const isSuspended = server?.suspended === true;
   const needsSetup = server?.needsSetup === true;
 
-  // Check if this server was just deployed (set by deploy page)
-  const justDeployed = typeof window !== 'undefined' &&
-    sessionStorage.getItem(`justDeployed:${serverId}`) === 'true';
-
-  // If server was just deployed, start polling immediately
-  useEffect(() => {
-    if (justDeployed && serverId && !reinstallTask.isActive) {
-      // Clear the flag so we don't keep triggering
-      sessionStorage.removeItem(`justDeployed:${serverId}`);
-      // Start the reinstall task to poll for build status
-      reinstallTask.startTask();
-    }
-  }, [justDeployed, serverId, reinstallTask.isActive]);
-
   // Check if initial setup is in progress (blocks server usage until complete)
   // reinstallTask now hydrates from backend on mount, so isActive is authoritative
   // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
@@ -946,9 +932,7 @@ export default function ServerDetail() {
   // This ensures cross-session protection even without sessionStorage
 
   // If server needs setup but provisioning hasn't started, show waiting message
-  // Note: Ideally the backend should start provisioning immediately after deploy
-  // Skip this view if we just deployed - we'll show provisioning view instead
-  if (needsSetup && !reinstallTask.isActive && !justDeployed) {
+  if (needsSetup && !reinstallTask.isActive) {
     return (
       <AppShell>
         <div className="max-w-2xl mx-auto py-12 space-y-6">

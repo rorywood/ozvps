@@ -1335,6 +1335,21 @@ export default function BillingPage() {
                                     {tx.type === 'debit' && tx.metadata && (tx.metadata as Record<string, string>).reason && (
                                       <> · {(tx.metadata as Record<string, string>).reason}</>
                                     )}
+                                    {/* Show details for credits - card info or reason */}
+                                    {tx.type === 'credit' && tx.metadata && (
+                                      <>
+                                        {(tx.metadata as Record<string, string>).cardBrand && (tx.metadata as Record<string, string>).cardLast4 && (
+                                          <> · {(tx.metadata as Record<string, string>).cardBrand} ****{(tx.metadata as Record<string, string>).cardLast4}</>
+                                        )}
+                                        {(tx.metadata as Record<string, string>).reason && (
+                                          <> · {(tx.metadata as Record<string, string>).reason}</>
+                                        )}
+                                      </>
+                                    )}
+                                    {/* Show details for refunds */}
+                                    {tx.type === 'refund' && tx.metadata && (tx.metadata as Record<string, string>).reason && (
+                                      <> · {(tx.metadata as Record<string, string>).reason}</>
+                                    )}
                                   </div>
                                   {/* Show admin reason for admin adjustments */}
                                   {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (

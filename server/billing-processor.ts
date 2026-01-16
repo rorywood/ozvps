@@ -76,12 +76,30 @@ async function processAutoTopups(stripe: Stripe | null) {
       });
 
       if (paymentIntent.status === 'succeeded') {
+        // Fetch payment method details for card info display
+        let cardBrand: string | undefined;
+        let cardLast4: string | undefined;
+        try {
+          const paymentMethod = await stripe.paymentMethods.retrieve(wallet.autoTopupPaymentMethodId);
+          if (paymentMethod.card?.brand) {
+            cardBrand = paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1);
+          }
+          cardLast4 = paymentMethod.card?.last4;
+        } catch (pmError) {
+          // Ignore - card info is optional for display
+        }
+
         // SECURITY: Use creditWallet with idempotency check on stripePaymentIntentId
         // This prevents double-crediting if the job runs twice after a successful charge
         await dbStorage.creditWallet(wallet.auth0UserId, wallet.autoTopupAmountCents, {
           type: 'auto_topup',
           stripePaymentIntentId: paymentIntent.id,
-          metadata: { source: 'auto_topup' },
+          metadata: {
+            source: 'auto_topup',
+            cardBrand,
+            cardLast4,
+            reason: 'Automatic wallet top-up',
+          },
         });
         log(`Auto top-up successful for ${wallet.auth0UserId}: $${(wallet.autoTopupAmountCents / 100).toFixed(2)}`);
 

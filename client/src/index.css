@@ -116,14 +116,14 @@
   :root.light {
     color-scheme: light;
 
-    /* DigitalOcean-style Light Mode - Pure white, navy text */
+    /* DigitalOcean-style Light Mode - Pure white, dark navy text for better contrast */
     --theme-background: hsl(0 0% 100%);
-    --theme-foreground: hsl(219 95% 15%);
+    --theme-foreground: hsl(219 30% 10%);
     --theme-card: hsl(0 0% 100%);
-    --theme-card-foreground: hsl(219 95% 15%);
+    --theme-card-foreground: hsl(219 30% 10%);
     --theme-sidebar: hsl(214 15% 97%);
     --theme-popover: hsl(0 0% 100%);
-    --theme-popover-foreground: hsl(219 95% 15%);
+    --theme-popover-foreground: hsl(219 30% 10%);
 
     /* Primary - Bright blue */
     --theme-primary: hsl(211 100% 50%);

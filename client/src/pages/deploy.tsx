@@ -179,10 +179,9 @@ export default function DeployPage() {
         title: "Server deployed!",
         description: "Your new VPS is being provisioned.",
       });
-      // Set flag so server-detail page knows this is a fresh deploy and should show provisioning view
+      // Set setupMode flag so server-detail page shows provisioning view
       try {
         sessionStorage.setItem(`setupMode:${data.serverId}`, 'true');
-        sessionStorage.setItem(`justDeployed:${data.serverId}`, 'true');
       } catch {
         // Ignore storage errors
       }
