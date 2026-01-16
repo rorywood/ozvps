@@ -186,7 +186,12 @@ export default function LoginPage() {
     if (storedError) {
       try {
         const parsed = JSON.parse(storedError);
-        setSessionMessage(parsed);
+        // Only show session errors that are NOT generic "UNAUTHORIZED"
+        // Generic UNAUTHORIZED just means "not logged in", which is expected on login page
+        // Only show actual session expiration or specific auth errors
+        if (parsed.code !== 'UNAUTHORIZED' || parsed.error !== 'Authentication required') {
+          setSessionMessage(parsed);
+        }
       } catch {}
       sessionStorage.removeItem('sessionError');
     }
