@@ -379,7 +379,7 @@ export default function AdminPage() {
     onSuccess: (data, auth0UserId) => {
       console.log('[Admin] Email verified successfully for:', auth0UserId);
       toast.success('Email verified successfully');
-      queryClient.invalidateQueries({ queryKey: ['vf-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
     },
     onError: (error: Error, auth0UserId) => {
       console.error('[Admin] Verify email mutation error for:', auth0UserId, error);
