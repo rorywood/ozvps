@@ -1135,17 +1135,31 @@ export default function AdminPage() {
                                   size="sm"
                                   variant="ghost"
                                   className="h-7 px-2 text-warning hover:text-warning hover:bg-warning/10 text-xs"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log('[Admin] Verify button clicked for user:', user.auth0UserId, user.email);
-                                    verifyEmailMutation.mutate(user.auth0UserId);
+                                  onClick={async () => {
+                                    const userId = user.auth0UserId;
+                                    toast.info(`Verifying ${user.email}...`);
+                                    try {
+                                      const res = await fetch('/api/admin/verify-email', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        credentials: 'include',
+                                        body: JSON.stringify({ auth0UserId: userId }),
+                                      });
+                                      const data = await res.json();
+                                      if (res.ok) {
+                                        toast.success('Email verified!');
+                                        queryClient.invalidateQueries({ queryKey: ['admin', 'vf', 'users'] });
+                                      } else {
+                                        toast.error(data.error || 'Failed to verify');
+                                      }
+                                    } catch (err: any) {
+                                      toast.error(err.message || 'Request failed');
+                                    }
                                   }}
-                                  disabled={verifyEmailMutation.isPending}
                                   title="Verify email on user's behalf"
                                 >
                                   <Mail className="h-3 w-3 mr-1" />
-                                  {verifyEmailMutation.isPending ? 'Verifying...' : 'Verify'}
+                                  Verify
                                 </Button>
                               )}
                             </td>
