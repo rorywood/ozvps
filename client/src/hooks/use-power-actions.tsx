@@ -108,10 +108,17 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
       return 'scheduled_deletion';
     }
 
-    // Map provisioning status to "setting up" for better UX
-    // Also check needsSetup flag - if server needs setup, show as "setting up" regardless of status
-    if (actualStatus === 'provisioning' || needsSetup) {
+    // IMPORTANT: Only show "setting up" if server NEEDS setup (not commissioned yet)
+    // If server is commissioned (needsSetup=false), show actual status even if provisioning
+    // This allows the status to show "running" when the server is booting after commission
+    if (needsSetup === true) {
       return 'setting up';
+    }
+
+    // If commissioned but still showing provisioning, it's booting - show actual status
+    if (actualStatus === 'provisioning' && needsSetup === false) {
+      // Server is commissioned and booting, show the real status
+      return actualStatus;
     }
 
     const pending = pendingActions[serverId];

@@ -163,10 +163,18 @@ export function useReinstallTask(serverId: string) {
       // STRICT CHECK: commissioned === 3 AND isComplete === true
       // Don't mark complete if still building (commissioned 0 or 1)
       if (buildStatus.commissioned === 3 && buildStatus.isComplete && !buildStatus.isBuilding) {
-        console.log('[useReinstallTask] Build COMPLETE (commissioned 3, not building) - stopping polling');
-        addTimelineEvent('complete', 'Installation complete');
-        stopPolling();
+        console.log('[useReinstallTask] Server commissioned (commissioned 3, not building)');
+        console.log('[useReinstallTask] Continuing to poll until server is fully running...');
+
+        // Mark as complete but DON'T stop polling yet
+        // We'll keep polling until server status becomes 'running'
+        // The auto-dismiss will wait for both complete + running
         setState(prev => {
+          if (prev.status === 'complete') {
+            return prev; // Already marked complete, no update needed
+          }
+
+          addTimelineEvent('complete', 'Installation complete - waiting for server to boot');
           const completed = {
             ...prev,
             isActive: true,
@@ -181,6 +189,8 @@ export function useReinstallTask(serverId: string) {
           });
           return completed;
         });
+
+        // Continue polling - will stop when auto-dismiss triggers
         return;
       }
 

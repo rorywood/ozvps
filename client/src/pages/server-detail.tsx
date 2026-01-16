@@ -284,48 +284,29 @@ export default function ServerDetail() {
 
   // Console lock hook - must be after server query
   const consoleLock = useConsoleLock(serverId || '', server?.status);
-  
-  // Clear building flags when server no longer needs setup AND reinstall task is complete
-  // ALSO: Clear if user navigates back after setup is complete
+
+  // Auto-clear stale flags when user navigates back after setup is complete
+  // This handles the case where setup completed in another tab/window
   useEffect(() => {
     if (server && !server.needsSetup && serverId) {
-      // CRITICAL: Only clear flags/state if:
-      // 1. Task is completely inactive (not running), OR
-      // 2. Setup mode is already off AND task is complete (cleanup after auto-dismiss)
-      const isTaskComplete = reinstallTask.status === 'complete';
-      const isSetupModeOff = !isSetupMode;
-
-      // Don't clean up if setup mode is still on (let auto-dismiss handle it)
-      // DO clean up if setup mode is off and task is complete (after auto-dismiss fired)
-      const shouldClearFlags = (!reinstallTask.isActive && !isTaskComplete) ||
-                               (isTaskComplete && isSetupModeOff);
-
-      if (shouldClearFlags) {
+      // Only clear if setup mode is OFF (auto-dismiss already handled it)
+      // AND there are stale flags in sessionStorage
+      if (!isSetupMode) {
         try {
-          // Server setup is complete, clear any leftover building flags
           const hasSetupFlags = sessionStorage.getItem(`setupMode:${serverId}`) ||
                                 sessionStorage.getItem(`setupMinimized:${serverId}`);
 
-          if (hasSetupFlags || isSetupMode || reinstallTask.isActive) {
-            console.log('[server-detail] Server fully online, clearing stale setup state');
+          if (hasSetupFlags) {
+            console.log('[server-detail] Clearing stale setup flags (setup already complete)');
             sessionStorage.removeItem(`setupMode:${serverId}`);
             sessionStorage.removeItem(`setupMinimized:${serverId}`);
-            setIsSetupMode(false);
-            setSetupMinimized(false);
-
-            // Reset reinstallTask to clear the 'complete' status and clean up state
-            if (reinstallTask.isActive || isTaskComplete) {
-              console.log('[server-detail] Resetting reinstallTask state (cleanup after completion)');
-              reinstallTask.reset();
-            }
           }
         } catch (e) {
-          // Ignore storage errors
           console.error('Error clearing setup flags:', e);
         }
       }
     }
-  }, [server?.needsSetup, serverId, reinstallTask.isActive, reinstallTask.status, isSetupMode, reinstallTask]);
+  }, [server?.needsSetup, serverId, isSetupMode]);
 
   // CRITICAL: Start reinstall task immediately when server needsSetup is detected
   // This ensures the checklist UI activates immediately without any flash of overview
@@ -340,61 +321,73 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
-  // AUTO-DISMISS: When setup completes, immediately show server overview
-  // Dismiss as soon as server is active in VirtFusion (no delay)
+  // AUTO-DISMISS: When setup completes AND server is fully online, show server overview
+  // Wait for server to be FULLY booted and running (not just commissioned)
   useEffect(() => {
     // Only run if setup mode is currently on
     if (!isSetupMode) return;
 
-    // Dismiss if ANY of these conditions are met:
-    // 1. reinstallTask marks as complete
-    // 2. Server data shows needsSetup=false (VirtFusion confirms commissioned)
-    // 3. Server status is 'running' or 'stopped' (not provisioning)
+    // STRICT REQUIREMENTS for dismiss:
+    // 1. reinstallTask must be complete (commissioned === 3)
+    // 2. Server must be 'running' (fully booted, not just commissioned)
+    // 3. needsSetup must be false (VirtFusion confirms ready)
     const taskComplete = reinstallTask.status === 'complete';
+    const serverFullyOnline = server && server.status === 'running';
     const serverCommissioned = server && server.needsSetup === false;
-    const serverActive = server && (server.status === 'running' || server.status === 'stopped');
 
-    const shouldDismiss = taskComplete || serverCommissioned || serverActive;
+    // ALL THREE must be true
+    const allConditionsMet = taskComplete && serverFullyOnline && serverCommissioned;
 
-    if (shouldDismiss) {
-      console.log('[server-detail] AUTO-DISMISS TRIGGERED!', {
+    if (allConditionsMet) {
+      console.log('[server-detail] All conditions met for auto-dismiss! Waiting 2 seconds to ensure UI is ready...', {
         taskComplete,
-        serverCommissioned,
-        serverActive,
-        needsSetup: server?.needsSetup,
         serverStatus: server?.status,
-        reinstallStatus: reinstallTask.status,
+        needsSetup: server?.needsSetup,
       });
 
-      // Save credentials if available (will be shown in banner later)
-      if (reinstallTask.credentials) {
-        updateSavedCredentials(reinstallTask.credentials);
-        setShowSavedCredentials(true);
-      }
+      // Wait 2 seconds to ensure:
+      // - Server is fully booted
+      // - All buttons are active
+      // - Status is green everywhere
+      const timer = setTimeout(() => {
+        console.log('[server-detail] AUTO-DISMISS TRIGGERED! Server is fully online.');
 
-      // Clear setup mode flags immediately (this will cause re-render to show overview)
-      updateSetupMode(false);
-      updateSetupMinimized(false);
+        // Save credentials if available (will be shown in banner later)
+        if (reinstallTask.credentials) {
+          updateSavedCredentials(reinstallTask.credentials);
+          setShowSavedCredentials(true);
+        }
 
-      // Clear sessionStorage flags
-      try {
-        sessionStorage.removeItem(`setupMode:${serverId}`);
-        sessionStorage.removeItem(`setupMinimized:${serverId}`);
-      } catch (e) {
-        // Ignore
-      }
+        // Reset reinstallTask to stop polling and clear state
+        reinstallTask.reset();
 
-      // Invalidate queries to refresh server data with latest status
-      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-      queryClient.invalidateQueries({ queryKey: ['servers'] });
+        // Clear setup mode flags (this will cause re-render to show overview)
+        updateSetupMode(false);
+        updateSetupMinimized(false);
 
-      console.log('[server-detail] Setup mode cleared - overview will show now');
+        // Clear sessionStorage flags
+        try {
+          sessionStorage.removeItem(`setupMode:${serverId}`);
+          sessionStorage.removeItem(`setupMinimized:${serverId}`);
+        } catch (e) {
+          // Ignore
+        }
+
+        // Invalidate queries to refresh server data with latest status
+        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        queryClient.invalidateQueries({ queryKey: ['servers'] });
+
+        console.log('[server-detail] Setup mode cleared - showing fully online server');
+      }, 2000);
+
+      return () => clearTimeout(timer);
     } else {
-      console.log('[server-detail] Auto-dismiss waiting...', {
+      console.log('[server-detail] Auto-dismiss waiting for all conditions...', {
         isSetupMode,
-        taskStatus: reinstallTask.status,
-        needsSetup: server?.needsSetup,
+        taskComplete,
         serverStatus: server?.status,
+        needsSetup: server?.needsSetup,
+        reinstallStatus: reinstallTask.status,
       });
     }
   }, [reinstallTask.status, isSetupMode, server?.needsSetup, server?.status, serverId]);
