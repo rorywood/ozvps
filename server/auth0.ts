@@ -291,6 +291,36 @@ class Auth0Client {
     }
   }
 
+  async updateUser(auth0UserId: string, data: { email_verified?: boolean; name?: string }): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        log(`Failed to update Auth0 user: ${response.status} - ${errorText}`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status}`);
+      }
+
+      log(`Updated Auth0 user ${auth0UserId} with: ${JSON.stringify(data)}`, 'auth0');
+      return true;
+    } catch (error: any) {
+      log(`Auth0 update user error: ${error.message}`, 'auth0');
+      throw error;
+    }
+  }
+
   async setVirtFusionUserId(auth0UserId: string, virtFusionUserId: number | null): Promise<boolean> {
     try {
       const managementToken = await this.getManagementToken();
