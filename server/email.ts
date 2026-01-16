@@ -1,11 +1,17 @@
 import { Resend } from 'resend';
 import { log } from './index';
 
-// Resend API key
-const RESEND_API_KEY = 're_WXhg2HSN_6PKUomuokPfFoMZ7NX5EjEES';
-const EMAIL_FROM = 'OzVPS <noreply@ozvps.com.au>';
+// Resend API key from environment - NEVER hardcode API keys!
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || 'OzVPS <noreply@ozvps.com.au>';
 
-const resend = new Resend(RESEND_API_KEY);
+// Validate Resend configuration
+if (!RESEND_API_KEY) {
+  console.warn('⚠️  WARNING: RESEND_API_KEY not configured. Password reset emails will fail.');
+  console.warn('   Set RESEND_API_KEY in your .env file');
+}
+
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 interface EmailResult {
   success: boolean;
@@ -21,6 +27,14 @@ export async function sendPasswordResetEmail(
   resetLink: string,
   expiresInMinutes: number = 30
 ): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send password reset email', 'email');
+    return {
+      success: false,
+      error: 'Email service not configured. Please contact administrator.'
+    };
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from: EMAIL_FROM,
@@ -130,8 +144,16 @@ If you didn't request a password reset, you can safely ignore this email.
  * Send a password changed confirmation email
  */
 export async function sendPasswordChangedEmail(to: string): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send password changed email', 'email');
+    return {
+      success: false,
+      error: 'Email service not configured. Please contact administrator.'
+    };
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error} = await resend.emails.send({
       from: EMAIL_FROM,
       to: [to],
       subject: 'Your OzVPS Password Has Been Changed',
