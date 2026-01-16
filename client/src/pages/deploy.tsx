@@ -4,6 +4,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +18,8 @@ import {
   ChevronRight,
   AlertCircle,
   Mail,
-  Wallet
+  Wallet,
+  HelpCircle
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -328,6 +330,7 @@ export default function DeployPage() {
 
   return (
     <AppShell>
+      <TooltipProvider>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -468,19 +471,55 @@ export default function DeployPage() {
 
                         <div className="space-y-1.5 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">vCPU</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  vCPU <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Virtual CPU cores for processing power</p>
+                              </TooltipContent>
+                            </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.vcpu}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">RAM</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  RAM <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Memory for running applications and processes</p>
+                              </TooltipContent>
+                            </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatRAM(plan.ramMb)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Storage</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Storage <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Fast NVMe SSD disk space for your files and databases</p>
+                              </TooltipContent>
+                            </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.storageGb} GB</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Transfer</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Transfer <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Monthly bandwidth allowance for incoming and outgoing traffic</p>
+                              </TooltipContent>
+                            </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatTransfer(plan.transferGb)}</span>
                           </div>
                         </div>
@@ -768,6 +807,7 @@ export default function DeployPage() {
           </div>
         </div>
       </div>
+      </TooltipProvider>
     </AppShell>
   );
 }
