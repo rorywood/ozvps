@@ -225,8 +225,10 @@ export default function ResetPasswordPage() {
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
-                  {password && !passwordValid && (
+                  {password && !passwordValid ? (
                     <p className="text-xs text-red-400">Password must be at least 8 characters</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Must be at least 8 characters long</p>
                   )}
                 </div>
 
