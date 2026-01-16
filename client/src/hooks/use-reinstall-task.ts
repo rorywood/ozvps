@@ -150,73 +150,115 @@ export function useReinstallTask(serverId: string) {
   const poll = useCallback(async () => {
     try {
       const buildStatus = await api.getBuildStatus(serverId);
-      
-      let newStatus: ReinstallStatus;
-      let newPercent: number;
-      
+
+      console.log('[useReinstallTask] Poll result:', {
+        commissioned: buildStatus.commissioned,
+        isBuilding: buildStatus.isBuilding,
+        isComplete: buildStatus.isComplete,
+        isError: buildStatus.isError,
+        phase: buildStatus.phase,
+      });
+
+      // COMPLETE: Server is fully built
+      if (buildStatus.isComplete && buildStatus.commissioned === 3) {
+        console.log('[useReinstallTask] Build COMPLETE - stopping polling');
+        addTimelineEvent('complete', 'Installation complete');
+        stopPolling();
+        setState(prev => {
+          const completed = {
+            ...prev,
+            isActive: true,
+            status: 'complete' as ReinstallStatus,
+            percent: 100,
+          };
+          saveTaskState(serverId, {
+            isActive: true,
+            status: 'complete',
+            percent: 100,
+            credentials: prev.credentials,
+          });
+          return completed;
+        });
+        return;
+      }
+
+      // ERROR: Build failed
       if (buildStatus.isError) {
-        newStatus = 'failed';
-        newPercent = state.percent;
+        console.log('[useReinstallTask] Build FAILED - stopping polling');
         addTimelineEvent('failed', 'Installation failed');
         stopPolling();
         setState(prev => ({
           ...prev,
-          isActive: true, // Keep active so dialog stays open for user to see error
-          status: 'failed',
-          error: 'Server reinstallation encountered an error.',
+          isActive: true,
+          status: 'failed' as ReinstallStatus,
+          error: 'Server installation encountered an error.',
         }));
         clearTaskState(serverId);
         return;
-      } else if (buildStatus.isComplete) {
-        newStatus = 'complete';
-        newPercent = 100;
-        addTimelineEvent('complete', 'Installation complete');
-        stopPolling();
-        setState(prev => ({
-          ...prev,
-          isActive: true, // Keep active so dialog stays open for user to see success
-          status: 'complete',
-          percent: 100,
-          // Preserve credentials when completing
-        }));
-        // Keep credentials in session storage for completed builds
-        saveTaskState(serverId, {
-          isActive: true,
-          status: 'complete',
-          percent: 100,
-          credentials: state.credentials,
-        });
-        return;
-      } else if (buildStatus.isBuilding) {
-        newStatus = mapVirtFusionStatus(buildStatus.phase);
-        newPercent = STATUS_PERCENT_MAP[newStatus];
-        addTimelineEvent(newStatus);
-      } else {
-        newStatus = 'queued';
-        newPercent = 5;
       }
 
-      setState(prev => ({
-        ...prev,
-        status: newStatus,
-        percent: newPercent,
-      }));
+      // BUILDING: commissioned 0 or 1 = still building
+      const commissioned = buildStatus.commissioned;
+      const stillBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
 
-      saveTaskState(serverId, {
-        isActive: true,
-        taskId: state.taskId,
-        status: newStatus,
-        percent: newPercent,
-        timeline: state.timeline,
-        credentials: state.credentials, // Persist credentials across polling updates
-      });
+      if (stillBuilding) {
+        // Determine status from phase or default to provisioning
+        let newStatus: ReinstallStatus = 'provisioning';
+        if (buildStatus.phase) {
+          newStatus = mapVirtFusionStatus(buildStatus.phase);
+        } else if (commissioned === 0) {
+          newStatus = 'queued';
+        }
+
+        const newPercent = STATUS_PERCENT_MAP[newStatus];
+        console.log('[useReinstallTask] Still building:', newStatus, newPercent + '%');
+
+        // Only update if status changed (prevent unnecessary re-renders)
+        setState(prev => {
+          if (prev.status === newStatus && prev.percent === newPercent) {
+            return prev; // No change, skip update
+          }
+
+          // NEVER GO BACKWARD: If new percent is less than current, keep current
+          const finalPercent = newPercent < prev.percent ? prev.percent : newPercent;
+          const finalStatus = finalPercent === prev.percent ? prev.status : newStatus;
+
+          console.log('[useReinstallTask] Updating state:', { from: prev.status, to: finalStatus, percent: finalPercent });
+
+          if (finalStatus !== prev.status) {
+            addTimelineEvent(finalStatus);
+          }
+
+          const updated = {
+            ...prev,
+            status: finalStatus,
+            percent: finalPercent,
+          };
+
+          saveTaskState(serverId, {
+            isActive: true,
+            taskId: prev.taskId,
+            status: finalStatus,
+            percent: finalPercent,
+            timeline: prev.timeline,
+            credentials: prev.credentials,
+          });
+
+          return updated;
+        });
+      } else {
+        // commissioned === 3 but not marked complete yet - wait for next poll
+        console.log('[useReinstallTask] Commissioned 3 but not complete, waiting...');
+      }
 
     } catch (e) {
-      console.error('Failed to poll reinstall status:', e);
+      console.error('[useReinstallTask] Poll error:', e);
     }
-  }, [serverId, state.taskId, state.percent, state.timeline, addTimelineEvent, stopPolling]);
+  }, [serverId, addTimelineEvent, stopPolling]);
 
   const startTask = useCallback((taskId?: string, password?: string, serverIp?: string) => {
+    console.log('[useReinstallTask] Starting task with credentials:', !!password);
+
     const credentials = password ? { serverIp: serverIp || 'N/A', username: 'root', password } : null;
     const initialState: ReinstallTaskState = {
       isActive: true,
@@ -224,22 +266,26 @@ export function useReinstallTask(serverId: string) {
       status: 'queued',
       percent: 5,
       error: null,
-      timeline: [{ status: 'queued', timestamp: Date.now(), message: 'Reinstall started' }],
+      timeline: [{ status: 'queued', timestamp: Date.now(), message: 'Installation started' }],
       credentials,
     };
-    
+
     setState(initialState);
     lastStatusRef.current = 'queued';
     saveTaskState(serverId, initialState);
 
+    // Stop any existing polling
     stopPolling();
     pollCountRef.current = 0;
 
+    // Start polling: Fast for 30 seconds (15 polls * 2s), then slow to 5s
+    console.log('[useReinstallTask] Starting fast polling (2s interval)');
     pollRef.current = setInterval(() => {
       pollCountRef.current++;
       poll();
-      
+
       if (pollCountRef.current === 15) {
+        console.log('[useReinstallTask] Switching to slow polling (5s interval)');
         stopPolling();
         pollRef.current = setInterval(poll, 5000);
       }
@@ -261,104 +307,22 @@ export function useReinstallTask(serverId: string) {
     lastStatusRef.current = 'idle';
   }, [serverId, stopPolling]);
 
-  // Check build status - used on mount and when tab becomes visible
+  // Check build status - SIMPLIFIED: Just ensure polling is active if task is active
   const checkBuildStatus = useCallback(async () => {
     if (!serverId) return;
 
-    try {
-      const buildStatus = await api.getBuildStatus(serverId);
+    console.log('[useReinstallTask] checkBuildStatus - current state:', {
+      isActive: state.isActive,
+      status: state.status,
+      hasPolling: !!pollRef.current,
+    });
 
-      // If there's an active build, sync with backend (always update to get latest progress)
-      if (buildStatus.isBuilding) {
-        const newStatus = mapVirtFusionStatus(buildStatus.phase);
-        const newPercent = STATUS_PERCENT_MAP[newStatus];
-
-        // If we already have an active task, UPDATE it (don't restart)
-        if (state.isActive) {
-          // Sync with VirtFusion's current status without restarting timeline
-          setState(prev => {
-            const updated = {
-              ...prev,
-              status: newStatus,
-              percent: newPercent,
-              // Keep existing timeline and credentials
-            };
-            // Persist updated state to sessionStorage (use prev values to avoid stale closure)
-            saveTaskState(serverId, {
-              isActive: true,
-              taskId: prev.taskId,
-              status: newStatus,
-              percent: newPercent,
-              timeline: prev.timeline,
-              credentials: prev.credentials,
-            });
-            return updated;
-          });
-          lastStatusRef.current = newStatus;
-          // Make sure polling is active
-          if (!pollRef.current) {
-            pollRef.current = setInterval(poll, 5000);
-          }
-        } else {
-          // No local state, hydrate from backend
-          setState({
-            isActive: true,
-            taskId: null,
-            status: newStatus,
-            percent: newPercent,
-            error: null,
-            timeline: [{ status: newStatus, timestamp: Date.now(), message: 'Build in progress' }],
-            credentials: null, // No credentials available from other sessions
-          });
-          lastStatusRef.current = newStatus;
-          // Start polling
-          if (!pollRef.current) {
-            pollRef.current = setInterval(poll, 5000);
-          }
-        }
-        return;
-      }
-
-      // If no active build and we have a stored state showing active, handle completion or reset
-      if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
-        // Check if the build completed while we were away
-        if (buildStatus.isComplete) {
-          setState(prev => {
-            const completed = {
-              ...prev,
-              status: 'complete',
-              percent: 100,
-              isActive: true, // Keep open to show completion
-              // Preserve credentials when build completes
-            };
-            // Keep credentials in session storage for completed builds (use prev to avoid stale closure)
-            saveTaskState(serverId, {
-              isActive: true,
-              status: 'complete',
-              percent: 100,
-              credentials: prev.credentials,
-            });
-            return completed;
-          });
-          stopPolling();
-        } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
-          // CRITICAL: Only reset if server is not in needsSetup state
-          // Check commissioned field to see if server still needs building
-          // If commissioned is 0, 1, or undefined, server is still being built - don't reset!
-          const commissioned = buildStatus.commissioned;
-          const stillNeedsBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
-
-          if (!stillNeedsBuilding) {
-            // Server is fully built (commissioned = 3) but no active task - safe to reset
-            reset();
-          }
-          // Otherwise, keep the task active and let polling continue
-        }
-      }
-    } catch (e) {
-      console.error('Failed to verify reinstall task state:', e);
+    // If we have an active task but polling stopped, restart it
+    if (state.isActive && state.status !== 'complete' && state.status !== 'failed' && !pollRef.current) {
+      console.log('[useReinstallTask] Restarting polling (was stopped)');
+      pollRef.current = setInterval(poll, 5000);
     }
-  }, [serverId, state.isActive, state.status, poll, reset, stopPolling]);
+  }, [serverId, state.isActive, state.status, poll]);
 
   // On mount, verify if there's actually an active task from VirtFusion
   // This prevents stale UI when user refreshes after reinstall completes
