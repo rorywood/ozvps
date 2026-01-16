@@ -33,6 +33,7 @@ declare module "http" {
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
     const blockedPatterns = [
+      // Environment and config files
       /^\/?\.env/i,
       /^\/?\.git/i,
       /^\/?\.config/i,
@@ -41,12 +42,44 @@ if (process.env.NODE_ENV === 'production') {
       /^\/?tsconfig/i,
       /^\/?vite\.config/i,
       /^\/?drizzle\.config/i,
+      /^\/?ecosystem\.config/i,
       /^\/?replit\.md$/i,
+
+      // Source code directories
       /^\/?node_modules\//i,
       /^\/?server\//i,
       /^\/?shared\//i,
+      /^\/?client\//i,
+      /^\/?src\//i,
+
+      // Database and logs
+      /^\/?migrations\//i,
+      /^\/?logs?\//i,
+      /\.log$/i,
+      /\.sql$/i,
+      /\.db$/i,
+      /\.sqlite$/i,
+
+      // Backups and sensitive files
+      /\.bak$/i,
+      /\.backup$/i,
+      /\.old$/i,
+      /\.tmp$/i,
+      /\.key$/i,
+      /\.pem$/i,
+      /\.p12$/i,
+      /\.pfx$/i,
+      /\.crt$/i,
+      /\.csr$/i,
+
+      // Source maps (extra safety)
+      /\.map$/i,
+
+      // Documentation that might contain sensitive info
+      /^\/?docs?\//i,
+      /^\/?\.claude\//i,
     ];
-    
+
     const reqPath = req.path.toLowerCase();
     if (blockedPatterns.some(pattern => pattern.test(reqPath))) {
       return res.status(404).send('Not found');

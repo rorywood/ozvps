@@ -29,6 +29,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: "esnext",
     minify: "terser",
+    sourcemap: false, // Disable source maps to prevent source code exposure
   },
   server: {
     host: "0.0.0.0",
