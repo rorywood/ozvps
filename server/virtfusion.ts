@@ -506,7 +506,7 @@ export class VirtFusionClient {
 
   async getServer(serverId: string, useCache = true) {
     const cacheKey = `server:${serverId}`;
-    
+
     // Check cache first
     if (useCache) {
       const cached = apiCache.get<ReturnType<typeof this.transformServer>>(cacheKey);
@@ -515,11 +515,17 @@ export class VirtFusionClient {
         return cached;
       }
     }
-    
+
     // Fetch with remoteState=true to get live power status from hypervisor
     const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
+
+    // DEBUG: Log what VirtFusion returns for the server endpoint
+    log(`[DEBUG] getServer raw data for ${serverId}: commissionStatus=${response.data.commissionStatus}, state=${response.data.state}, status=${response.data.status}`, 'virtfusion');
+
     const server = this.transformServer(response.data);
-    
+
+    log(`[DEBUG] After transformServer for ${serverId}: needsSetup=${server.needsSetup}, status=${server.status}`, 'virtfusion');
+
     // Cache the result
     apiCache.set(cacheKey, server);
     return server;
