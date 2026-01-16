@@ -937,17 +937,30 @@ export default function ServerDetail() {
   const isSuspended = server?.suspended === true;
   const needsSetup = server?.needsSetup === true;
 
+  // Determine if server is still being provisioned/built
+  // Show checklist if ANY of these conditions are true:
+  // 1. Server explicitly needs setup (commissioned=0)
+  // 2. Server status is 'provisioning' (actively building)
+  // 3. Server is 'setting up' per our display status
+  // 4. Reinstall task is active and not complete
+  const serverDisplayStatus = displayStatus;
+  const isProvisioningOrBuilding =
+    needsSetup ||
+    server?.status === 'provisioning' ||
+    serverDisplayStatus === 'setting up' ||
+    (reinstallTask.isActive && reinstallTask.status !== 'complete');
+
   // Check if initial setup is in progress (blocks server usage until complete)
   // reinstallTask now hydrates from backend on mount, so isActive is authoritative
   // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
   // Don't show as "setting up" if status is complete - server is ready
-  const isSettingUp = reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode);
+  const isSettingUp = isProvisioningOrBuilding || (reinstallTask.isActive && reinstallTask.status !== 'complete' && (needsSetup || isSetupMode));
 
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
 
   // If server needs setup but provisioning hasn't started, show waiting message
-  if (needsSetup && !reinstallTask.isActive) {
+  if (needsSetup && !reinstallTask.isActive && server?.status !== 'provisioning') {
     return (
       <AppShell>
         <div className="max-w-2xl mx-auto py-12 space-y-6">
