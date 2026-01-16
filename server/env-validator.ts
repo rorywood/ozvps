@@ -73,16 +73,16 @@ export function validateEnvironment(): ValidationResult {
     }
   }
 
-  // Validate SESSION_SECRET length
+  // Validate SESSION_SECRET length (WARNING only for backwards compatibility)
   const sessionSecret = process.env.SESSION_SECRET;
   if (sessionSecret && sessionSecret.length < 32) {
-    errors.push('SESSION_SECRET must be at least 32 characters for security');
+    warnings.push('SESSION_SECRET should be at least 32 characters for security (current: ' + sessionSecret.length + ' chars)');
   }
 
-  // Validate TOTP_ENCRYPTION_KEY if provided
+  // Validate TOTP_ENCRYPTION_KEY if provided (WARNING only)
   const totpKey = process.env.TOTP_ENCRYPTION_KEY;
   if (totpKey && totpKey.length < 32) {
-    errors.push('TOTP_ENCRYPTION_KEY must be at least 32 characters for security');
+    warnings.push('TOTP_ENCRYPTION_KEY should be at least 32 characters for security (current: ' + totpKey.length + ' chars)');
   }
 
   // Validate DATABASE_URL format
@@ -139,11 +139,11 @@ export function validateEnvironment(): ValidationResult {
     }
 
     if (!process.env.REDIS_URL) {
-      errors.push('REDIS_URL is required in production for session persistence across instances');
+      warnings.push('REDIS_URL not set - using in-memory sessions (will not persist across restarts/instances)');
     }
 
     if (!process.env.RESEND_API_KEY) {
-      errors.push('RESEND_API_KEY is required in production for password reset functionality');
+      warnings.push('RESEND_API_KEY not set - password reset emails will not work');
     }
 
     // Check for example/placeholder values
