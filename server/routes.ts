@@ -1406,15 +1406,19 @@ export async function registerRoutes(
       if (session.auth0UserId) {
         try {
           // Check database override for email verification first
+          log(`[/api/auth/me] Checking override for: ${session.auth0UserId}`, 'auth');
           const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
+          log(`[/api/auth/me] Override result: ${emailVerifiedOverride}`, 'auth');
 
           const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
             auth0Client.isUserAdmin(session.auth0UserId),
             auth0Client.isEmailVerified(session.auth0UserId),
           ]);
+          log(`[/api/auth/me] Auth0 emailVerified: ${currentEmailVerifiedFromAuth0}`, 'auth');
 
           // Email is verified if EITHER Auth0 says so OR we have a database override
           const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
+          log(`[/api/auth/me] Final emailVerified: ${currentEmailVerified}`, 'auth');
 
           const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
 
