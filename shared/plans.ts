@@ -21,7 +21,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     transferGb: 1000, // 1 TB
     priceMonthly: 700, // $7.00
     virtfusionPackageId: 1,
-    active: false, // Out of Stock
+    active: true,
   },
   {
     code: 'mini',
@@ -32,7 +32,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     transferGb: 2000, // 2 TB
     priceMonthly: 1200, // $12.00
     virtfusionPackageId: 2,
-    active: false, // Out of Stock
+    active: true,
   },
   {
     code: 'core',
@@ -43,7 +43,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     transferGb: 3000, // 3 TB
     priceMonthly: 1800, // $18.00
     virtfusionPackageId: 3,
-    active: false, // Out of Stock
+    active: true,
     popular: true,
   },
   {
@@ -55,7 +55,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     transferGb: 4000, // 4 TB
     priceMonthly: 2600, // $26.00
     virtfusionPackageId: 4,
-    active: false, // Out of Stock
+    active: true,
   },
   {
     code: 'max',
@@ -66,7 +66,7 @@ export const STATIC_PLANS: StaticPlan[] = [
     transferGb: 5000, // 5 TB
     priceMonthly: 3800, // $38.00
     virtfusionPackageId: 5,
-    active: true, // Available
+    active: true,
   },
 ];
 

@@ -184,7 +184,7 @@ export default function DeployPage() {
     },
   });
 
-  const plans = (plansData?.plans || []).filter(p => p.active);
+  const plans = plansData?.plans || [];
   const locations = locationsData?.locations || [];
   const wallet = walletData?.wallet;
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
@@ -412,21 +412,25 @@ export default function DeployPage() {
                   {plans.map((plan) => {
                     const isSelected = selectedPlanId === plan.id;
                     const isPopular = plan.popular;
+                    const isOutOfStock = !plan.active;
 
                     return (
                       <button
                         key={plan.id}
                         type="button"
-                        onClick={() => setSelectedPlanId(plan.id)}
+                        onClick={() => !isOutOfStock && setSelectedPlanId(plan.id)}
+                        disabled={isOutOfStock}
                         className={cn(
                           "relative p-4 rounded-lg border text-left transition-all",
-                          isSelected
-                            ? "bg-primary/5 border-primary shadow-sm"
-                            : "bg-card border-border hover:border-primary/50"
+                          isOutOfStock
+                            ? "opacity-60 cursor-not-allowed bg-muted/30 border-border"
+                            : isSelected
+                              ? "bg-primary/5 border-primary shadow-sm"
+                              : "bg-card border-border hover:border-primary/50"
                         )}
                         data-testid={`card-plan-${plan.code}`}
                       >
-                        {isPopular && (
+                        {isPopular && !isOutOfStock && (
                           <div className="mb-2">
                             <span className="inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-primary text-primary-foreground rounded">
                               Popular
@@ -434,7 +438,15 @@ export default function DeployPage() {
                           </div>
                         )}
 
-                        {isSelected && (
+                        {isOutOfStock && (
+                          <div className="mb-2">
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-muted-foreground/20 text-muted-foreground rounded">
+                              Out of Stock
+                            </span>
+                          </div>
+                        )}
+
+                        {isSelected && !isOutOfStock && (
                           <div className="absolute top-3 right-3">
                             <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
                               <Check className="h-3 w-3 text-primary-foreground" />
@@ -443,9 +455,9 @@ export default function DeployPage() {
                         )}
 
                         <div className="mb-3">
-                          <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
+                          <h3 className={cn("text-base font-semibold", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.name}</h3>
                           <div className="flex items-baseline gap-1 mt-1">
-                            <span className="text-3xl font-bold text-foreground tracking-tight">
+                            <span className={cn("text-3xl font-bold tracking-tight", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>
                               ${(plan.priceMonthly / 100).toFixed(0)}
                             </span>
                             <span className="text-sm text-muted-foreground">/mo</span>
@@ -455,19 +467,19 @@ export default function DeployPage() {
                         <div className="space-y-1.5 text-xs">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">vCPU</span>
-                            <span className="text-foreground font-medium">{plan.vcpu}</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.vcpu}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">RAM</span>
-                            <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatRAM(plan.ramMb)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Storage</span>
-                            <span className="text-foreground font-medium">{plan.storageGb} GB</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.storageGb} GB</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Transfer</span>
-                            <span className="text-foreground font-medium">{formatTransfer(plan.transferGb)}</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatTransfer(plan.transferGb)}</span>
                           </div>
                         </div>
                       </button>

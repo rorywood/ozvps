@@ -3877,8 +3877,8 @@ export async function registerRoutes(
   // Get available plans
   app.get('/api/plans', async (req, res) => {
     try {
-      const activePlans = await dbStorage.getActivePlans();
-      res.json({ plans: activePlans });
+      const allPlans = await dbStorage.getAllPlans();
+      res.json({ plans: allPlans });
     } catch (error: any) {
       log(`Error fetching plans: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch plans' });

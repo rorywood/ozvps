@@ -684,6 +684,10 @@ export const storage = new Proxy({} as IStorage, {
 // Database storage for plans, wallets, and deploy orders
 export const dbStorage = {
   // Plans
+  async getAllPlans(): Promise<Plan[]> {
+    return db.select().from(plans);
+  },
+
   async getActivePlans(): Promise<Plan[]> {
     return db.select().from(plans).where(eq(plans.active, true));
   },
