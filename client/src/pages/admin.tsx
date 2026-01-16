@@ -1131,12 +1131,15 @@ export default function AdminPage() {
                                   Verified
                                 </span>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-warning hover:text-warning hover:bg-warning/10 text-xs"
-                                  onClick={async () => {
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center h-7 px-2 text-xs font-medium text-warning hover:text-warning hover:bg-warning/10 rounded-md transition-colors"
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
                                     const userId = user.auth0UserId;
+                                    console.log('VERIFY CLICKED:', userId, user.email);
+                                    alert('Button clicked for: ' + user.email);
                                     toast.info(`Verifying ${user.email}...`);
                                     try {
                                       const res = await fetch('/api/admin/verify-email', {
@@ -1160,7 +1163,7 @@ export default function AdminPage() {
                                 >
                                   <Mail className="h-3 w-3 mr-1" />
                                   Verify
-                                </Button>
+                                </button>
                               )}
                             </td>
                             <td className="p-3">
