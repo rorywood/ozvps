@@ -26,7 +26,17 @@ export default function Dashboard() {
   const { data: dashboardData, isLoading, error } = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: () => api.getDashboardOverview(),
-    refetchInterval: 1000, // 1 second refresh for real-time updates
+    refetchInterval: (data) => {
+      // If any server needs setup or is provisioning, poll aggressively (500ms)
+      const hasProvisioningServers = data?.servers?.some((s: any) =>
+        s.needsSetup || s.status === 'building' || s.status === 'provisioning'
+      );
+      if (hasProvisioningServers) {
+        return 500;
+      }
+      // Normal operation: 1 second refresh for real-time updates
+      return 1000;
+    },
   });
 
   const servers = dashboardData?.servers || [];

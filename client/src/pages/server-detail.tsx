@@ -217,7 +217,15 @@ export default function ServerDetail() {
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 3000, // Poll every 3 seconds for real-time updates
+    refetchInterval: (data) => {
+      // During provisioning/setup, poll very aggressively (500ms)
+      // This ensures status updates appear immediately without manual refresh
+      if (data?.needsSetup || reinstallTask.isActive) {
+        return 500;
+      }
+      // Normal operation: poll every 1 second for real-time updates
+      return 1000;
+    },
   });
 
   // Dynamic page title
@@ -249,20 +257,20 @@ export default function ServerDetail() {
   });
   
   
-  // Fetch cancellation status - poll every 3s for real-time deletion status
+  // Fetch cancellation status - poll aggressively for real-time deletion status
   const { data: cancellationData, refetch: refetchCancellation } = useQuery({
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 3000, // Poll every 3 seconds for deletion progress
+    refetchInterval: 1000, // Poll every 1 second for deletion progress
   });
 
-  // Live stats polling every 3 seconds
+  // Live stats polling - fast updates for real-time monitoring
   const { data: liveStats } = useQuery({
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && server?.status === 'running',
-    refetchInterval: 3000, // Poll every 3 seconds for real-time stats
+    refetchInterval: 1000, // Poll every 1 second for real-time stats
   });
 
   // Console lock hook - must be after server query
