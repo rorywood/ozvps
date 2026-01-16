@@ -14,10 +14,10 @@ import {
   Server,
   MapPin,
   HardDrive,
-  Plus,
   ChevronRight,
   AlertCircle,
-  Mail
+  Mail,
+  Wallet
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -155,22 +155,6 @@ export default function DeployPage() {
 
   const stripeConfigured = stripeStatus?.configured ?? false;
 
-  const topupMutation = useMutation({
-    mutationFn: (amountCents: number) => api.createTopup(amountCents),
-    onSuccess: (data: { url: string }) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create checkout session",
-        variant: "destructive",
-      });
-    },
-  });
-
   const deployMutation = useMutation({
     mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string }) =>
       api.deployServer(data),
@@ -260,13 +244,6 @@ export default function DeployPage() {
       hostname: hostname.trim().toLowerCase(),
       locationCode: selectedLocationCode,
     });
-  };
-
-  const handleTopupAndDeploy = () => {
-    if (!selectedPlan || !wallet) return;
-    const shortfall = selectedPlan.priceMonthly - wallet.balanceCents;
-    const topupNeeded = Math.max(shortfall, 500);
-    topupMutation.mutate(topupNeeded);
   };
 
   // Determine current step for progress indicator
@@ -739,30 +716,31 @@ export default function DeployPage() {
                           </>
                         )}
                       </Button>
-                    ) : stripeConfigured ? (
-                      <Button
-                        className="w-full h-11 gap-2"
-                        onClick={handleTopupAndDeploy}
-                        disabled={topupMutation.isPending}
-                        data-testid="button-topup-deploy"
-                      >
-                        {topupMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4" />
-                            Top up & Deploy
-                          </>
-                        )}
-                      </Button>
                     ) : (
-                      <Button
-                        className="w-full h-11"
-                        disabled
-                        data-testid="button-deploy-no-stripe"
-                      >
-                        Insufficient balance
-                      </Button>
+                      <div className="space-y-3">
+                        <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <Wallet className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground mb-1">
+                                Insufficient Balance
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                You need {selectedPlan ? formatCurrency(selectedPlan.priceMonthly - (wallet?.balanceCents || 0)) : '—'} more to deploy this server.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          asChild
+                          className="w-full h-11"
+                          variant="outline"
+                        >
+                          <Link href="/billing">
+                            Go to Billing
+                          </Link>
+                        </Button>
+                      </div>
                     )}
                   </div>
 
