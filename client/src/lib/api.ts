@@ -52,21 +52,30 @@ async function secureFetch(url: string, options: RequestInit = {}): Promise<Resp
   const response = await fetch(url, options);
 
   // Handle 401 errors - trigger session error callback to redirect to login
+  // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
   if (response.status === 401) {
-    let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
-    try {
-      const clone = response.clone();
-      errorData = await clone.json();
-    } catch (e) {
-      // Failed to parse JSON, use default error
-    }
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/login' ||
+                       currentPath === '/register' ||
+                       currentPath === '/forgot-password' ||
+                       currentPath === '/reset-password';
 
-    // Trigger session error callback (will redirect to login)
-    if (sessionErrorCallback) {
-      sessionErrorCallback({
-        error: errorData.error || 'Authentication required',
-        code: errorData.code || 'UNAUTHORIZED'
-      });
+    if (!isAuthPage) {
+      let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
+      try {
+        const clone = response.clone();
+        errorData = await clone.json();
+      } catch (e) {
+        // Failed to parse JSON, use default error
+      }
+
+      // Trigger session error callback (will redirect to login)
+      if (sessionErrorCallback) {
+        sessionErrorCallback({
+          error: errorData.error || 'Authentication required',
+          code: errorData.code || 'UNAUTHORIZED'
+        });
+      }
     }
   }
 

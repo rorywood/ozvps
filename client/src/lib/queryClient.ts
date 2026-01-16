@@ -21,8 +21,14 @@ async function handleResponse(res: Response): Promise<void> {
         // Failed to parse JSON, use default error
       }
 
-      // Always trigger session error callback on 401
-      if (sessionErrorCallback) {
+      // Only trigger redirect if we're not on auth pages (avoid redirect loop)
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' ||
+                         currentPath === '/register' ||
+                         currentPath === '/forgot-password' ||
+                         currentPath === '/reset-password';
+
+      if (!isAuthPage && sessionErrorCallback) {
         sessionErrorCallback({
           error: errorData.error || 'Authentication required',
           code: errorData.code || 'UNAUTHORIZED'
@@ -70,8 +76,14 @@ export const getQueryFn: <T>(options: {
         // Failed to parse JSON, use default error
       }
 
-      // Always trigger session error callback on 401
-      if (sessionErrorCallback) {
+      // Only trigger redirect if we're not on auth pages (avoid redirect loop)
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' ||
+                         currentPath === '/register' ||
+                         currentPath === '/forgot-password' ||
+                         currentPath === '/reset-password';
+
+      if (!isAuthPage && sessionErrorCallback) {
         sessionErrorCallback({
           error: errorData.error || 'Authentication required',
           code: errorData.code || 'UNAUTHORIZED'
