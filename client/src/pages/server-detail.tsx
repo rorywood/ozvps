@@ -954,7 +954,9 @@ export default function ServerDetail() {
 
   if (isError || !server) {
     // Don't show error if we're in active setup mode - server might not be fully provisioned yet
-    if (reinstallTask.isActive && reinstallTask.status !== 'failed') {
+    // Also check if server has needsSetup flag (even with error, server data might be partial)
+    const serverNeedsSetup = server?.needsSetup === true;
+    if ((reinstallTask.isActive && reinstallTask.status !== 'failed') || serverNeedsSetup || isLoading) {
       return (
         <AppShell>
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
