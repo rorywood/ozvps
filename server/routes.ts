@@ -3805,12 +3805,17 @@ export async function registerRoutes(
 
       // Check email verification - session value OR database override
       let emailVerified = req.userSession!.emailVerified ?? false;
+      log(`[/api/me] User: ${req.userSession!.email}, auth0UserId: ${auth0UserId}`, 'api');
+      log(`[/api/me] Session emailVerified: ${req.userSession!.emailVerified}`, 'api');
+
       if (!emailVerified) {
         const override = await storage.getEmailVerifiedOverride(auth0UserId);
+        log(`[/api/me] Database override: ${override}`, 'api');
         if (override) {
           emailVerified = true;
         }
       }
+      log(`[/api/me] Final emailVerified: ${emailVerified}`, 'api');
 
       res.json({
         user: {
