@@ -14,6 +14,11 @@ import { startCancellationProcessor } from "./cancellation-processor";
 import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
 import { startBillingProcessor } from "./billing-processor";
 import { connectRedis, disconnectRedis, redisClient } from "./redis";
+import { validateOrExit, getEnvironmentSummary } from "./env-validator";
+
+// CRITICAL: Validate environment before doing anything else
+// This prevents the app from starting with invalid/missing configuration
+validateOrExit();
 
 const app = express();
 const httpServer = createServer(app);
@@ -333,6 +338,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      log('\n' + getEnvironmentSummary(), 'config');
 
       // Start background job for processing server cancellations
       startCancellationProcessor();

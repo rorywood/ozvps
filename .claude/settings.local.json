@@ -15,7 +15,17 @@
       "Bash(echo:*)",
       "Bash(done)",
       "Bash(cd:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git checkout:*)",
+      "Bash(powershell -Command \"npm run build\")",
+      "Bash(node:*)",
+      "Bash(git pull:*)",
+      "Bash(npm:*)",
+      "Bash(npm.cmd:*)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" --version)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" run build)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(ls:*)"
     ]
   }
 }

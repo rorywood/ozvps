@@ -660,6 +660,33 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
+  const ticketRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // 5 tickets per minute
+    message: { error: 'Too many ticket creation requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const walletTopupRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // 10 topup requests per minute
+    message: { error: 'Too many topup requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const serverActionRateLimiter = rateLimit({
+    windowMs: 30 * 1000, // 30 seconds
+    max: 10, // 10 server actions per 30 seconds
+    message: { error: 'Too many server actions. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -1719,7 +1746,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/power', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/servers/:id/power', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -1983,7 +2010,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/reinstall', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/servers/:id/reinstall', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -2055,7 +2082,7 @@ export async function registerRoutes(
   });
 
   // Reset server password - security-sensitive endpoint with ownership verification
-  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -4385,7 +4412,7 @@ export async function registerRoutes(
   });
 
   // SECURITY: Ensures Stripe customer exists before creating checkout session
-  app.post('/api/wallet/topup', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/wallet/topup', authMiddleware, requireEmailVerified, walletTopupRateLimiter, async (req, res) => {
     try {
       const result = topupSchema.safeParse(req.body);
       if (!result.success) {
@@ -4468,7 +4495,7 @@ export async function registerRoutes(
     paymentMethodId: z.string().min(1),
   });
 
-  app.post('/api/wallet/topup/direct', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/wallet/topup/direct', authMiddleware, requireEmailVerified, walletTopupRateLimiter, async (req, res) => {
     try {
       log(`[Direct Topup] Request received from user ${req.userSession?.auth0UserId}`, 'api');
 
@@ -5040,7 +5067,7 @@ export async function registerRoutes(
   });
 
   // Create a new ticket
-  app.post('/api/support/tickets', authMiddleware, async (req, res) => {
+  app.post('/api/support/tickets', authMiddleware, ticketRateLimiter, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       if (!auth0UserId) {
