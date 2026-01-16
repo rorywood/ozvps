@@ -3802,12 +3802,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
       }
       const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+
+      // Check email verification - session value OR database override
+      let emailVerified = req.userSession!.emailVerified ?? false;
+      if (!emailVerified) {
+        const override = await storage.getEmailVerifiedOverride(auth0UserId);
+        if (override) {
+          emailVerified = true;
+        }
+      }
+
       res.json({
         user: {
           id: req.userSession!.userId,
           email: req.userSession!.email,
           name: req.userSession!.name || req.userSession!.email,
         },
+        emailVerified,
         balance: wallet.balanceCents,
         balanceFormatted: `$${(wallet.balanceCents / 100).toFixed(2)}`,
       });
