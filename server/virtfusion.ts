@@ -824,6 +824,15 @@ export class VirtFusionClient {
       const response = await this.request<{ data: any }>(`/servers/${serverId}`);
       const server = response.data;
 
+      // DEBUG: Log raw server response to see what VirtFusion actually returns
+      log(`[DEBUG] Raw VirtFusion server data for ${serverId}: ${JSON.stringify({
+        state: server.state,
+        buildFailed: server.buildFailed,
+        commissioned: server.commissioned,
+        commissionStatus: server.commissionStatus,
+        status: server.status,
+      })}`, 'virtfusion');
+
       // Extract the raw build state information
       const state = server.state || '';
       const buildFailed = server.buildFailed === true;
