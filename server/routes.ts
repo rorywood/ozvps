@@ -2160,13 +2160,18 @@ export async function registerRoutes(
       }
 
       const result = await virtfusionClient.resetServerPassword(req.params.id);
-      
+
+      log(`[DEBUG] Password reset result for ${req.params.id}: ${JSON.stringify({ success: result.success, hasPassword: !!result.password, username: result.username })}`, 'api');
+
       if (!result.password) {
+        log(`[ERROR] Password reset for ${req.params.id} succeeded but no password returned`, 'api');
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
-      
+
       log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
-      res.json({ success: true, password: result.password, username: result.username });
+      const response = { success: true, password: result.password, username: result.username };
+      log(`[DEBUG] Sending response: ${JSON.stringify({ success: true, hasPassword: !!result.password, username: result.username })}`, 'api');
+      res.json(response);
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reset server password' });

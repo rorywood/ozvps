@@ -496,6 +496,8 @@ export default function ServerDetail() {
         console.log(`[AUTO-RESET] Attempt ${attemptNumber}/${retryDelays.length}: Calling password reset API`);
 
         api.resetServerPassword(serverId).then(response => {
+          console.log('[AUTO-RESET] API Response:', JSON.stringify(response));
+
           if (response.password) {
             console.log('[AUTO-RESET] ✅ Password reset successful, saving credentials');
             const creds = {
@@ -508,9 +510,15 @@ export default function ServerDetail() {
             autoPasswordResetInProgressRef.current = false;
             // Clear any pending retries
             timeouts.forEach(t => clearTimeout(t));
+          } else {
+            console.error('[AUTO-RESET] ❌ Response missing password field:', response);
+            // Don't retry if response succeeded but has no password - this is a backend issue
+            autoPasswordResetInProgressRef.current = false;
+            timeouts.forEach(t => clearTimeout(t));
           }
         }).catch((error) => {
           console.warn(`[AUTO-RESET] ❌ Attempt ${attemptNumber} failed:`, error.message || error);
+          console.warn('[AUTO-RESET] Full error object:', error);
 
           // Schedule next retry if available
           if (currentRetry < retryDelays.length - 1) {
