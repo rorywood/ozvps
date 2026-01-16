@@ -366,7 +366,7 @@ export default function ServerDetail() {
     // CRITICAL: If rebootingStartTime is undefined, treat as "hasn't started yet" (infinite time)
     const rebootingStartTime = reinstallTask.rebootingStartTime || Date.now();
     const timeInRebooting = Date.now() - rebootingStartTime;
-    const minimumRebootingTime = 4000; // 4 seconds minimum
+    const minimumRebootingTime = 60000; // 60 seconds minimum - gives guest agent time to install/start
     const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
     // DEBUG: Log all conditions to see what's failing
