@@ -1580,8 +1580,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' :
-                       powerActionPending ? '' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
@@ -1616,8 +1615,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' :
-                       powerActionPending ? '' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
@@ -1656,8 +1654,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' :
-                       powerActionPending ? '' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
