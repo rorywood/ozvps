@@ -730,20 +730,33 @@ export async function registerRoutes(
       const vfPackages = await virtfusionClient.getPackages();
       log(`Fetched ${vfPackages.length} packages from VirtFusion`, 'startup');
 
+      // Log what VirtFusion returned for debugging
+      vfPackages.forEach(pkg => {
+        log(`VirtFusion Package ${pkg.id} (${pkg.name}): enabled=${pkg.enabled}`, 'startup');
+      });
+
       const currentPlans = await db.select().from(plans);
       const plansMap = new Map(currentPlans.map(p => [p.virtfusionPackageId, p]));
 
       let synced = 0;
       for (const vfPkg of vfPackages) {
         const existingPlan = plansMap.get(vfPkg.id);
-        if (existingPlan && existingPlan.active !== vfPkg.enabled) {
-          await db
-            .update(plans)
-            .set({ active: vfPkg.enabled, name: vfPkg.name })
-            .where(eq(plans.virtfusionPackageId, vfPkg.id));
+        if (existingPlan) {
+          log(`Checking plan ${existingPlan.code} (VF ID: ${vfPkg.id}): DB active=${existingPlan.active}, VF enabled=${vfPkg.enabled}`, 'startup');
 
-          log(`Plan ${existingPlan.code}: ${existingPlan.active ? 'enabled' : 'disabled'} → ${vfPkg.enabled ? 'enabled' : 'disabled'}`, 'startup');
-          synced++;
+          if (existingPlan.active !== vfPkg.enabled) {
+            await db
+              .update(plans)
+              .set({ active: vfPkg.enabled, name: vfPkg.name })
+              .where(eq(plans.virtfusionPackageId, vfPkg.id));
+
+            log(`✓ Updated plan ${existingPlan.code}: ${existingPlan.active ? 'enabled' : 'disabled'} → ${vfPkg.enabled ? 'enabled' : 'disabled'}`, 'startup');
+            synced++;
+          } else {
+            log(`  No change needed for plan ${existingPlan.code}`, 'startup');
+          }
+        } else {
+          log(`⚠ No plan found in DB for VirtFusion package ${vfPkg.id} (${vfPkg.name})`, 'startup');
         }
       }
 

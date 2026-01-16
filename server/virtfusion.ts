@@ -1669,7 +1669,7 @@ export class VirtFusionClient {
       return packages.map(pkg => {
         // Try to extract prices from various VirtFusion formats
         let prices: Array<{ price: number; billingPeriod?: string }> = [];
-        
+
         // Format 1: prices array with billingPeriod
         if (Array.isArray(pkg.prices) && pkg.prices.length > 0) {
           prices = pkg.prices.map((p: any) => ({
@@ -1692,12 +1692,26 @@ export class VirtFusionClient {
         else if (pkg.monthlyPrice) {
           prices = [{ price: pkg.monthlyPrice, billingPeriod: 'monthly' }];
         }
-        
+
         // Log price info for debugging
         if (prices.length === 0 || prices.every(p => p.price === 0)) {
           log(`Package ${pkg.id} (${pkg.name}) has no valid pricing data`, 'virtfusion');
         }
-        
+
+        // Parse enabled status - check multiple possible fields
+        // VirtFusion may use 'enabled', 'status', or 'active'
+        let enabled = true; // Default to enabled if no field found
+        if (typeof pkg.enabled === 'boolean') {
+          enabled = pkg.enabled;
+        } else if (typeof pkg.active === 'boolean') {
+          enabled = pkg.active;
+        } else if (pkg.status) {
+          enabled = pkg.status === 'active' || pkg.status === 'enabled' || pkg.status === 1;
+        }
+
+        // Log raw package data for debugging
+        log(`VirtFusion Package ${pkg.id}: name="${pkg.name}", enabled field="${pkg.enabled}", active field="${pkg.active}", status field="${pkg.status}", parsed enabled=${enabled}`, 'virtfusion');
+
         return {
           id: pkg.id,
           code: pkg.code || `pkg-${pkg.id}`,
@@ -1706,7 +1720,7 @@ export class VirtFusionClient {
           memory: pkg.memory || 1024,
           primaryStorage: pkg.primaryStorage || 20,
           traffic: pkg.traffic || 1000,
-          enabled: pkg.enabled !== false,
+          enabled,
           prices,
         };
       });
