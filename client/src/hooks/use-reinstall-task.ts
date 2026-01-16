@@ -167,20 +167,10 @@ export function useReinstallTask(serverId: string) {
     try {
       const buildStatus = await api.getBuildStatus(serverId);
 
-      console.log('[useReinstallTask] Poll result:', {
-        commissioned: buildStatus.commissioned,
-        isBuilding: buildStatus.isBuilding,
-        isComplete: buildStatus.isComplete,
-        isError: buildStatus.isError,
-        phase: buildStatus.phase,
-      });
-
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
       // Show "Starting Server" step while server boots
       // NOTE: Don't check isComplete - VirtFusion doesn't set it properly
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
-        console.log('[useReinstallTask] Server commissioned (commissioned 3), checking if running...');
-
         // Mark as 'rebooting' to show "Starting Server" step
         // We'll keep polling until server status becomes 'running'
         setState(prev => {
@@ -189,8 +179,6 @@ export function useReinstallTask(serverId: string) {
           }
 
           const bootingStartTime = Date.now();
-          console.log('[useReinstallTask] Transitioning to REBOOTING status - will show for minimum 4 seconds');
-          console.log('[useReinstallTask] SET rebootingStartTime =', bootingStartTime);
           addTimelineEvent('rebooting', 'Server commissioned - booting up...');
           const booting = {
             ...prev,
@@ -217,7 +205,6 @@ export function useReinstallTask(serverId: string) {
 
       // ERROR: Build failed
       if (buildStatus.isError) {
-        console.log('[useReinstallTask] Build FAILED - stopping polling');
         addTimelineEvent('failed', 'Installation failed');
         stopPolling();
         setState(prev => ({
@@ -244,7 +231,6 @@ export function useReinstallTask(serverId: string) {
         }
 
         const newPercent = STATUS_PERCENT_MAP[newStatus];
-        console.log('[useReinstallTask] Still building:', newStatus, newPercent + '%');
 
         // Only update if status changed (prevent unnecessary re-renders)
         setState(prev => {
@@ -255,8 +241,6 @@ export function useReinstallTask(serverId: string) {
           // NEVER GO BACKWARD: If new percent is less than current, keep current
           const finalPercent = newPercent < prev.percent ? prev.percent : newPercent;
           const finalStatus = finalPercent === prev.percent ? prev.status : newStatus;
-
-          console.log('[useReinstallTask] Updating state:', { from: prev.status, to: finalStatus, percent: finalPercent });
 
           if (finalStatus !== prev.status) {
             addTimelineEvent(finalStatus);
@@ -280,9 +264,6 @@ export function useReinstallTask(serverId: string) {
 
           return updated;
         });
-      } else {
-        // commissioned === 3 but not marked complete yet - wait for next poll
-        console.log('[useReinstallTask] Commissioned 3 but not complete, waiting...');
       }
 
     } catch (e) {
@@ -291,8 +272,6 @@ export function useReinstallTask(serverId: string) {
   }, [serverId, addTimelineEvent, stopPolling]);
 
   const startTask = useCallback((taskId?: string, password?: string, serverIp?: string) => {
-    console.log('[useReinstallTask] Starting task with credentials:', !!password);
-
     const credentials = password ? { serverIp: serverIp || 'N/A', username: 'root', password } : null;
     const initialState: ReinstallTaskState = {
       isActive: true,
@@ -314,13 +293,11 @@ export function useReinstallTask(serverId: string) {
     pollCountRef.current = 0;
 
     // Start polling: Fast for 30 seconds (15 polls * 2s), then slow to 5s
-    console.log('[useReinstallTask] Starting fast polling (2s interval)');
     pollRef.current = setInterval(() => {
       pollCountRef.current++;
       poll();
 
       if (pollCountRef.current === 15) {
-        console.log('[useReinstallTask] Switching to slow polling (5s interval)');
         stopPolling();
         pollRef.current = setInterval(poll, 5000);
       }
@@ -347,15 +324,8 @@ export function useReinstallTask(serverId: string) {
   const checkBuildStatus = useCallback(async () => {
     if (!serverId) return;
 
-    console.log('[useReinstallTask] checkBuildStatus - current state:', {
-      isActive: state.isActive,
-      status: state.status,
-      hasPolling: !!pollRef.current,
-    });
-
     // If we have an active task but polling stopped, restart it
     if (state.isActive && state.status !== 'complete' && state.status !== 'failed' && !pollRef.current) {
-      console.log('[useReinstallTask] Restarting polling (was stopped)');
       pollRef.current = setInterval(poll, 5000);
     }
   }, [serverId, state.isActive, state.status, poll]);

@@ -316,7 +316,6 @@ export default function ServerDetail() {
                                 sessionStorage.getItem(`setupMinimized:${serverId}`);
 
           if (hasSetupFlags) {
-            console.log('[server-detail] Clearing stale setup flags (setup already complete)');
             sessionStorage.removeItem(`setupMode:${serverId}`);
             sessionStorage.removeItem(`setupMinimized:${serverId}`);
           }
@@ -333,7 +332,6 @@ export default function ServerDetail() {
     if (server && server.needsSetup && !reinstallTask.isActive) {
       // Server needs setup but task isn't tracking it yet
       // Start tracking immediately to show checklist
-      console.log('Server needs setup, starting task tracking immediately');
       reinstallTask.startTask(undefined, undefined, server.primaryIp);
       // Ensure setupMode is set
       updateSetupMode(true);
@@ -362,38 +360,15 @@ export default function ServerDetail() {
     const minimumRebootingTime = 4000; // 4 seconds minimum
     const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
-    // DEBUG LOGGING
-    console.log('[server-detail] AUTO-DISMISS CHECK:', {
-      taskAtFinalStage,
-      serverFullyOnline,
-      serverCommissioned,
-      hasBeenRebootingLongEnough,
-      'reinstallTask.rebootingStartTime': reinstallTask.rebootingStartTime,
-      'reinstallTask.status': reinstallTask.status,
-      'server.status': server?.status,
-      'server.needsSetup': server?.needsSetup,
-      timeInRebooting,
-      minimumRebootingTime,
-    });
-
     // ALL conditions must be true
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 
     if (allConditionsMet) {
-      console.log('[server-detail] Server is FULLY ONLINE! All conditions met:', {
-        reinstallStatus: reinstallTask.status,
-        serverStatus: server?.status,
-        needsSetup: server?.needsSetup,
-        timeInRebooting: `${timeInRebooting}ms`,
-      });
-
       // Wait 2 more seconds to ensure:
       // - Server is fully booted
       // - All buttons are active
       // - Status is green everywhere
       const timer = setTimeout(() => {
-        console.log('[server-detail] AUTO-DISMISS TRIGGERED! Server is fully online.');
-
         // Save credentials if available (will be shown in banner later)
         if (reinstallTask.credentials) {
           updateSavedCredentials(reinstallTask.credentials);
@@ -418,34 +393,18 @@ export default function ServerDetail() {
         // Invalidate queries to refresh server data with latest status
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
-
-        console.log('[server-detail] Setup mode cleared - showing fully online server');
       }, 2000);
 
       return () => clearTimeout(timer);
     } else {
-      console.log('[server-detail] Auto-dismiss waiting...', {
-        isSetupMode,
-        reinstallStatus: reinstallTask.status,
-        serverStatus: server?.status,
-        needsSetup: server?.needsSetup,
-        taskAtFinalStage,
-        serverFullyOnline,
-        serverCommissioned,
-        hasBeenRebootingLongEnough,
-        timeInRebooting: `${timeInRebooting}ms`,
-      });
-
       // CRITICAL: If we're in rebooting status but haven't waited long enough,
       // set a timer to re-check after the remaining time
       if (taskAtFinalStage && serverFullyOnline && serverCommissioned && !hasBeenRebootingLongEnough && reinstallTask.rebootingStartTime) {
         const remainingTime = minimumRebootingTime - timeInRebooting;
         // CRITICAL FIX: Prevent negative delay (edge case where time already passed)
         const safeDelay = Math.max(0, remainingTime) + 100;
-        console.log(`[server-detail] Setting timer to re-check in ${safeDelay}ms`);
 
         const recheckTimer = setTimeout(() => {
-          console.log('[server-detail] Re-checking after waiting period...');
           // Force a re-render by invalidating queries
           queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         }, safeDelay);
