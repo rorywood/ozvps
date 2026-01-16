@@ -1275,8 +1275,8 @@ export default function ServerDetail() {
 
   return (
     <AppShell>
-      <div className="space-y-6 pb-20">
-        
+      <div className="space-y-6 pt-6 pb-20">
+
         {/* Building banner removed - showing full-page provisioning view instead */}
         {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
         {showSavedCredentials && savedCredentials && server?.status === 'running' && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
