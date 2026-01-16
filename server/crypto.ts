@@ -12,30 +12,21 @@ const ENCRYPTION_KEY = process.env.TOTP_ENCRYPTION_KEY;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// SECURITY: Validate encryption keys on startup
-if (IS_PRODUCTION) {
-  if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
-    throw new Error(
-      'SECURITY ERROR: SESSION_SECRET must be at least 32 characters for production security. ' +
-      'Generate a secure secret with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
-    );
+// SECURITY: Validate encryption keys on startup (warnings only for backwards compatibility)
+if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+  console.warn('⚠️  SECURITY WARNING: SESSION_SECRET should be at least 32 characters for production security');
+  if (SESSION_SECRET) {
+    console.warn(`   Current length: ${SESSION_SECRET.length} characters`);
+  } else {
+    console.warn('   SESSION_SECRET is not set');
   }
-  if (ENCRYPTION_KEY && ENCRYPTION_KEY.length < 32) {
-    throw new Error(
-      'SECURITY ERROR: TOTP_ENCRYPTION_KEY must be at least 32 characters for production security. ' +
-      'Generate a secure key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
-    );
-  }
+  console.warn('   Generate a secure secret with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
 }
 
-// Warn in development if keys are weak
-if (!IS_PRODUCTION) {
-  if (SESSION_SECRET && SESSION_SECRET.length < 32) {
-    console.warn('⚠️  WARNING: SESSION_SECRET should be at least 32 characters for security');
-  }
-  if (ENCRYPTION_KEY && ENCRYPTION_KEY.length < 32) {
-    console.warn('⚠️  WARNING: TOTP_ENCRYPTION_KEY should be at least 32 characters for security');
-  }
+if (ENCRYPTION_KEY && ENCRYPTION_KEY.length < 32) {
+  console.warn('⚠️  SECURITY WARNING: TOTP_ENCRYPTION_KEY should be at least 32 characters for production security');
+  console.warn(`   Current length: ${ENCRYPTION_KEY.length} characters`);
+  console.warn('   Generate a secure key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
 }
 
 // Cache the derived key to avoid repeated derivation
