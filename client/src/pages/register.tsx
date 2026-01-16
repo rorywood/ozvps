@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Server, Shield, Zap, Globe, XCircle } from "lucide-react";
+import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Shield, Zap, Globe, XCircle } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -428,10 +428,9 @@ export default function RegisterPage() {
   const strength = passwordStrength();
 
   const features = [
-    { icon: Server, title: "Instant Deployment", description: "Deploy servers in seconds" },
-    { icon: Shield, title: "Enterprise Security", description: "Protected by Australian infrastructure" },
-    { icon: Zap, title: "High Performance", description: "NVMe storage & premium network" },
-    { icon: Globe, title: "99.9% Uptime", description: "Reliable cloud hosting" },
+    { icon: Zap, title: "Lightning Fast Deployment", description: "Deploy your server in seconds with our automated platform" },
+    { icon: Globe, title: "Australian Data Centers", description: "Low latency and compliance with local data sovereignty" },
+    { icon: Shield, title: "24/7 Expert Support", description: "Our team is always here to help when you need us" },
   ];
 
   return (
@@ -456,18 +455,18 @@ export default function RegisterPage() {
               Join thousands of developers and businesses who trust OzVPS for reliable, high-performance cloud infrastructure.
             </p>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-4">
               {features.map((feature, index) => (
                 <div
                   key={feature.title}
                   className="flex items-start gap-3"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
                     <feature.icon className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
-                    <p className="text-xs text-muted-foreground">{feature.description}</p>
+                    <h3 className="font-semibold mb-1 text-foreground">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
                   </div>
                 </div>
               ))}
@@ -517,7 +516,8 @@ export default function RegisterPage() {
                 </p>
               </div>
 
-              {!registrationEnabled && !registrationLoading ? (
+              {/* Show disabled message immediately if registration is disabled (don't wait for loading) */}
+              {registrationEnabled === false ? (
                 <div className="space-y-6">
                   <div className="flex flex-col items-center justify-center text-center p-8 rounded-xl bg-amber-500/10 border border-amber-500/20">
                     <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
