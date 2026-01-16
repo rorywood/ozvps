@@ -170,6 +170,7 @@ export default function Dashboard() {
                 const isStopped = displayStatus === 'stopped';
                 const isDeleting = displayStatus === 'destroying' || displayStatus === 'queued_deletion';
                 const isScheduledDeletion = displayStatus === 'scheduled_deletion';
+                const isProvisioning = displayStatus === 'setting up';
 
                 return (
                   <Link key={server.id} href={`/servers/${server.id}`}>
@@ -186,7 +187,8 @@ export default function Dashboard() {
                         isStopped && "bg-muted-foreground",
                         isDeleting && "bg-red-500 animate-pulse",
                         isScheduledDeletion && "bg-orange-500",
-                        !isRunning && !isStopped && !isDeleting && !isScheduledDeletion && "bg-warning"
+                        isProvisioning && "bg-blue-500 animate-pulse",
+                        !isRunning && !isStopped && !isDeleting && !isScheduledDeletion && !isProvisioning && "bg-warning"
                       )} />
 
                       {/* Server name - bold */}
@@ -212,6 +214,7 @@ export default function Dashboard() {
                           isRunning ? "success" :
                           isDeleting ? "destructive" :
                           isScheduledDeletion ? "warning" :
+                          isProvisioning ? "info" :
                           "secondary"
                         }
                         className="capitalize"

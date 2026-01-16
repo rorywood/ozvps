@@ -108,6 +108,11 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
       return 'scheduled_deletion';
     }
 
+    // Map provisioning status to "setting up" for better UX
+    if (actualStatus === 'provisioning') {
+      return 'setting up';
+    }
+
     const pending = pendingActions[serverId];
     if (!pending) return actualStatus;
 

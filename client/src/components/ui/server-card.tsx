@@ -28,6 +28,9 @@ export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
     if (displayStatus === 'destroying' || displayStatus === 'queued_deletion') return "removing";
     if (displayStatus === 'scheduled_deletion') return "scheduled";
 
+    // Check provisioning states
+    if (displayStatus === 'setting up') return "setting up";
+
     if (server.suspended) return "suspended";
     if (displayStatus === "provisioning") return "pending";
     if (displayStatus === "error") return "stopped";
@@ -38,6 +41,7 @@ export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
   const getStatusBarColor = () => {
     if (displayStatus === 'destroying' || displayStatus === 'queued_deletion') return "bg-red-500";
     if (displayStatus === 'scheduled_deletion') return "bg-orange-500";
+    if (displayStatus === 'setting up') return "bg-blue-500";
     if (displayStatus === "running" && !server.suspended) return "bg-success";
     if (displayStatus === "stopped") return "bg-destructive";
     if (server.suspended) return "bg-warning";

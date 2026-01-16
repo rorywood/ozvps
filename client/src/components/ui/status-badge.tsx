@@ -7,6 +7,7 @@ const statusConfig = {
   stopped: { label: "Stopped", variant: "destructive" as const, icon: false, pulse: false },
   suspended: { label: "Suspended", variant: "secondary" as const, icon: false, pulse: false },
   pending: { label: "Pending", variant: "secondary" as const, icon: true, pulse: true },
+  "setting up": { label: "Setting Up", variant: "info" as const, icon: true, pulse: true },
   deleting: { label: "Deleting", variant: "destructive" as const, icon: true, pulse: true },
   removing: { label: "Removing", variant: "destructive" as const, icon: true, pulse: true },
   scheduled: { label: "Scheduled", variant: "warning" as const, icon: true, pulse: false },
