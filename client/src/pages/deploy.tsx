@@ -522,6 +522,19 @@ export default function DeployPage() {
                             </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatTransfer(plan.transferGb)}</span>
                           </div>
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Network Speed <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Maximum inbound and outbound network speed</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>500 Mbps</span>
+                          </div>
                         </div>
                       </button>
                     );
@@ -587,7 +600,7 @@ export default function DeployPage() {
                     <Label htmlFor="hostname">Server Hostname</Label>
                     <Input
                       id="hostname"
-                      placeholder="my-server"
+                      placeholder="example.yourhostname.com"
                       value={hostname}
                       onChange={handleHostnameChange}
                       className={hostnameError ? "border-destructive" : ""}
@@ -688,9 +701,9 @@ export default function DeployPage() {
                     {selectedPlan && (
                       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                         <div>{selectedPlan.vcpu} vCPU</div>
-                        <div>{formatRAM(selectedPlan.ramMb)}</div>
+                        <div>{formatRAM(selectedPlan.ramMb)} RAM</div>
                         <div>{selectedPlan.storageGb} GB NVMe</div>
-                        <div>{formatTransfer(selectedPlan.transferGb)}</div>
+                        <div>{formatTransfer(selectedPlan.transferGb)} Bandwidth</div>
                       </div>
                     )}
                   </div>

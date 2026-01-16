@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppShell } from "@/components/layout/app-shell";
 import { useToast } from "@/hooks/use-toast";
-import { 
+import {
   ArrowLeft,
   Check,
   Loader2,
@@ -16,7 +16,8 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  ArrowUpDown
+  ArrowUpDown,
+  Network
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -272,7 +273,7 @@ export default function DeployConfigurePage() {
                 <Label htmlFor="hostname">Server Hostname</Label>
                 <Input
                   id="hostname"
-                  placeholder="my-server"
+                  placeholder="example.yourhostname.com"
                   value={hostname}
                   onChange={handleHostnameChange}
                   className={hostnameError ? "border-red-500" : ""}
@@ -374,7 +375,11 @@ export default function DeployConfigurePage() {
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <ArrowUpDown className="h-3.5 w-3.5" />
-                      <span>{formatTransfer(plan.transferGb)}</span>
+                      <span>{formatTransfer(plan.transferGb)} Transfer</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Network className="h-3.5 w-3.5" />
+                      <span>500Mbps Bandwidth</span>
                     </div>
                   </div>
 
