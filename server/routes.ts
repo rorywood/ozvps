@@ -651,6 +651,15 @@ export async function registerRoutes(
     keyGenerator: (req) => getClientIp(req),
   });
 
+  const deploymentRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 3, // 3 deployments per minute
+    message: { error: 'Too many deployment requests. Please wait before deploying again.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -4671,7 +4680,7 @@ export async function registerRoutes(
     locationCode: z.string().optional(),
   });
 
-  app.post('/api/deploy', authMiddleware, requireEmailVerified, async (req, res) => {
+  app.post('/api/deploy', authMiddleware, requireEmailVerified, deploymentRateLimiter, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       const virtFusionUserId = req.userSession!.virtFusionUserId;

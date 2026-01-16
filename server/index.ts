@@ -73,6 +73,12 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'same-origin' },
   permittedCrossDomainPolicies: { permittedPolicies: 'none' },
   dnsPrefetchControl: { allow: false },
+  frameguard: { action: 'deny' },
+  hsts: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true
+  } : false,
   ieNoOpen: true,
   noSniff: true,
   originAgentCluster: true,
@@ -338,6 +344,19 @@ app.use((req, res, next) => {
       getUncachableStripeClient()
         .then(stripe => startBillingProcessor(stripe))
         .catch(() => startBillingProcessor(null));
+
+      // Start background job for cleaning up expired password reset tokens
+      setInterval(async () => {
+        try {
+          const deleted = await dbStorage.cleanupExpiredResetTokens();
+          if (deleted > 0) {
+            log(`Cleaned up ${deleted} expired password reset tokens`, 'security');
+          }
+        } catch (error: any) {
+          log(`Error cleaning up reset tokens: ${error.message}`, 'security');
+        }
+      }, 60 * 60 * 1000); // Run every hour
+      log('Password reset token cleanup job started (runs hourly)', 'security');
     },
   );
 

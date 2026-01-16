@@ -286,11 +286,17 @@ main() {
         (
             case "$OS" in
                 ubuntu|debian)
-                    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+                    # Download Node.js setup script, then execute (avoid piping to bash)
+                    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x -o /tmp/node_setup.sh
+                    bash /tmp/node_setup.sh
+                    rm -f /tmp/node_setup.sh
                     apt-get install -y nodejs
                     ;;
                 centos|rhel|rocky|almalinux)
-                    curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash -
+                    # Download Node.js setup script, then execute (avoid piping to bash)
+                    curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x -o /tmp/node_setup.sh
+                    bash /tmp/node_setup.sh
+                    rm -f /tmp/node_setup.sh
                     yum install -y nodejs
                     ;;
             esac
