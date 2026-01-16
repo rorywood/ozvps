@@ -1086,29 +1086,21 @@ export class VirtFusionClient {
           expectedPassword?: string;
           password?: string;
           decryptedPassword?: string;
-          reset_password?: boolean;
         }
       }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ user: resetUser, sendMail: false }),
       });
 
-      // Check if the password reset actually succeeded
-      // VirtFusion returns reset_password: false if guest agent is not responding
-      // Be strict: only accept explicit true, anything else is a failure
-      if (data.data?.reset_password !== true) {
-        log(`Password reset for server ${serverId} failed: Guest agent not responding or not installed (reset_password=${data.data?.reset_password})`, 'virtfusion');
-        throw new Error('Password reset failed. The QEMU guest agent is not responding. Please ensure your server is fully booted and the guest agent is installed. For Linux: install qemu-guest-agent. For Windows: install VirtIO drivers.');
-      }
-
-      // VirtFusion returns the new password - check various possible field names
-      // v4.1.0+ uses expectedPassword, older versions may use password or decryptedPassword
+      // VirtFusion returns the new password via expectedPassword
+      // Response includes: { queueId: number, expectedPassword: string }
+      // The reset is queued and executed asynchronously, but password is returned immediately
       const newPassword = data.data?.expectedPassword || data.data?.decryptedPassword || data.data?.password || null;
 
       // Verify we actually got a password - without it, reset didn't work properly
       if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length === 0) {
-        log(`Password reset for server ${serverId} reported success but no valid password returned in response`, 'virtfusion');
-        throw new Error('Password reset request succeeded but no password was returned. The guest agent may not be functioning correctly. Please contact support if this persists.');
+        log(`Password reset for server ${serverId} failed: No password returned in response. Data: ${JSON.stringify(data.data)}`, 'virtfusion');
+        throw new Error('Password reset failed. No password was returned by VirtFusion. The server may not be ready yet. Please wait 30-60 seconds and try again.');
       }
 
       // Invalidate cache since server credentials have changed
