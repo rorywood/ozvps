@@ -244,6 +244,15 @@ export default function ServerDetail() {
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
+    onSuccess: (data) => {
+      if (reinstallTask.isActive) {
+        console.log('[SERVER QUERY] Got server data:', {
+          status: data.status,
+          needsSetup: data.needsSetup,
+          id: data.id,
+        });
+      }
+    },
     refetchInterval: (data) => {
       // During provisioning/setup, poll aggressively (1 second)
       // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
@@ -360,10 +369,24 @@ export default function ServerDetail() {
     const minimumRebootingTime = 4000; // 4 seconds minimum
     const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
+    // DEBUG: Log all conditions to see what's failing
+    console.log('[AUTO-DISMISS] Checking conditions:', {
+      taskAtFinalStage,
+      serverFullyOnline,
+      serverCommissioned,
+      hasBeenRebootingLongEnough,
+      'reinstallTask.status': reinstallTask.status,
+      'reinstallTask.rebootingStartTime': reinstallTask.rebootingStartTime,
+      'server.status': server?.status,
+      'server.needsSetup': server?.needsSetup,
+      timeInRebooting,
+    });
+
     // ALL conditions must be true
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 
     if (allConditionsMet) {
+      console.log('[AUTO-DISMISS] ✅ ALL CONDITIONS MET - Dismissing in 2 seconds');
       // Wait 2 more seconds to ensure:
       // - Server is fully booted
       // - All buttons are active
@@ -427,6 +450,7 @@ export default function ServerDetail() {
   // (even if tabbed out)
   useEffect(() => {
     if ((reinstallTask.status === 'complete' || reinstallTask.status === 'rebooting') && serverId) {
+      console.log('[REFETCH] Invalidating server queries due to status:', reinstallTask.status);
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }

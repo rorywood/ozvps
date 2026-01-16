@@ -171,6 +171,8 @@ export function useReinstallTask(serverId: string) {
       // Show "Starting Server" step while server boots
       // NOTE: Don't check isComplete - VirtFusion doesn't set it properly
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
+        console.log('[useReinstallTask] ✅ Server COMMISSIONED (commissioned=3)');
+
         // Mark as 'rebooting' to show "Starting Server" step
         // We'll keep polling until server status becomes 'running'
         setState(prev => {
@@ -179,6 +181,7 @@ export function useReinstallTask(serverId: string) {
           }
 
           const bootingStartTime = Date.now();
+          console.log('[useReinstallTask] 🔄 Transitioning to REBOOTING status, rebootingStartTime:', bootingStartTime);
           addTimelineEvent('rebooting', 'Server commissioned - booting up...');
           const booting = {
             ...prev,
