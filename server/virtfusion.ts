@@ -1239,10 +1239,11 @@ export class VirtFusionClient {
     
     // A server needs setup if:
     // - commissioned === 0 (not built yet)
+    // - commissioned === 1 (currently building)
     // - commissioned is undefined/null (very new server, fields not populated yet)
     // Note: commissioned is already checked above when determining status
     // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
-    const needsSetup = commissioned === 0 || commissioned === undefined || commissioned === null;
+    const needsSetup = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();
