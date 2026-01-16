@@ -11,19 +11,19 @@ interface EnvConfig {
   AUTH0_DOMAIN: string;
   AUTH0_CLIENT_ID: string;
   AUTH0_CLIENT_SECRET: string;
-  AUTH0_WEBHOOK_SECRET: string;
+  AUTH0_WEBHOOK_SECRET?: string; // Recommended but not required
 
   // Stripe
   STRIPE_SECRET_KEY: string;
   STRIPE_PUBLISHABLE_KEY: string;
-  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_WEBHOOK_SECRET?: string; // Recommended but not required
 
   // VirtFusion
   VIRTFUSION_PANEL_URL: string;
   VIRTFUSION_API_TOKEN: string;
 
   // Security
-  SESSION_SECRET: string;
+  SESSION_SECRET?: string; // Recommended but not required
   TOTP_ENCRYPTION_KEY?: string; // Optional but recommended
 
   // Email
@@ -50,19 +50,23 @@ export function validateEnvironment(): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Required variables
+  // Required variables (core functionality)
   const required: (keyof EnvConfig)[] = [
     'DATABASE_URL',
     'AUTH0_DOMAIN',
     'AUTH0_CLIENT_ID',
     'AUTH0_CLIENT_SECRET',
-    'AUTH0_WEBHOOK_SECRET',
     'STRIPE_SECRET_KEY',
     'STRIPE_PUBLISHABLE_KEY',
-    'STRIPE_WEBHOOK_SECRET',
     'VIRTFUSION_PANEL_URL',
     'VIRTFUSION_API_TOKEN',
+  ];
+
+  // Recommended variables (warn if missing, but don't block startup)
+  const recommended: (keyof EnvConfig)[] = [
     'SESSION_SECRET',
+    'AUTH0_WEBHOOK_SECRET',
+    'STRIPE_WEBHOOK_SECRET',
   ];
 
   // Check required variables
@@ -70,6 +74,14 @@ export function validateEnvironment(): ValidationResult {
     const value = process.env[key];
     if (!value || value.trim() === '') {
       errors.push(`Missing required environment variable: ${key}`);
+    }
+  }
+
+  // Check recommended variables (warnings only)
+  for (const key of recommended) {
+    const value = process.env[key];
+    if (!value || value.trim() === '') {
+      warnings.push(`${key} not set - This is recommended for production security and functionality`);
     }
   }
 
