@@ -1138,8 +1138,6 @@ export default function AdminPage() {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     const userId = user.auth0UserId;
-                                    console.log('VERIFY CLICKED:', userId, user.email);
-                                    alert('Button clicked for: ' + user.email);
                                     toast.info(`Verifying ${user.email}...`);
                                     try {
                                       const res = await fetch('/api/admin/verify-email', {
