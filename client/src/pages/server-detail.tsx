@@ -214,9 +214,13 @@ export default function ServerDetail() {
   
   const reinstallTask = useReinstallTask(serverId || '');
 
+  // Check setupMode flag IMMEDIATELY - this is set by deploy page before navigation
+  // If true, we're in initial setup and should NEVER show overview
+  const isInitialSetup = isSetupMode || (typeof window !== 'undefined' && sessionStorage.getItem(`setupMode:${serverId}`) === 'true');
+
   // Check if we're in setup mode before loading server data
   // This prevents the flash of server overview before showing checklist
-  const isCheckingSetupMode = reinstallTask.isActive && reinstallTask.status !== 'complete';
+  const isCheckingSetupMode = isInitialSetup || (reinstallTask.isActive && reinstallTask.status !== 'complete');
 
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
@@ -225,7 +229,7 @@ export default function ServerDetail() {
     refetchInterval: (data) => {
       // During provisioning/setup, poll very aggressively (500ms)
       // This ensures status updates appear immediately without manual refresh
-      if (data?.needsSetup || reinstallTask.isActive) {
+      if (data?.needsSetup || reinstallTask.isActive || isInitialSetup) {
         return 500;
       }
       // Normal operation: poll every 1 second for real-time updates
@@ -299,17 +303,18 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, serverId, reinstallTask.isActive]);
 
-  // Auto-start reinstall task polling when server is provisioning but task isn't active
-  // DISABLED: This was causing blank pages because reinstallTask.start() doesn't exist
-  // The hook already auto-checks build status on mount via checkBuildStatus()
-  // useEffect(() => {
-  //   if (server && server.status === 'provisioning' && !reinstallTask.isActive && !needsSetup) {
-  //     // Server is actively building but reinstallTask isn't tracking it
-  //     // This can happen if user navigated away during deploy and came back
-  //     console.log('Server is provisioning but task not active, starting task tracking');
-  //     reinstallTask.startTask(); // Method is called startTask, not start
-  //   }
-  // }, [server?.status, reinstallTask.isActive, needsSetup, reinstallTask]);
+  // CRITICAL: Start reinstall task immediately when server needsSetup is detected
+  // This ensures the checklist UI activates immediately without any flash of overview
+  useEffect(() => {
+    if (server && server.needsSetup && !reinstallTask.isActive) {
+      // Server needs setup but task isn't tracking it yet
+      // Start tracking immediately to show checklist
+      console.log('Server needs setup, starting task tracking immediately');
+      reinstallTask.startTask(undefined, undefined, server.primaryIp);
+      // Ensure setupMode is set
+      updateSetupMode(true);
+    }
+  }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
   // Set credentials in state when they become available (persists to sessionStorage)
   useEffect(() => {
