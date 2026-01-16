@@ -26,16 +26,19 @@ export default function ServerList() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: servers, isLoading, isError } = useQuery({
-    queryKey: ['servers'],
-    queryFn: () => api.listServers(),
+  const { data: dashboardData, isLoading, isError } = useQuery({
+    queryKey: ['dashboard-overview'],
+    queryFn: () => api.getDashboardOverview(),
     refetchInterval: 1000, // 1 second refresh for real-time updates
   });
+
+  const servers = dashboardData?.servers || [];
+  const cancellations = dashboardData?.cancellations || {};
 
   useSyncPowerActions(servers);
 
   // Filter servers based on search query
-  const filteredServers = servers?.filter(server => {
+  const filteredServers = servers.filter(server => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -44,7 +47,7 @@ export default function ServerList() {
       server.plan?.name?.toLowerCase().includes(query) ||
       server.location?.name?.toLowerCase().includes(query)
     );
-  }) || [];
+  });
 
   return (
     <AppShell>
@@ -114,6 +117,7 @@ export default function ServerList() {
               <ServerCard
                 key={server.id}
                 server={server}
+                cancellation={cancellations[server.id]}
                 onClick={() => setLocation(`/servers/${server.id}`)}
               />
             ))}

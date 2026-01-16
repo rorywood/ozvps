@@ -4,19 +4,45 @@ import { Progress } from "./progress";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Server } from "@/lib/types";
+import { usePowerActions } from "@/hooks/use-power-actions";
 
 interface ServerCardProps {
   server: Server;
+  cancellation?: { scheduledDeletionAt: string; reason: string | null; mode: string; status: string };
   onClick: () => void;
 }
 
-export function ServerCard({ server, onClick }: ServerCardProps) {
-  // Map server status to StatusBadge status type
+export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
+  const { getDisplayStatus } = usePowerActions();
+
+  // Get the display status (with deletion/power action states)
+  const displayStatus = getDisplayStatus(
+    server.id,
+    server.status,
+    cancellation
+  );
+
+  // Map display status to StatusBadge status type
   const getStatusBadgeStatus = (): StatusType => {
+    // Check deletion states first
+    if (displayStatus === 'destroying' || displayStatus === 'queued_deletion') return "removing";
+    if (displayStatus === 'scheduled_deletion') return "scheduled";
+
     if (server.suspended) return "suspended";
-    if (server.status === "provisioning") return "pending";
-    if (server.status === "error") return "stopped";
-    return server.status as StatusType;
+    if (displayStatus === "provisioning") return "pending";
+    if (displayStatus === "error") return "stopped";
+    return displayStatus as StatusType;
+  };
+
+  // Get status bar color
+  const getStatusBarColor = () => {
+    if (displayStatus === 'destroying' || displayStatus === 'queued_deletion') return "bg-red-500";
+    if (displayStatus === 'scheduled_deletion') return "bg-orange-500";
+    if (displayStatus === "running" && !server.suspended) return "bg-success";
+    if (displayStatus === "stopped") return "bg-destructive";
+    if (server.suspended) return "bg-warning";
+    if (displayStatus === "provisioning") return "bg-info";
+    return "bg-muted-foreground";
   };
 
   // Calculate percentages for resource usage
@@ -37,10 +63,7 @@ export function ServerCard({ server, onClick }: ServerCardProps) {
       <div
         className={cn(
           "absolute left-0 top-6 bottom-6 w-1 rounded-r-full",
-          server.status === "running" && !server.suspended && "bg-success",
-          server.status === "stopped" && "bg-destructive",
-          server.suspended && "bg-warning",
-          server.status === "provisioning" && "bg-info"
+          getStatusBarColor()
         )}
       />
 

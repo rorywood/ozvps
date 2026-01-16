@@ -8,6 +8,8 @@ const statusConfig = {
   suspended: { label: "Suspended", variant: "secondary" as const, icon: false, pulse: false },
   pending: { label: "Pending", variant: "secondary" as const, icon: true, pulse: true },
   deleting: { label: "Deleting", variant: "destructive" as const, icon: true, pulse: true },
+  removing: { label: "Removing", variant: "destructive" as const, icon: true, pulse: true },
+  scheduled: { label: "Scheduled", variant: "warning" as const, icon: true, pulse: false },
 
   // Billing statuses
   paid: { label: "Paid", variant: "default" as const, icon: false, pulse: false },
