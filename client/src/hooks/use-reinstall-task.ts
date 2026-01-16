@@ -276,12 +276,24 @@ export function useReinstallTask(serverId: string) {
         // If we already have an active task, UPDATE it (don't restart)
         if (state.isActive) {
           // Sync with VirtFusion's current status without restarting timeline
-          setState(prev => ({
-            ...prev,
-            status: newStatus,
-            percent: newPercent,
-            // Keep existing timeline and credentials
-          }));
+          setState(prev => {
+            const updated = {
+              ...prev,
+              status: newStatus,
+              percent: newPercent,
+              // Keep existing timeline and credentials
+            };
+            // Persist updated state to sessionStorage (use prev values to avoid stale closure)
+            saveTaskState(serverId, {
+              isActive: true,
+              taskId: prev.taskId,
+              status: newStatus,
+              percent: newPercent,
+              timeline: prev.timeline,
+              credentials: prev.credentials,
+            });
+            return updated;
+          });
           lastStatusRef.current = newStatus;
           // Make sure polling is active
           if (!pollRef.current) {
@@ -311,21 +323,24 @@ export function useReinstallTask(serverId: string) {
       if (!buildStatus.isBuilding && state.isActive && state.status !== 'complete' && state.status !== 'failed') {
         // Check if the build completed while we were away
         if (buildStatus.isComplete) {
-          setState(prev => ({
-            ...prev,
-            status: 'complete',
-            percent: 100,
-            isActive: true, // Keep open to show completion
-            // Preserve credentials when build completes
-          }));
-          stopPolling();
-          // Keep credentials in session storage for completed builds
-          saveTaskState(serverId, {
-            isActive: true,
-            status: 'complete',
-            percent: 100,
-            credentials: state.credentials,
+          setState(prev => {
+            const completed = {
+              ...prev,
+              status: 'complete',
+              percent: 100,
+              isActive: true, // Keep open to show completion
+              // Preserve credentials when build completes
+            };
+            // Keep credentials in session storage for completed builds (use prev to avoid stale closure)
+            saveTaskState(serverId, {
+              isActive: true,
+              status: 'complete',
+              percent: 100,
+              credentials: prev.credentials,
+            });
+            return completed;
           });
+          stopPolling();
         } else if (!buildStatus.isBuilding && !buildStatus.isComplete && !buildStatus.isError) {
           // CRITICAL: Only reset if server is not in needsSetup state
           // Check commissioned field to see if server still needs building
@@ -343,7 +358,7 @@ export function useReinstallTask(serverId: string) {
     } catch (e) {
       console.error('Failed to verify reinstall task state:', e);
     }
-  }, [serverId, state.isActive, state.status, state.credentials, poll, reset, stopPolling]);
+  }, [serverId, state.isActive, state.status, poll, reset, stopPolling]);
 
   // On mount, verify if there's actually an active task from VirtFusion
   // This prevents stale UI when user refreshes after reinstall completes
