@@ -214,6 +214,10 @@ export default function ServerDetail() {
   
   const reinstallTask = useReinstallTask(serverId || '');
 
+  // Check if we're in setup mode before loading server data
+  // This prevents the flash of server overview before showing checklist
+  const isCheckingSetupMode = reinstallTask.isActive && reinstallTask.status !== 'complete';
+
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
@@ -921,7 +925,23 @@ export default function ServerDetail() {
     });
   }, [allTemplates, osSearchQuery, selectedCategory]);
 
-  if (isLoading) {
+  // If reinstall task is active, show checklist immediately (prevents flash of overview)
+  if (isCheckingSetupMode && !isError) {
+    // Still loading server data but we know we're in setup mode
+    if (isLoading || !server) {
+      return (
+        <AppShell>
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
+            <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+            <p>Loading server setup...</p>
+          </div>
+        </AppShell>
+      );
+    }
+
+    // Server loaded, show checklist (this will be handled by the isSettingUp check below)
+    // Continue to normal render flow
+  } else if (isLoading) {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
@@ -933,6 +953,18 @@ export default function ServerDetail() {
   }
 
   if (isError || !server) {
+    // Don't show error if we're in active setup mode - server might not be fully provisioned yet
+    if (reinstallTask.isActive && reinstallTask.status !== 'failed') {
+      return (
+        <AppShell>
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
+            <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+            <p>Server is being provisioned...</p>
+          </div>
+        </AppShell>
+      );
+    }
+
     return (
       <AppShell>
          <div className="flex flex-col items-center justify-center py-20 text-red-400 h-[50vh]">
