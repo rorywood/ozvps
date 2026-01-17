@@ -7,7 +7,7 @@ import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { db } from "./db";
 import { plans } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
@@ -1600,7 +1600,7 @@ export async function registerRoutes(
 
             // Fetch billing status for the server
             // Note: Billing records are created during server deployment, not auto-initialized
-            const billingStatus = await getServerBillingStatus(server.id);
+            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId);
 
             return {
               ...server,
@@ -1692,7 +1692,7 @@ export async function registerRoutes(
             }
 
             // Fetch billing status for the server
-            const billingStatus = await getServerBillingStatus(server.id);
+            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId);
 
             return {
               ...server,
@@ -1751,24 +1751,43 @@ export async function registerRoutes(
       // Fetch billing status for this server (non-critical, don't fail if it errors)
       let billingStatus = null;
       try {
-        billingStatus = await getServerBillingStatus(req.params.id);
+        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId);
 
         // Auto-initialize billing for existing servers that don't have a record
-        if (!billingStatus && server.plan?.priceMonthly) {
+        if (!billingStatus) {
           try {
-            // Use server's actual creation date for accurate billing
-            const serverCreatedAt = server.created_at || server.createdAt;
-            const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+            // Look up plan price from our database based on server specs
+            const serverSpecs = server.plan?.specs;
+            if (serverSpecs) {
+              const matchingPlan = await db.select().from(plans)
+                .where(
+                  and(
+                    eq(plans.vcpu, serverSpecs.vcpu),
+                    eq(plans.ramMb, serverSpecs.ram),
+                    eq(plans.storageGb, serverSpecs.disk),
+                    eq(plans.active, true)
+                  )
+                )
+                .limit(1);
 
-            await createServerBilling({
-              auth0UserId: req.userSession!.auth0UserId!,
-              virtfusionServerId: req.params.id,
-              planId: server.plan.id,
-              monthlyPriceCents: server.plan.priceMonthly,
-              deployedAt,
-            });
-            // Fetch the newly created billing record
-            billingStatus = await getServerBillingStatus(req.params.id);
+              if (matchingPlan.length > 0) {
+                const plan = matchingPlan[0];
+                // Use server's actual creation date for accurate billing
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                await createServerBilling({
+                  auth0UserId: req.userSession!.auth0UserId!,
+                  virtfusionServerId: req.params.id,
+                  planId: plan.id,
+                  monthlyPriceCents: plan.priceMonthly,
+                  deployedAt,
+                });
+                // Fetch the newly created billing record
+                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId);
+                log(`Auto-initialized billing for server ${req.params.id} with plan ${plan.code}`, 'billing');
+              }
+            }
           } catch (billingCreateError: any) {
             log(`Could not auto-initialize billing for server ${req.params.id}: ${billingCreateError.message}`, 'api');
           }

@@ -221,23 +221,43 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
 }
 
 // Get billing status for a server
-export async function getServerBillingStatus(virtfusionServerId: string | number) {
+// Optionally pass auth0UserId to enable fallback lookup by user
+export async function getServerBillingStatus(virtfusionServerId: string | number, auth0UserId?: string) {
   // Ensure consistent string type for database query
   const serverId = String(virtfusionServerId);
+  const numericId = parseInt(serverId, 10);
 
   // Try exact match first
   let billing = await db.select().from(serverBilling)
     .where(eq(serverBilling.virtfusionServerId, serverId))
     .limit(1);
 
-  // If not found and the ID is numeric, try without leading zeros or with leading zeros
-  if (billing.length === 0 && /^\d+$/.test(serverId)) {
-    // Try trimmed version (no leading zeros)
-    const trimmedId = String(parseInt(serverId, 10));
+  // If not found and the ID is numeric, try without leading zeros
+  if (billing.length === 0 && !isNaN(numericId)) {
+    const trimmedId = String(numericId);
     if (trimmedId !== serverId) {
       billing = await db.select().from(serverBilling)
         .where(eq(serverBilling.virtfusionServerId, trimmedId))
         .limit(1);
+    }
+  }
+
+  // If still not found and we have auth0UserId, search user's billing records for a match
+  if (billing.length === 0 && auth0UserId) {
+    const userBillings = await db.select().from(serverBilling)
+      .where(eq(serverBilling.auth0UserId, auth0UserId));
+
+    // Try to find a billing record where the numeric ID matches
+    for (const b of userBillings) {
+      const storedNumericId = parseInt(b.virtfusionServerId, 10);
+      if (!isNaN(storedNumericId) && storedNumericId === numericId) {
+        // Found a match - update the record to use the correct ID format
+        await db.update(serverBilling)
+          .set({ virtfusionServerId: serverId, updatedAt: new Date() })
+          .where(eq(serverBilling.id, b.id));
+        log(`Fixed billing record ID mismatch: ${b.virtfusionServerId} -> ${serverId}`, 'billing');
+        return { ...b, virtfusionServerId: serverId };
+      }
     }
   }
 
