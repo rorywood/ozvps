@@ -81,18 +81,50 @@ warning() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 
 get_environment() {
     if [[ -f "$INSTALL_DIR/.ozvps-env" ]]; then
-        cat "$INSTALL_DIR/.ozvps-env" 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
+        # Trim whitespace and newlines
+        local env=$(cat "$INSTALL_DIR/.ozvps-env" 2>/dev/null | tr -d '[:space:]')
+        if [[ -n "$env" ]]; then
+            echo "$env"
+            return
+        fi
     fi
+    echo "unknown"
 }
 
 get_branch() {
     if [[ -f "$INSTALL_DIR/.ozvps-branch" ]]; then
-        cat "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || echo "main"
-    else
-        echo "main"
+        # Trim whitespace and newlines
+        local branch=$(cat "$INSTALL_DIR/.ozvps-branch" 2>/dev/null | tr -d '\n\r' | xargs)
+        if [[ -n "$branch" ]]; then
+            echo "$branch"
+            return
+        fi
     fi
+    echo "main"
+}
+
+# Parse DATABASE_URL - format: postgresql://user:pass@host:port/dbname
+parse_db_url() {
+    local url="$1"
+    local part="$2"
+
+    # Remove postgresql:// prefix
+    local stripped=$(echo "$url" | sed 's|^postgresql://||')
+
+    case "$part" in
+        user)
+            echo "$stripped" | sed 's|:.*||'
+            ;;
+        host)
+            echo "$stripped" | sed 's|.*@||' | sed 's|:.*||' | sed 's|/.*||'
+            ;;
+        port)
+            echo "$stripped" | sed 's|.*@||' | sed 's|.*/.*||' | sed 's|.*:||'
+            ;;
+        dbname)
+            echo "$stripped" | sed 's|.*@||' | sed 's|.*:||' | sed 's|.*/||' | sed 's|?.*||'
+            ;;
+    esac
 }
 
 get_app_status() {
@@ -250,37 +282,39 @@ action_db_status() {
 
     if [[ -f "$INSTALL_DIR/.env" ]]; then
         local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
-        local db_name=$(echo "$db_url" | grep -oP '\/\K[^?]+' | head -1)
-        local db_host=$(echo "$db_url" | grep -oP '@\K[^:\/]+' | head -1)
+        local db_name=$(parse_db_url "$db_url" "dbname")
+        local db_host=$(parse_db_url "$db_url" "host")
+        local db_user=$(parse_db_url "$db_url" "user")
 
-        echo -e "  Database: ${BOLD}$db_name${NC}"
-        echo -e "  Host:     ${BOLD}$db_host${NC}"
+        echo -e "  Database: ${BOLD}${db_name:-unknown}${NC}"
+        echo -e "  Host:     ${BOLD}${db_host:-unknown}${NC}"
+        echo -e "  User:     ${BOLD}${db_user:-unknown}${NC}"
         echo ""
 
         # Try to get table count and size
         if command -v psql &>/dev/null && [[ "$db_host" == "localhost" || "$db_host" == "127.0.0.1" ]]; then
             echo -e "  ${DIM}Checking database...${NC}"
 
-            # Extract credentials
-            local db_user=$(echo "$db_url" | grep -oP '//\K[^:]+' | head -1)
-
             # Count tables
             local table_count=$(sudo -u postgres psql -d "$db_name" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ')
 
-            if [[ -n "$table_count" ]]; then
+            if [[ -n "$table_count" && "$table_count" != "" ]]; then
                 echo -e "  Tables:   ${BOLD}$table_count${NC}"
 
                 # Get database size
                 local db_size=$(sudo -u postgres psql -d "$db_name" -t -c "SELECT pg_size_pretty(pg_database_size('$db_name'));" 2>/dev/null | tr -d ' ')
                 echo -e "  Size:     ${BOLD}$db_size${NC}"
-            fi
-
-            # Connection test
-            if sudo -u postgres psql -d "$db_name" -c "SELECT 1" &>/dev/null; then
                 echo -e "  Status:   ${GREEN}✓${NC} Connected"
             else
-                echo -e "  Status:   ${RED}✗${NC} Connection failed"
+                # Connection test
+                if sudo -u postgres psql -d "$db_name" -c "SELECT 1" &>/dev/null; then
+                    echo -e "  Status:   ${GREEN}✓${NC} Connected"
+                else
+                    echo -e "  Status:   ${RED}✗${NC} Connection failed"
+                fi
             fi
+        else
+            echo -e "  ${DIM}(psql not available or remote database)${NC}"
         fi
     else
         error ".env file not found"
@@ -432,7 +466,7 @@ action_backup() {
 
     if [[ -f "$INSTALL_DIR/.env" ]]; then
         local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
-        local db_name=$(echo "$db_url" | grep -oP '\/\K[^?]+' | head -1)
+        local db_name=$(parse_db_url "$db_url" "dbname")
 
         local backup_file="${BACKUP_DIR}/${db_name}_$(date +%Y%m%d_%H%M%S).sql.gz"
 
