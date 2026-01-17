@@ -1585,9 +1585,17 @@ export class VirtFusionClient {
 
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
+      log(`CREATE response data: ${JSON.stringify(server)}`, 'virtfusion');
 
       let password: string | undefined = undefined;
       let primaryIp: string | undefined = undefined;
+
+      // Try to get IP from CREATE response first
+      primaryIp = server.primaryIp || server.primary_ip || server.ip || server.ipAddress || undefined;
+      if (server.network?.primaryIp) primaryIp = server.network.primaryIp;
+      if (server.networks?.[0]?.ip) primaryIp = server.networks[0].ip;
+
+      log(`IP from CREATE response: ${primaryIp || 'not found'}`, 'virtfusion');
 
       // Step 2: Build the OS on the server
       if (osId) {
@@ -1603,28 +1611,46 @@ export class VirtFusionClient {
             body: JSON.stringify(buildBody),
           });
 
-          console.log('BUILD RESPONSE:', JSON.stringify(buildResponse, null, 2));
+          log(`BUILD response: ${JSON.stringify(buildResponse)}`, 'virtfusion');
 
-          // VirtFusion returns password in the build response
+          // VirtFusion returns password in the build response - check multiple locations
           const buildData = buildResponse.data;
           password =
             buildData?.settings?.decryptedPassword ||
             buildData?.settings?.password ||
             buildData?.decryptedPassword ||
             buildData?.password ||
+            buildData?.rootPassword ||
+            buildData?.credentials?.password ||
             undefined;
 
-          console.log('EXTRACTED PASSWORD:', password);
+          log(`Password from BUILD response: ${password ? 'FOUND' : 'NOT FOUND'}`, 'virtfusion');
+
+          // If we didn't get IP from CREATE, try BUILD response
+          if (!primaryIp) {
+            primaryIp = buildData?.primaryIp || buildData?.ip || buildData?.ipAddress || undefined;
+            log(`IP from BUILD response: ${primaryIp || 'not found'}`, 'virtfusion');
+          }
 
           log(`Server ${server.id} build initiated`, 'virtfusion');
 
-          // Fetch the server details to get the IP address (assigned during/after build)
-          try {
-            const serverDetails = await this.getServer(server.id.toString(), false);
-            primaryIp = serverDetails?.primaryIp;
-            console.log('FETCHED IP AFTER BUILD:', primaryIp);
-          } catch (ipError: any) {
-            log(`Failed to fetch IP for server ${server.id}: ${ipError.message}`, 'virtfusion');
+          // If still no IP, wait a moment and fetch server details (IP assigned async)
+          if (!primaryIp) {
+            log(`No IP yet, waiting 2 seconds then fetching server details...`, 'virtfusion');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Try up to 3 times with 2 second delays
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const serverDetails = await this.getServer(server.id.toString(), false);
+                primaryIp = serverDetails?.primaryIp;
+                log(`Attempt ${attempt}: Fetched IP = ${primaryIp || 'not found'}`, 'virtfusion');
+                if (primaryIp) break;
+                if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 2000));
+              } catch (ipError: any) {
+                log(`Attempt ${attempt}: Failed to fetch server details: ${ipError.message}`, 'virtfusion');
+              }
+            }
           }
         } catch (buildError: any) {
           log(`Server build failed: ${buildError.message}`, 'virtfusion');
@@ -1632,6 +1658,8 @@ export class VirtFusionClient {
       } else {
         log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
       }
+
+      log(`FINAL: serverId=${server.id}, password=${password ? 'SET' : 'NONE'}, primaryIp=${primaryIp || 'NONE'}`, 'virtfusion');
 
       return {
         serverId: server.id,
