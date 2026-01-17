@@ -1566,7 +1566,7 @@ export class VirtFusionClient {
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
 
     try {
-      // Create the server with OS template included - this is when VirtFusion generates the password
+      // Step 1: Create the server
       const createPayload: Record<string, any> = {
         userId,
         packageId,
@@ -1578,26 +1578,50 @@ export class VirtFusionClient {
         createPayload.hypervisorId = hypervisorGroupId;
       }
 
-      // Include OS template in creation request - this makes VirtFusion generate and return password
-      if (osId) {
-        createPayload.operatingSystemId = osId;
-      }
-
       const response = await this.request<{ data: any }>('/servers', {
         method: 'POST',
         body: JSON.stringify(createPayload),
       });
 
       const server = response.data;
-
-      // Extract password from creation response
-      let password: string | undefined =
-        server.settings?.decryptedPassword ||
-        server.settings?.password ||
-        server.password ||
-        undefined;
-
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
+
+      let password: string | undefined = undefined;
+
+      // Step 2: Build the OS on the server
+      if (osId) {
+        try {
+          log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
+          const buildBody: Record<string, any> = {
+            operatingSystemId: osId,
+            name: hostname,
+          };
+
+          const buildResponse = await this.request<{ data: any }>(`/servers/${server.id}/build`, {
+            method: 'POST',
+            body: JSON.stringify(buildBody),
+          });
+
+          console.log('BUILD RESPONSE:', JSON.stringify(buildResponse, null, 2));
+
+          // VirtFusion returns password in the build response
+          const buildData = buildResponse.data;
+          password =
+            buildData?.settings?.decryptedPassword ||
+            buildData?.settings?.password ||
+            buildData?.decryptedPassword ||
+            buildData?.password ||
+            undefined;
+
+          console.log('EXTRACTED PASSWORD:', password);
+
+          log(`Server ${server.id} build initiated`, 'virtfusion');
+        } catch (buildError: any) {
+          log(`Server build failed: ${buildError.message}`, 'virtfusion');
+        }
+      } else {
+        log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
+      }
 
       return {
         serverId: server.id,
