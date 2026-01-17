@@ -141,12 +141,7 @@ function Router() {
           <Billing />
         </AuthGuard>
       </Route>
-      {/* Admin Routes */}
-      <Route path="/admin">
-        <AdminGuard>
-          <AdminDashboard />
-        </AdminGuard>
-      </Route>
+      {/* Admin Routes - more specific routes first */}
       <Route path="/admin/users">
         <AdminGuard>
           <AdminUsers />
@@ -165,6 +160,11 @@ function Router() {
       <Route path="/admin/tickets">
         <AdminGuard>
           <AdminTickets />
+        </AdminGuard>
+      </Route>
+      <Route path="/admin">
+        <AdminGuard>
+          <AdminDashboard />
         </AdminGuard>
       </Route>
       <Route path="/support/:id">
