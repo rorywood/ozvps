@@ -2702,8 +2702,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'User not authenticated' });
       }
 
+      log(`2FA setup: starting for user ${session.email}`, 'security');
+
       // Import QR code library
-      const QRCode = await import('qrcode');
+      let QRCode;
+      try {
+        QRCode = await import('qrcode');
+        log(`2FA setup: QRCode library loaded`, 'security');
+      } catch (qrErr: any) {
+        log(`2FA setup: Failed to load QRCode library: ${qrErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to load QR code library' });
+      }
 
       // Check if 2FA is already enabled
       const existing = await dbStorage.getTwoFactorAuth(session.auth0UserId);
@@ -2712,26 +2721,57 @@ export async function registerRoutes(
       }
 
       // Generate a new secret
-      const plaintextSecret = totpGenerateSecret();
+      let plaintextSecret: string;
+      try {
+        plaintextSecret = totpGenerateSecret();
+        log(`2FA setup: Secret generated (length: ${plaintextSecret.length})`, 'security');
+      } catch (secretErr: any) {
+        log(`2FA setup: Failed to generate secret: ${secretErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to generate secret' });
+      }
+
       // Encrypt the secret for storage
-      const encryptedSecret = encryptSecret(plaintextSecret);
+      let encryptedSecret: string;
+      try {
+        encryptedSecret = encryptSecret(plaintextSecret);
+        log(`2FA setup: Secret encrypted`, 'security');
+      } catch (encryptErr: any) {
+        log(`2FA setup: Failed to encrypt secret: ${encryptErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to encrypt secret' });
+      }
 
       // Create or update the 2FA record with encrypted secret
-      if (existing) {
-        await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret: encryptedSecret, enabled: false });
-      } else {
-        await dbStorage.createTwoFactorAuth({
-          auth0UserId: session.auth0UserId,
-          secret: encryptedSecret,
-          enabled: false,
-        });
+      try {
+        if (existing) {
+          await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret: encryptedSecret, enabled: false });
+          log(`2FA setup: Updated existing record`, 'security');
+        } else {
+          await dbStorage.createTwoFactorAuth({
+            auth0UserId: session.auth0UserId,
+            secret: encryptedSecret,
+            enabled: false,
+          });
+          log(`2FA setup: Created new record`, 'security');
+        }
+      } catch (dbErr: any) {
+        log(`2FA setup: Database error: ${dbErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to save 2FA configuration' });
       }
 
       // Generate QR code URL using plaintext secret (user needs to scan it)
-      const otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
-      const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+      let otpAuthUrl: string;
+      let qrCodeDataUrl: string;
+      try {
+        otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
+        log(`2FA setup: URI generated: ${otpAuthUrl.substring(0, 50)}...`, 'security');
+        qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+        log(`2FA setup: QR code generated`, 'security');
+      } catch (qrGenErr: any) {
+        log(`2FA setup: Failed to generate QR code: ${qrGenErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to generate QR code' });
+      }
 
-      log(`2FA setup initiated for user ${session.email}`, 'security');
+      log(`2FA setup completed successfully for user ${session.email}`, 'security');
 
       res.json({
         secret: plaintextSecret, // Show plaintext to user for manual entry
@@ -2739,7 +2779,7 @@ export async function registerRoutes(
         otpAuthUrl,
       });
     } catch (error: any) {
-      log(`Error setting up 2FA: ${error.message}`, 'api');
+      log(`Error setting up 2FA: ${error.message}\n${error.stack}`, 'api');
       res.status(500).json({ error: 'Failed to set up 2FA' });
     }
   });
