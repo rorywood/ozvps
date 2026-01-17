@@ -51,21 +51,24 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
       {/* Status Header */}
       <div className={cn(
         "rounded-xl p-4 border",
-        isComplete && "bg-gradient-to-r from-emerald-500/10 to-emerald-600/5 border-emerald-500/20",
-        isFailed && "bg-gradient-to-r from-red-500/10 to-red-600/5 border-red-500/20",
-        isRunning && "bg-gradient-to-r from-blue-500/10 to-blue-600/5 border-blue-500/20",
-        !isRunning && !isComplete && !isFailed && "bg-card/50 border-border"
+        "bg-gradient-to-r from-blue-500/10 to-blue-600/5 border-blue-500/20", // Default
+        isComplete && "from-emerald-500/10 to-emerald-600/5 border-emerald-500/20",
+        isFailed && "from-red-500/10 to-red-600/5 border-red-500/20"
       )}>
         <div className="flex items-center gap-3 mb-3">
           <div className={cn(
             "w-10 h-10 rounded-full flex items-center justify-center",
+            "bg-blue-500/20", // Default
             isComplete && "bg-emerald-500/20",
-            isFailed && "bg-red-500/20",
-            isRunning && "bg-blue-500/20"
+            isFailed && "bg-red-500/20"
           )}>
-            {isRunning && <Loader2 className="w-5 h-5 animate-spin text-blue-400" />}
-            {isComplete && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-            {isFailed && <AlertCircle className="w-5 h-5 text-red-400" />}
+            {isComplete ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            ) : isFailed ? (
+              <AlertCircle className="w-5 h-5 text-red-400" />
+            ) : (
+              <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+            )}
           </div>
           <div className="flex-1">
             <h3 className={cn("font-semibold", config.color)}>
@@ -86,15 +89,15 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
         </div>
 
         {/* Progress Bar */}
-        <div className="h-2 bg-black/20 rounded-full overflow-hidden">
+        <div className="h-2.5 bg-black/30 rounded-full overflow-hidden">
           <div
             className={cn(
               "h-full rounded-full transition-all duration-500 ease-out",
-              isComplete && "bg-gradient-to-r from-emerald-500 to-emerald-400",
-              isFailed && "bg-gradient-to-r from-red-500 to-red-400",
-              isRunning && "bg-gradient-to-r from-blue-500 to-blue-400"
+              "bg-gradient-to-r from-blue-500 to-blue-400", // Default
+              isComplete && "from-emerald-500 to-emerald-400",
+              isFailed && "from-red-500 to-red-400"
             )}
-            style={{ width: `${percent}%` }}
+            style={{ width: `${Math.max(percent, 2)}%` }}
           />
         </div>
 
