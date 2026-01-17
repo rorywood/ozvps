@@ -1193,7 +1193,7 @@ export default function ServerDetail() {
                 </p>
               </div>
             </div>
-            <Link href={`/support/new?server=${serverId}`}>
+            <Link href="/support">
               <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
                 Open Ticket
               </Button>

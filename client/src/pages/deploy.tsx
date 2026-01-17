@@ -423,7 +423,7 @@ export default function DeployPage() {
                       <p className="text-muted-foreground mb-4 leading-relaxed">
                         All service plans are currently unavailable due to capacity constraints. New deployments are temporarily suspended while infrastructure expansion is underway. Existing services remain fully operational. Availability will resume once additional resources are provisioned.
                       </p>
-                      <Link href="/support/new">
+                      <Link href="/support">
                         <Button variant="outline" className="border-warning/50 text-warning hover:bg-warning/20">
                           Open a Support Ticket
                         </Button>
