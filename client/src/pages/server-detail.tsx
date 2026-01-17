@@ -481,12 +481,19 @@ export default function ServerDetail() {
   const [manualResetLoading, setManualResetLoading] = useState(false);
   const [manualResetError, setManualResetError] = useState<string | null>(null);
   const [autoFetchAttempted, setAutoFetchAttempted] = useState(false);
+  const [credentialsFetchStatus, setCredentialsFetchStatus] = useState<'idle' | 'checking' | 'ready' | 'failed'>('idle');
 
-  // Auto-fetch credentials with smart retry
+  // Auto-fetch credentials with persistent retry until guest agent is ready
   const autoFetchCredentials = async (retryCount = 0): Promise<boolean> => {
     if (!serverId || !server?.primaryIp) return false;
 
-    console.log(`[AUTO-FETCH] Attempt ${retryCount + 1} to fetch credentials`);
+    // Max retries: 10 attempts over ~5 minutes (30s, 30s, 30s, 30s, 30s, 60s, 60s, 60s, 60s, 60s)
+    const MAX_RETRIES = 10;
+    const isGuestAgentError = (error: any) =>
+      error.message?.includes('guest agent') || error.message?.includes('QEMU');
+
+    console.log(`[AUTO-FETCH] Attempt ${retryCount + 1}/${MAX_RETRIES} to fetch credentials`);
+    setCredentialsFetchStatus('checking');
 
     try {
       const response = await api.resetServerPassword(serverId);
@@ -499,6 +506,7 @@ export default function ServerDetail() {
         };
         updateSavedCredentials(creds);
         setShowSavedCredentials(true);
+        setCredentialsFetchStatus('ready');
         console.log('[AUTO-FETCH] ✅ Credentials retrieved successfully');
         toast({
           title: "Server Ready!",
@@ -510,24 +518,33 @@ export default function ServerDetail() {
     } catch (error: any) {
       console.log(`[AUTO-FETCH] ❌ Attempt ${retryCount + 1} failed:`, error.message);
 
-      // If this was the first attempt and guest agent isn't ready, retry once after 30s
-      if (retryCount === 0 && error.message?.includes('guest agent')) {
-        console.log('[AUTO-FETCH] Guest agent not ready, will retry in 30 seconds');
-        toast({
-          title: "Preparing Credentials",
-          description: "Guest agent starting, will retry in 30 seconds...",
-        });
+      // If guest agent not ready and we haven't hit max retries, keep trying
+      if (isGuestAgentError(error) && retryCount < MAX_RETRIES - 1) {
+        // Use exponential backoff: 30s for first 5 attempts, then 60s
+        const delayMs = retryCount < 5 ? 30000 : 60000;
+        const delaySec = delayMs / 1000;
+
+        console.log(`[AUTO-FETCH] Guest agent not ready, will retry in ${delaySec} seconds (attempt ${retryCount + 2}/${MAX_RETRIES})`);
+
+        // Only show toast on first few failures to avoid spam
+        if (retryCount < 3) {
+          toast({
+            title: "Preparing Server Access",
+            description: `Guest agent is starting up, checking again in ${delaySec}s...`,
+          });
+        }
 
         return new Promise((resolve) => {
           setTimeout(async () => {
-            const success = await autoFetchCredentials(1); // Retry once
+            const success = await autoFetchCredentials(retryCount + 1);
             resolve(success);
-          }, 30000); // Wait 30 seconds before retry
+          }, delayMs);
         });
       }
 
-      // Failed after retry or different error
-      console.log('[AUTO-FETCH] ❌ Auto-fetch failed, showing manual button');
+      // Failed after all retries or different error - show manual button
+      console.log('[AUTO-FETCH] ❌ Auto-fetch failed after retries, manual intervention needed');
+      setCredentialsFetchStatus('failed');
       return false;
     }
   };
@@ -1486,12 +1503,12 @@ export default function ServerDetail() {
           </div>
         )}
 
-        {/* Get SSH Credentials Button - Show when server is ready but auto-fetch failed */}
+        {/* Get SSH Credentials Button - Show ONLY after all auto-retry attempts failed */}
         {server?.status === 'running' &&
          server?.needsSetup === false &&
          !savedCredentials &&
          !reinstallTask.credentials &&
-         autoFetchAttempted &&
+         credentialsFetchStatus === 'failed' &&
          (!reinstallTask.isActive || reinstallTask.status === 'complete') &&
          (() => {
            try {
@@ -1504,17 +1521,17 @@ export default function ServerDetail() {
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-primary flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-primary">Retry SSH Credentials</h3>
+                <h3 className="font-semibold text-primary">Manual Credential Retrieval Required</h3>
                 <p className="text-sm text-muted-foreground">
-                  Automatic credential retrieval didn't complete. Try again manually.
+                  The QEMU guest agent is taking longer than expected to start.
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                <strong>Note:</strong> The guest agent may still be starting up.
-                Wait a few moments and click the button below to retry.
+                <strong>Note:</strong> We tried automatically fetching your credentials multiple times over several minutes, but the guest agent is not responding yet.
+                This is normal for some OS templates. You can try manually now, or wait a few more minutes for the guest agent to fully initialize.
               </p>
 
               {manualResetError && (
