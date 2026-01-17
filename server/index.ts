@@ -14,6 +14,7 @@ import { startCancellationProcessor } from "./cancellation-processor";
 import { startOrphanCleanupProcessor } from "./orphan-cleanup-processor";
 import { startBillingProcessor } from "./billing-processor";
 import { connectRedis, disconnectRedis, redisClient } from "./redis";
+import { runAutoMigrations } from "./db";
 import { validateOrExit, getEnvironmentSummary } from "./env-validator";
 import { initSentry, sentryRequestHandler, sentryErrorHandler, captureException } from "./sentry";
 
@@ -306,6 +307,14 @@ app.use((req, res, next) => {
   // Initialize Redis for session storage
   await connectRedis();
   initializeStorage(redisClient);
+
+  // Run automatic database migrations
+  try {
+    await runAutoMigrations();
+    log('Database migrations complete', 'db');
+  } catch (error: any) {
+    log(`Database migration warning: ${error.message}`, 'db');
+  }
 
   // Initialize Stripe schema and sync data on startup
   try {
