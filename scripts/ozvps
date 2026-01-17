@@ -145,31 +145,61 @@ parse_db_url() {
 }
 
 get_app_status() {
-    if pm2 describe "$SERVICE_NAME" &>/dev/null; then
-        local status=$(pm2 jlist 2>/dev/null | grep -o '"name":"'$SERVICE_NAME'"[^}]*"status":"[^"]*"' | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+    if ! pm2 describe "$SERVICE_NAME" &>/dev/null; then
+        echo "stopped"
+        return
+    fi
+
+    # Try jq first if available
+    if command -v jq &>/dev/null; then
+        local status=$(pm2 jlist 2>/dev/null | jq -r '.[] | select(.name=="'"$SERVICE_NAME"'") | .pm2_env.status' 2>/dev/null)
+        if [[ -n "$status" ]]; then
+            echo "$status"
+            return
+        fi
+    fi
+
+    # Fallback: parse pm2 show output
+    local status=$(pm2 show "$SERVICE_NAME" 2>/dev/null | grep -E "^\│ status" | awk '{print $4}')
+    if [[ -n "$status" ]]; then
         echo "$status"
     else
-        echo "stopped"
+        echo "unknown"
     fi
 }
 
 get_uptime() {
-    local uptime_ms=$(pm2 jlist 2>/dev/null | grep -o '"name":"'$SERVICE_NAME'"[^}]*"pm_uptime":[0-9]*' | grep -o '"pm_uptime":[0-9]*' | cut -d':' -f2)
-    if [[ -n "$uptime_ms" ]]; then
-        local now_ms=$(($(date +%s) * 1000))
-        local diff_ms=$((now_ms - uptime_ms))
-        local diff_sec=$((diff_ms / 1000))
-        local days=$((diff_sec / 86400))
-        local hours=$(((diff_sec % 86400) / 3600))
-        local mins=$(((diff_sec % 3600) / 60))
+    if ! pm2 describe "$SERVICE_NAME" &>/dev/null; then
+        echo "N/A"
+        return
+    fi
 
-        if [[ $days -gt 0 ]]; then
-            echo "${days}d ${hours}h"
-        elif [[ $hours -gt 0 ]]; then
-            echo "${hours}h ${mins}m"
-        else
-            echo "${mins}m"
+    # Try jq first if available
+    if command -v jq &>/dev/null; then
+        local uptime_ms=$(pm2 jlist 2>/dev/null | jq -r '.[] | select(.name=="'"$SERVICE_NAME"'") | .pm2_env.pm_uptime' 2>/dev/null)
+        if [[ -n "$uptime_ms" && "$uptime_ms" != "null" ]]; then
+            local now_ms=$(($(date +%s) * 1000))
+            local diff_ms=$((now_ms - uptime_ms))
+            local diff_sec=$((diff_ms / 1000))
+            local days=$((diff_sec / 86400))
+            local hours=$(((diff_sec % 86400) / 3600))
+            local mins=$(((diff_sec % 3600) / 60))
+
+            if [[ $days -gt 0 ]]; then
+                echo "${days}d ${hours}h"
+            elif [[ $hours -gt 0 ]]; then
+                echo "${hours}h ${mins}m"
+            else
+                echo "${mins}m"
+            fi
+            return
         fi
+    fi
+
+    # Fallback: parse pm2 show output for uptime
+    local uptime_str=$(pm2 show "$SERVICE_NAME" 2>/dev/null | grep -E "^\│ uptime" | awk '{print $4}')
+    if [[ -n "$uptime_str" ]]; then
+        echo "$uptime_str"
     else
         echo "N/A"
     fi
