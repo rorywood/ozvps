@@ -44,10 +44,11 @@ self_update() {
     shift
     local SCRIPT_ARGS=("$@")
 
-    # Get branch from installation
+    # Get branch from installation (use same logic as get_branch)
     local BRANCH="main"
     if [[ -f "$INSTALL_DIR/.ozvps-branch" ]]; then
-        BRANCH=$(cat "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || echo "main")
+        BRANCH=$(head -1 "$INSTALL_DIR/.ozvps-branch" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [[ -z "$BRANCH" ]] && BRANCH="main"
     fi
 
     local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps"
