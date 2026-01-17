@@ -23,11 +23,11 @@ export function AdminGuard({ children }: AdminGuardProps) {
     );
   }
 
-  if (!auth) {
+  if (!auth?.user) {
     return <Redirect to="/login" />;
   }
 
-  if (!auth.isAdmin) {
+  if (!auth.user.isAdmin) {
     return <Redirect to="/dashboard" />;
   }
 
