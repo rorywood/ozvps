@@ -221,9 +221,12 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
 }
 
 // Get billing status for a server
-export async function getServerBillingStatus(virtfusionServerId: string) {
+export async function getServerBillingStatus(virtfusionServerId: string | number) {
+  // Ensure consistent string type for database query
+  const serverId = String(virtfusionServerId);
+
   const billing = await db.select().from(serverBilling)
-    .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
+    .where(eq(serverBilling.virtfusionServerId, serverId))
     .limit(1);
 
   return billing.length > 0 ? billing[0] : null;
