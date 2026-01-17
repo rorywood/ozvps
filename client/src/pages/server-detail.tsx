@@ -454,7 +454,12 @@ export default function ServerDetail() {
       
       // Mark as reinstall mode (not initial setup)
       updateSetupMode(false);
-      
+
+      // Clear the credentials dismissed flag so banner shows again after reinstall
+      try {
+        sessionStorage.removeItem(`credentialsDismissed:${serverId}`);
+      } catch {}
+
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
@@ -491,9 +496,10 @@ export default function ServerDetail() {
       // Mark as setup mode (initial setup, not reinstall)
       updateSetupMode(true);
 
-      // Clear setupCompleted flag to allow checklist to show
+      // Clear setupCompleted and credentialsDismissed flags
       try {
         sessionStorage.removeItem(`setupCompleted:${serverId}`);
+        sessionStorage.removeItem(`credentialsDismissed:${serverId}`);
       } catch {
         // Ignore storage errors
       }
@@ -1341,8 +1347,8 @@ export default function ServerDetail() {
                   <span className="text-xs text-orange-400 font-medium">
                     {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
                      consoleLock.isLocked && consoleLock.action === 'reboot' ? 'Rebooting...' :
-                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Rebooting...' :
-                     consoleLock.isLocked ? 'Rebooting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Reinstalling...' :
+                     consoleLock.isLocked ? 'Processing...' :
                      displayStatus === 'starting' ? 'Starting...' :
                      displayStatus === 'rebooting' ? 'Rebooting...' :
                      displayStatus === 'stopping' ? 'Stopping...' :
