@@ -170,18 +170,6 @@ export default function ServerDetail() {
     }
   };
 
-  // Auto-dismiss banner after 60 seconds once it's visible
-  const bannerVisible = credentialsWereEmailed && server?.status === 'running' && !bannerDismissed;
-  useEffect(() => {
-    if (!bannerVisible) return;
-
-    const timer = setTimeout(() => {
-      dismissCredentials();
-    }, 60 * 1000);
-
-    return () => clearTimeout(timer);
-  }, [bannerVisible]);
-
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -231,6 +219,18 @@ export default function ServerDetail() {
       return 2000; // REDUCED from 1s to 2s for better performance
     },
   });
+
+  // Auto-dismiss banner after 60 seconds once it's visible
+  const bannerVisible = credentialsWereEmailed && server?.status === 'running' && !bannerDismissed;
+  useEffect(() => {
+    if (!bannerVisible) return;
+
+    const timer = setTimeout(() => {
+      dismissCredentials();
+    }, 60 * 1000);
+
+    return () => clearTimeout(timer);
+  }, [bannerVisible]);
 
   // Dynamic page title
   useDocumentTitle(server?.name ? `${server.name}` : 'Server Details');
