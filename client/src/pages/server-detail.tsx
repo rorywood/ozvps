@@ -403,11 +403,16 @@ export default function ServerDetail() {
       // - Server is fully booted
       // - All buttons are active
       // - Status is green everywhere
-      const timer = setTimeout(() => {
-        // Save credentials if available (will be shown in banner later)
+      const timer = setTimeout(async () => {
+        // Save credentials if available from reinstall task (will be shown in banner later)
         if (reinstallTask.credentials) {
           updateSavedCredentials(reinstallTask.credentials);
           setShowSavedCredentials(true);
+        } else if (!autoFetchAttempted) {
+          // No credentials from initial build response, attempt auto-fetch
+          // This will try once, wait 30s, then retry once
+          setAutoFetchAttempted(true);
+          await autoFetchCredentials(0);
         }
 
         // Reset reinstallTask to stop polling and clear state
@@ -473,6 +478,57 @@ export default function ServerDetail() {
   // Manual password reset state for "Get SSH Credentials" button
   const [manualResetLoading, setManualResetLoading] = useState(false);
   const [manualResetError, setManualResetError] = useState<string | null>(null);
+  const [autoFetchAttempted, setAutoFetchAttempted] = useState(false);
+
+  // Auto-fetch credentials with smart retry
+  const autoFetchCredentials = async (retryCount = 0): Promise<boolean> => {
+    if (!serverId || !server?.primaryIp) return false;
+
+    console.log(`[AUTO-FETCH] Attempt ${retryCount + 1} to fetch credentials`);
+
+    try {
+      const response = await api.resetServerPassword(serverId);
+
+      if (response.password) {
+        const creds = {
+          serverIp: server.primaryIp || 'N/A',
+          username: response.username || 'root',
+          password: response.password
+        };
+        updateSavedCredentials(creds);
+        setShowSavedCredentials(true);
+        console.log('[AUTO-FETCH] ✅ Credentials retrieved successfully');
+        toast({
+          title: "Server Ready!",
+          description: "Your SSH credentials are available below.",
+        });
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.log(`[AUTO-FETCH] ❌ Attempt ${retryCount + 1} failed:`, error.message);
+
+      // If this was the first attempt and guest agent isn't ready, retry once after 30s
+      if (retryCount === 0 && error.message?.includes('guest agent')) {
+        console.log('[AUTO-FETCH] Guest agent not ready, will retry in 30 seconds');
+        toast({
+          title: "Preparing Credentials",
+          description: "Guest agent starting, will retry in 30 seconds...",
+        });
+
+        return new Promise((resolve) => {
+          setTimeout(async () => {
+            const success = await autoFetchCredentials(1); // Retry once
+            resolve(success);
+          }, 30000); // Wait 30 seconds before retry
+        });
+      }
+
+      // Failed after retry or different error
+      console.log('[AUTO-FETCH] ❌ Auto-fetch failed, showing manual button');
+      return false;
+    }
+  };
 
   // Manual password reset handler
   const handleGetCredentials = async () => {
@@ -1428,11 +1484,12 @@ export default function ServerDetail() {
           </div>
         )}
 
-        {/* Get SSH Credentials Button - Show when server is ready but no credentials saved */}
+        {/* Get SSH Credentials Button - Show when server is ready but auto-fetch failed */}
         {server?.status === 'running' &&
          server?.needsSetup === false &&
          !savedCredentials &&
          !reinstallTask.credentials &&
+         autoFetchAttempted &&
          (!reinstallTask.isActive || reinstallTask.status === 'complete') &&
          (() => {
            try {
@@ -1445,17 +1502,17 @@ export default function ServerDetail() {
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-primary flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-primary">Get SSH Credentials</h3>
+                <h3 className="font-semibold text-primary">Retry SSH Credentials</h3>
                 <p className="text-sm text-muted-foreground">
-                  Retrieve your server credentials to access via SSH
+                  Automatic credential retrieval didn't complete. Try again manually.
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                <strong>Note:</strong> The guest agent needs 30-60 seconds to start after deployment.
-                If this fails, please wait a moment and try again.
+                <strong>Note:</strong> The guest agent may still be starting up.
+                Wait a few moments and click the button below to retry.
               </p>
 
               {manualResetError && (
