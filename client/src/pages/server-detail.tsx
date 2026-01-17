@@ -143,6 +143,10 @@ export default function ServerDetail() {
     }
   });
 
+  // Track when server last booted to disable password reset for 2 minutes
+  const [serverBootedAt, setServerBootedAt] = useState<number | null>(null);
+  const [isPasswordResetDisabled, setIsPasswordResetDisabled] = useState(false);
+
   // Dismiss credentials banner
   const dismissCredentials = () => {
     try {
@@ -396,15 +400,17 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
 
-  // Mark when build completes (so banner shows regardless of credentials)
+  // Mark when build starts (so banner shows after auto-dismiss)
+  // Set flag EARLY before auto-dismiss calls reset() and clears everything
   useEffect(() => {
-    if (reinstallTask.status === 'complete' && !credentialsWereEmailed) {
+    if (reinstallTask.isActive && !credentialsWereEmailed) {
+      console.log('[BANNER] Setting credentialsWereEmailed to true - task is active');
       setCredentialsWereEmailed(true);
       try {
         sessionStorage.setItem(`credentialsEmailed:${serverId}`, 'true');
       } catch {}
     }
-  }, [reinstallTask.status, serverId, credentialsWereEmailed]);
+  }, [reinstallTask.isActive, serverId, credentialsWereEmailed]);
 
   // Refetch server data when build completes OR enters rebooting status
   // This ensures needsSetup gets updated from true->false when commissioned=3
@@ -416,6 +422,25 @@ export default function ServerDetail() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
   }, [reinstallTask.status, serverId, queryClient]);
+
+  // Track server boot to disable password reset for 2 minutes (guest agent needs time)
+  const prevServerStatus = useRef<string | null>(null);
+  useEffect(() => {
+    if (server?.status === 'running' && prevServerStatus.current !== 'running') {
+      console.log('[PASSWORD RESET] Server just booted - disabling reset for 2 minutes');
+      setServerBootedAt(Date.now());
+      setIsPasswordResetDisabled(true);
+
+      // Re-enable after 2 minutes
+      const timer = setTimeout(() => {
+        console.log('[PASSWORD RESET] 2 minutes elapsed - re-enabling password reset');
+        setIsPasswordResetDisabled(false);
+      }, 2 * 60 * 1000);
+
+      return () => clearTimeout(timer);
+    }
+    prevServerStatus.current = server?.status || null;
+  }, [server?.status]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -1208,13 +1233,25 @@ export default function ServerDetail() {
       <div className="space-y-6 pt-6 pb-20">
 
         {/* Credentials Emailed Banner - Shows after server provisioning completes */}
-        {credentialsWereEmailed && server?.status === 'running' && (() => {
+        {(() => {
+          const shouldShow = credentialsWereEmailed && server?.status === 'running';
+          console.log('[BANNER] Render check:', {
+            credentialsWereEmailed,
+            serverStatus: server?.status,
+            shouldShow,
+            serverId
+          });
+
+          if (!shouldShow) return null;
+
           try {
             if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
+              console.log('[BANNER] Not showing - already dismissed');
               return null;
             }
           } catch {}
 
+          console.log('[BANNER] ✅ SHOWING BANNER');
           return (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-5" data-testid="banner-credentials">
               <div className="flex items-center gap-3">
@@ -1518,9 +1555,10 @@ export default function ServerDetail() {
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() => setPasswordResetDialogOpen(true)}
-                  disabled={isSuspended}
+                  disabled={isSuspended || isPasswordResetDisabled}
                 >
                   <Key className="h-4 w-4 mr-2" /> Reset Password
+                  {isPasswordResetDisabled && <span className="text-[10px] text-muted-foreground ml-auto">(wait 2min)</span>}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1908,20 +1946,25 @@ export default function ServerDetail() {
                 </div>
 
                 <div className="space-y-4">
-                  <Button 
+                  <Button
                     className={cn(
                       "text-foreground",
-                      (isSuspended || cancellationData?.cancellation)
+                      (isSuspended || cancellationData?.cancellation || isPasswordResetDisabled)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
                         : "bg-blue-600 hover:bg-blue-700"
                     )}
                     onClick={() => setPasswordResetDialogOpen(true)}
-                    disabled={isSuspended || !!cancellationData?.cancellation}
+                    disabled={isSuspended || !!cancellationData?.cancellation || isPasswordResetDisabled}
                     data-testid="button-reset-password"
                   >
                     <Key className="h-4 w-4 mr-2" />
                     Reset Password
                   </Button>
+                  {isPasswordResetDisabled && (
+                    <p className="text-sm text-amber-400/80 mt-2">
+                      Password reset is temporarily disabled. The QEMU guest agent needs 2 minutes to start after boot.
+                    </p>
+                  )}
                   {isSuspended && (
                     <p className="text-sm text-yellow-400/80 mt-2">
                       Password reset is disabled while the server is suspended.
