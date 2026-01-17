@@ -107,6 +107,16 @@ if [ -z "$SSL_EMAIL" ]; then
     SSL_EMAIL="admin@${DOMAIN}"
 fi
 
+# Optional: Sentry DSN
+echo ""
+echo -e "${BOLD}Optional: Error Tracking (Sentry)${NC}"
+read -p "Sentry DSN (press Enter to skip): " SENTRY_DSN < /dev/tty
+
+# Optional: Resend API Key
+echo ""
+echo -e "${BOLD}Optional: Email Service (Resend)${NC}"
+read -p "Resend API Key (press Enter to skip): " RESEND_KEY < /dev/tty
+
 echo ""
 echo -e "${GREEN}✓ Configuration collected${NC}"
 echo ""
@@ -309,10 +319,21 @@ AUTH0_CLIENT_SECRET=${AUTH0_CSEC}
 # Application Settings
 NODE_ENV=development
 PORT=3000
-
-# Error Tracking (Sentry)
-SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352
 ENVEOF
+
+# Add optional Sentry DSN if provided
+if [ -n "$SENTRY_DSN" ]; then
+    echo "" >> "$INSTALL_DIR/.env"
+    echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
+    echo "SENTRY_DSN=$SENTRY_DSN" >> "$INSTALL_DIR/.env"
+fi
+
+# Add optional Resend API key if provided
+if [ -n "$RESEND_KEY" ]; then
+    echo "" >> "$INSTALL_DIR/.env"
+    echo "# Email Service (Resend)" >> "$INSTALL_DIR/.env"
+    echo "RESEND_API_KEY=$RESEND_KEY" >> "$INSTALL_DIR/.env"
+fi
 chmod 600 "$INSTALL_DIR/.env"
 echo -e "${GREEN}✓ Configuration file created (.env)${NC}"
 echo ""

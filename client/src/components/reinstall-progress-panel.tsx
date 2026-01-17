@@ -14,7 +14,7 @@ const STATUS_CONFIG: Record<ReinstallStatus, { label: string; color: string; bgC
   idle: { label: 'Idle', color: 'text-slate-400', bgColor: 'bg-slate-500/10' },
   queued: { label: 'Queued', color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   provisioning: { label: 'Provisioning', color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  imaging: { label: 'Downloading Image', color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+  imaging: { label: 'Downloading Image', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10' },
   installing: { label: 'Installing OS', color: 'text-amber-400', bgColor: 'bg-amber-500/10' },
   configuring: { label: 'Configuring', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10' },
   rebooting: { label: 'Rebooting', color: 'text-orange-400', bgColor: 'bg-orange-500/10' },

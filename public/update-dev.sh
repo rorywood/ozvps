@@ -155,7 +155,9 @@ systemctl start postgresql 2>/dev/null || service postgresql start
 systemctl enable postgresql >/dev/null 2>&1 || true
 sleep 2
 
-sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD 'OzVPS_Dev_2024!';" 2>&1 | grep -v "already exists" || true
+# Generate secure random password for dev DB if creating new user
+DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 20)
+sudo -u postgres psql -c "CREATE USER ozvps_dev WITH PASSWORD '$DB_PASS';" 2>&1 | grep -v "already exists" || true
 sudo -u postgres psql -c "CREATE DATABASE ozvps_dev OWNER ozvps_dev;" 2>&1 | grep -v "already exists" || true
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ozvps_dev TO ozvps_dev;" >/dev/null 2>&1 || true
 success "PostgreSQL ready"
@@ -237,14 +239,21 @@ cp "$TEMP_DIR/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
 cp "$TEMP_DIR/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
 rm -rf "$TEMP_DIR" "$TEMP_EXTRACT" "$TEMP_ZIP"
 
-# Add SENTRY_DSN if not present
+# Add SENTRY_DSN if not present (prompt user)
 info "Checking Sentry configuration..."
 if [ -f "$INSTALL_DIR/.env" ]; then
     if ! grep -q "SENTRY_DSN" "$INSTALL_DIR/.env"; then
-        echo "" >> "$INSTALL_DIR/.env"
-        echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
-        echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
-        success "Added Sentry DSN to .env"
+        echo ""
+        echo -e "${YELLOW}Sentry DSN not configured. Enter your Sentry DSN (or press Enter to skip):${NC}"
+        read -p "SENTRY_DSN: " SENTRY_DSN_INPUT < /dev/tty
+        if [ -n "$SENTRY_DSN_INPUT" ]; then
+            echo "" >> "$INSTALL_DIR/.env"
+            echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
+            echo "SENTRY_DSN=$SENTRY_DSN_INPUT" >> "$INSTALL_DIR/.env"
+            success "Added Sentry DSN to .env"
+        else
+            warning "Skipped Sentry configuration"
+        fi
     else
         success "Sentry DSN already configured"
     fi
@@ -252,14 +261,21 @@ else
     warning ".env file not found, will add Sentry DSN later"
 fi
 
-# Add RESEND_API_KEY if not present
+# Add RESEND_API_KEY if not present (prompt user)
 info "Checking Resend email configuration..."
 if [ -f "$INSTALL_DIR/.env" ]; then
     if ! grep -q "RESEND_API_KEY" "$INSTALL_DIR/.env"; then
-        echo "" >> "$INSTALL_DIR/.env"
-        echo "# Email Service (Resend)" >> "$INSTALL_DIR/.env"
-        echo "RESEND_API_KEY=re_U9WresH8_6Uznzf6sanS8M7HS5ftF3c7A" >> "$INSTALL_DIR/.env"
-        success "Added Resend API key to .env"
+        echo ""
+        echo -e "${YELLOW}Resend API key not configured. Enter your Resend API key (or press Enter to skip):${NC}"
+        read -p "RESEND_API_KEY: " RESEND_KEY_INPUT < /dev/tty
+        if [ -n "$RESEND_KEY_INPUT" ]; then
+            echo "" >> "$INSTALL_DIR/.env"
+            echo "# Email Service (Resend)" >> "$INSTALL_DIR/.env"
+            echo "RESEND_API_KEY=$RESEND_KEY_INPUT" >> "$INSTALL_DIR/.env"
+            success "Added Resend API key to .env"
+        else
+            warning "Skipped Resend configuration - emails will not work"
+        fi
     else
         success "Resend API key already configured"
     fi
@@ -398,13 +414,7 @@ sleep 1
 # ============================================================================
 step_header 6 6 "Restarting Application"
 
-# Final check - ensure SENTRY_DSN is configured (failsafe for bootstrap issue)
-if [ -f "$INSTALL_DIR/.env" ] && ! grep -q "SENTRY_DSN" "$INSTALL_DIR/.env"; then
-    echo "" >> "$INSTALL_DIR/.env"
-    echo "# Error Tracking (Sentry)" >> "$INSTALL_DIR/.env"
-    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> "$INSTALL_DIR/.env"
-    success "Added Sentry DSN to .env (failsafe)"
-fi
+# Note: SENTRY_DSN is now prompted earlier in the script if not configured
 
 info "Stopping old instance..."
 pm2 delete "$SERVICE_NAME" 2>/dev/null || true

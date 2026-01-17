@@ -84,20 +84,34 @@ echo "✓ Files copied"
 # Restore configuration
 cp .env.backup .env 2>/dev/null || true
 
-# Add SENTRY_DSN if not present
+# Add SENTRY_DSN if not present (prompt user)
 if ! grep -q "^SENTRY_DSN=" .env 2>/dev/null; then
-    echo "" >> .env
-    echo "# Error Tracking (Sentry)" >> .env
-    echo "SENTRY_DSN=https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352" >> .env
-    echo "✓ Added Sentry error tracking"
+    echo ""
+    echo "Sentry DSN not configured. Enter your Sentry DSN (or press Enter to skip):"
+    read -p "SENTRY_DSN: " SENTRY_DSN_INPUT < /dev/tty
+    if [ -n "$SENTRY_DSN_INPUT" ]; then
+        echo "" >> .env
+        echo "# Error Tracking (Sentry)" >> .env
+        echo "SENTRY_DSN=$SENTRY_DSN_INPUT" >> .env
+        echo "✓ Added Sentry error tracking"
+    else
+        echo "⚠ Skipped Sentry configuration"
+    fi
 fi
 
-# Add RESEND_API_KEY if not present
+# Add RESEND_API_KEY if not present (prompt user)
 if ! grep -q "^RESEND_API_KEY=" .env 2>/dev/null; then
-    echo "" >> .env
-    echo "# Email Service (Resend)" >> .env
-    echo "RESEND_API_KEY=re_U9WresH8_6Uznzf6sanS8M7HS5ftF3c7A" >> .env
-    echo "✓ Added Resend email configuration"
+    echo ""
+    echo "Resend API key not configured. Enter your Resend API key (or press Enter to skip):"
+    read -p "RESEND_API_KEY: " RESEND_KEY_INPUT < /dev/tty
+    if [ -n "$RESEND_KEY_INPUT" ]; then
+        echo "" >> .env
+        echo "# Email Service (Resend)" >> .env
+        echo "RESEND_API_KEY=$RESEND_KEY_INPUT" >> .env
+        echo "✓ Added Resend email configuration"
+    else
+        echo "⚠ Skipped Resend configuration - emails will not work"
+    fi
 fi
 
 echo "✓ Code updated"

@@ -322,6 +322,24 @@ export function useReinstallTask(serverId: string) {
     }, 2000);
   }, [serverId, poll, stopPolling]);
 
+  const markComplete = useCallback(() => {
+    stopPolling();
+    addTimelineEvent('complete', 'Server ready');
+    setState(prev => {
+      const updated = {
+        ...prev,
+        status: 'complete' as ReinstallStatus,
+        percent: 100,
+      };
+      saveTaskState(serverId, {
+        ...updated,
+        timeline: [...prev.timeline, { status: 'complete', timestamp: Date.now(), message: 'Server ready' }],
+      });
+      return updated;
+    });
+    lastStatusRef.current = 'complete';
+  }, [serverId, stopPolling, addTimelineEvent]);
+
   const reset = useCallback(() => {
     stopPolling();
     clearTaskState(serverId);
@@ -386,6 +404,7 @@ export function useReinstallTask(serverId: string) {
   return {
     ...state,
     startTask,
+    markComplete,
     reset,
   };
 }

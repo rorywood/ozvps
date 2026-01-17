@@ -313,9 +313,11 @@ export default function ServerDetail() {
 
   // AUTO-DISMISS: When setup completes AND server is fully online, show server overview
   // Wait for server to be FULLY booted and running (not just commissioned)
+  // Handles both initial setup AND reinstalls
   useEffect(() => {
-    // Only run if setup mode is currently on
-    if (!isSetupMode) return;
+    // Run if setup mode is on OR if reinstall task is active and at rebooting stage
+    const isReinstallRebooting = reinstallTask.isActive && reinstallTask.status === 'rebooting' && !isSetupMode;
+    if (!isSetupMode && !isReinstallRebooting) return;
 
     // STRICT REQUIREMENTS for dismiss:
     // 1. reinstallTask must be at 'rebooting' (commissioned) or 'complete'
@@ -350,11 +352,20 @@ export default function ServerDetail() {
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 
     if (allConditionsMet) {
-      console.log('[AUTO-DISMISS] ✅ ALL CONDITIONS MET - Dismissing in 2 seconds');
-      // Wait 2 more seconds to ensure:
-      // - Server is fully booted
-      // - All buttons are active
-      // - Status is green everywhere
+      console.log('[AUTO-DISMISS] ✅ ALL CONDITIONS MET - Processing completion');
+
+      // For reinstall (not setup mode): Just mark task as complete (100%)
+      // The ReinstallProgressPanel has its own 2-min auto-dismiss
+      if (!isSetupMode && reinstallTask.isActive) {
+        console.log('[AUTO-DISMISS] Reinstall detected - marking task complete');
+        const timer = setTimeout(() => {
+          reinstallTask.markComplete();
+          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+
+      // For setup mode: Full dismiss sequence
       const timer = setTimeout(() => {
         console.log('[AUTO-DISMISS] Starting dismiss sequence');
 
@@ -398,7 +409,7 @@ export default function ServerDetail() {
         return () => clearTimeout(recheckTimer);
       }
     }
-  }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
+  }, [reinstallTask.status, reinstallTask.rebootingStartTime, reinstallTask.isActive, reinstallTask.markComplete, isSetupMode, server, serverId]);
 
   // Mark when build starts (so banner shows after auto-dismiss)
   // Set flag EARLY before auto-dismiss calls reset() and clears everything
@@ -1024,21 +1035,26 @@ export default function ServerDetail() {
   }
 
   if (isError || !server) {
-    // Don't show error if we're in active setup mode - server might not be fully provisioned yet
-    // ONLY show provisioning message if task is actively running (not complete/rebooting)
+    // Don't show error if we're in active setup/reinstall mode - server might not be fully ready
     const serverNeedsSetup = server?.needsSetup === true;
-    // Exclude 'rebooting' - server is commissioned and booting, not provisioning
-    const taskActivelyProvisioning = reinstallTask.isActive &&
-      reinstallTask.status !== 'failed' &&
-      reinstallTask.status !== 'complete' &&
-      reinstallTask.status !== 'rebooting';
+    // Show loading state if reinstall task is active (any status except failed)
+    // This prevents "Server not found" flashing during reinstall
+    const taskIsActive = reinstallTask.isActive && reinstallTask.status !== 'failed';
 
-    if (taskActivelyProvisioning || serverNeedsSetup || isLoading) {
+    if (taskIsActive || serverNeedsSetup || isLoading) {
+      // Customize message based on task status
+      let loadingMessage = 'Server is being provisioned...';
+      if (reinstallTask.status === 'rebooting') {
+        loadingMessage = 'Server is rebooting...';
+      } else if (reinstallTask.status === 'complete') {
+        loadingMessage = 'Loading server details...';
+      }
+
       return (
         <AppShell>
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
             <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
-            <p>Server is being provisioned...</p>
+            <p>{loadingMessage}</p>
           </div>
         </AppShell>
       );
@@ -1986,8 +2002,8 @@ export default function ServerDetail() {
             {/* Reinstall Section */}
             {reinstallTask.isActive && !isSetupMode ? (
               // Show progress panel when reinstalling
-              <Card className="overflow-hidden border-purple-500/30">
-                <div className="bg-gradient-to-r from-purple-600 to-purple-500 px-5 py-4">
+              <Card className="overflow-hidden border-blue-500/30">
+                <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/20 rounded-lg">
                       <RefreshCw className="h-5 w-5 text-white" />
@@ -2013,8 +2029,8 @@ export default function ServerDetail() {
               <Card className="p-6 border-destructive/30">
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-purple-500/20 rounded-xl">
-                      <RefreshCw className="h-6 w-6 text-purple-400" />
+                    <div className="p-3 bg-blue-500/20 rounded-xl">
+                      <RefreshCw className="h-6 w-6 text-blue-400" />
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-foreground">Reinstall Operating System</h3>
@@ -2061,7 +2077,7 @@ export default function ServerDetail() {
                       "w-full h-12 text-base font-semibold",
                       (isSuspended || cancellationData?.cancellation)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
-                        : "bg-purple-600 hover:bg-purple-700 text-white"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
                     )}
                     onClick={() => {
                       // Pre-fill hostname with current server name
@@ -2384,7 +2400,7 @@ export default function ServerDetail() {
                   className={cn(
                     "text-xs px-2 py-1 rounded transition-colors",
                     hostname === server?.name
-                      ? "bg-purple-500/20 text-purple-400"
+                      ? "bg-blue-500/20 text-blue-400"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )}
                   data-testid="button-use-current-hostname"
@@ -2473,7 +2489,7 @@ export default function ServerDetail() {
           {/* Footer with Install Button */}
           <div className="border-t border-border p-6">
             <Button
-              className="w-full bg-purple-600 hover:bg-purple-700 h-12 text-base font-semibold text-white disabled:opacity-50"
+              className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold text-white disabled:opacity-50"
               onClick={handleReinstall}
               disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
