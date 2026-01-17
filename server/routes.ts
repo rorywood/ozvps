@@ -128,18 +128,10 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { authenticator } from 'otplib';
-
-// Configure authenticator with secure defaults
-authenticator.options = {
-  window: 1, // Allow codes from ±30 seconds to handle time drift
-  digits: 6,
-  step: 30,
-  algorithm: 'sha1',
-};
+import { generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI, verifySync as otplibVerifySync } from 'otplib';
 
 function totpGenerateSecret(): string {
-  return authenticator.generateSecret();
+  return otplibGenerateSecret();
 }
 
 function totpVerify(token: string, secret: string): boolean {
@@ -147,7 +139,8 @@ function totpVerify(token: string, secret: string): boolean {
     // SECURITY: window: 1 allows codes from ±30 seconds to handle time drift
     // This is a balance between security (smaller window = less attack surface)
     // and usability (allow for reasonable clock drift between client and server)
-    return authenticator.verify({ token, secret });
+    const result = otplibVerifySync({ token, secret, window: 1 });
+    return result?.valid === true;
   } catch (error) {
     console.error('TOTP verification error:', error);
     return false;
@@ -155,7 +148,7 @@ function totpVerify(token: string, secret: string): boolean {
 }
 
 function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
-  return authenticator.keyuri(email, issuer, secret);
+  return otplibGenerateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
