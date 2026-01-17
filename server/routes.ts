@@ -703,6 +703,26 @@ export async function registerRoutes(
   app.use('/api', csrfProtection);
 
   // System health check (public)
+  // Test email endpoint - TEMPORARY
+  app.get('/api/test-email', async (req, res) => {
+    try {
+      const result = await sendServerCredentialsEmail(
+        'rorywoodaus@gmail.com',
+        'Test Server',
+        '192.168.1.1',
+        'root',
+        'TestPassword123',
+        'Ubuntu 22.04'
+      );
+
+      log(`Test email result: ${JSON.stringify(result)}`, 'api');
+      res.json(result);
+    } catch (error: any) {
+      log(`Test email error: ${error.message}`, 'api');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.get('/api/health', async (req, res) => {
     try {
       const connectionStatus = await virtfusionClient.getConnectionStatus();
