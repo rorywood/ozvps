@@ -1576,18 +1576,24 @@ export class VirtFusionClient {
       });
 
       const server = response.data;
-      log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
 
-      let password: string | undefined = undefined;
+      // Check if password is in server creation response
+      let password: string | undefined =
+        (server as any).settings?.decryptedPassword ||
+        (server as any).settings?.password ||
+        (server as any).decryptedPassword ||
+        (server as any).password ||
+        undefined;
+
+      log(`Server created: ID=${server.id}, name=${server.name}${password ? ' (password in creation response)' : ''}`, 'virtfusion');
 
       // Step 2: Build/install the OS on the server (only if osId is provided)
       if (osId) {
         try {
           log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
-          // Use same parameter names as reinstall: operatingSystemId and name
           const buildBody: Record<string, any> = {
             operatingSystemId: osId,
-            sendMail: false, // Don't email password, return it in response
+            sendMail: false,
           };
           if (hostname) {
             buildBody.name = hostname;
@@ -1597,18 +1603,19 @@ export class VirtFusionClient {
             body: JSON.stringify(buildBody),
           });
 
-          // Extract password from build response - VirtFusion returns it in settings.decryptedPassword
-          password =
-            buildResponse.data?.settings?.decryptedPassword ||
-            buildResponse.data?.settings?.password ||
-            buildResponse.data?.decryptedPassword ||
-            buildResponse.data?.password ||
-            undefined;
+          // If password wasn't in creation response, try to get it from build response
+          if (!password) {
+            password =
+              buildResponse.data?.settings?.decryptedPassword ||
+              buildResponse.data?.settings?.password ||
+              buildResponse.data?.decryptedPassword ||
+              buildResponse.data?.password ||
+              undefined;
+          }
 
-          log(`Server ${server.id} build initiated${password ? ' (password received)' : ' (no password in response)'}`, 'virtfusion');
+          log(`Server ${server.id} build initiated${password ? ' (password available)' : ' (no password)'}`, 'virtfusion');
         } catch (buildError: any) {
           log(`Server build failed: ${buildError.message}`, 'virtfusion');
-          // Don't throw - server is created, build may be queued
         }
       } else {
         log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
