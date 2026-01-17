@@ -4859,6 +4859,15 @@ export async function registerRoutes(
       }
 
       const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+
+      // DEBUG: Log template names to verify what VirtFusion returns
+      if (templates && Array.isArray(templates)) {
+        const templateNames = templates.flatMap((group: any) =>
+          group.templates ? group.templates.map((t: any) => t.name) : []
+        );
+        log(`[TEMPLATES DEBUG] VirtFusion returned ${templateNames.length} templates for package ${plan.virtfusionPackageId}: ${templateNames.join(', ')}`, 'api');
+      }
+
       res.json(templates || []);
     } catch (error: any) {
       log(`Error fetching templates for plan ${req.params.id}: ${error.message}`, 'api');
