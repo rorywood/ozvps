@@ -259,19 +259,21 @@ pm2 monit
 
 ## 🔄 Updates
 
-### Automatic Updates
+### Using the Control Panel
 
 ```bash
-# Production (main branch)
-sudo /usr/local/bin/update-prod
+# Open interactive control panel
+sudo ozvps
 
-# Development (claude/dev-* branches)
-sudo /usr/local/bin/update-dev
+# Direct update (no menu)
+sudo ozvps --update
 ```
 
-Updates are installed automatically by the installer and include:
-- Git pull latest code
-- npm install dependencies
+The `ozvps` command works for both production and development environments automatically based on the installation.
+
+Updates include:
+- Download latest code from GitHub
+- Install dependencies
 - Database migrations
 - Build production assets
 - PM2 restart with health check

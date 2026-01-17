@@ -52,18 +52,35 @@ export function registerInstallAssets(app: Express) {
     });
   });
 
-  app.get('/update-ozvps.sh', async (req, res) => {
+  // Serve the ozvps control panel script
+  app.get('/ozvps', async (req, res) => {
     try {
-      const scriptPath = path.join(process.cwd(), 'public', 'update-ozvps.sh');
+      const scriptPath = path.join(process.cwd(), 'scripts', 'ozvps');
       const script = await fs.readFile(scriptPath, 'utf8');
 
       res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
-      res.setHeader('Content-Disposition', 'inline; filename="update-ozvps.sh"');
+      res.setHeader('Content-Disposition', 'inline; filename="ozvps"');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.send(script);
     } catch (error: any) {
-      log(`Error serving update script: ${error.message}`, 'api');
-      res.status(404).send('# Update script not found');
+      log(`Error serving ozvps control script: ${error.message}`, 'api');
+      res.status(404).send('# Control script not found');
+    }
+  });
+
+  // Serve the unified installer script
+  app.get('/ozvps-install.sh', async (req, res) => {
+    try {
+      const scriptPath = path.join(process.cwd(), 'scripts', 'ozvps-install.sh');
+      const script = await fs.readFile(scriptPath, 'utf8');
+
+      res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+      res.setHeader('Content-Disposition', 'inline; filename="ozvps-install.sh"');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(script);
+    } catch (error: any) {
+      log(`Error serving installer script: ${error.message}`, 'api');
+      res.status(404).send('# Installer script not found');
     }
   });
 

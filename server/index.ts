@@ -198,7 +198,8 @@ app.use('/api/security/recaptcha-config', publicEndpointLimiter);
 app.use('/api/stripe/publishable-key', publicEndpointLimiter);
 app.use('/api/', apiLimiter);
 app.use('/install.sh', apiLimiter);
-app.use('/update-ozvps.sh', apiLimiter);
+app.use('/ozvps', apiLimiter);
+app.use('/ozvps-install.sh', apiLimiter);
 app.use('/ozvps-panel.tar.gz', apiLimiter);
 
 // Stripe webhook route MUST be registered BEFORE express.json()

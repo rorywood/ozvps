@@ -4749,7 +4749,8 @@ export async function registerRoutes(
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,
-        payment_method_types: ['card', 'apple_pay', 'google_pay'], // Enable Apple Pay and Google Pay
+        // Let Stripe auto-detect available payment methods (card, Apple Pay, Google Pay, etc.)
+        // based on account settings and customer context
         line_items: [
           {
             price_data: {
@@ -4795,7 +4796,20 @@ export async function registerRoutes(
           code: error.code
         });
       }
-      log(`Error creating checkout session: ${error.message}`, 'api');
+      // Log full Stripe error details for debugging
+      const errorDetails = {
+        message: error.message,
+        type: error.type,
+        code: error.code,
+        param: error.param,
+        statusCode: error.statusCode,
+      };
+      log(`Error creating checkout session: ${JSON.stringify(errorDetails)}`, 'stripe');
+
+      // Report to Sentry for monitoring
+      const { captureException } = await import('./sentry');
+      captureException(error, { context: 'wallet_topup_checkout', userId: req.userSession?.auth0UserId });
+
       res.status(500).json({ error: 'Failed to create checkout session' });
     }
   });

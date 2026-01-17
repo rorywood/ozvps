@@ -167,7 +167,7 @@ export const VERSION_HISTORY = [
       "Auth0 Event Streams integration for user deletion sync",
       "Admin: Block/unblock user functionality",
       "Improved bandwidth display with precise GB values",
-      "Added update-ozvps command for easy updates",
+      "Added ozvps control panel command for easy management",
       "Added public Pricing page (/pricing)",
       "Removed public registration - login only",
     ],

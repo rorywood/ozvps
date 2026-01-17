@@ -1,0 +1,908 @@
+#!/usr/bin/env bash
+set -e
+
+# ============================================================================
+#  OzVPS Control Panel
+#  Version: 4.0.0
+#
+#  Usage:
+#    ozvps              # Opens kiosk menu
+#    ozvps --update     # Direct update (no menu)
+#    ozvps --status     # Show status dashboard
+#    ozvps --help       # Show help
+# ============================================================================
+
+VERSION="4.0.0"
+INSTALL_DIR="/opt/ozvps-panel"
+SERVICE_NAME="ozvps-panel"
+GITHUB_REPO="rorywood/ozvps"
+BACKUP_DIR="/opt/ozvps-backups"
+
+# ============================================================================
+# Colors and Styling
+# ============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Status indicators
+RUNNING="${GREEN}●${NC}"
+STOPPED="${RED}●${NC}"
+WARNING="${YELLOW}●${NC}"
+
+# ============================================================================
+# Self-Update Function
+# ============================================================================
+self_update() {
+    local SELF_PATH="$1"
+    shift
+    local SCRIPT_ARGS=("$@")
+
+    # Get branch from installation
+    local BRANCH="main"
+    if [[ -f "$INSTALL_DIR/.ozvps-branch" ]]; then
+        BRANCH=$(cat "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || echo "main")
+    fi
+
+    local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps"
+    local TEMP_SCRIPT=$(mktemp)
+
+    if curl -fsSL -H 'Cache-Control: no-cache' "$SCRIPT_URL?t=$(date +%s)" -o "$TEMP_SCRIPT" 2>/dev/null; then
+        if head -1 "$TEMP_SCRIPT" | grep -q "^#!/"; then
+            local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
+            local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
+
+            if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
+                echo -e "  ${GREEN}✓${NC} New control panel version found, updating..."
+                cp "$TEMP_SCRIPT" "$SELF_PATH"
+                chmod +x "$SELF_PATH"
+                rm -f "$TEMP_SCRIPT"
+                exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
+            fi
+        fi
+    fi
+
+    rm -f "$TEMP_SCRIPT" 2>/dev/null
+}
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+error() { echo -e "  ${RED}✗${NC} $1"; }
+success() { echo -e "  ${GREEN}✓${NC} $1"; }
+info() { echo -e "  ${CYAN}→${NC} $1"; }
+warning() { echo -e "  ${YELLOW}⚠${NC} $1"; }
+
+get_environment() {
+    if [[ -f "$INSTALL_DIR/.ozvps-env" ]]; then
+        cat "$INSTALL_DIR/.ozvps-env" 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+get_branch() {
+    if [[ -f "$INSTALL_DIR/.ozvps-branch" ]]; then
+        cat "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || echo "main"
+    else
+        echo "main"
+    fi
+}
+
+get_app_status() {
+    if pm2 describe "$SERVICE_NAME" &>/dev/null; then
+        local status=$(pm2 jlist 2>/dev/null | grep -o '"name":"'$SERVICE_NAME'"[^}]*"status":"[^"]*"' | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        echo "$status"
+    else
+        echo "stopped"
+    fi
+}
+
+get_uptime() {
+    local uptime_ms=$(pm2 jlist 2>/dev/null | grep -o '"name":"'$SERVICE_NAME'"[^}]*"pm_uptime":[0-9]*' | grep -o '"pm_uptime":[0-9]*' | cut -d':' -f2)
+    if [[ -n "$uptime_ms" ]]; then
+        local now_ms=$(($(date +%s) * 1000))
+        local diff_ms=$((now_ms - uptime_ms))
+        local diff_sec=$((diff_ms / 1000))
+        local days=$((diff_sec / 86400))
+        local hours=$(((diff_sec % 86400) / 3600))
+        local mins=$(((diff_sec % 3600) / 60))
+
+        if [[ $days -gt 0 ]]; then
+            echo "${days}d ${hours}h"
+        elif [[ $hours -gt 0 ]]; then
+            echo "${hours}h ${mins}m"
+        else
+            echo "${mins}m"
+        fi
+    else
+        echo "N/A"
+    fi
+}
+
+check_db_connection() {
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+        if [[ -n "$db_url" ]]; then
+            # Extract host from DATABASE_URL
+            if echo "$db_url" | grep -q "localhost\|127.0.0.1"; then
+                if systemctl is-active postgresql &>/dev/null; then
+                    echo "connected"
+                    return
+                fi
+            fi
+            # Try a quick connection test
+            if timeout 2 bash -c "curl -s http://127.0.0.1:3000/api/health" &>/dev/null; then
+                echo "connected"
+                return
+            fi
+        fi
+    fi
+    echo "unknown"
+}
+
+# ============================================================================
+# Show Header
+# ============================================================================
+show_header() {
+    clear
+    local env=$(get_environment)
+    local branch=$(get_branch)
+    local app_status=$(get_app_status)
+    local uptime=$(get_uptime)
+    local db_status=$(check_db_connection)
+
+    # Status indicators
+    local app_indicator="$STOPPED Stopped"
+    if [[ "$app_status" == "online" ]]; then
+        app_indicator="$RUNNING Running"
+    elif [[ "$app_status" == "errored" ]]; then
+        app_indicator="$WARNING Errored"
+    fi
+
+    local db_indicator="$WARNING Unknown"
+    if [[ "$db_status" == "connected" ]]; then
+        db_indicator="$RUNNING Connected"
+    fi
+
+    # Environment color
+    local env_color="$GREEN"
+    local env_display="PRODUCTION"
+    if [[ "$env" == "development" ]]; then
+        env_color="$YELLOW"
+        env_display="DEVELOPMENT"
+    fi
+
+    echo ""
+    echo -e "${CYAN}${BOLD}"
+    cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║   ██████╗ ███████╗██╗   ██╗██████╗ ███████╗              ║
+    ║  ██╔═══██╗╚══███╔╝██║   ██║██╔══██╗██╔════╝              ║
+    ║  ██║   ██║  ███╔╝ ██║   ██║██████╔╝███████╗              ║
+    ║  ██║   ██║ ███╔╝  ╚██╗ ██╔╝██╔═══╝ ╚════██║              ║
+    ║  ╚██████╔╝███████╗ ╚████╔╝ ██║     ███████║              ║
+    ║   ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚══════╝              ║
+EOF
+    echo -e "    ║              ${NC}${BOLD}Control Panel v${VERSION}${CYAN}${BOLD}                       ║"
+    echo -e "    ╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "    Environment: ${env_color}${BOLD}${env_display}${NC} ${DIM}(${branch})${NC}"
+    echo -e "    App Status:  ${app_indicator}  |  DB: ${db_indicator}  |  Uptime: ${uptime}"
+    echo ""
+}
+
+# ============================================================================
+# Show Menu
+# ============================================================================
+show_menu() {
+    echo -e "${CYAN}╭───────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}STATUS${NC}                                                  ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[1]${NC} Application Status      ${BOLD}[2]${NC} Database Status          ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[3]${NC} View Live Logs          ${BOLD}[4]${NC} System Resources         ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}MANAGEMENT${NC}                                             ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[5]${NC} Restart Application     ${BOLD}[6]${NC} Stop Application         ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[7]${NC} Run Database Migrations ${BOLD}[8]${NC} Run Billing Job          ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}MAINTENANCE${NC}                                            ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[9]${NC} Update Application      ${BOLD}[10]${NC} Backup Database         ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[11]${NC} Restore Backup         ${BOLD}[12]${NC} Renew SSL Certificate   ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}CONFIGURATION${NC}                                          ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[13]${NC} View Configuration     ${BOLD}[14]${NC} Edit .env File          ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[15]${NC} Test Email Config      ${BOLD}[16]${NC} Check for Script Update ${CYAN}│${NC}"
+    echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[Q]${NC} Quit                                               ${CYAN}│${NC}"
+    echo -e "${CYAN}╰───────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+}
+
+# ============================================================================
+# Menu Actions
+# ============================================================================
+
+# 1. Application Status
+action_app_status() {
+    echo ""
+    echo -e "${BOLD}Application Status${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+    pm2 describe "$SERVICE_NAME" 2>/dev/null || echo "Application not running"
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 2. Database Status
+action_db_status() {
+    echo ""
+    echo -e "${BOLD}Database Status${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+        local db_name=$(echo "$db_url" | grep -oP '\/\K[^?]+' | head -1)
+        local db_host=$(echo "$db_url" | grep -oP '@\K[^:\/]+' | head -1)
+
+        echo -e "  Database: ${BOLD}$db_name${NC}"
+        echo -e "  Host:     ${BOLD}$db_host${NC}"
+        echo ""
+
+        # Try to get table count and size
+        if command -v psql &>/dev/null && [[ "$db_host" == "localhost" || "$db_host" == "127.0.0.1" ]]; then
+            echo -e "  ${DIM}Checking database...${NC}"
+
+            # Extract credentials
+            local db_user=$(echo "$db_url" | grep -oP '//\K[^:]+' | head -1)
+
+            # Count tables
+            local table_count=$(sudo -u postgres psql -d "$db_name" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ')
+
+            if [[ -n "$table_count" ]]; then
+                echo -e "  Tables:   ${BOLD}$table_count${NC}"
+
+                # Get database size
+                local db_size=$(sudo -u postgres psql -d "$db_name" -t -c "SELECT pg_size_pretty(pg_database_size('$db_name'));" 2>/dev/null | tr -d ' ')
+                echo -e "  Size:     ${BOLD}$db_size${NC}"
+            fi
+
+            # Connection test
+            if sudo -u postgres psql -d "$db_name" -c "SELECT 1" &>/dev/null; then
+                echo -e "  Status:   ${GREEN}✓${NC} Connected"
+            else
+                echo -e "  Status:   ${RED}✗${NC} Connection failed"
+            fi
+        fi
+    else
+        error ".env file not found"
+    fi
+
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 3. View Live Logs
+action_live_logs() {
+    echo ""
+    echo -e "${BOLD}Live Logs${NC} ${DIM}(Ctrl+C to exit)${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+    pm2 logs "$SERVICE_NAME" --lines 50
+}
+
+# 4. System Resources
+action_system_resources() {
+    echo ""
+    echo -e "${BOLD}System Resources${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+    echo ""
+
+    # CPU
+    local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null || echo "N/A")
+    echo -e "  CPU Usage:    ${BOLD}${cpu_usage}%${NC}"
+
+    # Memory
+    local mem_info=$(free -h 2>/dev/null | grep Mem)
+    local mem_total=$(echo "$mem_info" | awk '{print $2}')
+    local mem_used=$(echo "$mem_info" | awk '{print $3}')
+    echo -e "  Memory:       ${BOLD}${mem_used}${NC} / ${mem_total}"
+
+    # Disk
+    local disk_info=$(df -h / 2>/dev/null | tail -1)
+    local disk_used=$(echo "$disk_info" | awk '{print $3}')
+    local disk_total=$(echo "$disk_info" | awk '{print $2}')
+    local disk_pct=$(echo "$disk_info" | awk '{print $5}')
+    echo -e "  Disk (root):  ${BOLD}${disk_used}${NC} / ${disk_total} (${disk_pct})"
+
+    # App memory
+    local app_mem=$(pm2 jlist 2>/dev/null | grep -o '"name":"'$SERVICE_NAME'"[^}]*"memory":[0-9]*' | grep -o '"memory":[0-9]*' | cut -d':' -f2)
+    if [[ -n "$app_mem" ]]; then
+        local app_mem_mb=$((app_mem / 1024 / 1024))
+        echo -e "  App Memory:   ${BOLD}${app_mem_mb}MB${NC}"
+    fi
+
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 5. Restart Application
+action_restart() {
+    echo ""
+    echo -e "${YELLOW}Restart Application?${NC}"
+    read -p "  Are you sure? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Restarting application..."
+        pm2 restart "$SERVICE_NAME"
+        success "Application restarted"
+        sleep 2
+    else
+        info "Cancelled"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 6. Stop Application
+action_stop() {
+    echo ""
+    echo -e "${RED}${BOLD}Stop Application?${NC}"
+    echo -e "${YELLOW}⚠ This will make the panel unavailable!${NC}"
+    read -p "  Are you sure? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Stopping application..."
+        pm2 stop "$SERVICE_NAME"
+        success "Application stopped"
+    else
+        info "Cancelled"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 7. Run Database Migrations
+action_migrations() {
+    echo ""
+    echo -e "${BOLD}Run Database Migrations${NC}"
+    read -p "  Continue? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        cd "$INSTALL_DIR"
+        set -a && source .env && set +a
+        info "Running migrations..."
+        npx drizzle-kit push --force
+        success "Migrations complete"
+    else
+        info "Cancelled"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 8. Run Billing Job
+action_billing_job() {
+    echo ""
+    echo -e "${BOLD}Run Billing Job${NC}"
+    echo -e "${DIM}This will calculate and apply billing for active servers${NC}"
+    read -p "  Continue? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Running billing job..."
+        local response=$(curl -s -X POST http://127.0.0.1:3000/api/admin/billing/run-job 2>/dev/null)
+        if echo "$response" | grep -q "success\|processed"; then
+            success "Billing job completed"
+            echo -e "  ${DIM}$response${NC}"
+        else
+            error "Billing job may have failed"
+            echo -e "  ${DIM}$response${NC}"
+        fi
+    else
+        info "Cancelled"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 9. Update Application
+action_update() {
+    echo ""
+    do_update
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 10. Backup Database
+action_backup() {
+    echo ""
+    echo -e "${BOLD}Backup Database${NC}"
+
+    mkdir -p "$BACKUP_DIR"
+
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+        local db_name=$(echo "$db_url" | grep -oP '\/\K[^?]+' | head -1)
+
+        local backup_file="${BACKUP_DIR}/${db_name}_$(date +%Y%m%d_%H%M%S).sql.gz"
+
+        info "Creating backup: $backup_file"
+
+        if sudo -u postgres pg_dump "$db_name" | gzip > "$backup_file" 2>/dev/null; then
+            local backup_size=$(du -sh "$backup_file" 2>/dev/null | cut -f1)
+            success "Backup created ($backup_size)"
+
+            # Keep only last 5 backups
+            local backup_count=$(ls -1 "${BACKUP_DIR}/${db_name}_"*.sql.gz 2>/dev/null | wc -l)
+            if [[ $backup_count -gt 5 ]]; then
+                info "Cleaning old backups (keeping last 5)..."
+                ls -1t "${BACKUP_DIR}/${db_name}_"*.sql.gz | tail -n +6 | xargs rm -f
+            fi
+        else
+            error "Backup failed"
+        fi
+    else
+        error ".env file not found"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 11. Restore Backup
+action_restore() {
+    echo ""
+    echo -e "${BOLD}Restore Backup${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    # List available backups
+    local backups=($(ls -1t "${BACKUP_DIR}/"*.sql.gz 2>/dev/null))
+
+    if [[ ${#backups[@]} -eq 0 ]]; then
+        warning "No backups found in $BACKUP_DIR"
+        read -p "Press Enter to continue..." < /dev/tty
+        return
+    fi
+
+    echo "  Available backups:"
+    for i in "${!backups[@]}"; do
+        local backup_name=$(basename "${backups[$i]}")
+        local backup_size=$(du -sh "${backups[$i]}" 2>/dev/null | cut -f1)
+        echo -e "    ${BOLD}[$((i+1))]${NC} $backup_name ($backup_size)"
+    done
+    echo ""
+
+    read -p "  Select backup number (or 0 to cancel): " backup_num < /dev/tty
+
+    if [[ "$backup_num" == "0" || -z "$backup_num" ]]; then
+        info "Cancelled"
+        read -p "Press Enter to continue..." < /dev/tty
+        return
+    fi
+
+    local selected_backup="${backups[$((backup_num-1))]}"
+    if [[ -z "$selected_backup" || ! -f "$selected_backup" ]]; then
+        error "Invalid selection"
+        read -p "Press Enter to continue..." < /dev/tty
+        return
+    fi
+
+    echo ""
+    echo -e "${RED}${BOLD}WARNING: This will overwrite the current database!${NC}"
+    read -p "  Type 'restore' to confirm: " confirm < /dev/tty
+
+    if [[ "$confirm" != "restore" ]]; then
+        info "Cancelled"
+        read -p "Press Enter to continue..." < /dev/tty
+        return
+    fi
+
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        local db_url=$(grep "^DATABASE_URL=" "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+        local db_name=$(echo "$db_url" | grep -oP '\/\K[^?]+' | head -1)
+
+        info "Stopping application..."
+        pm2 stop "$SERVICE_NAME" 2>/dev/null || true
+
+        info "Restoring database..."
+        if gunzip -c "$selected_backup" | sudo -u postgres psql "$db_name" &>/dev/null; then
+            success "Database restored"
+        else
+            error "Restore failed"
+        fi
+
+        info "Starting application..."
+        pm2 start "$SERVICE_NAME"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 12. Renew SSL Certificate
+action_renew_ssl() {
+    echo ""
+    echo -e "${BOLD}Renew SSL Certificate${NC}"
+    read -p "  Force renewal? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Renewing SSL certificate..."
+        if certbot renew --force-renewal; then
+            success "SSL certificate renewed"
+            systemctl reload nginx
+        else
+            error "SSL renewal failed"
+        fi
+    else
+        info "Checking certificate status..."
+        certbot certificates
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 13. View Configuration
+action_view_config() {
+    echo ""
+    echo -e "${BOLD}Configuration${NC} ${DIM}(secrets masked)${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        while IFS= read -r line; do
+            # Skip comments and empty lines
+            if [[ "$line" =~ ^# ]] || [[ -z "$line" ]]; then
+                echo -e "${DIM}$line${NC}"
+                continue
+            fi
+
+            # Mask secrets
+            if echo "$line" | grep -qiE "(secret|token|password|key|dsn)"; then
+                local key=$(echo "$line" | cut -d'=' -f1)
+                echo -e "  ${BOLD}$key${NC}=********"
+            else
+                local key=$(echo "$line" | cut -d'=' -f1)
+                local value=$(echo "$line" | cut -d'=' -f2-)
+                echo -e "  ${BOLD}$key${NC}=$value"
+            fi
+        done < "$INSTALL_DIR/.env"
+    else
+        error ".env file not found"
+    fi
+
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 14. Edit .env File
+action_edit_env() {
+    local editor="${EDITOR:-nano}"
+    echo ""
+    info "Opening .env with $editor..."
+    $editor "$INSTALL_DIR/.env"
+    echo ""
+    warning "Changes require a restart to take effect"
+    read -p "  Restart now? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        pm2 restart "$SERVICE_NAME"
+        success "Application restarted"
+    fi
+}
+
+# 15. Test Email Config
+action_test_email() {
+    echo ""
+    echo -e "${BOLD}Test Email Configuration${NC}"
+    read -p "  Enter email address to test: " test_email < /dev/tty
+
+    if [[ -n "$test_email" ]]; then
+        info "Sending test email to $test_email..."
+        local response=$(curl -s -X POST "http://127.0.0.1:3000/api/admin/test-email" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$test_email\"}" 2>/dev/null)
+
+        if echo "$response" | grep -q "success\|sent"; then
+            success "Test email sent"
+        else
+            error "Failed to send test email"
+            echo -e "  ${DIM}$response${NC}"
+        fi
+    else
+        info "Cancelled"
+    fi
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# 16. Check for Script Update
+action_check_update() {
+    echo ""
+    echo -e "${BOLD}Checking for Script Updates${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    local branch=$(get_branch)
+    local script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps"
+    local temp_script=$(mktemp)
+
+    info "Checking $branch branch..."
+
+    if curl -fsSL -H 'Cache-Control: no-cache' "$script_url?t=$(date +%s)" -o "$temp_script" 2>/dev/null; then
+        local current_md5=$(md5sum "$0" 2>/dev/null | cut -d' ' -f1)
+        local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
+
+        if [[ "$current_md5" != "$new_md5" ]]; then
+            success "New version available!"
+            read -p "  Update now? (y/N): " -n 1 -r < /dev/tty
+            echo ""
+
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                cp "$temp_script" "$0"
+                chmod +x "$0"
+                success "Script updated! Restarting..."
+                rm -f "$temp_script"
+                exec "$0"
+            fi
+        else
+            success "Script is up to date"
+        fi
+    else
+        error "Could not check for updates"
+    fi
+
+    rm -f "$temp_script" 2>/dev/null
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+# ============================================================================
+# Update Function (full update flow)
+# ============================================================================
+do_update() {
+    local branch=$(get_branch)
+
+    echo -e "${CYAN}${BOLD}"
+    cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║                   Updating Application                    ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    echo -e "    Branch: ${BOLD}$branch${NC}"
+    echo ""
+
+    # Check for new commits
+    info "Checking for updates..."
+
+    local current_commit=""
+    if [[ -f "$INSTALL_DIR/.commit" ]]; then
+        current_commit=$(cat "$INSTALL_DIR/.commit" 2>/dev/null || echo "")
+    fi
+
+    local latest_commit=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${branch}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
+
+    if [[ -n "$latest_commit" && -n "$current_commit" && "$current_commit" == "$latest_commit" ]]; then
+        success "Already on latest version (${latest_commit:0:7})"
+        echo ""
+        read -p "  Force update anyway? (y/N): " -n 1 -r < /dev/tty
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            return
+        fi
+    else
+        if [[ -n "$current_commit" && -n "$latest_commit" ]]; then
+            success "New version available!"
+            echo -e "    Current: ${DIM}${current_commit:0:7}${NC}"
+            echo -e "    Latest:  ${DIM}${latest_commit:0:7}${NC}"
+        fi
+    fi
+
+    echo ""
+
+    # Step 1: Backup
+    info "Creating backup..."
+    mkdir -p "$BACKUP_DIR"
+    local backup_file="${BACKUP_DIR}/pre-update_$(date +%Y%m%d_%H%M%S).tar.gz"
+    tar -czf "$backup_file" -C "$INSTALL_DIR" . 2>/dev/null || true
+    success "Backup created"
+
+    # Step 2: Download
+    info "Downloading latest code..."
+    local temp_dir=$(mktemp -d)
+    cp "$INSTALL_DIR/.env" "$temp_dir/.env" 2>/dev/null || true
+    cp "$INSTALL_DIR/ecosystem.config.cjs" "$temp_dir/ecosystem.config.cjs" 2>/dev/null || true
+
+    local safe_branch=$(echo "$branch" | tr '/' '-')
+    local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
+    local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
+
+    if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip" -o "$temp_zip"; then
+        error "Failed to download"
+        return
+    fi
+    success "Downloaded"
+
+    # Step 3: Extract
+    info "Extracting..."
+    find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 ! -name 'node_modules' ! -name '.env' ! -name 'ecosystem.config.cjs' -exec rm -rf {} + 2>/dev/null || true
+
+    rm -rf "$temp_extract" && mkdir -p "$temp_extract"
+    unzip -q "$temp_zip" -d "$temp_extract"
+    local extracted_dir=$(find "$temp_extract" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
+
+    cp -r "${extracted_dir}"/* "$INSTALL_DIR/"
+    cp -r "${extracted_dir}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+    cp "$temp_dir/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
+    cp "$temp_dir/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
+    rm -rf "$temp_dir" "$temp_extract" "$temp_zip"
+
+    if [[ -n "$latest_commit" ]]; then
+        echo "$latest_commit" > "$INSTALL_DIR/.commit"
+    fi
+    success "Code updated"
+
+    # Step 4: Install dependencies
+    info "Installing dependencies..."
+    cd "$INSTALL_DIR"
+    npm install --silent 2>&1 | grep -v "^npm " || true
+    success "Dependencies installed"
+
+    # Step 5: Build
+    info "Building application..."
+    npm run build
+    if [[ ! -f "dist/index.cjs" ]]; then
+        error "Build failed - dist/index.cjs not found"
+        return
+    fi
+    success "Build complete"
+
+    # Step 6: Migrations
+    info "Running migrations..."
+    set -a && source .env && set +a
+    npx drizzle-kit push --force 2>/dev/null || true
+    success "Migrations applied"
+
+    # Step 7: Restart
+    info "Restarting application..."
+    pm2 delete "$SERVICE_NAME" 2>/dev/null || true
+    pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
+    pm2 save --force
+    success "Application restarted"
+
+    # Wait for health
+    info "Waiting for application..."
+    for i in {1..30}; do
+        if curl -s "http://127.0.0.1:3000/api/health" &>/dev/null; then
+            success "Application is healthy"
+            break
+        fi
+        sleep 1
+        if [[ $i -eq 30 ]]; then
+            warning "Health check timeout - check logs"
+        fi
+    done
+
+    echo ""
+    echo -e "${GREEN}${BOLD}Update Complete!${NC}"
+    echo ""
+}
+
+# ============================================================================
+# Main Menu Loop
+# ============================================================================
+main_menu() {
+    while true; do
+        show_header
+        show_menu
+
+        read -p "  Select option: " choice < /dev/tty
+
+        case $choice in
+            1) action_app_status ;;
+            2) action_db_status ;;
+            3) action_live_logs ;;
+            4) action_system_resources ;;
+            5) action_restart ;;
+            6) action_stop ;;
+            7) action_migrations ;;
+            8) action_billing_job ;;
+            9) action_update ;;
+            10) action_backup ;;
+            11) action_restore ;;
+            12) action_renew_ssl ;;
+            13) action_view_config ;;
+            14) action_edit_env ;;
+            15) action_test_email ;;
+            16) action_check_update ;;
+            q|Q) echo ""; info "Goodbye!"; exit 0 ;;
+            *) warning "Invalid option" ;;
+        esac
+    done
+}
+
+# ============================================================================
+# Parse Arguments
+# ============================================================================
+SKIP_SELF_UPDATE=false
+DIRECT_UPDATE=false
+SHOW_STATUS=false
+
+for arg in "$@"; do
+    case $arg in
+        --no-self-update)
+            SKIP_SELF_UPDATE=true
+            ;;
+        --update|-u)
+            DIRECT_UPDATE=true
+            ;;
+        --status|-s)
+            SHOW_STATUS=true
+            ;;
+        --version|-v)
+            echo "OzVPS Control Panel v${VERSION}"
+            exit 0
+            ;;
+        --help|-h)
+            echo "OzVPS Control Panel v${VERSION}"
+            echo ""
+            echo "Usage: ozvps [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  (no args)     Open interactive control panel menu"
+            echo "  --update, -u  Run update directly (no menu)"
+            echo "  --status, -s  Show status dashboard and exit"
+            echo "  --version     Show version"
+            echo "  --help        Show this help message"
+            exit 0
+            ;;
+    esac
+done
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+# Check root
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}Error:${NC} Must run as root (sudo ozvps)"
+    exit 1
+fi
+
+# Check installation
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo -e "${RED}Error:${NC} OzVPS not installed at $INSTALL_DIR"
+    echo "Run the installer first: curl -fsSL ... | sudo bash"
+    exit 1
+fi
+
+# Get script path for self-update
+SELF_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+
+# Self-update check
+if [[ "$SKIP_SELF_UPDATE" == "false" && -f "$SELF_PATH" ]]; then
+    self_update "$SELF_PATH" "$@"
+fi
+
+# Handle direct commands
+if [[ "$DIRECT_UPDATE" == "true" ]]; then
+    show_header
+    do_update
+    exit 0
+fi
+
+if [[ "$SHOW_STATUS" == "true" ]]; then
+    show_header
+    exit 0
+fi
+
+# Run main menu
+main_menu
