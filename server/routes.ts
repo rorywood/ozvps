@@ -2113,10 +2113,17 @@ export async function registerRoutes(
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
 
       // Email credentials immediately - VirtFusion sets this password during build
+      log(`[CREDENTIALS] Checking if we can email credentials for server ${server.id}`, 'email');
+      log(`[CREDENTIALS] Has password: ${!!result.generatedPassword}`, 'email');
+      log(`[CREDENTIALS] Has user email: ${!!req.userSession?.email}`, 'email');
+      log(`[CREDENTIALS] Has server IP: ${!!server.primaryIp}`, 'email');
+
       if (result.generatedPassword && req.userSession?.email && server.primaryIp) {
         const osName = selectedTemplate?.name || 'Linux';
         const serverName = hostname || server.name || `Server ${server.id}`;
         const username = 'root'; // Default username for most Linux distributions
+
+        log(`[CREDENTIALS] ✅ All checks passed - sending email to ${req.userSession.email}`, 'email');
 
         // Fire and forget - don't block response on email
         sendServerCredentialsEmail(
@@ -2126,11 +2133,17 @@ export async function registerRoutes(
           username,
           result.generatedPassword,
           osName
-        ).catch(err => {
-          log(`Failed to send credentials email for server ${server.id}: ${err.message}`, 'email');
+        ).then(result => {
+          if (result.success) {
+            log(`[CREDENTIALS] ✅ Email sent successfully to ${req.userSession.email}, messageId: ${result.messageId}`, 'email');
+          } else {
+            log(`[CREDENTIALS] ❌ Email failed: ${result.error}`, 'email');
+          }
+        }).catch(err => {
+          log(`[CREDENTIALS] ❌ Email exception: ${err.message}`, 'email');
         });
-
-        log(`Credentials email sent to ${req.userSession.email} for server ${server.id}`, 'email');
+      } else {
+        log(`[CREDENTIALS] ❌ Cannot send email - missing required data`, 'email');
       }
 
       res.json({ success: true, data: result });

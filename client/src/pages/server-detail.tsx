@@ -133,6 +133,16 @@ export default function ServerDetail() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
 
+  // Track if credentials were emailed (persists after reinstallTask.reset())
+  const [credentialsWereEmailed, setCredentialsWereEmailed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return sessionStorage.getItem(`credentialsEmailed:${serverId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // Dismiss credentials banner
   const dismissCredentials = () => {
     try {
@@ -385,6 +395,16 @@ export default function ServerDetail() {
       }
     }
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
+
+  // Mark credentials as emailed when they exist (so banner shows even after reset)
+  useEffect(() => {
+    if (reinstallTask.credentials && !credentialsWereEmailed) {
+      setCredentialsWereEmailed(true);
+      try {
+        sessionStorage.setItem(`credentialsEmailed:${serverId}`, 'true');
+      } catch {}
+    }
+  }, [reinstallTask.credentials, serverId, credentialsWereEmailed]);
 
   // Refetch server data when build completes OR enters rebooting status
   // This ensures needsSetup gets updated from true->false when commissioned=3
@@ -1188,7 +1208,7 @@ export default function ServerDetail() {
       <div className="space-y-6 pt-6 pb-20">
 
         {/* Credentials Emailed Banner - Shows after server provisioning completes */}
-        {reinstallTask.credentials && server?.status === 'running' && (() => {
+        {credentialsWereEmailed && server?.status === 'running' && (() => {
           try {
             if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
               return null;
