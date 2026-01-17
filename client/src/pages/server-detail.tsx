@@ -131,7 +131,13 @@ export default function ServerDetail() {
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
-  
+
+  // Store credentials after reset clears reinstallTask
+  const [savedCredentials, setSavedCredentials] = useState<{
+    serverIp: string;
+    username: string;
+    password: string;
+  } | null>(null);
 
   // Dismiss credentials banner
   const dismissCredentials = () => {
@@ -1064,6 +1070,10 @@ export default function ServerDetail() {
             state={reinstallTask}
             serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
             onDismiss={() => {
+              // Save credentials BEFORE reset clears them
+              if (reinstallTask.credentials) {
+                setSavedCredentials(reinstallTask.credentials);
+              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1071,6 +1081,10 @@ export default function ServerDetail() {
               queryClient.invalidateQueries({ queryKey: ['servers'] });
             }}
             onClose={() => {
+              // Save credentials BEFORE reset clears them
+              if (reinstallTask.credentials) {
+                setSavedCredentials(reinstallTask.credentials);
+              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1190,13 +1204,18 @@ export default function ServerDetail() {
 
         {/* Building banner removed - showing full-page provisioning view instead */}
         {/* Saved Credentials Banner - Shows ONLY when we have credentials from the initial build */}
-        {reinstallTask.credentials && server?.status === 'running' && (() => {
+        {(() => {
+          const creds = savedCredentials || reinstallTask.credentials;
+          const shouldShow = creds && server?.status === 'running';
           try {
-            return sessionStorage.getItem(`credentialsDismissed:${serverId}`) !== 'true';
-          } catch {
-            return true;
-          }
-        })() && (
+            if (shouldShow && sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
+              return null;
+            }
+          } catch {}
+
+          if (!shouldShow) return null;
+
+          return (
           <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-success flex-shrink-0" />
@@ -1212,14 +1231,14 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Server IP</span>
-                  <span className="font-mono text-foreground">{reinstallTask.credentials.serverIp}</span>
+                  <span className="font-mono text-foreground">{creds.serverIp}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(reinstallTask.credentials!.serverIp);
+                    navigator.clipboard.writeText(creds.serverIp);
                     toast({ title: "Copied", description: "Server IP copied to clipboard" });
                   }}
                 >
@@ -1229,14 +1248,14 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Username</span>
-                  <span className="font-mono text-foreground">{reinstallTask.credentials.username}</span>
+                  <span className="font-mono text-foreground">{creds.username}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(reinstallTask.credentials!.username);
+                    navigator.clipboard.writeText(creds.username);
                     toast({ title: "Copied", description: "Username copied to clipboard" });
                   }}
                 >
@@ -1247,7 +1266,7 @@ export default function ServerDetail() {
                 <div>
                   <span className="text-xs text-muted-foreground block">Password</span>
                   <span className="font-mono text-foreground">
-                    {showCredentialsPassword ? reinstallTask.credentials.password : '••••••••••••'}
+                    {showCredentialsPassword ? creds.password : '••••••••••••'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1265,7 +1284,7 @@ export default function ServerDetail() {
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:bg-muted"
                     onClick={() => {
-                      navigator.clipboard.writeText(reinstallTask.credentials!.password);
+                      navigator.clipboard.writeText(creds.password);
                       toast({ title: "Copied", description: "Password copied to clipboard" });
                     }}
                     data-testid="button-copy-password"
@@ -1281,14 +1300,14 @@ export default function ServerDetail() {
               <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs font-mono text-success bg-card/30 px-3 py-2 rounded">
-                  ssh {reinstallTask.credentials.username}@{reinstallTask.credentials.serverIp}
+                  ssh {creds.username}@{creds.serverIp}
                 </code>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(`ssh ${reinstallTask.credentials!.username}@${reinstallTask.credentials!.serverIp}`);
+                    navigator.clipboard.writeText(`ssh ${creds.username}@${creds.serverIp}`);
                     toast({ title: "Copied", description: "SSH command copied to clipboard" });
                   }}
                   title="Copy SSH command"
@@ -1310,7 +1329,8 @@ export default function ServerDetail() {
               </Button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
 
         {/* Suspension Banner */}
