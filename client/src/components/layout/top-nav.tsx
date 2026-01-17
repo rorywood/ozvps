@@ -268,7 +268,7 @@ function DesktopNav() {
       isDev ? "top-14" : "top-0"
     )}>
       <div className="container mx-auto max-w-7xl px-6">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-24">
           <div className="flex items-center gap-8">
             <Link href="/dashboard">
               <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo" />
