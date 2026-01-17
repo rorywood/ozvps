@@ -1566,19 +1566,21 @@ export class VirtFusionClient {
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
 
     try {
-      // Step 1: Create the server
-      // IMPORTANT: VirtFusion API expects "hypervisorId" (which is the hypervisor GROUP ID)
-      // and "ipv4: 1" to allocate an IPv4 address
+      // Create the server with OS template included - this is when VirtFusion generates the password
       const createPayload: Record<string, any> = {
         userId,
         packageId,
         name: hostname,
-        ipv4: 1, // Allocate one IPv4 address
+        ipv4: 1,
       };
 
-      // VirtFusion uses "hypervisorId" for hypervisor group selection
       if (hypervisorGroupId) {
         createPayload.hypervisorId = hypervisorGroupId;
+      }
+
+      // Include OS template in creation request - this makes VirtFusion generate and return password
+      if (osId) {
+        createPayload.operatingSystemId = osId;
       }
 
       const response = await this.request<{ data: any }>('/servers', {
@@ -1588,51 +1590,14 @@ export class VirtFusionClient {
 
       const server = response.data;
 
-      // VirtFusion returns password in various locations - check all possibilities
-      const rawResponse = response as any;
+      // Extract password from creation response
       let password: string | undefined =
-        rawResponse.password ||  // Sometimes at root level
-        rawResponse.data?.password ||
-        server.password ||
-        server.settings?.password ||
         server.settings?.decryptedPassword ||
+        server.settings?.password ||
+        server.password ||
         undefined;
 
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
-
-      // Step 2: Build/install the OS on the server (only if osId is provided)
-      if (osId) {
-        try {
-          log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
-          const buildBody: Record<string, any> = {
-            operatingSystemId: osId,
-            sendMail: false,
-          };
-          if (hostname) {
-            buildBody.name = hostname;
-          }
-          const buildResponse = await this.request<{ data: any }>(`/servers/${server.id}/build`, {
-            method: 'POST',
-            body: JSON.stringify(buildBody),
-          });
-
-          // If password wasn't in creation response, check build response
-          if (!password) {
-            password =
-              (buildResponse as any).password ||
-              buildResponse.data?.password ||
-              buildResponse.data?.settings?.password ||
-              buildResponse.data?.settings?.decryptedPassword ||
-              undefined;
-          }
-
-          log(`Server ${server.id} build initiated`, 'virtfusion');
-        } catch (buildError: any) {
-          log(`Server build failed: ${buildError.message}`, 'virtfusion');
-        }
-      } else {
-        log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
-      }
 
       return {
         serverId: server.id,
