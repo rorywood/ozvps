@@ -143,6 +143,16 @@ export default function ServerDetail() {
     }
   });
 
+  // Track if banner was dismissed (for immediate UI response)
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // Track when server last booted to disable password reset for 2 minutes
   const [serverBootedAt, setServerBootedAt] = useState<number | null>(null);
   const [isPasswordResetDisabled, setIsPasswordResetDisabled] = useState(false);
@@ -152,14 +162,25 @@ export default function ServerDetail() {
 
   // Dismiss credentials banner
   const dismissCredentials = () => {
+    setBannerDismissed(true);
     try {
       sessionStorage.setItem(`credentialsDismissed:${serverId}`, 'true');
     } catch {
       // Ignore storage errors
     }
-    // Force re-render by invalidating queries
-    queryClient.invalidateQueries({ queryKey: ['server', serverId] });
   };
+
+  // Auto-dismiss banner after 60 seconds once it's visible
+  const bannerVisible = credentialsWereEmailed && server?.status === 'running' && !bannerDismissed;
+  useEffect(() => {
+    if (!bannerVisible) return;
+
+    const timer = setTimeout(() => {
+      dismissCredentials();
+    }, 60 * 1000);
+
+    return () => clearTimeout(timer);
+  }, [bannerVisible]);
 
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
@@ -1143,23 +1164,13 @@ export default function ServerDetail() {
     <AppShell>
       <div className="space-y-6 pt-6 pb-20">
 
-        {/* Credentials Emailed Banner - Shows after server provisioning completes */}
-        {(() => {
-          const shouldShow = credentialsWereEmailed && server?.status === 'running';
-          if (!shouldShow) return null;
-
-          try {
-            if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
-              return null;
-            }
-          } catch {}
-
-          return (
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 mb-8" data-testid="banner-credentials">
-              <div className="flex items-center gap-3">
-                <Mail className="h-5 w-5 text-primary flex-shrink-0" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-primary">Your Server is Ready!</h3>
+        {/* Credentials Emailed Banner - Shows after server provisioning completes, auto-dismisses after 60s */}
+        {bannerVisible && (
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 mb-8" data-testid="banner-credentials">
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-primary flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-primary">Your Server is Ready!</h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     SSH login credentials have been emailed to your account email address.
                   </p>
@@ -1177,8 +1188,7 @@ export default function ServerDetail() {
                 </Button>
               </div>
             </div>
-          );
-        })()}
+        )}
 
 
         {/* Suspension Banner */}
