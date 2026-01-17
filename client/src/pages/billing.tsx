@@ -611,6 +611,7 @@ export default function BillingPage() {
     suspendAt: string | null;
     autoRenew: boolean;
     serverName?: string;
+    serverUuid?: string;
   }> }>({
     queryKey: ['upcoming-charges'],
     queryFn: () => api.getUpcomingCharges(),
@@ -1265,6 +1266,11 @@ export default function BillingPage() {
                                       </>
                                     )}
                                   </div>
+                                  {charge.serverUuid && (
+                                    <div className="text-[10px] text-muted-foreground/70 font-mono mt-0.5 truncate" title={charge.serverUuid}>
+                                      UUID: {charge.serverUuid}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <div className="text-right flex-shrink-0 ml-4">

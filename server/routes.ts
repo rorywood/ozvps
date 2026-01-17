@@ -2319,14 +2319,19 @@ export async function registerRoutes(
 
         const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
         // Convert server IDs to strings since serverBilling stores virtfusionServerId as text
-        const serverMap = new Map(servers.map(s => [String(s.id), s.name]));
+        // Store both name and uuid for each server
+        const serverMap = new Map(servers.map(s => [String(s.id), { name: s.name, uuid: s.uuid }]));
 
         // Include all billing records, even if server is temporarily not visible (e.g., during reinstall)
-        // Just enrich with server name if available
-        upcoming = billingRecords.map(billing => ({
-          ...billing,
-          serverName: serverMap.get(billing.virtfusionServerId) || `Server #${billing.virtfusionServerId}`,
-        }));
+        // Just enrich with server name and UUID if available
+        upcoming = billingRecords.map(billing => {
+          const serverInfo = serverMap.get(billing.virtfusionServerId);
+          return {
+            ...billing,
+            serverName: serverInfo?.name || `Server #${billing.virtfusionServerId}`,
+            serverUuid: serverInfo?.uuid || billing.virtfusionServerUuid || undefined,
+          };
+        });
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }
