@@ -147,6 +147,9 @@ export default function ServerDetail() {
   const [serverBootedAt, setServerBootedAt] = useState<number | null>(null);
   const [isPasswordResetDisabled, setIsPasswordResetDisabled] = useState(false);
 
+  // Tab state for controlled navigation
+  const [activeTab, setActiveTab] = useState("overview");
+
   // Dismiss credentials banner
   const dismissCredentials = () => {
     try {
@@ -1016,7 +1019,7 @@ export default function ServerDetail() {
               } catch {}
               queryClient.invalidateQueries({ queryKey: ['server', serverId] });
               queryClient.invalidateQueries({ queryKey: ['servers'] });
-              // Stay on current server page - overview tab is default
+              setActiveTab('overview');
             }}
             onClose={() => {
               reinstallTask.reset();
@@ -1461,7 +1464,7 @@ export default function ServerDetail() {
         </div>
 
         {/* Navigation Tabs - Restructured to 3 Tabs (DO Style) */}
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="border-b border-border">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
               <TabsTrigger
@@ -1899,7 +1902,7 @@ export default function ServerDetail() {
                     onDismiss={() => {
                       reinstallTask.reset();
                       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                      // Stay on current server page - overview tab is default
+                      setActiveTab('overview');
                     }}
                   />
                 </div>

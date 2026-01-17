@@ -140,7 +140,32 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         </div>
       </div>
 
-      {/* Progress Bar */}
+      {/* Server is Ready Banner - show prominently when complete */}
+      {isComplete && (
+        <div className="p-5 bg-success/10 border-2 border-success/30 rounded-lg space-y-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-6 w-6 text-success flex-shrink-0" />
+            <div>
+              <h4 className="font-semibold text-success text-lg">Your Server is Ready!</h4>
+              <p className="text-sm text-muted-foreground">
+                SSH credentials have been emailed to your account.
+              </p>
+            </div>
+          </div>
+          {onDismiss && (
+            <Button
+              onClick={onDismiss}
+              className="w-full bg-success hover:bg-success/90 text-white"
+              data-testid="button-continue-to-server"
+            >
+              Continue to Server
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Progress Bar - hide when complete */}
+      {!isComplete && (
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Progress</span>
@@ -211,6 +236,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
           );
         })}
       </div>
+      )}
 
       {/* Credentials Section - Show immediately when complete */}
       {isComplete && credentials && (
@@ -329,30 +355,6 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Server is Ready Banner - show when complete */}
-      {isComplete && (
-        <div className="p-5 bg-success/10 border border-success/20 rounded-lg space-y-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-6 w-6 text-success flex-shrink-0" />
-            <div>
-              <h4 className="font-semibold text-success text-lg">Your Server is Ready!</h4>
-              <p className="text-sm text-muted-foreground">
-                SSH credentials have been emailed to your account.
-              </p>
-            </div>
-          </div>
-          {onDismiss && (
-            <Button
-              onClick={onDismiss}
-              className="w-full bg-success hover:bg-success/90 text-white"
-              data-testid="button-continue-to-server"
-            >
-              Continue to Server
-            </Button>
-          )}
         </div>
       )}
 
