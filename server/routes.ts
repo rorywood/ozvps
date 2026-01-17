@@ -5000,10 +5000,16 @@ export async function registerRoutes(
 
         log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
 
+        console.log('PASSWORD CHECK:', serverResult.password ? 'HAS PASSWORD' : 'NO PASSWORD');
+        console.log('EMAIL CHECK:', req.userSession?.email || 'NO EMAIL');
+
         // Email credentials if password was returned
         if (serverResult.password && req.userSession?.email) {
+          console.log('GETTING SERVER DETAILS FOR EMAIL...');
           const server = await virtfusionClient.getServer(serverResult.serverId.toString(), false);
+          console.log('SERVER IP:', server?.primaryIp || 'NO IP');
           if (server?.primaryIp) {
+            console.log('CALLING sendServerCredentialsEmail NOW');
             sendServerCredentialsEmail(
               req.userSession.email,
               serverResult.name,
@@ -5011,7 +5017,11 @@ export async function registerRoutes(
               'root',
               serverResult.password,
               (server as any).os?.name || 'Linux'
-            ).catch(() => {});  // Fire and forget
+            ).then(result => {
+              console.log('EMAIL RESULT:', result);
+            }).catch(err => {
+              console.log('EMAIL ERROR:', err);
+            });
           }
         }
       } catch (provisionError: any) {
