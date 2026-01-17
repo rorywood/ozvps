@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OzVPS Development Update Script
-# Version: 3.2.0
+# Version: 3.3.0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,7 +95,7 @@ cat << "EOF"
 ║  ██║   ██║ ███╔╝  ╚██╗ ██╔╝██╔═══╝ ╚════██║              ║
 ║  ╚██████╔╝███████╗ ╚████╔╝ ██║     ███████║              ║
 ║   ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚══════╝              ║
-║           Development Update System v3.2                 ║
+║           Development Update System v3.3                 ║
 ╚═══════════════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
