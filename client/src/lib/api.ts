@@ -739,17 +739,13 @@ class ApiClient {
     clientSecret?: string;
     paymentIntentId?: string;
   }> {
-    console.log(`[API] Direct topup request: $${(amountCents / 100).toFixed(2)}, payment method: ${paymentMethodId}`);
     const response = await secureFetch(`${this.baseUrl}/wallet/topup/direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountCents, paymentMethodId }),
     });
-    console.log(`[API] Direct topup response status: ${response.status}`);
     const data = await response.json();
-    console.log('[API] Direct topup response data:', data);
     if (!response.ok) {
-      console.error('[API] Direct topup failed:', data.error);
       throw new Error(data.error || 'Payment failed');
     }
     return data;

@@ -660,8 +660,7 @@ export default function BillingPage() {
   const directChargeMutation = useMutation({
     mutationFn: ({ amountCents, paymentMethodId }: { amountCents: number; paymentMethodId: string }) =>
       api.directTopup(amountCents, paymentMethodId),
-    onSuccess: async (data, variables) => {
-      console.log('[Direct Topup] Success response:', data);
+    onSuccess: async (data) => {
       if (data.success) {
         const chargedAmount = (data.chargedAmountCents || 0) / 100;
         setPaymentFeedback({

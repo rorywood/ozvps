@@ -196,15 +196,6 @@ export default function ServerDetail() {
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
-    onSuccess: (data) => {
-      if (reinstallTask.isActive) {
-        console.log('[SERVER QUERY] Got server data:', {
-          status: data.status,
-          needsSetup: data.needsSetup,
-          id: data.id,
-        });
-      }
-    },
     refetchInterval: (data) => {
       // During provisioning/setup, poll aggressively (1 second)
       // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
@@ -335,29 +326,11 @@ export default function ServerDetail() {
     const minimumRebootingTime = 60000; // 60 seconds minimum - gives guest agent time to install/start
     const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
 
-    // DEBUG: Log all conditions to see what's failing
-    console.log('[AUTO-DISMISS] Checking conditions:', {
-      taskAtFinalStage,
-      serverFullyOnline,
-      serverCommissioned,
-      hasBeenRebootingLongEnough,
-      'reinstallTask.status': reinstallTask.status,
-      'reinstallTask.rebootingStartTime': reinstallTask.rebootingStartTime,
-      'server.status': server?.status,
-      'server.needsSetup': server?.needsSetup,
-      timeInRebooting,
-    });
-
-    // ALL conditions must be true
     const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
 
     if (allConditionsMet) {
-      console.log('[AUTO-DISMISS] ✅ ALL CONDITIONS MET - Processing completion');
-
       // For reinstall (not setup mode): Just mark task as complete (100%)
-      // The ReinstallProgressPanel has its own 2-min auto-dismiss
       if (!isSetupMode && reinstallTask.isActive) {
-        console.log('[AUTO-DISMISS] Reinstall detected - marking task complete');
         const timer = setTimeout(() => {
           reinstallTask.markComplete();
           queryClient.invalidateQueries({ queryKey: ['server', serverId] });
@@ -367,16 +340,10 @@ export default function ServerDetail() {
 
       // For setup mode: Full dismiss sequence
       const timer = setTimeout(() => {
-        console.log('[AUTO-DISMISS] Starting dismiss sequence');
-
-        // STEP 1: Reset reinstallTask FIRST (clears isActive flag)
         reinstallTask.reset();
-
-        // STEP 2: Clear setup mode flags
         updateSetupMode(false);
         updateSetupMinimized(false);
 
-        // STEP 3: Clear sessionStorage
         try {
           sessionStorage.removeItem(`setupMode:${serverId}`);
           sessionStorage.removeItem(`setupMinimized:${serverId}`);
@@ -385,11 +352,8 @@ export default function ServerDetail() {
           // Ignore
         }
 
-        // STEP 4: Invalidate queries to refresh with latest data
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
-
-        console.log('[AUTO-DISMISS] Dismiss complete - buttons should unlock on next render');
       }, 2000);
 
       return () => clearTimeout(timer);
@@ -412,10 +376,8 @@ export default function ServerDetail() {
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, reinstallTask.isActive, reinstallTask.markComplete, isSetupMode, server, serverId]);
 
   // Mark when build starts (so banner shows after auto-dismiss)
-  // Set flag EARLY before auto-dismiss calls reset() and clears everything
   useEffect(() => {
     if (reinstallTask.isActive && !credentialsWereEmailed) {
-      console.log('[BANNER] Setting credentialsWereEmailed to true - task is active');
       setCredentialsWereEmailed(true);
       try {
         sessionStorage.setItem(`credentialsEmailed:${serverId}`, 'true');
@@ -424,11 +386,8 @@ export default function ServerDetail() {
   }, [reinstallTask.isActive, serverId, credentialsWereEmailed]);
 
   // Refetch server data when build completes OR enters rebooting status
-  // This ensures needsSetup gets updated from true->false when commissioned=3
-  // (even if tabbed out)
   useEffect(() => {
     if ((reinstallTask.status === 'complete' || reinstallTask.status === 'rebooting') && serverId) {
-      console.log('[REFETCH] Invalidating server queries due to status:', reinstallTask.status);
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
@@ -438,13 +397,10 @@ export default function ServerDetail() {
   const prevServerStatus = useRef<string | null>(null);
   useEffect(() => {
     if (server?.status === 'running' && prevServerStatus.current !== 'running') {
-      console.log('[PASSWORD RESET] Server just booted - disabling reset for 2 minutes');
       setServerBootedAt(Date.now());
       setIsPasswordResetDisabled(true);
 
-      // Re-enable after 2 minutes
       const timer = setTimeout(() => {
-        console.log('[PASSWORD RESET] 2 minutes elapsed - re-enabling password reset');
         setIsPasswordResetDisabled(false);
       }, 2 * 60 * 1000);
 
@@ -568,8 +524,6 @@ export default function ServerDetail() {
       
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
-      console.log('[DEPLOY] Password from build response:', password ? '✅ PRESENT' : '❌ MISSING');
-      console.log('[DEPLOY] Full response.data:', response.data);
       reinstallTask.startTask(undefined, password, server?.primaryIp);
 
       // Start console lock (server will reboot after reinstall)
@@ -613,10 +567,8 @@ export default function ServerDetail() {
 
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
-      console.log('[DEPLOY] Password from build response:', password ? '✅ PRESENT' : '❌ MISSING');
-      console.log('[DEPLOY] Full response.data:', response.data);
       reinstallTask.startTask(undefined, password, server?.primaryIp);
-      
+
       // Refetch server data to update the UI
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       
@@ -1251,23 +1203,14 @@ export default function ServerDetail() {
         {/* Credentials Emailed Banner - Shows after server provisioning completes */}
         {(() => {
           const shouldShow = credentialsWereEmailed && server?.status === 'running';
-          console.log('[BANNER] Render check:', {
-            credentialsWereEmailed,
-            serverStatus: server?.status,
-            shouldShow,
-            serverId
-          });
-
           if (!shouldShow) return null;
 
           try {
             if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
-              console.log('[BANNER] Not showing - already dismissed');
               return null;
             }
           } catch {}
 
-          console.log('[BANNER] ✅ SHOWING BANNER');
           return (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-5" data-testid="banner-credentials">
               <div className="flex items-center gap-3">

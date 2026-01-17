@@ -47,11 +47,9 @@ export function useSessionTimeout() {
       return;
     }
 
-    // Warn user if they're approaching timeout (optional - can be extended later)
+    // Warn user if they're approaching timeout (could show a toast here)
     if (timeSinceLastActivity >= IDLE_TIMEOUT_MS - WARNING_THRESHOLD_MS && !warnedRef.current) {
       warnedRef.current = true;
-      console.log('Session will expire soon due to inactivity');
-      // Could show a toast/notification here in the future
     }
   }, [queryClient]);
 

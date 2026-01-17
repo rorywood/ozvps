@@ -33,7 +33,10 @@
       "Bash(pm2 logs:*)",
       "WebFetch(domain:docs.virtfusion.com)",
       "Bash(pm2 restart:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(pm2 env:*)",
+      "Bash(npx vite build:*)",
+      "Bash(cmd /c \"cd /d D:\\\\Claude\\\\ozvps && npm run build\")"
     ]
   }
 }

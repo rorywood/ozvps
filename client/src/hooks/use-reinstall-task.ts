@@ -167,30 +167,14 @@ export function useReinstallTask(serverId: string) {
     try {
       const buildStatus = await api.getBuildStatus(serverId);
 
-      console.log('[useReinstallTask] 📊 Build Status Poll:', {
-        commissioned: buildStatus.commissioned,
-        isBuilding: buildStatus.isBuilding,
-        isComplete: buildStatus.isComplete,
-        isError: buildStatus.isError,
-        phase: buildStatus.phase,
-        state: buildStatus.state,
-      });
-
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
-      // Show "Starting Server" step while server boots
-      // NOTE: Don't check isComplete - VirtFusion doesn't set it properly
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
-        console.log('[useReinstallTask] ✅ Server COMMISSIONED (commissioned=3)');
-
-        // Mark as 'rebooting' to show "Starting Server" step
-        // We'll keep polling until server status becomes 'running'
         setState(prev => {
           if (prev.status === 'rebooting') {
-            return prev; // Already at rebooting, no update needed
+            return prev;
           }
 
           const bootingStartTime = Date.now();
-          console.log('[useReinstallTask] 🔄 Transitioning to REBOOTING status, rebootingStartTime:', bootingStartTime);
           addTimelineEvent('rebooting', 'Server commissioned - booting up...');
           const booting = {
             ...prev,
@@ -284,13 +268,7 @@ export function useReinstallTask(serverId: string) {
   }, [serverId, addTimelineEvent, stopPolling]);
 
   const startTask = useCallback((taskId?: string, password?: string, serverIp?: string) => {
-    console.log('[useReinstallTask] startTask called with:', {
-      hasPassword: !!password,
-      serverIp,
-      taskId
-    });
     const credentials = password ? { serverIp: serverIp || 'N/A', username: 'root', password } : null;
-    console.log('[useReinstallTask] Credentials created:', credentials ? '✅ YES' : '❌ NO');
     const initialState: ReinstallTaskState = {
       isActive: true,
       taskId: taskId || null,
