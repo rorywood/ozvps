@@ -1571,7 +1571,7 @@ export class VirtFusionClient {
     extRelationId: string;
     osId?: number; // Optional - if not provided, server is created without OS (awaiting setup)
     hypervisorGroupId?: number;
-  }): Promise<{ serverId: number; name: string; password?: string; primaryIp?: string; osName?: string }> {
+  }): Promise<{ serverId: number; name: string; uuid?: string; password?: string; primaryIp?: string; osName?: string }> {
     const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId } = params;
 
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
@@ -1670,11 +1670,12 @@ export class VirtFusionClient {
         log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
       }
 
-      log(`FINAL: serverId=${server.id}, password=${password ? 'SET' : 'NONE'}, primaryIp=${primaryIp || 'NONE'}`, 'virtfusion');
+      log(`FINAL: serverId=${server.id}, uuid=${server.uuid || 'NONE'}, password=${password ? 'SET' : 'NONE'}, primaryIp=${primaryIp || 'NONE'}`, 'virtfusion');
 
       return {
         serverId: server.id,
         name: server.name,
+        uuid: server.uuid,
         password,
         primaryIp,
       };

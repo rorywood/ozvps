@@ -22,6 +22,7 @@ function addMonth(date: Date): Date {
 export async function createServerBilling(params: {
   auth0UserId: string;
   virtfusionServerId: string;
+  virtfusionServerUuid?: string; // Immutable UUID for reliable lookup
   planId: number;
   monthlyPriceCents: number;
   deployedAt?: Date; // Optional - use server's actual creation date if available
@@ -32,6 +33,7 @@ export async function createServerBilling(params: {
   await db.insert(serverBilling).values({
     auth0UserId: params.auth0UserId,
     virtfusionServerId: params.virtfusionServerId,
+    virtfusionServerUuid: params.virtfusionServerUuid || null,
     planId: params.planId,
     deployedAt,
     monthlyPriceCents: params.monthlyPriceCents,
@@ -40,7 +42,7 @@ export async function createServerBilling(params: {
     nextBillAt,
     suspendAt: null,
   });
-  log(`Created billing record for server ${params.virtfusionServerId}, next bill: ${nextBillAt.toISOString()}`, 'billing');
+  log(`Created billing record for server ${params.virtfusionServerId} (UUID: ${params.virtfusionServerUuid || 'N/A'}), next bill: ${nextBillAt.toISOString()}`, 'billing');
 }
 
 // Charge a server's monthly fee
@@ -221,13 +223,17 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
 }
 
 // Get billing status for a server
-// Optionally pass auth0UserId to enable fallback lookup by user
-export async function getServerBillingStatus(virtfusionServerId: string | number, auth0UserId?: string) {
+// Optionally pass auth0UserId and serverUuid for robust fallback lookup
+export async function getServerBillingStatus(
+  virtfusionServerId: string | number,
+  auth0UserId?: string,
+  serverUuid?: string
+) {
   // Ensure consistent string type for database query
   const serverId = String(virtfusionServerId);
   const numericId = parseInt(serverId, 10);
 
-  // Try exact match first
+  // Try exact match by server ID first (fastest)
   let billing = await db.select().from(serverBilling)
     .where(eq(serverBilling.virtfusionServerId, serverId))
     .limit(1);
@@ -242,23 +248,55 @@ export async function getServerBillingStatus(virtfusionServerId: string | number
     }
   }
 
-  // If still not found and we have auth0UserId, search user's billing records for a match
+  // If not found but we have UUID, try lookup by UUID (most reliable)
+  if (billing.length === 0 && serverUuid) {
+    billing = await db.select().from(serverBilling)
+      .where(eq(serverBilling.virtfusionServerUuid, serverUuid))
+      .limit(1);
+
+    if (billing.length > 0) {
+      // Found via UUID - update the server ID to current value (self-healing)
+      const record = billing[0];
+      if (record.virtfusionServerId !== serverId) {
+        await db.update(serverBilling)
+          .set({ virtfusionServerId: serverId, updatedAt: new Date() })
+          .where(eq(serverBilling.id, record.id));
+        log(`Self-healed billing record via UUID: server ID ${record.virtfusionServerId} -> ${serverId}`, 'billing');
+        return { ...record, virtfusionServerId: serverId };
+      }
+      return record;
+    }
+  }
+
+  // Legacy fallback: search user's billing records for numeric ID match
   if (billing.length === 0 && auth0UserId) {
     const userBillings = await db.select().from(serverBilling)
       .where(eq(serverBilling.auth0UserId, auth0UserId));
 
-    // Try to find a billing record where the numeric ID matches
     for (const b of userBillings) {
       const storedNumericId = parseInt(b.virtfusionServerId, 10);
       if (!isNaN(storedNumericId) && storedNumericId === numericId) {
-        // Found a match - update the record to use the correct ID format
+        // Found a match - update the record with correct ID and UUID if available
+        const updates: any = { virtfusionServerId: serverId, updatedAt: new Date() };
+        if (serverUuid && !b.virtfusionServerUuid) {
+          updates.virtfusionServerUuid = serverUuid;
+        }
         await db.update(serverBilling)
-          .set({ virtfusionServerId: serverId, updatedAt: new Date() })
+          .set(updates)
           .where(eq(serverBilling.id, b.id));
-        log(`Fixed billing record ID mismatch: ${b.virtfusionServerId} -> ${serverId}`, 'billing');
-        return { ...b, virtfusionServerId: serverId };
+        log(`Fixed billing record ID mismatch: ${b.virtfusionServerId} -> ${serverId}${serverUuid ? ` (added UUID: ${serverUuid})` : ''}`, 'billing');
+        return { ...b, virtfusionServerId: serverId, virtfusionServerUuid: serverUuid || b.virtfusionServerUuid };
       }
     }
+  }
+
+  // If found but missing UUID, update with UUID for future reliability
+  if (billing.length > 0 && serverUuid && !billing[0].virtfusionServerUuid) {
+    await db.update(serverBilling)
+      .set({ virtfusionServerUuid: serverUuid, updatedAt: new Date() })
+      .where(eq(serverBilling.id, billing[0].id));
+    log(`Added UUID to existing billing record for server ${serverId}: ${serverUuid}`, 'billing');
+    return { ...billing[0], virtfusionServerUuid: serverUuid };
   }
 
   return billing.length > 0 ? billing[0] : null;

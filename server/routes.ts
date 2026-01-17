@@ -1598,9 +1598,9 @@ export async function registerRoutes(
               bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
             }
 
-            // Fetch billing status for the server
+            // Fetch billing status for the server (using UUID for reliable lookup)
             // Note: Billing records are created during server deployment, not auto-initialized
-            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId);
+            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId, server.uuid);
 
             return {
               ...server,
@@ -1691,8 +1691,8 @@ export async function registerRoutes(
               totalBandwidthLimit += limitGB;
             }
 
-            // Fetch billing status for the server
-            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId);
+            // Fetch billing status for the server (using UUID for reliable lookup)
+            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId, server.uuid);
 
             return {
               ...server,
@@ -1749,9 +1749,10 @@ export async function registerRoutes(
       }
 
       // Fetch billing status for this server (non-critical, don't fail if it errors)
+      // Use UUID for reliable lookup - it never changes even if server ID format changes
       let billingStatus = null;
       try {
-        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId);
+        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
 
         // Auto-initialize billing for existing servers that don't have a record
         if (!billingStatus) {
@@ -1779,13 +1780,14 @@ export async function registerRoutes(
                 await createServerBilling({
                   auth0UserId: req.userSession!.auth0UserId!,
                   virtfusionServerId: req.params.id,
+                  virtfusionServerUuid: server.uuid, // Store UUID for reliable future lookups
                   planId: plan.id,
                   monthlyPriceCents: plan.priceMonthly,
                   deployedAt,
                 });
                 // Fetch the newly created billing record
-                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId);
-                log(`Auto-initialized billing for server ${req.params.id} with plan ${plan.code}`, 'billing');
+                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
+                log(`Auto-initialized billing for server ${req.params.id} (UUID: ${server.uuid}) with plan ${plan.code}`, 'billing');
               }
             }
           } catch (billingCreateError: any) {
@@ -5077,6 +5079,7 @@ export async function registerRoutes(
         await createServerBilling({
           auth0UserId,
           virtfusionServerId: serverResult.serverId.toString(),
+          virtfusionServerUuid: serverResult.uuid, // Immutable UUID for reliable lookups
           planId,
           monthlyPriceCents: plan.priceMonthly,
         });

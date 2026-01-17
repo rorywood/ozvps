@@ -1262,6 +1262,27 @@ export default function ServerDetail() {
                   </div>
                 </div>
 
+                {server.uuid && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">UUID</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-foreground truncate" title={server.uuid}>{server.uuid}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(server.uuid);
+                          toast({ title: "Copied to clipboard" });
+                        }}
+                        title="Copy UUID"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {server.billing?.nextBillAt && (
                   <div className="border-t border-border pt-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Next Due</p>

@@ -117,6 +117,7 @@ export const serverBilling = pgTable("server_billing", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull(),
   virtfusionServerId: text("virtfusion_server_id").notNull().unique(),
+  virtfusionServerUuid: text("virtfusion_server_uuid"), // Immutable UUID for reliable lookup
   planId: integer("plan_id").notNull(),
 
   // Billing state
