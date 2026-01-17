@@ -222,13 +222,9 @@ export default function LoginPage() {
     },
     onError: (err: any) => {
       setIsSubmitting(false);
-      if (err.code === 'USER_NOT_FOUND') {
-        setShowUserNotFound(true);
-        setError("");
-      } else {
-        setError(err.message || "Invalid email or password");
-        setShowUserNotFound(false);
-      }
+      // SECURITY: Always show generic error message to prevent email enumeration
+      setError(err.message || "Invalid email or password");
+      setShowUserNotFound(false);
       setRecaptchaToken(null);
       setTwoFAToken("");
       if (widgetIdRef.current !== null && window.grecaptcha?.reset) {

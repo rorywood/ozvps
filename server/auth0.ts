@@ -168,7 +168,8 @@ class Auth0Client {
         log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
         
         if (error.code === 'invalid_signup' || error.description?.includes('already exists')) {
-          return { success: false, error: 'An account with this email already exists' };
+          // SECURITY: Generic message to prevent email enumeration
+          return { success: false, error: 'Unable to create account. Please try a different email or log in if you already have an account.' };
         }
         if (error.code === 'password_strength_error' || error.name === 'PasswordStrengthError') {
           return { success: false, error: 'Password is too weak. Please use a stronger password.' };

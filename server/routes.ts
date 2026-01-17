@@ -19,13 +19,56 @@ import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDe
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail } from "./email";
 
+// Helper to validate IP address format (prevents header injection)
+function isValidIp(ip: string): boolean {
+  // IPv4 pattern
+  const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  // IPv6 pattern (simplified - covers most cases)
+  const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$|^::1$|^::ffff:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+  if (ipv4Pattern.test(ip)) {
+    // Validate each octet is 0-255
+    const octets = ip.split('.').map(Number);
+    return octets.every(o => o >= 0 && o <= 255);
+  }
+  return ipv6Pattern.test(ip);
+}
+
 // Helper to get client IP from request
+// SECURITY: Only trust proxy headers in production behind reverse proxy (nginx/cloudflare)
+// The TRUST_PROXY env var should only be set when running behind a trusted proxy
 function getClientIp(req: any): string {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-         req.headers['x-real-ip'] ||
-         req.socket?.remoteAddress ||
-         req.ip ||
-         'unknown';
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  if (trustProxy) {
+    // When behind a trusted proxy, use X-Forwarded-For but validate format
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      // Take the leftmost IP (original client) and validate it
+      const clientIp = forwardedFor.split(',')[0]?.trim();
+      if (clientIp && isValidIp(clientIp)) {
+        return clientIp;
+      }
+    }
+
+    // Fallback to X-Real-IP if X-Forwarded-For is invalid
+    const realIp = req.headers['x-real-ip'];
+    if (realIp && isValidIp(realIp)) {
+      return realIp;
+    }
+  }
+
+  // Direct connection or untrusted proxy - use socket address
+  const socketIp = req.socket?.remoteAddress || req.ip;
+  if (socketIp) {
+    // Handle IPv6-mapped IPv4 addresses (::ffff:127.0.0.1)
+    const cleanIp = socketIp.replace(/^::ffff:/, '');
+    if (isValidIp(cleanIp)) {
+      return cleanIp;
+    }
+  }
+
+  return 'unknown';
 }
 
 // Error codes for consistent error handling
@@ -1153,10 +1196,8 @@ export async function registerRoutes(
         });
       }
 
-      // Check if user exists in Auth0 first
-      const existingUser = await auth0Client.getUserByEmail(email);
-
       // Authenticate with Auth0
+      // SECURITY: Do NOT check if user exists separately - this enables email enumeration attacks
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
         // Only record failed login if it's an authentication failure, not a connection error
@@ -1171,18 +1212,11 @@ export async function registerRoutes(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        // If user doesn't exist, return a specific code for the frontend
-        if (!existingUser) {
-          return res.status(401).json({
-            error: 'No account found with this email address',
-            code: 'USER_NOT_FOUND'
-          });
-        }
-
-        // User exists but wrong password
+        // SECURITY: Return generic error message to prevent email enumeration
+        // Do NOT reveal whether the email exists or if the password was wrong
         return res.status(401).json({
-          error: 'Invalid password. Please try again.',
-          code: 'INVALID_PASSWORD'
+          error: 'Invalid email or password',
+          code: 'INVALID_CREDENTIALS'
         });
       }
 
@@ -1226,7 +1260,7 @@ export async function registerRoutes(
 
         // Try TOTP token first
         if (totpToken) {
-          log(`Login 2FA: verifying TOTP token ${totpToken}`, 'security');
+          log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
           tfaValid = totpVerify(totpToken, plaintextSecret);
           log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
         }
