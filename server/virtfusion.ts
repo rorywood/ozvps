@@ -1027,31 +1027,11 @@ export class VirtFusionClient {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      
+
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);
-      
-      // Log the response structure to debug password location
-      log(`[BUILD DEBUG] Full response keys for server ${serverId}: ${Object.keys(data.data || {}).join(', ')}`, 'virtfusion');
-      log(`[BUILD DEBUG] Settings keys for server ${serverId}: ${Object.keys(data.data?.settings || {}).join(', ')}`, 'virtfusion');
-      log(`[BUILD DEBUG] Full response data: ${JSON.stringify(data.data)}`, 'virtfusion');
 
-      // VirtFusion may return password in various fields depending on version
-      // Check settings.decryptedPassword, settings.password, or root level
-      const generatedPassword =
-        data.data?.settings?.decryptedPassword ||
-        data.data?.settings?.password ||
-        data.data?.decryptedPassword ||
-        data.data?.password ||
-        null;
-
-      if (generatedPassword) {
-        log(`[BUILD DEBUG] ✅ Password found for server ${serverId} in build response`, 'virtfusion');
-      } else {
-        log(`[BUILD DEBUG] ❌ No password returned in build response for server ${serverId}`, 'virtfusion');
-      }
-      
-      return { ...data.data, generatedPassword };
+      return data.data;
     } catch (error) {
       log(`Failed to reinstall server ${serverId}: ${error}`, 'virtfusion');
       throw error;
@@ -1569,11 +1549,11 @@ export class VirtFusionClient {
     extRelationId: string;
     osId?: number; // Optional - if not provided, server is created without OS (awaiting setup)
     hypervisorGroupId?: number;
-  }): Promise<{ serverId: number; name: string }> {
+  }): Promise<{ serverId: number; name: string; password?: string }> {
     const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId } = params;
-    
+
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
-    
+
     try {
       // Step 1: Create the server
       // IMPORTANT: VirtFusion API expects "hypervisorId" (which is the hypervisor GROUP ID)
@@ -1584,20 +1564,22 @@ export class VirtFusionClient {
         name: hostname,
         ipv4: 1, // Allocate one IPv4 address
       };
-      
+
       // VirtFusion uses "hypervisorId" for hypervisor group selection
       if (hypervisorGroupId) {
         createPayload.hypervisorId = hypervisorGroupId;
       }
-      
+
       const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
         method: 'POST',
         body: JSON.stringify(createPayload),
       });
-      
+
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
-      
+
+      let password: string | undefined = undefined;
+
       // Step 2: Build/install the OS on the server (only if osId is provided)
       if (osId) {
         try {
@@ -1605,15 +1587,25 @@ export class VirtFusionClient {
           // Use same parameter names as reinstall: operatingSystemId and name
           const buildBody: Record<string, any> = {
             operatingSystemId: osId,
+            sendMail: false, // Don't email password, return it in response
           };
           if (hostname) {
             buildBody.name = hostname;
           }
-          await this.request(`/servers/${server.id}/build`, {
+          const buildResponse = await this.request<{ data: any }>(`/servers/${server.id}/build`, {
             method: 'POST',
             body: JSON.stringify(buildBody),
           });
-          log(`Server ${server.id} build initiated`, 'virtfusion');
+
+          // Extract password from build response - VirtFusion returns it in settings.decryptedPassword
+          password =
+            buildResponse.data?.settings?.decryptedPassword ||
+            buildResponse.data?.settings?.password ||
+            buildResponse.data?.decryptedPassword ||
+            buildResponse.data?.password ||
+            undefined;
+
+          log(`Server ${server.id} build initiated${password ? ' (password received)' : ' (no password in response)'}`, 'virtfusion');
         } catch (buildError: any) {
           log(`Server build failed: ${buildError.message}`, 'virtfusion');
           // Don't throw - server is created, build may be queued
@@ -1621,10 +1613,11 @@ export class VirtFusionClient {
       } else {
         log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
       }
-      
+
       return {
         serverId: server.id,
         name: server.name,
+        password,
       };
     } catch (error: any) {
       log(`Failed to provision server: ${error.message}`, 'virtfusion');
