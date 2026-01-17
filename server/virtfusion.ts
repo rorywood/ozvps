@@ -1586,6 +1586,9 @@ export class VirtFusionClient {
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
 
+      // Log the full create response to see what fields are available
+      console.log('CREATE RESPONSE:', JSON.stringify(response, null, 2));
+
       // Extract IP from create response
       const primaryIp = server.primaryIp || server.primary_ip || server.ipv4 || undefined;
       console.log('SERVER IP FROM CREATE:', primaryIp);
