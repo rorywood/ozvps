@@ -302,41 +302,8 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
-  // AUTO-DISMISS: When setup completes, dismiss the setup UI
-  // Handles both initial setup AND reinstalls
-  useEffect(() => {
-    // Only run for setup mode (initial server setup)
-    if (!isSetupMode) return;
-
-    // Check if task is complete and server is ready
-    const taskComplete = reinstallTask.status === 'complete';
-    const serverFullyOnline = server && server.status === 'running';
-    const serverCommissioned = server && server.needsSetup === false;
-
-    const allConditionsMet = taskComplete && serverFullyOnline && serverCommissioned;
-
-    if (allConditionsMet) {
-      // For setup mode: Full dismiss sequence
-      const timer = setTimeout(() => {
-        reinstallTask.reset();
-        updateSetupMode(false);
-        updateSetupMinimized(false);
-
-        try {
-          sessionStorage.removeItem(`setupMode:${serverId}`);
-          sessionStorage.removeItem(`setupMinimized:${serverId}`);
-          sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
-        } catch (e) {
-          // Ignore
-        }
-
-        queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        queryClient.invalidateQueries({ queryKey: ['servers'] });
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [reinstallTask.status, isSetupMode, server, serverId]);
+  // Note: Auto-dismiss removed - user must click "Continue to Server" button
+  // This ensures they see the "Server is Ready" banner and credentials
 
   // Mark when build starts (so banner shows after auto-dismiss)
   useEffect(() => {
@@ -1042,9 +1009,14 @@ export default function ServerDetail() {
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
+              try {
+                sessionStorage.removeItem(`setupMode:${serverId}`);
+                sessionStorage.removeItem(`setupMinimized:${serverId}`);
+                sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
+              } catch {}
               queryClient.invalidateQueries({ queryKey: ['server', serverId] });
               queryClient.invalidateQueries({ queryKey: ['servers'] });
-              setLocation('/servers');
+              // Stay on current server page - overview tab is default
             }}
             onClose={() => {
               reinstallTask.reset();
@@ -1927,7 +1899,7 @@ export default function ServerDetail() {
                     onDismiss={() => {
                       reinstallTask.reset();
                       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                      setLocation('/servers');
+                      // Stay on current server page - overview tab is default
                     }}
                   />
                 </div>

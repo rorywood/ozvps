@@ -350,7 +350,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
               className="w-full bg-success hover:bg-success/90 text-white"
               data-testid="button-continue-to-server"
             >
-              Continue to Overview
+              Continue to Server
             </Button>
           )}
         </div>
