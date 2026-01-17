@@ -32,7 +32,8 @@
       "Bash(ssh root@198.251.87.100 'cd /opt/ozvps-panel && pm2 restart ozvps-panel && pm2 logs ozvps-panel --lines 20 --nostream | grep -i sentry')",
       "Bash(pm2 logs:*)",
       "WebFetch(domain:docs.virtfusion.com)",
-      "Bash(pm2 restart:*)"
+      "Bash(pm2 restart:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }
