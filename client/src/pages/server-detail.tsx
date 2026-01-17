@@ -1426,7 +1426,7 @@ export default function ServerDetail() {
               <>
                 <Button
                   variant="outline"
-                  className="h-10"
+                  className="h-10 border-orange-500/50 text-orange-500 hover:bg-orange-500/10"
                   onClick={() => handlePowerAction('reboot')}
                   disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
                   data-testid="button-reboot"
@@ -1436,7 +1436,7 @@ export default function ServerDetail() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-10"
+                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
                   onClick={() => handlePowerAction('shutdown')}
                   disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
                   data-testid="button-shutdown"
@@ -1446,7 +1446,7 @@ export default function ServerDetail() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
+                  className="h-10 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
                   onClick={() => handlePowerAction('poweroff')}
                   disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
                   data-testid="button-force-stop"
