@@ -1869,15 +1869,26 @@ export class VirtFusionClient {
     created: string;
   }>> {
     try {
-      const response = await this.request<{ data: any[] }>('/compute/hypervisors?with=servers&results=200');
+      // Try fetching with stats included
+      const response = await this.request<{ data: any[] }>('/compute/hypervisors?with=servers,stats&results=200');
       const hypervisors = response.data || [];
       log(`Fetched ${hypervisors.length} hypervisors`, 'virtfusion');
-      
+
+      // Debug log first hypervisor structure to understand the response
+      if (hypervisors.length > 0) {
+        const sample = hypervisors[0];
+        log(`Hypervisor sample keys: ${Object.keys(sample).join(', ')}`, 'virtfusion');
+        if (sample.resources) log(`Resources keys: ${Object.keys(sample.resources).join(', ')}`, 'virtfusion');
+        if (sample.stats) log(`Stats keys: ${Object.keys(sample.stats).join(', ')}`, 'virtfusion');
+        if (sample.settings) log(`Settings keys: ${Object.keys(sample.settings).join(', ')}`, 'virtfusion');
+      }
+
       return hypervisors.map(h => {
-        // Extract resource usage from VirtFusion response
-        const resources = h.resources || {};
-        const stats = h.stats || {};
-        
+        // Extract resource usage from VirtFusion response - check multiple possible locations
+        const resources = h.resources || h.resource || h.usage || {};
+        const stats = h.stats || h.statistics || {};
+        const settings = h.settings || {};
+
         // Helper to get first defined value (including 0) or null
         const getFirstDefined = (...values: any[]): number | null => {
           for (const v of values) {
@@ -1885,27 +1896,47 @@ export class VirtFusionClient {
           }
           return null;
         };
-        
-        // Memory calculations - return null only if data truly not available
-        const ramTotalMb = getFirstDefined(resources.memoryTotal, resources.memory_total, h.maxMemory);
-        const ramUsedMb = getFirstDefined(resources.memoryUsed, resources.memory_used);
-        const memoryUsage = (ramTotalMb !== null && ramUsedMb !== null && ramTotalMb > 0) 
-          ? Math.round((ramUsedMb / ramTotalMb) * 100) 
+
+        // Memory calculations - check multiple possible field names
+        // VirtFusion might use: maxMemory, memoryMb, memory, ramMb, etc.
+        const ramTotalMb = getFirstDefined(
+          resources.memoryTotal, resources.memory_total, resources.totalMemory,
+          h.maxMemory, h.memoryMb, h.memory, h.ramMb, h.ram,
+          settings.maxMemory, stats.memoryTotal
+        );
+        const ramUsedMb = getFirstDefined(
+          resources.memoryUsed, resources.memory_used, resources.usedMemory,
+          stats.memoryUsed, stats.memory_used, stats.usedMemory,
+          h.usedMemory, h.memoryUsed
+        );
+        const memoryUsage = (ramTotalMb !== null && ramUsedMb !== null && ramTotalMb > 0)
+          ? Math.round((ramUsedMb / ramTotalMb) * 100)
           : null;
-        
-        // Disk calculations - return null only if data truly not available
-        const diskTotalGb = getFirstDefined(resources.diskTotal, resources.disk_total);
-        const diskUsedGb = getFirstDefined(resources.diskUsed, resources.disk_used);
-        const diskUsage = (diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0) 
-          ? Math.round((diskUsedGb / diskTotalGb) * 100) 
+
+        // Disk calculations - check multiple possible field names
+        const diskTotalGb = getFirstDefined(
+          resources.diskTotal, resources.disk_total, resources.totalDisk,
+          h.diskGb, h.disk, h.storage, stats.diskTotal
+        );
+        const diskUsedGb = getFirstDefined(
+          resources.diskUsed, resources.disk_used, resources.usedDisk,
+          stats.diskUsed, stats.disk_used, stats.usedDisk,
+          h.usedDisk, h.diskUsed
+        );
+        const diskUsage = (diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0)
+          ? Math.round((diskUsedGb / diskTotalGb) * 100)
           : null;
-        
+
         // VM counts - use servers array length if available
-        const vmCount = getFirstDefined(stats.instances, stats.servers, h.servers?.length) ?? 0;
-        const maxVms = h.maxServers ?? 100;
-        
-        // CPU usage - return null only if data truly not available
-        const cpuUsage = getFirstDefined(resources.cpuUsage, resources.cpu_usage, stats.cpu);
+        const vmCount = getFirstDefined(stats.instances, stats.servers, stats.vms, h.servers?.length) ?? 0;
+        const maxVms = h.maxServers ?? settings.maxServers ?? 100;
+
+        // CPU usage - check multiple possible field names
+        const cpuUsage = getFirstDefined(
+          resources.cpuUsage, resources.cpu_usage, resources.cpu,
+          stats.cpu, stats.cpuUsage, stats.cpu_usage,
+          h.cpuUsage, h.cpu
+        );
         
         return {
           id: h.id,
