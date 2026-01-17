@@ -6,9 +6,9 @@ import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { db } from "./db";
-import { plans } from "@shared/schema";
+import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
+import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from "./index";
@@ -3974,6 +3974,98 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Admin: Error fetching stats: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
+  // ================== Admin Billing Routes ==================
+
+  // Admin: Get all billing records
+  app.get('/api/admin/billing/records', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const records = await db.select().from(serverBilling).orderBy(serverBilling.nextBillAt);
+      res.json({ records });
+    } catch (error: any) {
+      log(`Admin: Error fetching billing records: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch billing records' });
+    }
+  });
+
+  // Admin: Manually trigger billing job
+  app.post('/api/admin/billing/run-job', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      log(`Admin ${req.userSession?.email} manually triggered billing job`, 'admin');
+
+      // Run the billing job
+      await runBillingJob();
+
+      // Fetch updated records to return
+      const records = await db.select().from(serverBilling).orderBy(serverBilling.nextBillAt);
+
+      res.json({
+        success: true,
+        message: 'Billing job completed',
+        records
+      });
+    } catch (error: any) {
+      log(`Admin: Error running billing job: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to run billing job' });
+    }
+  });
+
+  // Admin: Update billing record (for testing - adjust nextBillAt)
+  app.put('/api/admin/billing/records/:id', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const billingId = parseInt(req.params.id, 10);
+      if (isNaN(billingId)) {
+        return res.status(400).json({ error: 'Invalid billing record ID' });
+      }
+
+      const { nextBillAt, status, suspendAt } = req.body;
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+
+      if (nextBillAt !== undefined) {
+        updates.nextBillAt = new Date(nextBillAt);
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} nextBillAt to ${nextBillAt}`, 'admin');
+      }
+
+      if (status !== undefined) {
+        if (!['active', 'paid', 'unpaid', 'suspended'].includes(status)) {
+          return res.status(400).json({ error: 'Invalid status. Must be: active, paid, unpaid, or suspended' });
+        }
+        updates.status = status;
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} status to ${status}`, 'admin');
+      }
+
+      if (suspendAt !== undefined) {
+        updates.suspendAt = suspendAt ? new Date(suspendAt) : null;
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} suspendAt to ${suspendAt}`, 'admin');
+      }
+
+      const [updated] = await db.update(serverBilling)
+        .set(updates)
+        .where(eq(serverBilling.id, billingId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Billing record not found' });
+      }
+
+      res.json({ success: true, record: updated });
+    } catch (error: any) {
+      log(`Admin: Error updating billing record: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to update billing record' });
+    }
+  });
+
+  // Admin: Get billing ledger (all charges)
+  app.get('/api/admin/billing/ledger', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const ledger = await db.select().from(billingLedger).orderBy(billingLedger.createdAt);
+      res.json({ ledger });
+    } catch (error: any) {
+      log(`Admin: Error fetching billing ledger: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch billing ledger' });
     }
   });
 
