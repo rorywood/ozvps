@@ -326,7 +326,7 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.status, serverId, queryClient]);
 
-  // Track server boot to disable password reset for 2 minutes (guest agent needs time)
+  // Track server boot to disable password reset for 60 seconds (guest agent needs time)
   const prevServerStatus = useRef<string | null>(null);
   useEffect(() => {
     if (server?.status === 'running' && prevServerStatus.current !== 'running') {
@@ -335,7 +335,7 @@ export default function ServerDetail() {
 
       const timer = setTimeout(() => {
         setIsPasswordResetDisabled(false);
-      }, 2 * 60 * 1000);
+      }, 60 * 1000);
 
       return () => clearTimeout(timer);
     }
@@ -1499,7 +1499,7 @@ export default function ServerDetail() {
                   disabled={isSuspended || isPasswordResetDisabled}
                 >
                   <Key className="h-4 w-4 mr-2" /> Reset Password
-                  {isPasswordResetDisabled && <span className="text-[10px] text-muted-foreground ml-auto">(wait 2min)</span>}
+                  {isPasswordResetDisabled && <span className="text-[10px] text-muted-foreground ml-auto">(wait 1min)</span>}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1903,7 +1903,7 @@ export default function ServerDetail() {
                   </Button>
                   {isPasswordResetDisabled && (
                     <p className="text-sm text-amber-400/80 mt-2">
-                      Password reset is temporarily disabled. The QEMU guest agent needs 2 minutes to start after boot.
+                      Password reset is temporarily disabled.
                     </p>
                   )}
                   {isSuspended && (
