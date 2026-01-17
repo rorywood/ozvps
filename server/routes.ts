@@ -242,29 +242,6 @@ const CSRF_HEADER = 'x-csrf-token';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-// Track pending credential emails (to be sent when build completes)
-interface PendingCredentialEmail {
-  userEmail: string;
-  serverName: string;
-  serverIp: string;
-  username: string;
-  password: string;
-  osName: string;
-  createdAt: Date;
-}
-const pendingCredentialEmails = new Map<string, PendingCredentialEmail>();
-
-// Cleanup old pending emails (older than 1 hour = likely failed builds)
-setInterval(() => {
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  for (const [serverId, pending] of pendingCredentialEmails.entries()) {
-    if (pending.createdAt.getTime() < oneHourAgo) {
-      log(`Removing stale pending credential email for server ${serverId}`, 'email');
-      pendingCredentialEmails.delete(serverId);
-    }
-  }
-}, 10 * 60 * 1000); // Check every 10 minutes
-
 /**
  * Generate a cryptographically secure CSRF token
  */
@@ -2135,23 +2112,25 @@ export async function registerRoutes(
 
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
 
-      // Store credentials to be emailed when build completes
+      // Email credentials immediately - VirtFusion sets this password during build
       if (result.generatedPassword && req.userSession?.email && server.primaryIp) {
         const osName = selectedTemplate?.name || 'Linux';
         const serverName = hostname || server.name || `Server ${server.id}`;
         const username = 'root'; // Default username for most Linux distributions
 
-        pendingCredentialEmails.set(req.params.id, {
-          userEmail: req.userSession.email,
+        // Fire and forget - don't block response on email
+        sendServerCredentialsEmail(
+          req.userSession.email,
           serverName,
-          serverIp: server.primaryIp,
+          server.primaryIp,
           username,
-          password: result.generatedPassword,
-          osName,
-          createdAt: new Date(),
+          result.generatedPassword,
+          osName
+        ).catch(err => {
+          log(`Failed to send credentials email for server ${server.id}: ${err.message}`, 'email');
         });
 
-        log(`Credentials stored for server ${server.id}, will email ${req.userSession.email} when build completes`, 'email');
+        log(`Credentials email sent to ${req.userSession.email} for server ${server.id}`, 'email');
       }
 
       res.json({ success: true, data: result });
@@ -2171,29 +2150,6 @@ export async function registerRoutes(
       if (buildStatus.commissioned === 3) {
         log(`Server ${req.params.id} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
         virtfusionClient.invalidateServerCache(req.params.id);
-
-        // Check if we have pending credentials to email
-        const pending = pendingCredentialEmails.get(req.params.id);
-        if (pending) {
-          log(`Build complete for server ${req.params.id}, sending credentials email to ${pending.userEmail}`, 'email');
-
-          // Send email (fire and forget)
-          sendServerCredentialsEmail(
-            pending.userEmail,
-            pending.serverName,
-            pending.serverIp,
-            pending.username,
-            pending.password,
-            pending.osName
-          ).then(() => {
-            log(`✅ Credentials email sent successfully for server ${req.params.id}`, 'email');
-          }).catch(err => {
-            log(`❌ Failed to send credentials email for server ${req.params.id}: ${err.message}`, 'email');
-          });
-
-          // Remove from pending queue (only send once)
-          pendingCredentialEmails.delete(req.params.id);
-        }
       }
 
       // Now do ownership check - will fetch fresh data if cache was invalidated
