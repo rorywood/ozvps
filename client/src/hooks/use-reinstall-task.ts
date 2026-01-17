@@ -165,12 +165,19 @@ export function useReinstallTask(serverId: string) {
 
   const poll = useCallback(async () => {
     try {
+      // Don't poll if already complete - prevents race conditions
+      if (lastStatusRef.current === 'complete') {
+        stopPolling();
+        return;
+      }
+
       const buildStatus = await api.getBuildStatus(serverId);
 
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
         setState(prev => {
-          if (prev.status === 'rebooting') {
+          // Don't change status if already at rebooting or complete
+          if (prev.status === 'rebooting' || prev.status === 'complete' || lastStatusRef.current === 'complete') {
             return prev;
           }
 
