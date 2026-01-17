@@ -5012,7 +5012,7 @@ export async function registerRoutes(
         // Send credentials email if password was returned
         if (serverResult.password && req.userSession?.email) {
           // Get server details to extract IP and OS name
-          const server = await virtfusionClient.getServerById(serverResult.serverId.toString());
+          const server = await virtfusionClient.getServer(serverResult.serverId.toString(), false);
           if (server?.primaryIp) {
             sendServerCredentialsEmail(
               req.userSession.email,
