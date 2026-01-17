@@ -2120,28 +2120,19 @@ export async function registerRoutes(
 
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
 
-      // Send credentials email if password was returned in build response
-      if (result?.settings?.decryptedPassword || result?.settings?.password || result?.decryptedPassword || result?.password) {
-        const password = result?.settings?.decryptedPassword || result?.settings?.password || result?.decryptedPassword || result?.password;
-        if (password && req.userSession?.email && server.primaryIp) {
-          sendServerCredentialsEmail(
-            req.userSession.email,
-            hostname || server.name || `Server ${server.id}`,
-            server.primaryIp,
-            'root',
-            password,
-            selectedTemplate?.name || 'Linux'
-          ).then(emailResult => {
-            if (emailResult.success) {
-              log(`Credentials emailed to ${req.userSession.email} for reinstalled server ${req.params.id}`, 'email');
-            }
-          }).catch(err => {
-            log(`Failed to send credentials email for server ${req.params.id}: ${err.message}`, 'email');
-          });
-        }
+      // Email credentials if password was returned
+      if (result.password && req.userSession?.email && server.primaryIp) {
+        sendServerCredentialsEmail(
+          req.userSession.email,
+          hostname || server.name || `Server ${server.id}`,
+          server.primaryIp,
+          'root',
+          result.password,
+          selectedTemplate?.name || 'Linux'
+        ).catch(() => {});  // Fire and forget
       }
 
-      res.json({ success: true, data: result });
+      res.json({ success: true });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reinstall server' });
@@ -5009,9 +5000,8 @@ export async function registerRoutes(
 
         log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
 
-        // Send credentials email if password was returned
+        // Email credentials if password was returned
         if (serverResult.password && req.userSession?.email) {
-          // Get server details to extract IP and OS name
           const server = await virtfusionClient.getServer(serverResult.serverId.toString(), false);
           if (server?.primaryIp) {
             sendServerCredentialsEmail(
@@ -5021,13 +5011,7 @@ export async function registerRoutes(
               'root',
               serverResult.password,
               (server as any).os?.name || 'Linux'
-            ).then(emailResult => {
-              if (emailResult.success) {
-                log(`Credentials emailed to ${req.userSession.email} for new server ${serverResult.serverId}`, 'email');
-              }
-            }).catch(err => {
-              log(`Failed to send credentials email for server ${serverResult.serverId}: ${err.message}`, 'email');
-            });
+            ).catch(() => {});  // Fire and forget
           }
         }
       } catch (provisionError: any) {
