@@ -225,9 +225,21 @@ export async function getServerBillingStatus(virtfusionServerId: string | number
   // Ensure consistent string type for database query
   const serverId = String(virtfusionServerId);
 
-  const billing = await db.select().from(serverBilling)
+  // Try exact match first
+  let billing = await db.select().from(serverBilling)
     .where(eq(serverBilling.virtfusionServerId, serverId))
     .limit(1);
+
+  // If not found and the ID is numeric, try without leading zeros or with leading zeros
+  if (billing.length === 0 && /^\d+$/.test(serverId)) {
+    // Try trimmed version (no leading zeros)
+    const trimmedId = String(parseInt(serverId, 10));
+    if (trimmedId !== serverId) {
+      billing = await db.select().from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, trimmedId))
+        .limit(1);
+    }
+  }
 
   return billing.length > 0 ? billing[0] : null;
 }
