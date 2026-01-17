@@ -4967,14 +4967,17 @@ export async function registerRoutes(
       }
 
       // Only verify OS template if osId is provided
+      let selectedTemplate: { id: number; name: string } | undefined;
       if (osId) {
         const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
         let templateAllowed = false;
         if (templates && Array.isArray(templates)) {
           for (const group of templates) {
             if (group.templates && Array.isArray(group.templates)) {
-              if (group.templates.some((t: any) => t.id === osId)) {
+              const found = group.templates.find((t: any) => t.id === osId);
+              if (found) {
                 templateAllowed = true;
+                selectedTemplate = { id: found.id, name: found.name };
                 break;
               }
             }
