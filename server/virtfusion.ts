@@ -1011,17 +1011,18 @@ export class VirtFusionClient {
 
   async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
-      const body: any = { 
+      const body: any = {
         operatingSystemId: osId,
+        sendMail: false, // Don't email password, return it in response instead
       };
-      
+
       // Include hostname if provided
       if (hostname) {
         body.name = hostname;
       }
-      
+
       log(`Reinstalling server ${serverId} with OS template ${osId}${hostname ? `, hostname: ${hostname}` : ''}`, 'virtfusion');
-      
+
       const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
         body: JSON.stringify(body),

@@ -1821,6 +1821,14 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
+
+      // VirtFusion returns 423 Locked when there are pending tasks in queue
+      if (error.message?.includes('423') || error.message?.includes('Locked') || error.message?.includes('pending tasks')) {
+        return res.status(423).json({
+          error: 'Server is busy with another operation. Please wait for the current task to complete and try again.'
+        });
+      }
+
       return handleApiError(res, error, 'Unable to perform the power action. The server may be busy. Please try again.', 'powerAction');
     }
   });
