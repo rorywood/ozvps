@@ -711,6 +711,10 @@ export default function AdminPage() {
                 <MessageSquare className="h-4 w-4" />
                 Tickets
               </TabsTrigger>
+              <TabsTrigger value="billing" className="data-[state=active]:bg-primary/20 gap-2" data-testid="tab-billing">
+                <DollarSign className="h-4 w-4" />
+                Billing
+              </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -1375,6 +1379,169 @@ export default function AdminPage() {
             <TabsContent value="tickets" className="space-y-4">
               <AdminTicketsPanel />
             </TabsContent>
+
+            {/* Billing Tab */}
+            <TabsContent value="billing" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">
+                  {billingRecords.length} billing records
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { refetchBilling(); refetchLedger(); }}
+                    className="border-border gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => runBillingJobMutation.mutate()}
+                    disabled={runBillingJobMutation.isPending}
+                    className="gap-2"
+                  >
+                    {runBillingJobMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                    Run Billing Job
+                  </Button>
+                </div>
+              </div>
+
+              {billingLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : billingRecords.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  No billing records found
+                </div>
+              ) : (
+                <div className="rounded-xl bg-muted/20 ring-1 ring-border overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-left bg-muted/20">
+                          <th className="p-4 text-muted-foreground font-medium">Server</th>
+                          <th className="p-4 text-muted-foreground font-medium">User</th>
+                          <th className="p-4 text-muted-foreground font-medium">Status</th>
+                          <th className="p-4 text-muted-foreground font-medium">Price</th>
+                          <th className="p-4 text-muted-foreground font-medium">Next Bill</th>
+                          <th className="p-4 text-muted-foreground font-medium">Suspend At</th>
+                          <th className="p-4 text-muted-foreground font-medium text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {billingRecords.map((record) => (
+                          <tr key={record.id} className="border-b border-border hover:bg-muted/20">
+                            <td className="p-4">
+                              <p className="font-medium text-foreground">Server #{record.virtfusionServerId}</p>
+                              {record.virtfusionServerUuid && (
+                                <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[150px]" title={record.virtfusionServerUuid}>
+                                  {record.virtfusionServerUuid}
+                                </p>
+                              )}
+                            </td>
+                            <td className="p-4 text-muted-foreground text-xs font-mono truncate max-w-[150px]" title={record.auth0UserId}>
+                              {record.auth0UserId.replace('auth0|', '')}
+                            </td>
+                            <td className="p-4">
+                              <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
+                                record.status === 'suspended' ? 'bg-red-500/20 text-red-400' :
+                                record.status === 'unpaid' ? 'bg-yellow-500/20 text-yellow-400' :
+                                record.status === 'paid' ? 'bg-green-500/20 text-green-400' :
+                                'bg-blue-500/20 text-blue-400'
+                              }`}>
+                                {record.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-foreground">
+                              ${(record.monthlyPriceCents / 100).toFixed(2)}/mo
+                            </td>
+                            <td className="p-4 text-muted-foreground text-xs">
+                              {format(new Date(record.nextBillAt), 'MMM d, yyyy HH:mm')}
+                            </td>
+                            <td className="p-4 text-muted-foreground text-xs">
+                              {record.suspendAt ? format(new Date(record.suspendAt), 'MMM d, yyyy HH:mm') : '-'}
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingBillingRecord(record);
+                                    setBillingEditForm({
+                                      nextBillAt: record.nextBillAt.slice(0, 16),
+                                      status: record.status,
+                                      suspendAt: record.suspendAt ? record.suspendAt.slice(0, 16) : '',
+                                    });
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Billing Ledger Section */}
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-foreground mb-4">Billing Ledger (Charges)</h3>
+                {ledgerLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : billingLedger.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No billing ledger entries
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-muted/20 ring-1 ring-border overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border text-left bg-muted/20">
+                            <th className="p-3 text-muted-foreground font-medium">Date</th>
+                            <th className="p-3 text-muted-foreground font-medium">Server</th>
+                            <th className="p-3 text-muted-foreground font-medium">Amount</th>
+                            <th className="p-3 text-muted-foreground font-medium">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {billingLedger.slice(-50).reverse().map((entry) => (
+                            <tr key={entry.id} className="border-b border-border hover:bg-muted/20">
+                              <td className="p-3 text-muted-foreground text-xs">
+                                {format(new Date(entry.createdAt), 'MMM d, yyyy HH:mm')}
+                              </td>
+                              <td className="p-3 text-foreground">
+                                {entry.virtfusionServerId || '-'}
+                              </td>
+                              <td className="p-3 text-foreground">
+                                ${(entry.amountCents / 100).toFixed(2)}
+                              </td>
+                              <td className="p-3 text-muted-foreground text-xs">
+                                {entry.description}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
           </Tabs>
 
       {/* Server Action Dialog */}
@@ -1610,6 +1777,95 @@ export default function AdminPage() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Link Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Billing Edit Dialog */}
+      <Dialog open={!!editingBillingRecord} onOpenChange={(open) => !open && setEditingBillingRecord(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-400" />
+              Edit Billing Record
+            </DialogTitle>
+            <DialogDescription>
+              {editingBillingRecord && (
+                <span>
+                  Editing billing for Server #{editingBillingRecord.virtfusionServerId}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="billingStatus">Status</Label>
+              <select
+                id="billingStatus"
+                value={billingEditForm.status}
+                onChange={(e) => setBillingEditForm(prev => ({ ...prev, status: e.target.value }))}
+                className="w-full px-3 py-2 rounded-md bg-muted/50 border border-border text-foreground"
+              >
+                <option value="active">Active</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="nextBillAt">Next Bill At</Label>
+              <Input
+                id="nextBillAt"
+                type="datetime-local"
+                value={billingEditForm.nextBillAt}
+                onChange={(e) => setBillingEditForm(prev => ({ ...prev, nextBillAt: e.target.value }))}
+                className="bg-muted/50 border-border"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="suspendAt">Suspend At (leave empty to clear)</Label>
+              <Input
+                id="suspendAt"
+                type="datetime-local"
+                value={billingEditForm.suspendAt}
+                onChange={(e) => setBillingEditForm(prev => ({ ...prev, suspendAt: e.target.value }))}
+                className="bg-muted/50 border-border"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingBillingRecord(null)}
+              disabled={updateBillingMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingBillingRecord) {
+                  updateBillingMutation.mutate({
+                    id: editingBillingRecord.id,
+                    updates: {
+                      nextBillAt: billingEditForm.nextBillAt ? new Date(billingEditForm.nextBillAt).toISOString() : undefined,
+                      status: billingEditForm.status || undefined,
+                      suspendAt: billingEditForm.suspendAt ? new Date(billingEditForm.suspendAt).toISOString() : null,
+                    },
+                  });
+                }
+              }}
+              disabled={updateBillingMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {updateBillingMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
