@@ -1586,14 +1586,8 @@ export class VirtFusionClient {
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
 
-      // Log the full create response to see what fields are available
-      console.log('CREATE RESPONSE:', JSON.stringify(response, null, 2));
-
-      // Extract IP from create response
-      const primaryIp = server.primaryIp || server.primary_ip || server.ipv4 || undefined;
-      console.log('SERVER IP FROM CREATE:', primaryIp);
-
       let password: string | undefined = undefined;
+      let primaryIp: string | undefined = undefined;
 
       // Step 2: Build the OS on the server
       if (osId) {
@@ -1623,6 +1617,15 @@ export class VirtFusionClient {
           console.log('EXTRACTED PASSWORD:', password);
 
           log(`Server ${server.id} build initiated`, 'virtfusion');
+
+          // Fetch the server details to get the IP address (assigned during/after build)
+          try {
+            const serverDetails = await this.getServer(server.id.toString(), false);
+            primaryIp = serverDetails?.primaryIp;
+            console.log('FETCHED IP AFTER BUILD:', primaryIp);
+          } catch (ipError: any) {
+            log(`Failed to fetch IP for server ${server.id}: ${ipError.message}`, 'virtfusion');
+          }
         } catch (buildError: any) {
           log(`Server build failed: ${buildError.message}`, 'virtfusion');
         }
