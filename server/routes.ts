@@ -17,7 +17,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail } from "./email";
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
@@ -2142,7 +2142,7 @@ export async function registerRoutes(
 
       // Email credentials if password was returned
       if (result.password && req.userSession?.email && server.primaryIp) {
-        sendServerCredentialsEmail(
+        sendServerReinstallEmail(
           req.userSession.email,
           hostname || server.name || `Server ${server.id}`,
           server.primaryIp,

@@ -369,6 +369,230 @@ Need help? Contact support@ozvps.com.au
 }
 
 /**
+ * Send SSH credentials email for reinstalled server
+ */
+export async function sendServerReinstallEmail(
+  to: string,
+  serverName: string,
+  serverIp: string,
+  username: string,
+  password: string,
+  osName: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send server reinstall email', 'email');
+    return {
+      success: false,
+      error: 'Email service not configured. Please contact administrator.'
+    };
+  }
+
+  const logoUrl = process.env.APP_URL
+    ? `${process.env.APP_URL}/logo-email.png`
+    : 'https://dev.ozvps.com.au/logo-email.png';
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `🔄 Your server ${serverName} has been reinstalled`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Reinstalled</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0e1a;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0e1a; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px;">
+
+          <!-- Logo Header -->
+          <tr>
+            <td style="padding: 32px 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="180" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(145deg, #141c2e 0%, #1a2540 100%); border-radius: 16px; overflow: hidden; border: 1px solid #2a3a5c;">
+
+                <!-- Reinstall Banner -->
+                <tr>
+                  <td style="background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%); padding: 20px 32px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="48" valign="middle">
+                          <div style="width: 40px; height: 40px; background-color: rgba(255,255,255,0.2); border-radius: 50%; text-align: center; line-height: 40px;">
+                            <span style="font-size: 20px;">🔄</span>
+                          </div>
+                        </td>
+                        <td valign="middle" style="padding-left: 16px;">
+                          <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Server Reinstalled</h1>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Server Info -->
+                <tr>
+                  <td style="padding: 32px;">
+                    <p style="margin: 0 0 24px; color: #94a3b8; font-size: 15px; line-height: 1.7;">
+                      Your server has been reinstalled with <strong style="color: #a78bfa;">${osName}</strong>. Your new credentials are below.
+                    </p>
+
+                    <!-- Server Name Card -->
+                    <div style="background-color: #0d1424; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #1e3a5f;">
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td>
+                            <p style="margin: 0 0 4px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server Name</p>
+                            <p style="margin: 0; color: #f1f5f9; font-size: 18px; font-weight: 600;">${serverName}</p>
+                          </td>
+                          <td align="right">
+                            <div style="display: inline-block; background-color: rgba(139, 92, 246, 0.15); color: #a78bfa; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
+                              🔄 Reinstalled
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+
+                    <!-- Credentials Section -->
+                    <div style="background-color: #0d1424; border-radius: 12px; overflow: hidden; border: 1px solid #1e3a5f;">
+                      <div style="background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%); padding: 14px 20px;">
+                        <h2 style="margin: 0; color: #ffffff; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                          🔐 New SSH Credentials
+                        </h2>
+                      </div>
+                      <div style="padding: 20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="padding: 12px 0; border-bottom: 1px solid #1e3a5f;">
+                              <span style="color: #64748b; font-size: 13px;">IP Address</span>
+                            </td>
+                            <td style="padding: 12px 0; border-bottom: 1px solid #1e3a5f; text-align: right;">
+                              <code style="color: #60a5fa; font-size: 14px; font-family: 'SF Mono', Monaco, 'Courier New', monospace; background-color: #172033; padding: 4px 10px; border-radius: 4px;">${serverIp}</code>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 12px 0; border-bottom: 1px solid #1e3a5f;">
+                              <span style="color: #64748b; font-size: 13px;">Username</span>
+                            </td>
+                            <td style="padding: 12px 0; border-bottom: 1px solid #1e3a5f; text-align: right;">
+                              <code style="color: #f1f5f9; font-size: 14px; font-family: 'SF Mono', Monaco, 'Courier New', monospace; background-color: #172033; padding: 4px 10px; border-radius: 4px;">${username}</code>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 12px 0;">
+                              <span style="color: #64748b; font-size: 13px;">Password</span>
+                            </td>
+                            <td style="padding: 12px 0; text-align: right;">
+                              <code style="color: #fbbf24; font-size: 14px; font-family: 'SF Mono', Monaco, 'Courier New', monospace; background-color: #172033; padding: 4px 10px; border-radius: 4px;">${password}</code>
+                            </td>
+                          </tr>
+                        </table>
+                      </div>
+                    </div>
+
+                    <!-- Quick Connect -->
+                    <div style="margin-top: 24px; background-color: #0d1424; border-radius: 12px; padding: 20px; border: 1px solid #1e3a5f;">
+                      <p style="margin: 0 0 12px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Quick Connect Command</p>
+                      <div style="background-color: #000000; border-radius: 8px; padding: 14px 16px; font-family: 'SF Mono', Monaco, 'Courier New', monospace;">
+                        <span style="color: #a78bfa;">$</span>
+                        <span style="color: #f1f5f9; margin-left: 8px;">ssh ${username}@${serverIp}</span>
+                      </div>
+                    </div>
+
+                    <!-- Security Notice -->
+                    <div style="margin-top: 24px; background: linear-gradient(90deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%); border-left: 3px solid #fbbf24; border-radius: 0 8px 8px 0; padding: 16px 20px;">
+                      <p style="margin: 0; color: #fcd34d; font-size: 13px; font-weight: 600;">⚠️ Important</p>
+                      <p style="margin: 8px 0 0; color: #94a3b8; font-size: 13px; line-height: 1.6;">
+                        Your previous data has been erased. These are your new login credentials - save them securely.
+                      </p>
+                    </div>
+
+                    <!-- CTA Button -->
+                    <div style="margin-top: 32px; text-align: center;">
+                      <a href="https://dev.ozvps.com.au/dashboard" style="display: inline-block; background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 14px; font-weight: 600;">
+                        View Server Dashboard →
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: #64748b; font-size: 13px;">
+                Need help? <a href="mailto:support@ozvps.com.au" style="color: #a78bfa; text-decoration: none;">Contact Support</a>
+              </p>
+              <p style="margin: 0; color: #475569; font-size: 12px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. Australian owned & operated.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+🔄 SERVER REINSTALLED
+=====================
+
+Your server has been reinstalled with ${osName}. Your new credentials are below.
+
+SERVER: ${serverName}
+STATUS: Reinstalled
+
+NEW SSH CREDENTIALS
+-------------------
+IP Address: ${serverIp}
+Username:   ${username}
+Password:   ${password}
+
+QUICK CONNECT
+-------------
+$ ssh ${username}@${serverIp}
+
+⚠️ IMPORTANT
+Your previous data has been erased. These are your new login credentials - save them securely.
+
+View your server: https://dev.ozvps.com.au/dashboard
+
+---
+Need help? Contact support@ozvps.com.au
+© ${new Date().getFullYear()} OzVPS Pty Ltd. Australian owned & operated.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send server reinstall email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Server reinstall email sent to ${to} for server ${serverName}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending server reinstall email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send a password changed confirmation email
  */
 export async function sendPasswordChangedEmail(to: string): Promise<EmailResult> {

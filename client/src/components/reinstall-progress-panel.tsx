@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Eye, EyeOff, Copy, Check, Terminal, Server, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, Eye, EyeOff, Copy, Check, Terminal, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReinstallTaskState, ReinstallStatus, TimelineEvent } from "@/hooks/use-reinstall-task";
+
+const AUTO_DISMISS_MS = 2 * 60 * 1000; // 2 minutes
 
 interface ReinstallProgressPanelProps {
   state: ReinstallTaskState;
@@ -28,11 +30,33 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
   const { status, percent, error, timeline, isActive, credentials } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | 'ssh' | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
   const isComplete = status === 'complete';
   const isFailed = status === 'failed';
   const isRunning = isActive && !isComplete && !isFailed;
   const config = STATUS_CONFIG[status];
+
+  // Auto-dismiss credentials after 2 minutes
+  useEffect(() => {
+    if (isComplete && credentials && onDismiss) {
+      const startTime = Date.now();
+      setTimeRemaining(AUTO_DISMISS_MS);
+
+      const countdownInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, AUTO_DISMISS_MS - elapsed);
+        setTimeRemaining(remaining);
+
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          onDismiss();
+        }
+      }, 1000);
+
+      return () => clearInterval(countdownInterval);
+    }
+  }, [isComplete, credentials, onDismiss]);
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password' | 'ssh') => {
     try {
@@ -113,9 +137,16 @@ export function ReinstallProgressPanel({ state, onDismiss }: ReinstallProgressPa
       {isComplete && credentials && (
         <div className="rounded-xl overflow-hidden border border-emerald-500/20">
           {/* Header */}
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-white" />
-            <h4 className="font-semibold text-white text-sm">SSH Login Credentials</h4>
+          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-white" />
+              <h4 className="font-semibold text-white text-sm">SSH Login Credentials</h4>
+            </div>
+            {timeRemaining !== null && timeRemaining > 0 && (
+              <span className="text-xs text-white/70">
+                Auto-hides in {Math.ceil(timeRemaining / 1000)}s
+              </span>
+            )}
           </div>
 
           <div className="bg-card/50 p-4 space-y-3">
