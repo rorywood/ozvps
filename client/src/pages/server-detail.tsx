@@ -1458,7 +1458,7 @@ export default function ServerDetail() {
           </div>
 
           {/* DigitalOcean-style Power Controls - Prominent Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-6">
             {/* Primary Console Button */}
             <Button
               className="h-10"
