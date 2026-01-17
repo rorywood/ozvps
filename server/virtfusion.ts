@@ -1775,6 +1775,10 @@ export class VirtFusionClient {
     try {
       log(`Fetching OS templates for package ${packageId}`, 'virtfusion');
       const data = await this.request<{ data: any }>(`/media/templates/fromServerPackageSpec/${packageId}`);
+
+      // DEBUG: Log the full response structure
+      log(`[VIRTFUSION TEMPLATES] Raw response for package ${packageId}: ${JSON.stringify(data.data)}`, 'virtfusion');
+
       return data.data;
     } catch (error) {
       log(`Failed to fetch OS templates for package ${packageId}: ${error}`, 'virtfusion');
