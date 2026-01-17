@@ -373,10 +373,8 @@ export default function ServerDetail() {
                      "Shutting down server...",
       });
       
-      // Start console lock for boot/reboot actions
-      if (action === 'boot' || action === 'reboot') {
-        consoleLock.startLock(action);
-      }
+      // Start console lock for all power actions to prevent button spamming
+      consoleLock.startLock(action);
       
       // Poll for status updates with stabilization delay
       let completionDetectedAt: number | null = null;
@@ -1354,7 +1352,8 @@ export default function ServerDetail() {
                      displayStatus === 'stopping' ? 'Stopping...' :
                      powerActionPending === 'boot' ? 'Starting...' :
                      powerActionPending === 'reboot' ? 'Rebooting...' :
-                     powerActionPending === 'poweroff' ? 'Stopping...' :
+                     powerActionPending === 'shutdown' ? 'Shutting down...' :
+                     powerActionPending === 'poweroff' ? 'Force stopping...' :
                      'Processing...'}
                   </span>
                 </div>
@@ -1417,7 +1416,7 @@ export default function ServerDetail() {
                 variant="outline"
                 className="h-10 border-success/50 text-success hover:bg-success/10"
                 onClick={() => handlePowerAction('boot')}
-                disabled={isTransitioning || !!powerActionPending || isSuspended}
+                disabled={isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
                 data-testid="button-start"
               >
                 <Power className="h-4 w-4 mr-2" />
@@ -1429,7 +1428,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10"
                   onClick={() => handlePowerAction('reboot')}
-                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
                   data-testid="button-reboot"
                 >
                   <RotateCw className="h-4 w-4 mr-2" />
@@ -1437,13 +1436,23 @@ export default function ServerDetail() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
-                  onClick={() => handlePowerAction('poweroff')}
-                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended}
-                  data-testid="button-stop"
+                  className="h-10"
+                  onClick={() => handlePowerAction('shutdown')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                  data-testid="button-shutdown"
                 >
                   <Power className="h-4 w-4 mr-2" />
-                  Stop
+                  Shutdown
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
+                  onClick={() => handlePowerAction('poweroff')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                  data-testid="button-force-stop"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Force Stop
                 </Button>
               </>
             )}
