@@ -412,7 +412,9 @@ export default function ServerDetail() {
 
         // CRITICAL: Reset reinstallTask IMMEDIATELY to unlock buttons
         // Don't wait for credential fetch - that can take 30+ seconds
+        console.log('[AUTO-DISMISS] Calling reinstallTask.reset() to unlock buttons');
         reinstallTask.reset();
+        console.log('[AUTO-DISMISS] After reset, reinstallTask.isActive should be false:', reinstallTask.isActive);
 
         // Clear setup mode flags (this will cause re-render to show overview)
         updateSetupMode(false);
@@ -1387,6 +1389,18 @@ export default function ServerDetail() {
 
         {/* Building banner removed - showing full-page provisioning view instead */}
         {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
+        {(() => {
+          // DEBUG: Log why SSH banner is not showing
+          const shouldShow = showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete');
+          console.log('[SSH BANNER DEBUG] Should show:', shouldShow, {
+            showSavedCredentials,
+            hasSavedCredentials: !!savedCredentials,
+            reinstallTaskIsActive: reinstallTask.isActive,
+            reinstallTaskStatus: reinstallTask.status,
+            credentialsFetchStatus,
+          });
+          return null;
+        })()}
         {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
           <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
             <div className="flex items-center gap-3">
@@ -1788,6 +1802,23 @@ export default function ServerDetail() {
 
           {/* DigitalOcean-style Power Controls - Prominent Buttons */}
           <div className="flex flex-wrap items-center gap-3">
+            {(() => {
+              // DEBUG: Log button disable conditions
+              const consoleDisabled = !!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive;
+              if (consoleDisabled) {
+                console.log('[BUTTON DEBUG] Console button disabled. Reasons:', {
+                  powerActionPending: !!powerActionPending,
+                  serverNotRunning: server.status !== 'running',
+                  serverStatus: server.status,
+                  isSuspended,
+                  consoleLockIsLocked: consoleLock.isLocked,
+                  consoleLockAction: consoleLock.action,
+                  reinstallTaskIsActive: reinstallTask.isActive,
+                  reinstallTaskStatus: reinstallTask.status,
+                });
+              }
+              return null;
+            })()}
             {/* Primary Console Button */}
             <Button
               className="h-10"
