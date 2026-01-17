@@ -1155,7 +1155,7 @@ export default function ServerDetail() {
           } catch {}
 
           return (
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 mb-4" data-testid="banner-credentials">
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 mb-8" data-testid="banner-credentials">
               <div className="flex items-center gap-3">
                 <Mail className="h-5 w-5 text-primary flex-shrink-0" />
                 <div className="flex-1">
