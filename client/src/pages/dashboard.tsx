@@ -55,8 +55,9 @@ export default function Dashboard() {
 
   const formatBandwidth = (bytes: number): string => {
     const gb = bytes / (1024 * 1024 * 1024);
+    // Bandwidth uses decimal units (1TB = 1000GB), not binary (1TiB = 1024GiB)
     if (gb >= 1000) {
-      const tb = gb / 1024;
+      const tb = gb / 1000;
       return `${tb.toFixed(2)} TB`;
     } else if (gb >= 1) {
       return `${gb.toFixed(2)} GB`;

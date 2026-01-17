@@ -1681,8 +1681,9 @@ export default function ServerDetail() {
                 const formatBytes = (bytes: number): string => {
                   if (bytes === 0) return '0 MB';
                   const gb = bytes / (1024 * 1024 * 1024);
+                  // Bandwidth uses decimal units (1TB = 1000GB), not binary (1TiB = 1024GiB)
                   if (gb >= 1000) {
-                    const tb = gb / 1024;
+                    const tb = gb / 1000;
                     return `${tb.toFixed(2)} TB`;
                   }
                   if (gb >= 1) {
