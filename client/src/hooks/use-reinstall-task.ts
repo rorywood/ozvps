@@ -175,27 +175,39 @@ export function useReinstallTask(serverId: string) {
 
       // COMMISSIONED: Server is built (commissioned=3) but may still be booting
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
+        // Check ref BEFORE setState to prevent duplicate rebooting events
+        if (lastStatusRef.current === 'rebooting' || lastStatusRef.current === 'complete') {
+          return;
+        }
+
+        // Set ref immediately to prevent race conditions
+        lastStatusRef.current = 'rebooting';
+        const bootingStartTime = Date.now();
+
         setState(prev => {
-          // Don't change status if already at rebooting or complete
-          if (prev.status === 'rebooting' || prev.status === 'complete' || lastStatusRef.current === 'complete') {
+          // Double-check state as well
+          if (prev.status === 'rebooting' || prev.status === 'complete') {
             return prev;
           }
 
-          const bootingStartTime = Date.now();
-          addTimelineEvent('rebooting', 'Server commissioned - booting up...');
+          const newTimeline = [
+            ...prev.timeline,
+            { status: 'rebooting' as ReinstallStatus, timestamp: Date.now(), message: 'Server commissioned - booting up...' }
+          ];
           const booting = {
             ...prev,
             isActive: true,
             status: 'rebooting' as ReinstallStatus,
             percent: 95,
             rebootingStartTime: bootingStartTime,
+            timeline: newTimeline,
           };
           saveTaskState(serverId, {
             isActive: true,
             taskId: prev.taskId,
             status: 'rebooting',
             percent: 95,
-            timeline: prev.timeline,
+            timeline: newTimeline,
             credentials: prev.credentials,
             rebootingStartTime: bootingStartTime,
           });
