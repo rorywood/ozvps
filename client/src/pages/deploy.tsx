@@ -196,6 +196,16 @@ export default function DeployPage() {
   const templates = templatesData || [];
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
+  // Check if all plans are out of stock
+  const allPlansOutOfStock = plans.length > 0 && plans.every(p => p.active === false);
+
+  // Debug logging - remove after fixing
+  console.log('[Deploy] Plans data:', {
+    plansCount: plans.length,
+    allPlansOutOfStock,
+    plans: plans.map(p => ({ id: p.id, name: p.name, active: p.active, activeType: typeof p.active }))
+  });
+
   const validateHostname = (value: string): boolean => {
     const trimmed = value.trim();
     if (!trimmed || trimmed.length === 0) {
@@ -412,7 +422,7 @@ export default function DeployPage() {
                 <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
                   <Loader2 className="h-6 w-6 text-primary animate-spin" />
                 </div>
-              ) : plans.length > 0 && plans.every(p => !p.active) ? (
+              ) : allPlansOutOfStock ? (
                 <div className="border border-border rounded-lg p-6 bg-card">
                   <div className="flex items-start gap-4">
                     <AlertCircle className="h-6 w-6 text-warning flex-shrink-0 mt-0.5" />
