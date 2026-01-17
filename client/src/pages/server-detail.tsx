@@ -132,79 +132,18 @@ export default function ServerDetail() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
   
-  // Persistent setup credentials (survives dialog close and page refreshes)
-  const [savedCredentials, setSavedCredentials] = useState<{
-    serverIp: string;
-    username: string;
-    password: string;
-  } | null>(() => {
-    // Restore from sessionStorage on mount (guard for SSR)
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = sessionStorage.getItem(`credentials:${serverId}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
 
-        // Check if credentials have expired (5 minute TTL)
-        if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
-          // Expired - remove from storage and return null
-          sessionStorage.removeItem(`credentials:${serverId}`);
-          return null;
-        }
-
-        // Return credentials without the expiresAt field
-        const { expiresAt, ...credentials } = parsed;
-        return credentials;
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null;
-  });
-  const [showSavedCredentials, setShowSavedCredentials] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      // Don't show if credentials were dismissed
-      if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
-        return false;
-      }
-      return !!sessionStorage.getItem(`credentials:${serverId}`);
-    } catch {
-      return false;
-    }
-  });
-
-  // Persist credentials dismissal
+  // Dismiss credentials banner
   const dismissCredentials = () => {
-    setShowSavedCredentials(false);
     try {
       sessionStorage.setItem(`credentialsDismissed:${serverId}`, 'true');
     } catch {
       // Ignore storage errors
     }
+    // Force re-render by invalidating queries
+    queryClient.invalidateQueries({ queryKey: ['server', serverId] });
   };
   const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
-  
-  // SECURITY WARNING: Credentials stored in sessionStorage are vulnerable to XSS attacks
-  // We store them temporarily (5 minutes max) for user convenience during server setup
-  // They auto-expire and should be copied by user immediately
-  const updateSavedCredentials = (creds: { serverIp: string; username: string; password: string } | null) => {
-    setSavedCredentials(creds);
-    try {
-      if (creds) {
-        // Add expiration timestamp (5 minutes from now)
-        const credentialsWithExpiry = {
-          ...creds,
-          expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-        };
-        sessionStorage.setItem(`credentials:${serverId}`, JSON.stringify(credentialsWithExpiry));
-      } else {
-        sessionStorage.removeItem(`credentials:${serverId}`);
-      }
-    } catch {
-      // Ignore storage errors
-    }
-  };
 
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
@@ -404,41 +343,29 @@ export default function ServerDetail() {
       // - All buttons are active
       // - Status is green everywhere
       const timer = setTimeout(() => {
-        // Save credentials if available from reinstall task (will be shown in banner later)
-        if (reinstallTask.credentials) {
-          updateSavedCredentials(reinstallTask.credentials);
-          setShowSavedCredentials(true);
-        }
+        console.log('[AUTO-DISMISS] Starting dismiss sequence');
 
-        // CRITICAL: Reset reinstallTask IMMEDIATELY to unlock buttons
-        // Don't wait for credential fetch - that can take 30+ seconds
-        console.log('[AUTO-DISMISS] Calling reinstallTask.reset() to unlock buttons');
+        // STEP 1: Reset reinstallTask FIRST (clears isActive flag)
         reinstallTask.reset();
-        console.log('[AUTO-DISMISS] After reset, reinstallTask.isActive should be false:', reinstallTask.isActive);
 
-        // Clear setup mode flags (this will cause re-render to show overview)
+        // STEP 2: Clear setup mode flags
         updateSetupMode(false);
         updateSetupMinimized(false);
 
-        // Clear sessionStorage flags and mark setup as completed
+        // STEP 3: Clear sessionStorage
         try {
           sessionStorage.removeItem(`setupMode:${serverId}`);
           sessionStorage.removeItem(`setupMinimized:${serverId}`);
-          // Mark setup as completed to prevent restarting on query refetch
           sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
         } catch (e) {
           // Ignore
         }
 
-        // Invalidate queries to refresh server data with latest status
+        // STEP 4: Invalidate queries to refresh with latest data
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
 
-        // Auto-fetch credentials in background (don't block button unlock)
-        if (!autoFetchAttempted) {
-          setAutoFetchAttempted(true);
-          autoFetchCredentials(0); // Fire and forget - runs in background
-        }
+        console.log('[AUTO-DISMISS] Dismiss complete - buttons should unlock on next render');
       }, 2000);
 
       return () => clearTimeout(timer);
@@ -460,14 +387,6 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
 
-  // Set credentials in state when they become available (persists to sessionStorage)
-  useEffect(() => {
-    if (reinstallTask.credentials && serverId && !savedCredentials) {
-      updateSavedCredentials(reinstallTask.credentials);
-      setShowSavedCredentials(true);
-    }
-  }, [reinstallTask.credentials, serverId, savedCredentials]);
-  
   // Refetch server data when build completes OR enters rebooting status
   // This ensures needsSetup gets updated from true->false when commissioned=3
   // (even if tabbed out)
@@ -478,116 +397,6 @@ export default function ServerDetail() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
   }, [reinstallTask.status, serverId, queryClient]);
-  
-  // Manual password reset state for "Get SSH Credentials" button
-  const [manualResetLoading, setManualResetLoading] = useState(false);
-  const [manualResetError, setManualResetError] = useState<string | null>(null);
-  const [autoFetchAttempted, setAutoFetchAttempted] = useState(false);
-  const [credentialsFetchStatus, setCredentialsFetchStatus] = useState<'idle' | 'checking' | 'ready' | 'failed'>('idle');
-
-  // Auto-fetch credentials with persistent retry until guest agent is ready
-  const autoFetchCredentials = async (retryCount = 0): Promise<boolean> => {
-    if (!serverId || !server?.primaryIp) return false;
-
-    // Max retries: 10 attempts over ~5 minutes (30s, 30s, 30s, 30s, 30s, 60s, 60s, 60s, 60s, 60s)
-    const MAX_RETRIES = 10;
-    const isGuestAgentError = (error: any) =>
-      error.message?.includes('guest agent') || error.message?.includes('QEMU');
-
-    console.log(`[AUTO-FETCH] Attempt ${retryCount + 1}/${MAX_RETRIES} to fetch credentials`);
-    setCredentialsFetchStatus('checking');
-
-    try {
-      const response = await api.resetServerPassword(serverId);
-
-      if (response.password) {
-        const creds = {
-          serverIp: server.primaryIp || 'N/A',
-          username: response.username || 'root',
-          password: response.password
-        };
-        updateSavedCredentials(creds);
-        setShowSavedCredentials(true);
-        setCredentialsFetchStatus('ready');
-        console.log('[AUTO-FETCH] ✅ Credentials retrieved successfully');
-        toast({
-          title: "Server Ready!",
-          description: "Your SSH credentials are available below.",
-        });
-        return true;
-      }
-      return false;
-    } catch (error: any) {
-      console.log(`[AUTO-FETCH] ❌ Attempt ${retryCount + 1} failed:`, error.message);
-
-      // If guest agent not ready and we haven't hit max retries, keep trying
-      if (isGuestAgentError(error) && retryCount < MAX_RETRIES - 1) {
-        // Use exponential backoff: 30s for first 5 attempts, then 60s
-        const delayMs = retryCount < 5 ? 30000 : 60000;
-        const delaySec = delayMs / 1000;
-
-        console.log(`[AUTO-FETCH] Guest agent not ready, will retry in ${delaySec} seconds (attempt ${retryCount + 2}/${MAX_RETRIES})`);
-
-        // Only show toast on first few failures to avoid spam
-        if (retryCount < 3) {
-          toast({
-            title: "Preparing Server Access",
-            description: `Guest agent is starting up, checking again in ${delaySec}s...`,
-          });
-        }
-
-        return new Promise((resolve) => {
-          setTimeout(async () => {
-            const success = await autoFetchCredentials(retryCount + 1);
-            resolve(success);
-          }, delayMs);
-        });
-      }
-
-      // Failed after all retries or different error - show manual button
-      console.log('[AUTO-FETCH] ❌ Auto-fetch failed after retries, manual intervention needed');
-      setCredentialsFetchStatus('failed');
-      return false;
-    }
-  };
-
-  // Manual password reset handler
-  const handleGetCredentials = async () => {
-    if (!serverId || !server?.primaryIp) return;
-
-    setManualResetLoading(true);
-    setManualResetError(null);
-
-    try {
-      const response = await api.resetServerPassword(serverId);
-
-      if (response.password) {
-        const creds = {
-          serverIp: server.primaryIp || 'N/A',
-          username: response.username || 'root',
-          password: response.password
-        };
-        updateSavedCredentials(creds);
-        setShowSavedCredentials(true);
-        toast({
-          title: "Credentials Retrieved",
-          description: "Your SSH credentials are now available below.",
-        });
-      } else {
-        throw new Error('No password returned from server');
-      }
-    } catch (error: any) {
-      const errorMsg = error.message || 'Failed to get credentials';
-      setManualResetError(errorMsg);
-      toast({
-        title: "Failed to Get Credentials",
-        description: errorMsg,
-        variant: "destructive",
-      });
-    } finally {
-      setManualResetLoading(false);
-    }
-  };
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
@@ -1255,10 +1064,6 @@ export default function ServerDetail() {
             state={reinstallTask}
             serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
             onDismiss={() => {
-              if (reinstallTask.credentials) {
-                updateSavedCredentials(reinstallTask.credentials);
-                setShowSavedCredentials(true);
-              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1266,10 +1071,6 @@ export default function ServerDetail() {
               queryClient.invalidateQueries({ queryKey: ['servers'] });
             }}
             onClose={() => {
-              if (reinstallTask.credentials) {
-                updateSavedCredentials(reinstallTask.credentials);
-                setShowSavedCredentials(true);
-              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1388,20 +1189,14 @@ export default function ServerDetail() {
       <div className="space-y-6 pt-6 pb-20">
 
         {/* Building banner removed - showing full-page provisioning view instead */}
-        {/* Saved Credentials Banner - Shows after build completes, setup dialog closes, AND server is running */}
-        {(() => {
-          // DEBUG: Log why SSH banner is not showing
-          const shouldShow = showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete');
-          console.log('[SSH BANNER DEBUG] Should show:', shouldShow, {
-            showSavedCredentials,
-            hasSavedCredentials: !!savedCredentials,
-            reinstallTaskIsActive: reinstallTask.isActive,
-            reinstallTaskStatus: reinstallTask.status,
-            credentialsFetchStatus,
-          });
-          return null;
-        })()}
-        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
+        {/* Saved Credentials Banner - Shows ONLY when we have credentials from the initial build */}
+        {reinstallTask.credentials && server?.status === 'running' && (() => {
+          try {
+            return sessionStorage.getItem(`credentialsDismissed:${serverId}`) !== 'true';
+          } catch {
+            return true;
+          }
+        })() && (
           <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-success flex-shrink-0" />
@@ -1417,14 +1212,14 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Server IP</span>
-                  <span className="font-mono text-foreground">{savedCredentials.serverIp}</span>
+                  <span className="font-mono text-foreground">{reinstallTask.credentials.serverIp}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(savedCredentials.serverIp);
+                    navigator.clipboard.writeText(reinstallTask.credentials!.serverIp);
                     toast({ title: "Copied", description: "Server IP copied to clipboard" });
                   }}
                 >
@@ -1434,14 +1229,14 @@ export default function ServerDetail() {
               <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground block">Username</span>
-                  <span className="font-mono text-foreground">{savedCredentials.username}</span>
+                  <span className="font-mono text-foreground">{reinstallTask.credentials.username}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(savedCredentials.username);
+                    navigator.clipboard.writeText(reinstallTask.credentials!.username);
                     toast({ title: "Copied", description: "Username copied to clipboard" });
                   }}
                 >
@@ -1452,7 +1247,7 @@ export default function ServerDetail() {
                 <div>
                   <span className="text-xs text-muted-foreground block">Password</span>
                   <span className="font-mono text-foreground">
-                    {showCredentialsPassword ? savedCredentials.password : '••••••••••••'}
+                    {showCredentialsPassword ? reinstallTask.credentials.password : '••••••••••••'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1470,7 +1265,7 @@ export default function ServerDetail() {
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:bg-muted"
                     onClick={() => {
-                      navigator.clipboard.writeText(savedCredentials.password);
+                      navigator.clipboard.writeText(reinstallTask.credentials!.password);
                       toast({ title: "Copied", description: "Password copied to clipboard" });
                     }}
                     data-testid="button-copy-password"
@@ -1486,14 +1281,14 @@ export default function ServerDetail() {
               <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs font-mono text-success bg-card/30 px-3 py-2 rounded">
-                  ssh {savedCredentials.username}@{savedCredentials.serverIp}
+                  ssh {reinstallTask.credentials.username}@{reinstallTask.credentials.serverIp}
                 </code>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    navigator.clipboard.writeText(`ssh ${savedCredentials.username}@${savedCredentials.serverIp}`);
+                    navigator.clipboard.writeText(`ssh ${reinstallTask.credentials!.username}@${reinstallTask.credentials!.serverIp}`);
                     toast({ title: "Copied", description: "SSH command copied to clipboard" });
                   }}
                   title="Copy SSH command"
@@ -1517,73 +1312,6 @@ export default function ServerDetail() {
           </div>
         )}
 
-        {/* Get SSH Credentials Button - Show ONLY after all auto-retry attempts failed */}
-        {server?.status === 'running' &&
-         server?.needsSetup === false &&
-         !savedCredentials &&
-         !reinstallTask.credentials &&
-         credentialsFetchStatus === 'failed' &&
-         (!reinstallTask.isActive || reinstallTask.status === 'complete') &&
-         (() => {
-           try {
-             return sessionStorage.getItem(`credentialsDismissed:${serverId}`) !== 'true';
-           } catch {
-             return true;
-           }
-         })() && (
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 space-y-4" data-testid="banner-get-credentials">
-            <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-primary flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-primary">Manual Credential Retrieval Required</h3>
-                <p className="text-sm text-muted-foreground">
-                  The QEMU guest agent is taking longer than expected to start.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                <strong>Note:</strong> We tried automatically fetching your credentials multiple times over several minutes, but the guest agent is not responding yet.
-                This is normal for some OS templates. You can try manually now, or wait a few more minutes for the guest agent to fully initialize.
-              </p>
-
-              {manualResetError && (
-                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-destructive font-medium">Failed to retrieve credentials</p>
-                    <p className="text-xs text-muted-foreground mt-1">{manualResetError}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      The guest agent may not be ready yet. Please wait 30-60 seconds and try again.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleGetCredentials}
-                  disabled={manualResetLoading}
-                  className="bg-primary hover:bg-primary/90"
-                  data-testid="button-get-credentials"
-                >
-                  {manualResetLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Retrieving...
-                    </>
-                  ) : (
-                    <>
-                      <Key className="h-4 w-4 mr-2" />
-                      Get SSH Credentials
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Suspension Banner */}
         {isSuspended && (
@@ -1802,28 +1530,11 @@ export default function ServerDetail() {
 
           {/* DigitalOcean-style Power Controls - Prominent Buttons */}
           <div className="flex flex-wrap items-center gap-3">
-            {(() => {
-              // DEBUG: Log button disable conditions
-              const consoleDisabled = !!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive;
-              if (consoleDisabled) {
-                console.log('[BUTTON DEBUG] Console button disabled. Reasons:', {
-                  powerActionPending: !!powerActionPending,
-                  serverNotRunning: server.status !== 'running',
-                  serverStatus: server.status,
-                  isSuspended,
-                  consoleLockIsLocked: consoleLock.isLocked,
-                  consoleLockAction: consoleLock.action,
-                  reinstallTaskIsActive: reinstallTask.isActive,
-                  reinstallTaskStatus: reinstallTask.status,
-                });
-              }
-              return null;
-            })()}
             {/* Primary Console Button */}
             <Button
               className="h-10"
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
               data-testid="button-console"
             >
               <TerminalSquare className="h-4 w-4 mr-2" />
@@ -1836,7 +1547,7 @@ export default function ServerDetail() {
                 variant="outline"
                 className="h-10 border-success/50 text-success hover:bg-success/10"
                 onClick={() => handlePowerAction('boot')}
-                disabled={isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                disabled={isTransitioning || !!powerActionPending || isSuspended}
                 data-testid="button-start"
               >
                 <Power className="h-4 w-4 mr-2" />
@@ -1848,7 +1559,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10"
                   onClick={() => handlePowerAction('reboot')}
-                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended}
                   data-testid="button-reboot"
                 >
                   <RotateCw className="h-4 w-4 mr-2" />
@@ -1858,7 +1569,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
                   onClick={() => handlePowerAction('poweroff')}
-                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended}
                   data-testid="button-stop"
                 >
                   <Power className="h-4 w-4 mr-2" />
@@ -1878,7 +1589,7 @@ export default function ServerDetail() {
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() => setPasswordResetDialogOpen(true)}
-                  disabled={isSuspended || reinstallTask.isActive}
+                  disabled={isSuspended}
                 >
                   <Key className="h-4 w-4 mr-2" /> Reset Password
                 </DropdownMenuItem>
