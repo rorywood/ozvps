@@ -1759,7 +1759,7 @@ export default function ServerDetail() {
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1024).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1000).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
                       </span>
                       {remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
