@@ -885,8 +885,8 @@ export default function BillingPage() {
 
   return (
     <AppShell>
-      <div className="space-y-10 max-w-6xl">
-        <div>
+      <div className="max-w-6xl">
+        <div className="mb-10">
           <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
             Billing
           </h1>
