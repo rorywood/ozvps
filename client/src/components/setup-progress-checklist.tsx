@@ -50,15 +50,9 @@ const SETUP_STEPS: ChecklistStep[] = [
     description: 'Applying network and security settings',
     statuses: ['configuring'],
   },
-  {
-    id: 'rebooting',
-    label: 'Starting Server',
-    description: 'Booting up and finalizing setup',
-    statuses: ['rebooting'],
-  },
 ];
 
-const STATUS_ORDER: ReinstallStatus[] = ['idle', 'queued', 'provisioning', 'imaging', 'installing', 'configuring', 'rebooting', 'complete'];
+const STATUS_ORDER: ReinstallStatus[] = ['idle', 'queued', 'provisioning', 'imaging', 'installing', 'configuring', 'complete'];
 
 function getStepState(step: ChecklistStep, currentStatus: ReinstallStatus): 'pending' | 'active' | 'complete' {
   const currentIndex = STATUS_ORDER.indexOf(currentStatus);
@@ -84,7 +78,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
   const [copiedField, setCopiedField] = useState<'ip' | 'username' | 'password' | null>(null);
   const [copiedSshCommand, setCopiedSshCommand] = useState(false);
 
-  const isComplete = status === 'complete' || status === 'rebooting';
+  const isComplete = status === 'complete';
   const isFailed = status === 'failed';
 
   const handleCopy = async (value: string, field: 'ip' | 'username' | 'password') => {
@@ -138,7 +132,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
             )}
           </div>
           <h3 className="text-xl font-display font-semibold text-foreground">
-            {status === 'rebooting' ? 'Server is Booting...' : isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
+            {isComplete ? 'Setup Complete!' : isFailed ? 'Setup Failed' : 'Setting Up Server'}
           </h3>
           {serverName && (
             <p className="text-sm text-muted-foreground">{serverName}</p>
@@ -338,23 +332,26 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         </div>
       )}
 
-      {/* Completion message - show when server is booting or complete */}
-      {isComplete && credentials && (
-        <div className="flex items-center gap-2 text-sm py-3 px-4 bg-success/10 border border-success/20 rounded-lg">
-          {status === 'rebooting' ? (
-            <>
-              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-success" />
-              <span className="font-medium text-success">
-                Server commissioned! Waiting for boot to complete...
-              </span>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" />
-              <span className="font-medium text-success">
-                Setup complete! Credentials have been saved.
-              </span>
-            </>
+      {/* Server is Ready Banner - show when complete */}
+      {isComplete && (
+        <div className="p-5 bg-success/10 border border-success/20 rounded-lg space-y-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-6 w-6 text-success flex-shrink-0" />
+            <div>
+              <h4 className="font-semibold text-success text-lg">Your Server is Ready!</h4>
+              <p className="text-sm text-muted-foreground">
+                SSH credentials have been emailed to your account.
+              </p>
+            </div>
+          </div>
+          {onDismiss && (
+            <Button
+              onClick={onDismiss}
+              className="w-full bg-success hover:bg-success/90 text-white"
+              data-testid="button-continue-to-server"
+            >
+              Continue to Overview
+            </Button>
           )}
         </div>
       )}

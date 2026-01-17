@@ -1044,6 +1044,7 @@ export default function ServerDetail() {
               updateSetupMinimized(false);
               queryClient.invalidateQueries({ queryKey: ['server', serverId] });
               queryClient.invalidateQueries({ queryKey: ['servers'] });
+              setLocation('/servers');
             }}
             onClose={() => {
               reinstallTask.reset();
@@ -1926,6 +1927,7 @@ export default function ServerDetail() {
                     onDismiss={() => {
                       reinstallTask.reset();
                       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                      setLocation('/servers');
                     }}
                   />
                 </div>
