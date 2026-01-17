@@ -17,7 +17,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail } from "./email";
 
 // Helper to get client IP from request
 function getClientIp(req: any): string {
@@ -2089,26 +2089,50 @@ export async function registerRoutes(
       // Templates are returned in groups, each group has a templates array
       const templateGroups = await virtfusionClient.getOsTemplates(req.params.id);
       let templateAllowed = false;
-      
+      let selectedTemplate: any = null;
+
       if (templateGroups && Array.isArray(templateGroups)) {
         for (const group of templateGroups) {
           if (group.templates && Array.isArray(group.templates)) {
-            const found = group.templates.some((t: any) => 
+            const found = group.templates.find((t: any) =>
               String(t.id) === String(osId) || t.id === osId
             );
             if (found) {
               templateAllowed = true;
+              selectedTemplate = found;
               break;
             }
           }
         }
       }
-      
+
       if (!templateAllowed) {
         return res.status(403).json({ error: 'Selected OS template is not available for this server' });
       }
 
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
+
+      // Send credentials email if we have a password
+      if (result.generatedPassword && req.userSession?.email && server.primaryIp) {
+        const osName = selectedTemplate?.name || 'Linux';
+        const serverName = hostname || server.name || `Server ${server.id}`;
+        const username = 'root'; // Default username for most Linux distributions
+
+        // Fire and forget - don't block response on email
+        sendServerCredentialsEmail(
+          req.userSession.email,
+          serverName,
+          server.primaryIp,
+          username,
+          result.generatedPassword,
+          osName
+        ).catch(err => {
+          log(`Failed to send credentials email for server ${server.id}: ${err.message}`, 'email');
+        });
+
+        log(`Credentials email queued for ${req.userSession.email} (server ${server.id})`, 'email');
+      }
+
       res.json({ success: true, data: result });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');

@@ -39,7 +39,8 @@ import {
   Eye,
   EyeOff,
   Shield,
-  Server
+  Server,
+  Mail
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -132,13 +133,6 @@ export default function ServerDetail() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
 
-  // Store credentials after reset clears reinstallTask
-  const [savedCredentials, setSavedCredentials] = useState<{
-    serverIp: string;
-    username: string;
-    password: string;
-  } | null>(null);
-
   // Dismiss credentials banner
   const dismissCredentials = () => {
     try {
@@ -149,7 +143,6 @@ export default function ServerDetail() {
     // Force re-render by invalidating queries
     queryClient.invalidateQueries({ queryKey: ['server', serverId] });
   };
-  const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
 
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
@@ -1070,10 +1063,6 @@ export default function ServerDetail() {
             state={reinstallTask}
             serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
             onDismiss={() => {
-              // Save credentials BEFORE reset clears them
-              if (reinstallTask.credentials) {
-                setSavedCredentials(reinstallTask.credentials);
-              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1081,10 +1070,6 @@ export default function ServerDetail() {
               queryClient.invalidateQueries({ queryKey: ['servers'] });
             }}
             onClose={() => {
-              // Save credentials BEFORE reset clears them
-              if (reinstallTask.credentials) {
-                setSavedCredentials(reinstallTask.credentials);
-              }
               reinstallTask.reset();
               updateSetupMode(false);
               updateSetupMinimized(false);
@@ -1202,133 +1187,37 @@ export default function ServerDetail() {
     <AppShell>
       <div className="space-y-6 pt-6 pb-20">
 
-        {/* Building banner removed - showing full-page provisioning view instead */}
-        {/* Saved Credentials Banner - Shows ONLY when we have credentials from the initial build */}
-        {(() => {
-          const creds = savedCredentials || reinstallTask.credentials;
-          const shouldShow = creds && server?.status === 'running';
+        {/* Credentials Emailed Banner - Shows after server provisioning completes */}
+        {reinstallTask.credentials && server?.status === 'running' && (() => {
           try {
-            if (shouldShow && sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
+            if (sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true') {
               return null;
             }
           } catch {}
 
-          if (!shouldShow) return null;
-
           return (
-          <div className="bg-success/10 border border-success/20 rounded-lg p-5 space-y-4" data-testid="banner-credentials">
-            <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-success flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-success">Your Server is Ready!</h3>
-                <p className="text-sm text-muted-foreground">
-                  Save these credentials to access your server
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-sm">
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Server IP</span>
-                  <span className="font-mono text-foreground">{creds.serverIp}</span>
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-5" data-testid="banner-credentials">
+              <div className="flex items-center gap-3">
+                <Mail className="h-5 w-5 text-primary flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-primary">Your Server is Ready!</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    SSH login credentials have been emailed to your account email address.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Check your inbox for login details. Don't forget to check your spam folder if you don't see it.
+                  </p>
                 </div>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                  onClick={() => {
-                    navigator.clipboard.writeText(creds.serverIp);
-                    toast({ title: "Copied", description: "Server IP copied to clipboard" });
-                  }}
+                  size="sm"
+                  onClick={dismissCredentials}
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Username</span>
-                  <span className="font-mono text-foreground">{creds.username}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                  onClick={() => {
-                    navigator.clipboard.writeText(creds.username);
-                    toast({ title: "Copied", description: "Username copied to clipboard" });
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Password</span>
-                  <span className="font-mono text-foreground">
-                    {showCredentialsPassword ? creds.password : '••••••••••••'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                    onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
-                    data-testid="button-toggle-password-visibility"
-                  >
-                    {showCredentialsPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                    onClick={() => {
-                      navigator.clipboard.writeText(creds.password);
-                      toast({ title: "Copied", description: "Password copied to clipboard" });
-                    }}
-                    data-testid="button-copy-password"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* SSH Command with Copy Button */}
-            <div className="pt-2 border-t border-border space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Quick Connect:</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono text-success bg-card/30 px-3 py-2 rounded">
-                  ssh {creds.username}@{creds.serverIp}
-                </code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:bg-muted"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`ssh ${creds.username}@${creds.serverIp}`);
-                    toast({ title: "Copied", description: "SSH command copied to clipboard" });
-                  }}
-                  title="Copy SSH command"
-                  data-testid="button-copy-ssh-command"
-                >
-                  <Copy className="h-3 w-3" />
+                  Dismiss
                 </Button>
               </div>
             </div>
-
-            {/* Close button */}
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={dismissCredentials}
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
           );
         })()}
 
