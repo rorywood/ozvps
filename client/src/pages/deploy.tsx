@@ -196,15 +196,8 @@ export default function DeployPage() {
   const templates = templatesData || [];
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  // Check if all plans are out of stock
+  // Check if all plans are out of stock (using strict equality for reliability)
   const allPlansOutOfStock = plans.length > 0 && plans.every(p => p.active === false);
-
-  // Debug logging - remove after fixing
-  console.log('[Deploy] Plans data:', {
-    plansCount: plans.length,
-    allPlansOutOfStock,
-    plans: plans.map(p => ({ id: p.id, name: p.name, active: p.active, activeType: typeof p.active }))
-  });
 
   const validateHostname = (value: string): boolean => {
     const trimmed = value.trim();
