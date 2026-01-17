@@ -164,9 +164,10 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
         </div>
       )}
 
-      {/* Progress Bar - hide when complete */}
+      {/* Progress Bar, Error, and Checklist - hide when complete */}
       {!isComplete && (
-      <div className="space-y-2">
+        <>
+        <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Progress</span>
           <span className={cn(
@@ -236,6 +237,7 @@ export function SetupProgressChecklist({ state, serverName, onDismiss, onMinimiz
           );
         })}
       </div>
+        </>
       )}
 
       {/* Credentials Section - Show immediately when complete */}
