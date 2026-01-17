@@ -3983,7 +3983,36 @@ export async function registerRoutes(
   app.get('/api/admin/billing/records', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const records = await db.select().from(serverBilling).orderBy(serverBilling.nextBillAt);
-      res.json({ records });
+
+      // Enrich records with server names and user emails
+      const enrichedRecords = await Promise.all(records.map(async (record) => {
+        let serverName: string | undefined;
+        let userEmail: string | undefined;
+
+        // Get server name from VirtFusion
+        try {
+          const server = await virtfusionClient.getServer(parseInt(record.virtfusionServerId));
+          serverName = server?.name || server?.hostname;
+        } catch (e) {
+          // Server might be deleted
+        }
+
+        // Get user email from Auth0
+        try {
+          const auth0User = await auth0Client.getUserById(record.auth0UserId);
+          userEmail = auth0User?.email;
+        } catch (e) {
+          // User lookup failed
+        }
+
+        return {
+          ...record,
+          serverName,
+          userEmail,
+        };
+      }));
+
+      res.json({ records: enrichedRecords });
     } catch (error: any) {
       log(`Admin: Error fetching billing records: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to fetch billing records' });

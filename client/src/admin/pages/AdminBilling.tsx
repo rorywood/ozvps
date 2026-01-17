@@ -40,6 +40,8 @@ interface BillingRecord {
   deployedAt: string;
   createdAt: string;
   updatedAt: string;
+  serverName?: string;
+  userEmail?: string;
 }
 
 interface BillingLedgerEntry {
@@ -180,15 +182,14 @@ export default function AdminBilling() {
                   {billingRecords.map((record) => (
                     <tr key={record.id} className="border-b border-white/5 hover:bg-white/5">
                       <td className="p-4">
-                        <p className="font-medium text-white">Server #{record.virtfusionServerId}</p>
-                        {record.virtfusionServerUuid && (
-                          <p className="text-[10px] text-slate-500 font-mono truncate max-w-[150px]" title={record.virtfusionServerUuid}>
-                            {record.virtfusionServerUuid}
-                          </p>
-                        )}
+                        <p className="font-medium text-white">{record.serverName || `Server #${record.virtfusionServerId}`}</p>
+                        <p className="text-xs text-slate-500">ID: {record.virtfusionServerId}</p>
                       </td>
-                      <td className="p-4 text-slate-400 text-xs font-mono truncate max-w-[150px]" title={record.auth0UserId}>
-                        {record.auth0UserId.replace('auth0|', '')}
+                      <td className="p-4">
+                        <p className="text-white text-sm">{record.userEmail || 'Unknown'}</p>
+                        <p className="text-[10px] text-slate-500 font-mono truncate max-w-[150px]" title={record.auth0UserId}>
+                          {record.auth0UserId.split('|').pop()}
+                        </p>
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
@@ -295,7 +296,8 @@ export default function AdminBilling() {
             <DialogDescription className="text-slate-400">
               {editingBillingRecord && (
                 <span>
-                  Editing billing for Server #{editingBillingRecord.virtfusionServerId}
+                  Editing billing for {editingBillingRecord.serverName || `Server #${editingBillingRecord.virtfusionServerId}`}
+                  {editingBillingRecord.userEmail && ` (${editingBillingRecord.userEmail})`}
                 </span>
               )}
             </DialogDescription>
