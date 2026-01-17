@@ -396,15 +396,15 @@ export default function ServerDetail() {
     }
   }, [reinstallTask.status, reinstallTask.rebootingStartTime, isSetupMode, server, serverId]);
 
-  // Mark credentials as emailed when they exist (so banner shows even after reset)
+  // Mark when build completes (so banner shows regardless of credentials)
   useEffect(() => {
-    if (reinstallTask.credentials && !credentialsWereEmailed) {
+    if (reinstallTask.status === 'complete' && !credentialsWereEmailed) {
       setCredentialsWereEmailed(true);
       try {
         sessionStorage.setItem(`credentialsEmailed:${serverId}`, 'true');
       } catch {}
     }
-  }, [reinstallTask.credentials, serverId, credentialsWereEmailed]);
+  }, [reinstallTask.status, serverId, credentialsWereEmailed]);
 
   // Refetch server data when build completes OR enters rebooting status
   // This ensures needsSetup gets updated from true->false when commissioned=3

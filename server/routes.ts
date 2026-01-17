@@ -2112,11 +2112,11 @@ export async function registerRoutes(
 
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
 
-      // Email credentials immediately - VirtFusion sets this password during build
-      log(`[CREDENTIALS] Checking if we can email credentials for server ${server.id}`, 'email');
-      log(`[CREDENTIALS] Has password: ${!!result.generatedPassword}`, 'email');
-      log(`[CREDENTIALS] Has user email: ${!!req.userSession?.email}`, 'email');
-      log(`[CREDENTIALS] Has server IP: ${!!server.primaryIp}`, 'email');
+      // DEBUG: Log full response to see what VirtFusion returns
+      log(`[CREDENTIALS] Full reinstall response: ${JSON.stringify(result)}`, 'email');
+      log(`[CREDENTIALS] generatedPassword value: ${result.generatedPassword}`, 'email');
+      log(`[CREDENTIALS] Has user email: ${req.userSession?.email}`, 'email');
+      log(`[CREDENTIALS] Server IP: ${server.primaryIp}`, 'email');
 
       if (result.generatedPassword && req.userSession?.email && server.primaryIp) {
         const osName = selectedTemplate?.name || 'Linux';

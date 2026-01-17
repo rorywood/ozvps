@@ -163,7 +163,7 @@ export async function sendServerCredentialsEmail(
     const { data, error } = await resend.emails.send({
       from: EMAIL_FROM,
       to: [to],
-      subject: `Your Server is Ready - ${serverName}`,
+      subject: `New server provisioned - here are your login credentials`,
       html: `
 <!DOCTYPE html>
 <html>
