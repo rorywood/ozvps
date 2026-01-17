@@ -1273,17 +1273,12 @@ export async function registerRoutes(
         await dbStorage.updateTwoFactorLastUsed(auth0Result.user.user_id);
       }
 
-      // Revoke any idle sessions first (sessions that exceeded 15 min idle timeout)
-      await storage.revokeIdleSessions(auth0Result.user.user_id, IDLE_TIMEOUT_MS, SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
-
-      // Check if user already has an active session (strict single-session)
+      // Revoke ALL existing sessions for this user (single-session policy)
+      // This allows users who lost their cookie to log in again without waiting
       const hasExistingSession = await storage.hasActiveSession(auth0Result.user.user_id, IDLE_TIMEOUT_MS);
       if (hasExistingSession) {
-        log(`User ${email} already has an active session - login blocked`, 'auth');
-        return res.status(403).json({ 
-          error: 'You are already logged in from another location. Please log out there first or wait for your session to expire.',
-          code: 'ALREADY_LOGGED_IN'
-        });
+        log(`User ${email} has existing session - revoking to allow new login`, 'auth');
+        await storage.revokeSessionsByAuth0UserId(auth0Result.user.user_id, SESSION_REVOKE_REASONS.NEW_LOGIN);
       }
 
       // Check for existing VirtFusion user ID in Auth0 metadata
