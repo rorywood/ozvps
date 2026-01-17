@@ -5025,10 +5025,11 @@ export async function registerRoutes(
 
         // Email credentials if password and IP were returned
         if (serverResult.password && serverResult.primaryIp && req.userSession?.email) {
-          log(`Sending credentials email to ${req.userSession.email} for server ${serverResult.name}`, 'api');
+          const emailServerName = serverResult.name || serverHostname || `Server #${serverResult.serverId}`;
+          log(`Sending credentials email to ${req.userSession.email} for server ${emailServerName}`, 'api');
           sendServerCredentialsEmail(
             req.userSession.email,
-            serverResult.name,
+            emailServerName,
             serverResult.primaryIp,
             'root',
             serverResult.password,
