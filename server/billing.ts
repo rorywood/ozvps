@@ -118,10 +118,15 @@ export async function runBillingJob(): Promise<void> {
   log('Starting billing job...', 'billing');
 
   // Step A: Charge due servers
+  // Include 'active' status - new servers start as 'active' and need to be billed
   const dueServers = await db.select().from(serverBilling)
     .where(
       and(
-        or(eq(serverBilling.status, 'paid'), eq(serverBilling.status, 'unpaid')),
+        or(
+          eq(serverBilling.status, 'active'),
+          eq(serverBilling.status, 'paid'),
+          eq(serverBilling.status, 'unpaid')
+        ),
         eq(serverBilling.autoRenew, true),
         lte(serverBilling.nextBillAt, now)
       )
