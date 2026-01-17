@@ -4650,11 +4650,15 @@ export async function registerRoutes(
       if (enabled && paymentMethodId) {
         const stripe = await getUncachableStripeClient();
         const wallet = await dbStorage.getWallet(auth0UserId);
-        if (wallet?.stripeCustomerId) {
-          const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-          if (pm.customer !== wallet.stripeCustomerId) {
-            return res.status(403).json({ error: 'Payment method does not belong to this account' });
-          }
+
+        // SECURITY: Must have a Stripe customer to verify payment method ownership
+        if (!wallet?.stripeCustomerId) {
+          return res.status(400).json({ error: 'Please add a payment method first before enabling auto top-up' });
+        }
+
+        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+        if (pm.customer !== wallet.stripeCustomerId) {
+          return res.status(403).json({ error: 'Payment method does not belong to this account' });
         }
       }
 
