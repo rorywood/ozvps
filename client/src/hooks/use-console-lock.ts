@@ -12,9 +12,11 @@ function getActionKey(serverId: string): string {
   return `${SESSION_ACTION_PREFIX}${serverId}`;
 }
 
+export type LockAction = 'boot' | 'reboot' | 'shutdown' | 'poweroff' | 'reinstall';
+
 interface LockData {
   expiry: number | null;
-  action: 'boot' | 'reboot' | 'reinstall' | null;
+  action: LockAction | null;
 }
 
 function getLockData(serverId: string): LockData {
@@ -26,7 +28,7 @@ function getLockData(serverId: string): LockData {
       if (!isNaN(expiry)) {
         return {
           expiry,
-          action: (storedAction as 'boot' | 'reboot' | 'reinstall') || null,
+          action: (storedAction as LockAction) || null,
         };
       }
     }
@@ -36,7 +38,7 @@ function getLockData(serverId: string): LockData {
   return { expiry: null, action: null };
 }
 
-function setLockData(serverId: string, expiry: number, action: 'boot' | 'reboot' | 'reinstall'): void {
+function setLockData(serverId: string, expiry: number, action: LockAction): void {
   try {
     sessionStorage.setItem(getSessionKey(serverId), expiry.toString());
     sessionStorage.setItem(getActionKey(serverId), action);
@@ -57,7 +59,7 @@ function clearLockData(serverId: string): void {
 export interface ConsoleLockState {
   isLocked: boolean;
   remainingSeconds: number;
-  action: 'boot' | 'reboot' | 'reinstall' | null;
+  action: LockAction | null;
 }
 
 export function useConsoleLock(serverId: string, serverStatus?: string) {
@@ -86,7 +88,7 @@ export function useConsoleLock(serverId: string, serverStatus?: string) {
     setState({ isLocked: false, remainingSeconds: 0, action: null });
   }, [serverId]);
 
-  const startLock = useCallback((action: 'boot' | 'reboot' | 'reinstall' = 'reboot') => {
+  const startLock = useCallback((action: LockAction = 'reboot') => {
     const expiry = Date.now() + LOCK_DURATION_MS;
     setLockData(serverId, expiry, action);
     lockDataRef.current = { expiry, action };
@@ -117,12 +119,24 @@ export function useConsoleLock(serverId: string, serverStatus?: string) {
   }, [serverId, clearLock]);
 
   useEffect(() => {
-    // Only clear lock when server is stopped/suspended if we're waiting for a boot
-    // Don't clear during reboot (server goes stopped -> running) or reinstall
+    // Clear lock based on server status and action type
     const lockData = getLockData(serverId);
     const currentAction = lockData.action;
 
+    if (!currentAction) return;
+
+    // For boot: clear if server is stopped/suspended (boot failed or didn't happen)
     if ((serverStatus === 'stopped' || serverStatus === 'suspended') && currentAction === 'boot') {
+      clearLock();
+    }
+
+    // For shutdown/poweroff: clear when server is stopped (action completed)
+    if (serverStatus === 'stopped' && (currentAction === 'shutdown' || currentAction === 'poweroff')) {
+      clearLock();
+    }
+
+    // For reboot/boot: clear when server is running (action completed)
+    if (serverStatus === 'running' && (currentAction === 'reboot' || currentAction === 'boot')) {
       clearLock();
     }
   }, [serverStatus, serverId, clearLock]);

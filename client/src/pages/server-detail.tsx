@@ -1416,7 +1416,7 @@ export default function ServerDetail() {
                 variant="outline"
                 className="h-10 border-success/50 text-success hover:bg-success/10"
                 onClick={() => handlePowerAction('boot')}
-                disabled={isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                disabled={isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
                 data-testid="button-start"
               >
                 <Power className="h-4 w-4 mr-2" />
@@ -1428,7 +1428,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10 border-orange-500/50 text-orange-500 hover:bg-orange-500/10"
                   onClick={() => handlePowerAction('reboot')}
-                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
                   data-testid="button-reboot"
                 >
                   <RotateCw className="h-4 w-4 mr-2" />
@@ -1438,7 +1438,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
                   onClick={() => handlePowerAction('shutdown')}
-                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
                   data-testid="button-shutdown"
                 >
                   <Power className="h-4 w-4 mr-2" />
@@ -1448,7 +1448,7 @@ export default function ServerDetail() {
                   variant="outline"
                   className="h-10 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
                   onClick={() => handlePowerAction('poweroff')}
-                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
                   data-testid="button-force-stop"
                 >
                   <Power className="h-4 w-4 mr-2" />
