@@ -46,8 +46,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { loadStripe, Stripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { loadStripe, Stripe, PaymentRequest } from "@stripe/stripe-js";
+import { Elements, CardElement, PaymentRequestButtonElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { useTheme } from "@/components/theme-provider";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -150,17 +150,80 @@ function getTransactionColor(type: string, amountCents: number): { bg: string; t
   return { bg: 'bg-destructive/10', text: 'text-destructive' };
 }
 
-// Card Form Component
+// Card Form Component with Apple Pay / Google Pay support
 function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
+  const [canMakePayment, setCanMakePayment] = useState<{ applePay?: boolean; googlePay?: boolean } | null>(null);
   const { toast } = useToast();
   const { theme } = useTheme();
 
   // Determine if we're in light mode (theme can be 'light', 'dark', or 'system')
   const isLightMode = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+
+  // Initialize Payment Request for Apple Pay / Google Pay
+  useEffect(() => {
+    if (!stripe) return;
+
+    const pr = stripe.paymentRequest({
+      country: 'AU',
+      currency: 'aud',
+      total: {
+        label: 'Add Payment Method',
+        amount: 0, // No charge, just adding payment method
+      },
+      requestPayerName: true,
+      requestPayerEmail: true,
+    });
+
+    // Check if Apple Pay or Google Pay is available
+    pr.canMakePayment().then((result) => {
+      if (result) {
+        setPaymentRequest(pr);
+        setCanMakePayment(result);
+      }
+    });
+
+    // Handle payment method from Apple Pay / Google Pay
+    pr.on('paymentmethod', async (event) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Validate and attach the payment method
+        const validation = await api.validatePaymentMethod(event.paymentMethod.id);
+
+        if (!validation.valid) {
+          if (validation.duplicate && validation.existingCard) {
+            throw new Error(
+              `This ${validation.existingCard.brand} card ending in ${validation.existingCard.last4} is already saved to your account`
+            );
+          }
+          throw new Error(validation.error || "Failed to validate payment method");
+        }
+
+        event.complete('success');
+        toast({
+          title: "Success",
+          description: "Payment method added successfully",
+        });
+        onSuccess();
+      } catch (err: any) {
+        event.complete('fail');
+        setError(err.message || "Failed to add payment method");
+        toast({
+          title: "Error",
+          description: err.message || "Failed to add payment method",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    });
+  }, [stripe, toast, onSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,60 +288,97 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 rounded-lg bg-card border border-border">
-        <CardElement
-          options={{
-            hidePostalCode: true,
-            style: {
-              base: {
-                fontSize: '16px',
-                color: isLightMode ? '#1a1f2e' : '#ffffff',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                '::placeholder': {
-                  color: isLightMode ? '#6b7280' : '#9ca3af',
+    <div className="space-y-4">
+      {/* Apple Pay / Google Pay Button */}
+      {paymentRequest && canMakePayment && (
+        <>
+          <div className="space-y-2">
+            {canMakePayment.applePay && (
+              <p className="text-xs text-muted-foreground text-center">Apple Pay available</p>
+            )}
+            {canMakePayment.googlePay && (
+              <p className="text-xs text-muted-foreground text-center">Google Pay available</p>
+            )}
+            <PaymentRequestButtonElement
+              options={{
+                paymentRequest,
+                style: {
+                  paymentRequestButton: {
+                    type: 'default',
+                    theme: isLightMode ? 'light' : 'dark',
+                    height: '48px',
+                  },
+                },
+              }}
+            />
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or enter card details</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Manual Card Entry Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="p-4 rounded-lg bg-card border border-border">
+          <CardElement
+            options={{
+              hidePostalCode: true,
+              style: {
+                base: {
+                  fontSize: '16px',
+                  color: isLightMode ? '#1a1f2e' : '#ffffff',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  '::placeholder': {
+                    color: isLightMode ? '#6b7280' : '#9ca3af',
+                  },
+                },
+                invalid: {
+                  color: '#ef4444',
+                },
+                complete: {
+                  color: '#10b981',
                 },
               },
-              invalid: {
-                color: '#ef4444',
-              },
-              complete: {
-                color: '#10b981',
-              },
-            },
-          }}
-        />
-      </div>
-      <div className="flex items-start gap-2 p-3 rounded-md bg-primary/5 border border-primary/20">
-        <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Your card information is securely processed and stored by Stripe. We never store your full card details on our servers.
-        </p>
-      </div>
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          className="border-border"
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!stripe || isLoading}>
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Adding...
-            </>
-          ) : (
-            'Add Card'
-          )}
-        </Button>
-      </DialogFooter>
-    </form>
+            }}
+          />
+        </div>
+        <div className="flex items-start gap-2 p-3 rounded-md bg-primary/5 border border-primary/20">
+          <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your card information is securely processed and stored by Stripe. We never store your full card details on our servers.
+          </p>
+        </div>
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="border-border"
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!stripe || isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Adding...
+              </>
+            ) : (
+              'Add Card'
+            )}
+          </Button>
+        </DialogFooter>
+      </form>
+    </div>
   );
 }
 
