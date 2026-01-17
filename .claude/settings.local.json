@@ -36,7 +36,9 @@
       "Bash(sqlite3:*)",
       "Bash(pm2 env:*)",
       "Bash(npx vite build:*)",
-      "Bash(cmd /c \"cd /d D:\\\\Claude\\\\ozvps && npm run build\")"
+      "Bash(cmd /c \"cd /d D:\\\\Claude\\\\ozvps && npm run build\")",
+      "Bash(wc:*)",
+      "Bash(git show:*)"
     ]
   }
 }

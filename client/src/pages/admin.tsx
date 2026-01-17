@@ -131,6 +131,32 @@ interface Transaction {
   metadata?: Record<string, unknown>;
 }
 
+interface BillingRecord {
+  id: number;
+  auth0UserId: string;
+  virtfusionServerId: string;
+  virtfusionServerUuid?: string;
+  planId: number;
+  monthlyPriceCents: number;
+  status: 'active' | 'paid' | 'unpaid' | 'suspended';
+  nextBillAt: string;
+  suspendAt?: string | null;
+  autoRenew: boolean;
+  deployedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface BillingLedgerEntry {
+  id: number;
+  auth0UserId: string;
+  virtfusionServerId?: string;
+  amountCents: number;
+  description: string;
+  idempotencyKey: string;
+  createdAt: string;
+}
+
 function StatCard({ icon, label, value, detail, color }: { 
   icon: React.ReactNode; 
   label: string; 
@@ -192,6 +218,10 @@ export default function AdminPage() {
   
   // Hypervisor state
   const [expandedHypervisor, setExpandedHypervisor] = useState<number | null>(null);
+
+  // Billing state
+  const [editingBillingRecord, setEditingBillingRecord] = useState<BillingRecord | null>(null);
+  const [billingEditForm, setBillingEditForm] = useState({ nextBillAt: '', status: '', suspendAt: '' });
 
   const { data: userData, isLoading: userLoading } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -267,6 +297,30 @@ export default function AdminPage() {
     },
     enabled: isAdmin && activeTab === 'audit',
   });
+
+  // Billing queries
+  const { data: billingRecordsData, isLoading: billingLoading, refetch: refetchBilling } = useQuery<{ records: BillingRecord[] }>({
+    queryKey: ['admin', 'billing-records'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/billing/records');
+      if (!res.ok) throw new Error('Failed to fetch billing records');
+      return res.json();
+    },
+    enabled: isAdmin && activeTab === 'billing',
+  });
+
+  const { data: billingLedgerData, isLoading: ledgerLoading, refetch: refetchLedger } = useQuery<{ ledger: BillingLedgerEntry[] }>({
+    queryKey: ['admin', 'billing-ledger'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/billing/ledger');
+      if (!res.ok) throw new Error('Failed to fetch billing ledger');
+      return res.json();
+    },
+    enabled: isAdmin && activeTab === 'billing',
+  });
+
+  const billingRecords = billingRecordsData?.records || [];
+  const billingLedger = billingLedgerData?.ledger || [];
 
   // Mutations
 
@@ -471,6 +525,43 @@ export default function AdminPage() {
       return response.json();
     },
     enabled: !!selectedUser?.auth0UserId && transactionsDialogOpen,
+  });
+
+  // Billing mutations
+  const runBillingJobMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/admin/billing/run-job', { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to run billing job');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Billing job completed');
+      refetchBilling();
+      refetchLedger();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const updateBillingMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: number; updates: { nextBillAt?: string; status?: string; suspendAt?: string | null } }) => {
+      const response = await fetch(`/api/admin/billing/records/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update billing record');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Billing record updated');
+      refetchBilling();
+      setEditingBillingRecord(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
   });
 
   const handleSearch = (e: React.FormEvent) => {

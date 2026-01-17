@@ -406,10 +406,7 @@ fi
 
 success "Migrations applied"
 
-if [ -f "$INSTALL_DIR/reset-billing.js" ]; then
-    info "Resetting billing records..."
-    node reset-billing.js >/dev/null 2>&1 && success "Billing reset" || warning "Billing reset skipped"
-fi
+# NOTE: reset-billing.js was removed - it was deleting all billing records on every update!
 
 sleep 1
 
