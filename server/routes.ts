@@ -2320,13 +2320,12 @@ export async function registerRoutes(
         // Convert server IDs to strings since serverBilling stores virtfusionServerId as text
         const serverMap = new Map(servers.map(s => [String(s.id), s.name]));
 
-        // Only include billing records for servers that actually exist
-        upcoming = billingRecords
-          .filter(billing => serverMap.has(billing.virtfusionServerId))
-          .map(billing => ({
-            ...billing,
-            serverName: serverMap.get(billing.virtfusionServerId),
-          }));
+        // Include all billing records, even if server is temporarily not visible (e.g., during reinstall)
+        // Just enrich with server name if available
+        upcoming = billingRecords.map(billing => ({
+          ...billing,
+          serverName: serverMap.get(billing.virtfusionServerId) || `Server #${billing.virtfusionServerId}`,
+        }));
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }

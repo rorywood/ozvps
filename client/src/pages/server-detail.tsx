@@ -1984,63 +1984,109 @@ export default function ServerDetail() {
           <TabsContent value="destroy" className="space-y-6 animate-in fade-in duration-300">
 
             {/* Reinstall Section */}
-            <Card className="p-6 border-destructive/30">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-foreground mb-2">Reinstall Operating System</h3>
-                  <p className="text-sm text-muted-foreground">
-                    This will completely erase all data on your server and install a fresh operating system.
-                    Make sure to backup any important data before proceeding.
-                  </p>
-                </div>
-
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+            {reinstallTask.isActive && !isSetupMode ? (
+              // Show progress panel when reinstalling
+              <Card className="overflow-hidden border-purple-500/30">
+                <div className="bg-gradient-to-r from-purple-600 to-purple-500 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <RefreshCw className="h-5 w-5 text-white" />
+                    </div>
                     <div>
-                      <div className="font-medium text-red-400">Warning: Data Loss</div>
-                      <div className="text-sm text-red-400/80">
-                        All existing data on the server will be permanently deleted. This action cannot be undone.
-                      </div>
+                      <h3 className="text-lg font-bold text-white">Reinstalling Server</h3>
+                      <p className="text-sm text-white/80">{server.name}</p>
                     </div>
                   </div>
                 </div>
+                <div className="p-5">
+                  <ReinstallProgressPanel
+                    state={reinstallTask}
+                    onDismiss={() => {
+                      reinstallTask.reset();
+                      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                    }}
+                  />
+                </div>
+              </Card>
+            ) : (
+              // Show normal reinstall card
+              <Card className="p-6 border-destructive/30">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-purple-500/20 rounded-xl">
+                      <RefreshCw className="h-6 w-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-foreground">Reinstall Operating System</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Fresh install with new credentials
+                      </p>
+                    </div>
+                  </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-2 block">Current Operating System</label>
-                    <div className="p-3 bg-muted/50 rounded-md border border-border">
-                      <span className="text-foreground">{server.image?.name || 'Unknown'}</span>
+                  {/* Current Server Info */}
+                  <div className="p-4 bg-muted/30 border border-border rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-background rounded-lg border border-border">
+                        <Server className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-mono font-semibold text-foreground">{server?.name}</div>
+                        <div className="text-sm text-muted-foreground space-x-3">
+                          <span>{server?.primaryIp || 'No IP'}</span>
+                          <span>•</span>
+                          <span>{server?.os?.name || server?.image?.name || 'Unknown OS'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Warning Box */}
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <div className="font-semibold text-amber-400">Warning: Data Loss</div>
+                        <ul className="text-sm text-amber-400/80 space-y-0.5">
+                          <li>• All existing data will be permanently erased</li>
+                          <li>• You'll receive new login credentials</li>
+                          <li>• The server will reboot during installation</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 
                   <Button
                     className={cn(
-                      "text-foreground",
+                      "w-full h-12 text-base font-semibold",
                       (isSuspended || cancellationData?.cancellation)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
-                        : "bg-red-600 hover:bg-red-700"
+                        : "bg-purple-600 hover:bg-purple-700 text-white"
                     )}
-                    onClick={() => setReinstallDialogOpen(true)}
+                    onClick={() => {
+                      // Pre-fill hostname with current server name
+                      setHostname(server?.name || '');
+                      setReinstallDialogOpen(true);
+                    }}
                     disabled={isSuspended || !!cancellationData?.cancellation}
                     data-testid="button-reinstall"
                   >
-                    <RefreshCw className="h-4 w-4 mr-2" />
+                    <RefreshCw className="h-5 w-5 mr-2" />
                     Reinstall Server
                   </Button>
                   {isSuspended && (
-                    <p className="text-sm text-yellow-400/80 mt-2">
+                    <p className="text-sm text-yellow-400/80 text-center">
                       Reinstall is disabled while the server is suspended.
                     </p>
                   )}
                   {cancellationData?.cancellation && !isSuspended && (
-                    <p className="text-sm text-red-400/80 mt-2">
+                    <p className="text-sm text-red-400/80 text-center">
                       Reinstall is disabled because this server is scheduled for deletion.
                     </p>
                   )}
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
 
             {/* Destroy Server Section - DigitalOcean Style */}
             <Card className="p-6 border-destructive/50">
@@ -2324,9 +2370,29 @@ export default function ServerDetail() {
 
           {/* Hostname Input - Required */}
           <div className="px-6 pt-4">
-            <label className="text-sm font-medium text-foreground block mb-2">
-              Hostname <span className="text-red-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-foreground">
+                Hostname <span className="text-red-400">*</span>
+              </label>
+              {server?.name && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHostname(server.name);
+                    setHostnameError('');
+                  }}
+                  className={cn(
+                    "text-xs px-2 py-1 rounded transition-colors",
+                    hostname === server?.name
+                      ? "bg-purple-500/20 text-purple-400"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                  data-testid="button-use-current-hostname"
+                >
+                  {hostname === server?.name ? 'Using current hostname' : 'Use current hostname'}
+                </button>
+              )}
+            </div>
             <Input
               value={hostname}
               onChange={(e) => handleHostnameChange(e.target.value)}
@@ -2406,8 +2472,8 @@ export default function ServerDetail() {
 
           {/* Footer with Install Button */}
           <div className="border-t border-border p-6">
-            <Button 
-              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold disabled:opacity-50"
+            <Button
+              className="w-full bg-purple-600 hover:bg-purple-700 h-12 text-base font-semibold text-white disabled:opacity-50"
               onClick={handleReinstall}
               disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
@@ -2418,7 +2484,10 @@ export default function ServerDetail() {
                   Installing...
                 </>
               ) : (
-                'Reinstall Server'
+                <>
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Reinstall Server
+                </>
               )}
             </Button>
             {!isHostnameValid && hostname.trim() === '' && (
