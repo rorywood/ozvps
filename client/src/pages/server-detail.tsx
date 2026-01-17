@@ -403,19 +403,15 @@ export default function ServerDetail() {
       // - Server is fully booted
       // - All buttons are active
       // - Status is green everywhere
-      const timer = setTimeout(async () => {
+      const timer = setTimeout(() => {
         // Save credentials if available from reinstall task (will be shown in banner later)
         if (reinstallTask.credentials) {
           updateSavedCredentials(reinstallTask.credentials);
           setShowSavedCredentials(true);
-        } else if (!autoFetchAttempted) {
-          // No credentials from initial build response, attempt auto-fetch
-          // This will try once, wait 30s, then retry once
-          setAutoFetchAttempted(true);
-          await autoFetchCredentials(0);
         }
 
-        // Reset reinstallTask to stop polling and clear state
+        // CRITICAL: Reset reinstallTask IMMEDIATELY to unlock buttons
+        // Don't wait for credential fetch - that can take 30+ seconds
         reinstallTask.reset();
 
         // Clear setup mode flags (this will cause re-render to show overview)
@@ -435,6 +431,12 @@ export default function ServerDetail() {
         // Invalidate queries to refresh server data with latest status
         queryClient.invalidateQueries({ queryKey: ['server', serverId] });
         queryClient.invalidateQueries({ queryKey: ['servers'] });
+
+        // Auto-fetch credentials in background (don't block button unlock)
+        if (!autoFetchAttempted) {
+          setAutoFetchAttempted(true);
+          autoFetchCredentials(0); // Fire and forget - runs in background
+        }
       }, 2000);
 
       return () => clearTimeout(timer);
@@ -2143,7 +2145,6 @@ export default function ServerDetail() {
                       <div className="flex items-center gap-3 mb-4">
                         <Network className="h-5 w-5 text-blue-400" />
                         <span className="font-mono font-bold text-foreground">{iface.name}</span>
-                        <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
                       </div>
 
                       {iface.ipv4.length > 0 && (
@@ -2151,19 +2152,14 @@ export default function ServerDetail() {
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
                           {iface.ipv4.map((ip, ipIndex) => (
                             <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                              <div className="flex items-center gap-3">
-                                <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
-                                <button
-                                  onClick={() => copyToClipboard(ip.address)}
-                                  className="text-muted-foreground hover:text-foreground p-1"
-                                  data-testid={`button-copy-ip-${index}-${ipIndex}`}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </button>
-                              </div>
+                              <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
+                              <button
+                                onClick={() => copyToClipboard(ip.address)}
+                                className="text-muted-foreground hover:text-foreground p-1"
+                                data-testid={`button-copy-ip-${index}-${ipIndex}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
                             </div>
                           ))}
                         </div>
