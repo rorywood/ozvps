@@ -151,13 +151,17 @@ export async function sendServerCredentialsEmail(
   password: string,
   osName: string
 ): Promise<EmailResult> {
+  log(`[EMAIL FUNCTION] sendServerCredentialsEmail called with: to=${to}, serverName=${serverName}, serverIp=${serverIp}, username=${username}, hasPassword=${!!password}, osName=${osName}`, 'email');
+
   if (!resend) {
-    log('Email service not configured - cannot send server credentials email', 'email');
+    log('[EMAIL FUNCTION] ❌ Resend not configured - resend instance is null', 'email');
     return {
       success: false,
       error: 'Email service not configured. Please contact administrator.'
     };
   }
+
+  log(`[EMAIL FUNCTION] ✅ Resend configured, calling resend.emails.send()`, 'email');
 
   try {
     const { data, error } = await resend.emails.send({
@@ -282,15 +286,18 @@ Powered by Australian infrastructure. Built with ❤️ in Queensland.
       `.trim(),
     });
 
+    log(`[EMAIL FUNCTION] Resend API response: data=${JSON.stringify(data)}, error=${JSON.stringify(error)}`, 'email');
+
     if (error) {
-      log(`Failed to send server credentials email to ${to}: ${error.message}`, 'email');
+      log(`[EMAIL FUNCTION] ❌ Resend returned error: ${error.message}`, 'email');
       return { success: false, error: error.message };
     }
 
-    log(`Server credentials email sent to ${to} for server ${serverName}, messageId: ${data?.id}`, 'email');
+    log(`[EMAIL FUNCTION] ✅ Email sent successfully! messageId: ${data?.id}`, 'email');
     return { success: true, messageId: data?.id };
   } catch (err: any) {
-    log(`Error sending server credentials email to ${to}: ${err.message}`, 'email');
+    log(`[EMAIL FUNCTION] ❌ Exception caught: ${err.message}`, 'email');
+    log(`[EMAIL FUNCTION] ❌ Full error: ${JSON.stringify(err)}`, 'email');
     return { success: false, error: err.message };
   }
 }

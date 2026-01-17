@@ -2123,15 +2123,18 @@ export async function registerRoutes(
       // DEBUG: Log full response to see what VirtFusion returns
       log(`[CREDENTIALS] Full reinstall response: ${JSON.stringify(result)}`, 'email');
       log(`[CREDENTIALS] generatedPassword value: ${result.generatedPassword}`, 'email');
-      log(`[CREDENTIALS] Has user email: ${req.userSession?.email}`, 'email');
+      log(`[CREDENTIALS] generatedPassword type: ${typeof result.generatedPassword}`, 'email');
+      log(`[CREDENTIALS] Has user email: ${!!req.userSession?.email} (${req.userSession?.email})`, 'email');
       log(`[CREDENTIALS] Server IP: ${server.primaryIp}`, 'email');
+      log(`[CREDENTIALS] Check results: hasPassword=${!!result.generatedPassword}, hasEmail=${!!req.userSession?.email}, hasIP=${!!server.primaryIp}`, 'email');
 
       if (result.generatedPassword && req.userSession?.email && server.primaryIp) {
         const osName = selectedTemplate?.name || 'Linux';
         const serverName = hostname || server.name || `Server ${server.id}`;
         const username = 'root'; // Default username for most Linux distributions
 
-        log(`[CREDENTIALS] ✅ All checks passed - sending email to ${req.userSession.email}`, 'email');
+        log(`[CREDENTIALS] ✅ All checks passed - CALLING sendServerCredentialsEmail NOW`, 'email');
+        log(`[CREDENTIALS] Parameters: to=${req.userSession.email}, serverName=${serverName}, ip=${server.primaryIp}, user=${username}, os=${osName}`, 'email');
 
         // Fire and forget - don't block response on email
         sendServerCredentialsEmail(
@@ -2141,17 +2144,22 @@ export async function registerRoutes(
           username,
           result.generatedPassword,
           osName
-        ).then(result => {
-          if (result.success) {
-            log(`[CREDENTIALS] ✅ Email sent successfully to ${req.userSession.email}, messageId: ${result.messageId}`, 'email');
+        ).then(emailResult => {
+          log(`[CREDENTIALS] Email promise resolved`, 'email');
+          if (emailResult.success) {
+            log(`[CREDENTIALS] ✅ Email sent successfully, messageId: ${emailResult.messageId}`, 'email');
           } else {
-            log(`[CREDENTIALS] ❌ Email failed: ${result.error}`, 'email');
+            log(`[CREDENTIALS] ❌ Email failed: ${emailResult.error}`, 'email');
           }
         }).catch(err => {
-          log(`[CREDENTIALS] ❌ Email exception: ${err.message}`, 'email');
+          log(`[CREDENTIALS] ❌ Email promise rejected: ${err.message}`, 'email');
+          log(`[CREDENTIALS] ❌ Full error: ${JSON.stringify(err)}`, 'email');
         });
       } else {
-        log(`[CREDENTIALS] ❌ Cannot send email - missing required data`, 'email');
+        log(`[CREDENTIALS] ❌ Cannot send email - missing required data:`, 'email');
+        log(`[CREDENTIALS] - Password: ${result.generatedPassword ? 'EXISTS' : 'MISSING'}`, 'email');
+        log(`[CREDENTIALS] - Email: ${req.userSession?.email || 'MISSING'}`, 'email');
+        log(`[CREDENTIALS] - IP: ${server.primaryIp || 'MISSING'}`, 'email');
       }
 
       res.json({ success: true, data: result });
