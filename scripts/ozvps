@@ -762,6 +762,8 @@ EOF
     local temp_dir=$(mktemp -d)
     cp "$INSTALL_DIR/.env" "$temp_dir/.env" 2>/dev/null || true
     cp "$INSTALL_DIR/ecosystem.config.cjs" "$temp_dir/ecosystem.config.cjs" 2>/dev/null || true
+    cp "$INSTALL_DIR/.ozvps-branch" "$temp_dir/.ozvps-branch" 2>/dev/null || true
+    cp "$INSTALL_DIR/.ozvps-env" "$temp_dir/.ozvps-env" 2>/dev/null || true
 
     local safe_branch=$(echo "$branch" | tr '/' '-')
     local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
@@ -786,6 +788,8 @@ EOF
 
     cp "$temp_dir/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
     cp "$temp_dir/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
+    cp "$temp_dir/.ozvps-branch" "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || true
+    cp "$temp_dir/.ozvps-env" "$INSTALL_DIR/.ozvps-env" 2>/dev/null || true
     rm -rf "$temp_dir" "$temp_extract" "$temp_zip"
 
     if [[ -n "$latest_commit" ]]; then
@@ -883,11 +887,82 @@ main_menu() {
 }
 
 # ============================================================================
+# Branch Selection Menu
+# ============================================================================
+select_branch() {
+    echo ""
+    echo -e "${BOLD}Select Branch${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+    echo ""
+
+    local current_branch=$(get_branch)
+    echo -e "  Current: ${CYAN}${BOLD}$current_branch${NC}"
+    echo ""
+
+    # Fetch available branches from GitHub
+    info "Fetching branches from GitHub..."
+    local branches_json=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/branches?per_page=20" 2>/dev/null)
+
+    if [[ -z "$branches_json" ]]; then
+        error "Could not fetch branches"
+        return 1
+    fi
+
+    # Parse branch names
+    local branches=($(echo "$branches_json" | grep '"name":' | cut -d'"' -f4))
+
+    if [[ ${#branches[@]} -eq 0 ]]; then
+        error "No branches found"
+        return 1
+    fi
+
+    echo ""
+    echo "  Available branches:"
+    for i in "${!branches[@]}"; do
+        local marker=""
+        if [[ "${branches[$i]}" == "$current_branch" ]]; then
+            marker=" ${GREEN}(current)${NC}"
+        fi
+        echo -e "    ${BOLD}[$((i+1))]${NC} ${branches[$i]}${marker}"
+    done
+    echo ""
+
+    read -p "  Select branch number (or 0 to cancel): " branch_num < /dev/tty
+
+    if [[ "$branch_num" == "0" || -z "$branch_num" ]]; then
+        info "Cancelled"
+        return 1
+    fi
+
+    local selected_branch="${branches[$((branch_num-1))]}"
+
+    if [[ -z "$selected_branch" ]]; then
+        error "Invalid selection"
+        return 1
+    fi
+
+    # Save the branch
+    echo "$selected_branch" > "$INSTALL_DIR/.ozvps-branch"
+    success "Branch set to: $selected_branch"
+    echo ""
+
+    read -p "  Run update now? (y/N): " -n 1 -r < /dev/tty
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        do_update
+    fi
+
+    return 0
+}
+
+# ============================================================================
 # Parse Arguments
 # ============================================================================
 SKIP_SELF_UPDATE=false
 DIRECT_UPDATE=false
 SHOW_STATUS=false
+SELECT_BRANCH=false
 
 for arg in "$@"; do
     case $arg in
@@ -899,6 +974,9 @@ for arg in "$@"; do
             ;;
         --status|-s)
             SHOW_STATUS=true
+            ;;
+        --branch|-b)
+            SELECT_BRANCH=true
             ;;
         --version|-v)
             echo "OzVPS Control Panel v${VERSION}"
@@ -912,6 +990,7 @@ for arg in "$@"; do
             echo "Options:"
             echo "  (no args)     Open interactive control panel menu"
             echo "  --update, -u  Run update directly (no menu)"
+            echo "  --branch, -b  Select branch from list"
             echo "  --status, -s  Show status dashboard and exit"
             echo "  --version     Show version"
             echo "  --help        Show this help message"
@@ -946,6 +1025,11 @@ if [[ "$SKIP_SELF_UPDATE" == "false" && -f "$SELF_PATH" ]]; then
 fi
 
 # Handle direct commands
+if [[ "$SELECT_BRANCH" == "true" ]]; then
+    select_branch
+    exit 0
+fi
+
 if [[ "$DIRECT_UPDATE" == "true" ]]; then
     show_header
     do_update
