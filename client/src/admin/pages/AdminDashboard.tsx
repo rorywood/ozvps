@@ -3,7 +3,10 @@ import { AdminLayout } from "../layout/AdminLayout";
 import { StatCard } from "../components/StatCard";
 import { Server, HardDrive, Network, Users, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
+
+async function secureFetch(url: string): Promise<Response> {
+  return fetch(url, { credentials: 'include' });
+}
 
 interface StatsResponse {
   servers: { total: number; running: number; stopped: number };
@@ -31,7 +34,7 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<StatsResponse>({
     queryKey: ['admin', 'vf', 'stats'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/vf/stats');
+      const res = await secureFetch('/api/admin/vf/stats');
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
@@ -41,7 +44,7 @@ export default function AdminDashboard() {
   const { data: hypervisorsData, isLoading: hypervisorsLoading, refetch: refetchHypervisors } = useQuery({
     queryKey: ['admin', 'vf', 'hypervisors'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/vf/hypervisors');
+      const res = await secureFetch('/api/admin/vf/hypervisors');
       if (!res.ok) throw new Error('Failed to fetch hypervisors');
       return res.json();
     },

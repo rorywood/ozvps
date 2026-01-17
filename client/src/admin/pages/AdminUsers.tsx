@@ -12,6 +12,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
+function getCsrfToken(): string {
+  return localStorage.getItem('csrfToken') ||
+    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+}
+
+async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCsrfToken(),
+      ...options.headers,
+    },
+  });
+}
+
 interface VFUser {
   virtfusionId: number | null;
   auth0UserId: string;
@@ -40,7 +57,7 @@ export default function AdminUsers() {
   const { data: vfUsersData, isLoading: vfUsersLoading, refetch: refetchUsers } = useQuery({
     queryKey: ['admin', 'vf', 'users'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/vf/users');
+      const res = await secureFetch('/api/admin/vf/users');
       if (!res.ok) throw new Error('Failed to fetch users');
       return res.json();
     },
@@ -51,9 +68,8 @@ export default function AdminUsers() {
   // Mutations
   const adjustMutation = useMutation({
     mutationFn: async (data: { auth0UserId: string; amountCents: number; reason: string }) => {
-      const response = await fetch('/api/admin/wallet/adjust', {
+      const response = await secureFetch('/api/admin/wallet/adjust', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (!response.ok) {

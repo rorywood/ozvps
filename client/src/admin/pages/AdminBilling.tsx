@@ -9,6 +9,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from "sonner";
 import { format } from "date-fns";
 
+function getCsrfToken(): string {
+  return localStorage.getItem('csrfToken') ||
+    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+}
+
+async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCsrfToken(),
+      ...options.headers,
+    },
+  });
+}
+
 interface BillingRecord {
   id: number;
   auth0UserId: string;
@@ -46,7 +63,7 @@ export default function AdminBilling() {
   const { data: billingRecordsData, isLoading: billingLoading, refetch: refetchBilling } = useQuery<{ records: BillingRecord[] }>({
     queryKey: ['admin', 'billing-records'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/billing/records');
+      const res = await secureFetch('/api/admin/billing/records');
       if (!res.ok) throw new Error('Failed to fetch billing records');
       return res.json();
     },
@@ -55,7 +72,7 @@ export default function AdminBilling() {
   const { data: billingLedgerData, isLoading: ledgerLoading, refetch: refetchLedger } = useQuery<{ ledger: BillingLedgerEntry[] }>({
     queryKey: ['admin', 'billing-ledger'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/billing/ledger');
+      const res = await secureFetch('/api/admin/billing/ledger');
       if (!res.ok) throw new Error('Failed to fetch billing ledger');
       return res.json();
     },
@@ -67,7 +84,7 @@ export default function AdminBilling() {
   // Mutations
   const runBillingJobMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/admin/billing/run-job', { method: 'POST' });
+      const response = await secureFetch('/api/admin/billing/run-job', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to run billing job');
       return response.json();
     },
@@ -83,9 +100,8 @@ export default function AdminBilling() {
 
   const updateBillingMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: number; updates: { nextBillAt?: string; status?: string; suspendAt?: string | null } }) => {
-      const response = await fetch(`/api/admin/billing/records/${id}`, {
+      const response = await secureFetch(`/api/admin/billing/records/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
       if (!response.ok) throw new Error('Failed to update billing record');
@@ -292,12 +308,12 @@ export default function AdminBilling() {
                 id="billingStatus"
                 value={billingEditForm.status}
                 onChange={(e) => setBillingEditForm(prev => ({ ...prev, status: e.target.value }))}
-                className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 text-white"
+                className="w-full px-3 py-2 rounded-md bg-slate-800 border border-white/10 text-white"
               >
-                <option value="active">Active</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="suspended">Suspended</option>
+                <option value="active" className="bg-slate-800 text-white">Active</option>
+                <option value="paid" className="bg-slate-800 text-white">Paid</option>
+                <option value="unpaid" className="bg-slate-800 text-white">Unpaid</option>
+                <option value="suspended" className="bg-slate-800 text-white">Suspended</option>
               </select>
             </div>
 

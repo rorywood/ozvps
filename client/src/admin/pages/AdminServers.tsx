@@ -12,6 +12,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
+function getCsrfToken(): string {
+  return localStorage.getItem('csrfToken') ||
+    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+}
+
+async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCsrfToken(),
+      ...options.headers,
+    },
+  });
+}
+
 interface VFServer {
   id: number;
   name: string;
@@ -39,7 +56,7 @@ export default function AdminServers() {
   const { data: serversData, isLoading: serversLoading, refetch: refetchServers } = useQuery({
     queryKey: ['admin', 'vf', 'servers'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/vf/servers');
+      const res = await secureFetch('/api/admin/vf/servers');
       if (!res.ok) throw new Error('Failed to fetch servers');
       return res.json();
     },
@@ -69,9 +86,8 @@ export default function AdminServers() {
         url = `/api/admin/vf/servers/${serverId}/power/${action}`;
       }
 
-      const res = await fetch(url, {
+      const res = await secureFetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
