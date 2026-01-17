@@ -302,42 +302,20 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
-  // AUTO-DISMISS: When setup completes AND server is fully online, show server overview
-  // Wait for server to be FULLY booted and running (not just commissioned)
+  // AUTO-DISMISS: When setup completes, dismiss the setup UI
   // Handles both initial setup AND reinstalls
   useEffect(() => {
-    // Run if setup mode is on OR if reinstall task is active and at rebooting stage
-    const isReinstallRebooting = reinstallTask.isActive && reinstallTask.status === 'rebooting' && !isSetupMode;
-    if (!isSetupMode && !isReinstallRebooting) return;
+    // Only run for setup mode (initial server setup)
+    if (!isSetupMode) return;
 
-    // STRICT REQUIREMENTS for dismiss:
-    // 1. reinstallTask must be at 'rebooting' (commissioned) or 'complete'
-    // 2. Server must be 'running' (fully booted, not just commissioned)
-    // 3. needsSetup must be false (VirtFusion confirms ready)
-    // 4. MINIMUM 4 seconds must have passed since entering 'rebooting' status
-    const taskAtFinalStage = reinstallTask.status === 'rebooting' || reinstallTask.status === 'complete';
+    // Check if task is complete and server is ready
+    const taskComplete = reinstallTask.status === 'complete';
     const serverFullyOnline = server && server.status === 'running';
     const serverCommissioned = server && server.needsSetup === false;
 
-    // Check if enough time has passed since entering 'rebooting' status
-    // CRITICAL: If rebootingStartTime is undefined, treat as "hasn't started yet" (infinite time)
-    const rebootingStartTime = reinstallTask.rebootingStartTime || Date.now();
-    const timeInRebooting = Date.now() - rebootingStartTime;
-    const minimumRebootingTime = 60000; // 60 seconds minimum - gives guest agent time to install/start
-    const hasBeenRebootingLongEnough = reinstallTask.rebootingStartTime ? timeInRebooting >= minimumRebootingTime : false;
-
-    const allConditionsMet = taskAtFinalStage && serverFullyOnline && serverCommissioned && hasBeenRebootingLongEnough;
+    const allConditionsMet = taskComplete && serverFullyOnline && serverCommissioned;
 
     if (allConditionsMet) {
-      // For reinstall (not setup mode): Just mark task as complete (100%)
-      if (!isSetupMode && reinstallTask.isActive) {
-        const timer = setTimeout(() => {
-          reinstallTask.markComplete();
-          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        }, 2000);
-        return () => clearTimeout(timer);
-      }
-
       // For setup mode: Full dismiss sequence
       const timer = setTimeout(() => {
         reinstallTask.reset();
@@ -357,23 +335,8 @@ export default function ServerDetail() {
       }, 2000);
 
       return () => clearTimeout(timer);
-    } else {
-      // CRITICAL: If we're in rebooting status but haven't waited long enough,
-      // set a timer to re-check after the remaining time
-      if (taskAtFinalStage && serverFullyOnline && serverCommissioned && !hasBeenRebootingLongEnough && reinstallTask.rebootingStartTime) {
-        const remainingTime = minimumRebootingTime - timeInRebooting;
-        // CRITICAL FIX: Prevent negative delay (edge case where time already passed)
-        const safeDelay = Math.max(0, remainingTime) + 100;
-
-        const recheckTimer = setTimeout(() => {
-          // Force a re-render by invalidating queries
-          queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-        }, safeDelay);
-
-        return () => clearTimeout(recheckTimer);
-      }
     }
-  }, [reinstallTask.status, reinstallTask.rebootingStartTime, reinstallTask.isActive, reinstallTask.markComplete, isSetupMode, server, serverId]);
+  }, [reinstallTask.status, isSetupMode, server, serverId]);
 
   // Mark when build starts (so banner shows after auto-dismiss)
   useEffect(() => {

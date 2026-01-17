@@ -173,48 +173,45 @@ export function useReinstallTask(serverId: string) {
 
       const buildStatus = await api.getBuildStatus(serverId);
 
-      // COMMISSIONED: Server is built (commissioned=3) but may still be booting
+      // COMMISSIONED: Server is built (commissioned=3) - mark as complete
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
-        // Check ref BEFORE setState to prevent duplicate rebooting events
-        if (lastStatusRef.current === 'rebooting' || lastStatusRef.current === 'complete') {
+        // Check ref to prevent duplicate complete events
+        if (lastStatusRef.current === 'complete') {
+          stopPolling();
           return;
         }
 
-        // Set ref immediately to prevent race conditions
-        lastStatusRef.current = 'rebooting';
-        const bootingStartTime = Date.now();
+        // Set ref immediately and stop polling
+        lastStatusRef.current = 'complete';
+        stopPolling();
 
         setState(prev => {
-          // Double-check state as well
-          if (prev.status === 'rebooting' || prev.status === 'complete') {
+          if (prev.status === 'complete') {
             return prev;
           }
 
           const newTimeline = [
             ...prev.timeline,
-            { status: 'rebooting' as ReinstallStatus, timestamp: Date.now(), message: 'Server commissioned - booting up...' }
+            { status: 'complete' as ReinstallStatus, timestamp: Date.now(), message: 'Server ready' }
           ];
-          const booting = {
+          const completed = {
             ...prev,
             isActive: true,
-            status: 'rebooting' as ReinstallStatus,
-            percent: 95,
-            rebootingStartTime: bootingStartTime,
+            status: 'complete' as ReinstallStatus,
+            percent: 100,
             timeline: newTimeline,
           };
           saveTaskState(serverId, {
             isActive: true,
             taskId: prev.taskId,
-            status: 'rebooting',
-            percent: 95,
+            status: 'complete',
+            percent: 100,
             timeline: newTimeline,
             credentials: prev.credentials,
-            rebootingStartTime: bootingStartTime,
           });
-          return booting;
+          return completed;
         });
 
-        // Continue polling - will mark complete when server is running
         return;
       }
 
