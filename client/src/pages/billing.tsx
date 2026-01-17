@@ -94,8 +94,8 @@ interface Invoice {
 
 const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000]; // In cents
 const ITEMS_PER_PAGE = 10;
-const MAX_TRANSACTION_PAGES = 20;
-const MAX_INVOICE_PAGES = 20;
+const MAX_TRANSACTION_PAGES = 5;
+const MAX_INVOICE_PAGES = 5;
 
 function formatCurrency(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -906,7 +906,7 @@ export default function BillingPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {/* Payment Feedback Message */}
             {paymentFeedback && (
               <div
@@ -1487,11 +1487,6 @@ export default function BillingPage() {
                         <div className="flex items-center justify-between pt-4">
                           <p className="text-sm text-muted-foreground">
                             Page {transactionsPage} of {transactionsTotalPages}
-                            {transactions.length > MAX_TRANSACTION_PAGES * ITEMS_PER_PAGE && (
-                              <span className="text-yellow-400 ml-2">
-                                (Showing first {MAX_TRANSACTION_PAGES} pages)
-                              </span>
-                            )}
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -1514,6 +1509,13 @@ export default function BillingPage() {
                             </Button>
                           </div>
                         </div>
+                      )}
+
+                      {/* Show support message when there's more data than displayed */}
+                      {transactions.length > MAX_TRANSACTION_PAGES * ITEMS_PER_PAGE && (
+                        <p className="text-xs text-muted-foreground text-center pt-4">
+                          Showing recent transactions only. Contact <Link href="/support" className="text-primary hover:underline">support</Link> for older records.
+                        </p>
                       )}
                     </>
                   )}
@@ -1580,11 +1582,6 @@ export default function BillingPage() {
                         <div className="flex items-center justify-between pt-4">
                           <p className="text-sm text-muted-foreground">
                             Page {invoicesPage} of {invoicesTotalPages}
-                            {invoices.length > MAX_INVOICE_PAGES * ITEMS_PER_PAGE && (
-                              <span className="text-yellow-400 ml-2">
-                                (Showing first {MAX_INVOICE_PAGES} pages)
-                              </span>
-                            )}
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -1607,6 +1604,13 @@ export default function BillingPage() {
                             </Button>
                           </div>
                         </div>
+                      )}
+
+                      {/* Show support message when there's more data than displayed */}
+                      {invoices.length > MAX_INVOICE_PAGES * ITEMS_PER_PAGE && (
+                        <p className="text-xs text-muted-foreground text-center pt-4">
+                          Showing recent invoices only. Contact <Link href="/support" className="text-primary hover:underline">support</Link> for older records.
+                        </p>
                       )}
                     </>
                   )}

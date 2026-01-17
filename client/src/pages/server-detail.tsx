@@ -1192,6 +1192,29 @@ export default function ServerDetail() {
         )}
 
 
+        {/* Overdue/Unpaid Banner */}
+        {server.billing?.status === 'unpaid' && !isSuspended && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-overdue">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-red-300">Payment Overdue</h3>
+                <p className="text-sm text-red-300/80">
+                  Your server payment is overdue. Please add funds to avoid suspension
+                  {server.billing?.suspendAt && (
+                    <> by {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</>
+                  )}.
+                </p>
+              </div>
+            </div>
+            <Link href="/billing">
+              <Button variant="outline" size="sm" className="border-red-500/50 text-red-300 hover:bg-red-500/20">
+                Add Funds
+              </Button>
+            </Link>
+          </div>
+        )}
+
         {/* Suspension Banner */}
         {isSuspended && (
           <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-suspended">
@@ -1200,15 +1223,25 @@ export default function ServerDetail() {
               <div>
                 <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
                 <p className="text-sm text-yellow-300/80">
-                  Please contact support for assistance.
+                  {server.billing?.status === 'suspended'
+                    ? 'Payment is overdue. Please add funds to restore your server.'
+                    : 'Please contact support for assistance.'}
                 </p>
               </div>
             </div>
-            <Link href="/support">
-              <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
-                Open Ticket
-              </Button>
-            </Link>
+            {server.billing?.status === 'suspended' ? (
+              <Link href="/billing">
+                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
+                  Add Funds
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/support">
+                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
+                  Open Ticket
+                </Button>
+              </Link>
+            )}
           </div>
         )}
         
@@ -1302,14 +1335,26 @@ export default function ServerDetail() {
 
                 {server.billing?.nextBillAt && (
                   <div className="border-t border-border pt-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Next Due</p>
-                    <p className="text-sm text-foreground font-medium">
-                      {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      {server.billing.status === 'unpaid' ? 'Payment Due' : 'Next Due'}
                     </p>
+                    <div className="flex items-center gap-2">
+                      {server.billing.status === 'unpaid' && (
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                      )}
+                      <p className={`text-sm font-medium ${server.billing.status === 'unpaid' ? 'text-red-400' : 'text-foreground'}`}>
+                        {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                    {server.billing.status === 'unpaid' && server.billing.suspendAt && (
+                      <p className="text-xs text-red-400/80 mt-1">
+                        Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
