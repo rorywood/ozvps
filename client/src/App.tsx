@@ -3,6 +3,7 @@ import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient, setSessionErrorCallback, SessionError } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -251,6 +252,7 @@ function App() {
           <TooltipProvider>
             <DevBanner />
             <Toaster />
+            <SonnerToaster />
             <SessionTimeoutHandler />
             <SessionErrorHandler />
             <SystemHealthCheck>

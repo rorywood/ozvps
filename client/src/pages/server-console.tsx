@@ -40,15 +40,44 @@ export default function ServerConsole() {
     }
   }, [isPopout, serverId]);
 
-  // Cleanup VNC on window close for popout
+  // Cleanup VNC on component unmount (navigating away) or window close
   useEffect(() => {
-    if (isPopout && serverId) {
-      const handleBeforeUnload = () => {
-        api.disableVnc(serverId).catch(() => {});
-      };
+    if (!serverId) return;
+
+    const disableVncWithKeepalive = () => {
+      // Use fetch with keepalive for reliable cleanup during page unload
+      // This ensures the request completes even if the page is closing
+      const csrfToken = localStorage.getItem('csrfToken') ||
+        document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+
+      fetch(`/api/servers/${serverId}/vnc/disable`, {
+        method: 'POST',
+        keepalive: true,
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+      }).catch(() => {});
+    };
+
+    const handleBeforeUnload = () => {
+      disableVncWithKeepalive();
+    };
+
+    // Add beforeunload listener for popout window close
+    if (isPopout) {
       window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
+
+    // Cleanup function runs when component unmounts (user navigates away)
+    return () => {
+      if (isPopout) {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
+      // Disable VNC when navigating away from console (embedded or popout)
+      api.disableVnc(serverId).catch(() => {});
+    };
   }, [isPopout, serverId]);
 
   const handleClose = () => {

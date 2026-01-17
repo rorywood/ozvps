@@ -930,7 +930,12 @@ export class VirtFusionClient {
         body: JSON.stringify({ action: 'disable' }),
       });
       return data.data;
-    } catch (error) {
+    } catch (error: any) {
+      // 423 Locked means VNC is already disabled or in process - treat as success
+      if (error.message?.includes('423')) {
+        log(`VNC already disabled for server ${serverId}`, 'virtfusion');
+        return { disabled: true };
+      }
       log(`Failed to disable VNC for server ${serverId}: ${error}`, 'virtfusion');
       throw error;
     }

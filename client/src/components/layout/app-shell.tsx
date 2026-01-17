@@ -154,11 +154,10 @@ function Footer() {
           </div>
         </div>
         
-        <div className="mt-6 pt-6 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="mt-6 pt-6 border-t border-border/50 flex items-center justify-center">
           <p className="text-xs text-muted-foreground/60">
             Powered by Australian infrastructure. Built with ❤️ in Queensland.
           </p>
-          <VersionDialog />
         </div>
       </div>
     </footer>

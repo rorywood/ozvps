@@ -885,7 +885,7 @@ export default function BillingPage() {
 
   return (
     <AppShell>
-      <div className="space-y-8 max-w-6xl">
+      <div className="space-y-10 max-w-6xl">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
             Billing
@@ -941,21 +941,26 @@ export default function BillingPage() {
               </div>
             )}
 
-            {/* Wallet Balance - Minimal DO Style */}
-            <div className="border border-border rounded-lg p-6 bg-card" data-testid="wallet-section">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground tracking-wide mb-2">Available Balance</p>
-                  {loadingWallet ? (
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  ) : (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-bold text-foreground font-display tracking-tight" data-testid="text-balance">
-                        {formatCurrency(wallet?.balanceCents || 0)}
-                      </span>
-                      <span className="text-xl text-muted-foreground">AUD</span>
-                    </div>
-                  )}
+            {/* Wallet Balance Card - Clean Modern Design */}
+            <div className="border border-border rounded-xl p-6 bg-gradient-to-br from-card to-card/80" data-testid="wallet-section">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Wallet className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-0.5">Available Balance</p>
+                    {loadingWallet ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    ) : (
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-bold text-foreground tracking-tight" data-testid="text-balance">
+                          {formatCurrency(wallet?.balanceCents || 0)}
+                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">AUD</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
@@ -1618,7 +1623,7 @@ export default function BillingPage() {
             </Tabs>
 
             {/* Support Banner */}
-            <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="border border-border rounded-lg p-6 bg-card mt-4">
               <div className="flex items-start gap-4">
                 <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <div className="flex-1">

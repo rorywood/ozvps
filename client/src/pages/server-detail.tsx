@@ -23,6 +23,7 @@ import {
   RefreshCw,
   X,
   ArrowDownToLine,
+  Globe,
   ArrowUpFromLine,
   Gauge,
   Calendar,
@@ -1238,6 +1239,12 @@ export default function ServerDetail() {
                       <StorageIcon className="h-4 w-4" />
                       <span>{server.plan.specs.disk} GB Storage</span>
                     </div>
+                    {server.plan.specs.traffic > 0 && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Globe className="h-4 w-4" />
+                        <span>{server.plan.specs.traffic >= 1000 ? `${(server.plan.specs.traffic / 1000).toFixed(0)} TB` : `${server.plan.specs.traffic} GB`} Bandwidth</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

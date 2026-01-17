@@ -238,7 +238,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         )}
       </div>
 
-      <div className="p-4 border-t border-border space-y-2">
+      <div className="p-4 border-t border-border">
         <button
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
@@ -248,7 +248,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           <LogOut className="h-4 w-4" />
           {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
         </button>
-        <VersionFooter />
       </div>
     </>
   );

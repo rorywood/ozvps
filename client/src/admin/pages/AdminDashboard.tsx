@@ -1,11 +1,26 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "../layout/AdminLayout";
 import { StatCard } from "../components/StatCard";
-import { Server, HardDrive, Network, Users, RefreshCw, Loader2 } from "lucide-react";
+import { Server, HardDrive, Network, Users, RefreshCw, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
-async function secureFetch(url: string): Promise<Response> {
-  return fetch(url, { credentials: 'include' });
+function getCsrfToken(): string {
+  return localStorage.getItem('csrfToken') ||
+    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+}
+
+async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCsrfToken(),
+      ...options.headers,
+    },
+  });
 }
 
 interface StatsResponse {
@@ -31,6 +46,37 @@ interface Hypervisor {
 }
 
 export default function AdminDashboard() {
+  const queryClient = useQueryClient();
+
+  // Registration setting query
+  const { data: registrationData, isLoading: registrationLoading } = useQuery<{ enabled: boolean }>({
+    queryKey: ['admin', 'settings', 'registration'],
+    queryFn: async () => {
+      const res = await secureFetch('/api/admin/settings/registration');
+      if (!res.ok) throw new Error('Failed to fetch registration setting');
+      return res.json();
+    },
+  });
+
+  // Registration toggle mutation
+  const toggleRegistrationMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const response = await secureFetch('/api/admin/settings/registration', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) throw new Error('Failed to update registration setting');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast.success(`Registration ${data.enabled ? 'enabled' : 'disabled'}`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'registration'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<StatsResponse>({
     queryKey: ['admin', 'vf', 'stats'],
     queryFn: async () => {
@@ -174,6 +220,44 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Quick Settings */}
+        <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
+              <UserPlus className="h-4 w-4" />
+            </div>
+            <h2 className="text-xl font-semibold text-white">Quick Settings</h2>
+          </div>
+
+          <div className="space-y-4">
+            {/* Registration Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+              <div>
+                <p className="font-medium text-white">User Registration</p>
+                <p className="text-xs text-slate-500">Allow new users to create accounts</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {registrationLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                ) : (
+                  <>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      registrationData?.enabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {registrationData?.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <Switch
+                      checked={registrationData?.enabled ?? false}
+                      onCheckedChange={(checked) => toggleRegistrationMutation.mutate(checked)}
+                      disabled={toggleRegistrationMutation.isPending}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </AdminLayout>
