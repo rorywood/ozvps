@@ -80,8 +80,8 @@ info() { echo -e "  ${CYAN}→${NC} $1"; }
 warning() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 
 get_environment() {
+    # First check explicit .ozvps-env file
     if [[ -f "$INSTALL_DIR/.ozvps-env" ]]; then
-        # Read and trim whitespace/newlines
         local env
         env=$(tr -d '[:space:]' < "$INSTALL_DIR/.ozvps-env" 2>/dev/null)
         if [[ -n "$env" ]]; then
@@ -89,6 +89,20 @@ get_environment() {
             return
         fi
     fi
+
+    # Fallback: detect from branch name
+    local branch=$(get_branch)
+    if [[ "$branch" == *"dev"* || "$branch" == *"develop"* || "$branch" == *"staging"* ]]; then
+        echo "development"
+        return
+    fi
+
+    # Default to production for main/master branches
+    if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+        echo "production"
+        return
+    fi
+
     echo "unknown"
 }
 
