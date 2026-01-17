@@ -1560,7 +1560,7 @@ export class VirtFusionClient {
     extRelationId: string;
     osId?: number; // Optional - if not provided, server is created without OS (awaiting setup)
     hypervisorGroupId?: number;
-  }): Promise<{ serverId: number; name: string; password?: string }> {
+  }): Promise<{ serverId: number; name: string; password?: string; primaryIp?: string; osName?: string }> {
     const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId } = params;
 
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
@@ -1585,6 +1585,10 @@ export class VirtFusionClient {
 
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
+
+      // Extract IP from create response
+      const primaryIp = server.primaryIp || server.primary_ip || server.ipv4 || undefined;
+      console.log('SERVER IP FROM CREATE:', primaryIp);
 
       let password: string | undefined = undefined;
 
@@ -1627,6 +1631,7 @@ export class VirtFusionClient {
         serverId: server.id,
         name: server.name,
         password,
+        primaryIp,
       };
     } catch (error: any) {
       log(`Failed to provision server: ${error.message}`, 'virtfusion');

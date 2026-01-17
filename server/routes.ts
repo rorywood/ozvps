@@ -5000,29 +5000,27 @@ export async function registerRoutes(
 
         log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
 
-        console.log('PASSWORD CHECK:', serverResult.password ? 'HAS PASSWORD' : 'NO PASSWORD');
-        console.log('EMAIL CHECK:', req.userSession?.email || 'NO EMAIL');
-
-        // Email credentials if password was returned
-        if (serverResult.password && req.userSession?.email) {
-          console.log('GETTING SERVER DETAILS FOR EMAIL...');
-          const server = await virtfusionClient.getServer(serverResult.serverId.toString(), false);
-          console.log('SERVER IP:', server?.primaryIp || 'NO IP');
-          if (server?.primaryIp) {
-            console.log('CALLING sendServerCredentialsEmail NOW');
-            sendServerCredentialsEmail(
-              req.userSession.email,
-              serverResult.name,
-              server.primaryIp,
-              'root',
-              serverResult.password,
-              (server as any).os?.name || 'Linux'
-            ).then(result => {
-              console.log('EMAIL RESULT:', result);
-            }).catch(err => {
-              console.log('EMAIL ERROR:', err);
-            });
-          }
+        // Email credentials if password and IP were returned
+        if (serverResult.password && serverResult.primaryIp && req.userSession?.email) {
+          log(`Sending credentials email to ${req.userSession.email} for server ${serverResult.name}`, 'api');
+          sendServerCredentialsEmail(
+            req.userSession.email,
+            serverResult.name,
+            serverResult.primaryIp,
+            'root',
+            serverResult.password,
+            selectedTemplate?.name || 'Linux'
+          ).then(result => {
+            if (result.success) {
+              log(`Credentials email sent successfully for server ${serverResult.serverId}`, 'api');
+            } else {
+              log(`Failed to send credentials email for server ${serverResult.serverId}: ${result.error}`, 'api');
+            }
+          }).catch(err => {
+            log(`Error sending credentials email for server ${serverResult.serverId}: ${err.message}`, 'api');
+          });
+        } else {
+          log(`Skipping credentials email - password: ${!!serverResult.password}, IP: ${!!serverResult.primaryIp}, email: ${!!req.userSession?.email}`, 'api');
         }
       } catch (provisionError: any) {
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
