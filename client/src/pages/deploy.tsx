@@ -412,6 +412,25 @@ export default function DeployPage() {
                 <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
                   <Loader2 className="h-6 w-6 text-primary animate-spin" />
                 </div>
+              ) : plans.length > 0 && plans.every(p => !p.active) ? (
+                <div className="border border-border rounded-lg p-6 bg-card">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="h-6 w-6 text-warning flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-foreground mb-3">
+                        Service Plans Unavailable
+                      </h3>
+                      <p className="text-muted-foreground mb-4 leading-relaxed">
+                        All service plans are currently unavailable due to capacity constraints. New deployments are temporarily suspended while infrastructure expansion is underway. Existing services remain fully operational. Availability will resume once additional resources are provisioned.
+                      </p>
+                      <Link href="/support/new">
+                        <Button variant="outline" className="border-warning/50 text-warning hover:bg-warning/20">
+                          Open a Support Ticket
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {plans.map((plan) => {
