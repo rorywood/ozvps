@@ -1183,14 +1183,21 @@ export default function ServerDetail() {
 
         {/* Suspension Banner */}
         {isSuspended && (
-          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
-            <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
-            <div>
-              <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
-              <p className="text-sm text-yellow-300/80">
-                Please contact support for assistance.
-              </p>
+          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-suspended">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
+                <p className="text-sm text-yellow-300/80">
+                  Please contact support for assistance.
+                </p>
+              </div>
             </div>
+            <Link href={`/support/new?server=${serverId}`}>
+              <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
+                Open Ticket
+              </Button>
+            </Link>
           </div>
         )}
         

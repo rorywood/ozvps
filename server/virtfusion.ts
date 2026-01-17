@@ -592,6 +592,17 @@ export class VirtFusionClient {
 
   async suspendServer(serverId: string) {
     try {
+      // Force stop the server before suspending to ensure it's not running
+      try {
+        await this.request(`/servers/${serverId}/power/poweroff`, {
+          method: 'POST',
+        });
+        log(`Server ${serverId} powered off before suspension`, 'virtfusion');
+      } catch (powerError: any) {
+        // Continue with suspension even if poweroff fails (server might already be stopped)
+        log(`Could not poweroff server ${serverId} before suspension (may already be stopped): ${powerError.message}`, 'virtfusion');
+      }
+
       await this.request(`/servers/${serverId}/suspend`, {
         method: 'POST',
       });
