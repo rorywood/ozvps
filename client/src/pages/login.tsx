@@ -484,16 +484,7 @@ export default function LoginPage() {
 
               {/* Password */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-sm font-medium text-foreground">Password</Label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-                    data-testid="link-forgot-password"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
+                <Label htmlFor="password" className="text-sm font-medium text-foreground">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                   <Input
@@ -506,6 +497,15 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     data-testid="input-password"
                   />
+                </div>
+                <div className="flex justify-end">
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
               </div>
 
