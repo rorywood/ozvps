@@ -92,6 +92,14 @@ if ! grep -q "^SENTRY_DSN=" .env 2>/dev/null; then
     echo "✓ Added Sentry error tracking"
 fi
 
+# Add RESEND_API_KEY if not present
+if ! grep -q "^RESEND_API_KEY=" .env 2>/dev/null; then
+    echo "" >> .env
+    echo "# Email Service (Resend)" >> .env
+    echo "RESEND_API_KEY=re_U9WresH8_6Uznzf6sanS8M7HS5ftF3c7A" >> .env
+    echo "✓ Added Resend email configuration"
+fi
+
 echo "✓ Code updated"
 
 # Update custom error pages

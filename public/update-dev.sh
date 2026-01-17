@@ -252,6 +252,19 @@ else
     warning ".env file not found, will add Sentry DSN later"
 fi
 
+# Add RESEND_API_KEY if not present
+info "Checking Resend email configuration..."
+if [ -f "$INSTALL_DIR/.env" ]; then
+    if ! grep -q "RESEND_API_KEY" "$INSTALL_DIR/.env"; then
+        echo "" >> "$INSTALL_DIR/.env"
+        echo "# Email Service (Resend)" >> "$INSTALL_DIR/.env"
+        echo "RESEND_API_KEY=re_U9WresH8_6Uznzf6sanS8M7HS5ftF3c7A" >> "$INSTALL_DIR/.env"
+        success "Added Resend API key to .env"
+    else
+        success "Resend API key already configured"
+    fi
+fi
+
 # Update custom error pages
 if [ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]; then
     info "Updating custom error pages..."
