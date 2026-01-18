@@ -14,25 +14,40 @@ interface CacheEntry<T> {
 
 class SimpleCache {
   private cache = new Map<string, CacheEntry<any>>();
-  
+
+  // Maximum age for stale data (5 minutes) - used as fallback when fresh fetch fails
+  private readonly STALE_TTL_MS = 5 * 60 * 1000;
+
   get<T>(key: string): T | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
     if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+      // Don't delete - keep for stale fallback
+      return null;
+    }
+    return entry.data;
+  }
+
+  // Get stale data even if expired (but not older than STALE_TTL_MS)
+  getStale<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    // Allow stale data up to 5 minutes old
+    if (Date.now() - entry.timestamp > this.STALE_TTL_MS) {
       this.cache.delete(key);
       return null;
     }
     return entry.data;
   }
-  
+
   set<T>(key: string, data: T): void {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
-  
+
   invalidate(key: string): void {
     this.cache.delete(key);
   }
-  
+
   invalidatePrefix(prefix: string): void {
     const keys = Array.from(this.cache.keys());
     for (const key of keys) {
@@ -41,7 +56,7 @@ class SimpleCache {
       }
     }
   }
-  
+
   clear(): void {
     this.cache.clear();
   }
@@ -516,13 +531,25 @@ export class VirtFusionClient {
       }
     }
 
-    // Fetch with remoteState=true to get live power status from hypervisor
-    const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
-    const server = this.transformServer(response.data);
+    try {
+      // Fetch with remoteState=true to get live power status from hypervisor
+      const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
+      const server = this.transformServer(response.data);
 
-    // Cache the result
-    apiCache.set(cacheKey, server);
-    return server;
+      // Cache the result
+      apiCache.set(cacheKey, server);
+      return server;
+    } catch (error: any) {
+      // If fetch fails, try to return stale cached data (up to 5 minutes old)
+      // This prevents brief "Server not found" errors during VirtFusion API hiccups
+      const staleData = apiCache.getStale<ReturnType<typeof this.transformServer>>(cacheKey);
+      if (staleData) {
+        log(`VirtFusion API failed for server ${serverId}, using stale cache: ${error.message}`, 'virtfusion');
+        return staleData;
+      }
+      // No stale data available, re-throw the error
+      throw error;
+    }
   }
   
   // Invalidate server cache after power actions or changes
