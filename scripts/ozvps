@@ -768,10 +768,23 @@ ERRORCONF
 
     # Step 5: Check current NGINX config
     info "Step 5: Checking NGINX config..."
+
+    # Try to find the correct config file
+    if [[ -f "/etc/nginx/sites-available/ozvps" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps"
+    elif [[ -f "/etc/nginx/sites-available/ozvps-dev" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps-dev"
+    elif [[ -f "/etc/nginx/sites-available/ozvps-prod" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps-prod"
+    else
+        # Find any ozvps config
+        nginx_conf=$(ls /etc/nginx/sites-available/ozvps* 2>/dev/null | head -1)
+    fi
+
     echo "  Config file: $nginx_conf"
 
-    if [[ ! -f "$nginx_conf" ]]; then
-        error "NGINX config not found at $nginx_conf"
+    if [[ -z "$nginx_conf" || ! -f "$nginx_conf" ]]; then
+        error "No OzVPS NGINX config found"
         echo "  Available configs:"
         ls -la /etc/nginx/sites-available/
         read -p "Press Enter to continue..." < /dev/tty
@@ -982,9 +995,16 @@ EOF
     info "Configuring domain for webhooks..."
     local domain=""
 
-    # Try to detect domain from NGINX config
-    if [[ -f "/etc/nginx/sites-available/ozvps" ]]; then
-        domain=$(grep -oP "server_name\s+\K[^;]+" /etc/nginx/sites-available/ozvps 2>/dev/null | head -1 | tr -d ' ')
+    # Try to detect domain from NGINX config (check multiple possible names)
+    local nginx_conf_for_domain=""
+    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod; do
+        if [[ -f "$conf" ]]; then
+            nginx_conf_for_domain="$conf"
+            break
+        fi
+    done
+    if [[ -n "$nginx_conf_for_domain" ]]; then
+        domain=$(grep -oP "server_name\s+\K[^;]+" "$nginx_conf_for_domain" 2>/dev/null | head -1 | tr -d ' ')
     fi
 
     # Fallback: try to get from hostname
@@ -1041,8 +1061,19 @@ ERRORCONF
     success "Error pages snippet created at $snippet_file"
 
     # Update NGINX config to include the snippet in ALL server blocks
-    local nginx_conf="/etc/nginx/sites-available/ozvps"
-    if [[ -f "$nginx_conf" ]]; then
+    # Find the correct config file
+    local nginx_conf=""
+    if [[ -f "/etc/nginx/sites-available/ozvps" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps"
+    elif [[ -f "/etc/nginx/sites-available/ozvps-dev" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps-dev"
+    elif [[ -f "/etc/nginx/sites-available/ozvps-prod" ]]; then
+        nginx_conf="/etc/nginx/sites-available/ozvps-prod"
+    else
+        nginx_conf=$(ls /etc/nginx/sites-available/ozvps* 2>/dev/null | head -1)
+    fi
+
+    if [[ -n "$nginx_conf" && -f "$nginx_conf" ]]; then
         # Check if snippet is already included
         if ! grep -q "include snippets/ozvps-errors.conf" "$nginx_conf"; then
             info "Adding error pages snippet to NGINX config..."
