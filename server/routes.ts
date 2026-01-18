@@ -1505,9 +1505,36 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // Session check endpoint - returns authenticated status without triggering logout
+  app.get('/api/auth/session', async (req, res) => {
+    const sessionId = req.cookies?.[SESSION_COOKIE];
+
+    if (!sessionId) {
+      return res.json({ authenticated: false });
+    }
+
+    try {
+      const session = await storage.getSession(sessionId);
+
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.json({ authenticated: false });
+      }
+
+      // Check if session was revoked
+      if (session.revokedAt) {
+        return res.json({ authenticated: false });
+      }
+
+      return res.json({ authenticated: true });
+    } catch (error) {
+      // On any error, just return not authenticated (don't crash)
+      return res.json({ authenticated: false });
+    }
+  });
+
   app.get('/api/auth/me', async (req, res) => {
     const sessionId = req.cookies?.[SESSION_COOKIE];
-    
+
     if (!sessionId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
