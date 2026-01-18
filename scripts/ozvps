@@ -772,13 +772,7 @@ EOF
     local latest_commit=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${branch}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
 
     if [[ -n "$latest_commit" && -n "$current_commit" && "$current_commit" == "$latest_commit" ]]; then
-        success "Already on latest version (${latest_commit:0:7})"
-        echo ""
-        read -p "  Force update anyway? (y/N): " -n 1 -r < /dev/tty
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            return
-        fi
+        success "Already on latest version (${latest_commit:0:7}) - will rebuild anyway"
     else
         if [[ -n "$current_commit" && -n "$latest_commit" ]]; then
             success "New version available!"
@@ -808,7 +802,8 @@ EOF
     local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
     local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
 
-    if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip" -o "$temp_zip"; then
+    # Add cache-busting timestamp to avoid GitHub CDN serving stale ZIP
+    if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)" -o "$temp_zip"; then
         error "Failed to download"
         return
     fi
