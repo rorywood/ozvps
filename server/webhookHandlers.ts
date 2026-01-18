@@ -59,7 +59,7 @@ export class WebhookHandlers {
     // This prevents test webhooks from affecting production data
     if (process.env.NODE_ENV === 'production' && event.livemode === false) {
       log(`SECURITY: Rejected test mode webhook in production: ${event.id}`, 'stripe');
-      return;
+      throw new Error('Test mode webhooks are not accepted in production');
     }
 
     // Track webhook health

@@ -36,7 +36,7 @@ class Auth0Client {
   private adminStatusCache: Map<string, { isAdmin: boolean; cachedAt: number }> = new Map();
   // SECURITY: Very short cache TTL to ensure deleted users are locked out quickly
   // Only cache "exists: false" longer since that's a permanent state
-  private readonly USER_EXISTS_CACHE_TTL_MS = 30 * 1000; // 30 seconds for exists: true
+  private readonly USER_EXISTS_CACHE_TTL_MS = 10 * 1000; // 10 seconds for exists: true (reduced from 30s for faster lockout)
   private readonly USER_NOT_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for exists: false
   // Admin status cache - 5 minutes is reasonable since admin changes are rare
   private readonly ADMIN_STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

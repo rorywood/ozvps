@@ -1,7 +1,8 @@
 import { Server, SupportTicket, TicketMessage } from "./types";
 import { SessionError } from "./queryClient";
 
-// CSRF token management
+// CSRF token management - read from cookie only (set by server)
+// SECURITY: Never store CSRF tokens in localStorage (vulnerable to XSS)
 const CSRF_COOKIE = 'ozvps_csrf';
 
 // Session error callback (set by App.tsx)
@@ -12,7 +13,7 @@ export function setApiSessionErrorCallback(callback: (error: SessionError) => vo
 }
 
 function getCsrfToken(): string | null {
-  // Get CSRF token from cookie
+  // Get CSRF token from cookie only - server sets this on login
   const cookies = document.cookie.split(';');
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split('=');
@@ -20,18 +21,18 @@ function getCsrfToken(): string | null {
       return decodeURIComponent(value);
     }
   }
-  // Fallback to localStorage (set after login response)
-  return localStorage.getItem('csrfToken');
+  return null;
 }
 
-// Store CSRF token from login response
-export function storeCsrfToken(token: string): void {
-  localStorage.setItem('csrfToken', token);
+// DEPRECATED: These functions are no longer needed since CSRF token
+// is managed entirely by the server via cookies. Kept for backwards
+// compatibility but they do nothing.
+export function storeCsrfToken(_token: string): void {
+  // No-op: CSRF token is now managed via cookies only
 }
 
-// Clear CSRF token on logout
 export function clearCsrfToken(): void {
-  localStorage.removeItem('csrfToken');
+  // No-op: CSRF cookie is cleared by server on logout
 }
 
 // Enhanced fetch that includes CSRF token for mutating requests
