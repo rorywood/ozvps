@@ -27,9 +27,18 @@ export function useAuth() {
     queryKey: ["auth", "session"],
     queryFn: async () => {
       const response = await fetch("/api/auth/session");
+      // If rate limited, throw to preserve previous state (don't log out)
+      if (response.status === 429) {
+        throw new Error("Rate limited - slow down");
+      }
       return response.json();
     },
     staleTime: 1000 * 60 * 5,
+    retry: (failureCount, error) => {
+      // Don't retry if rate limited
+      if (error?.message?.includes("Rate limited")) return false;
+      return failureCount < 2;
+    },
   });
 
   // Fetch full user data including emailVerified
@@ -37,6 +46,10 @@ export function useAuth() {
     queryKey: ["auth", "me"],
     queryFn: async () => {
       const response = await fetch("/api/auth/me");
+      // If rate limited, throw to preserve previous state
+      if (response.status === 429) {
+        throw new Error("Rate limited - slow down");
+      }
       if (!response.ok) return null;
       return response.json();
     },

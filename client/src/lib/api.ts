@@ -59,6 +59,13 @@ export async function secureFetch(url: string, options: RequestInit = {}): Promi
 
   const response = await fetch(url, options);
 
+  // Handle 429 (rate limited) - show slow down message, don't logout
+  if (response.status === 429) {
+    // Show a toast notification if available, otherwise the caller handles it
+    // Don't trigger logout - just let the error propagate
+    return response;
+  }
+
   // Handle 401 errors - trigger session error callback to redirect to login
   // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
   if (response.status === 401) {
@@ -75,6 +82,11 @@ export async function secureFetch(url: string, options: RequestInit = {}): Promi
         errorData = await clone.json();
       } catch (e) {
         // Failed to parse JSON, use default error
+      }
+
+      // Don't logout for rate limiting errors
+      if (errorData.code === 'RATE_LIMITED') {
+        return response;
       }
 
       // Trigger session error callback (will redirect to login)
