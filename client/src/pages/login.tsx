@@ -526,32 +526,32 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
-                  disabled={isSubmitting || loginMutation.isPending}
-                  data-testid="button-submit"
-                >
-                  {(isSubmitting || loginMutation.isPending) ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign in"
-                  )}
-                </Button>
-
-                {/* Forgot Password */}
-                <div className="text-center">
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-slate-400 hover:text-primary transition-colors"
-                    data-testid="link-forgot-password"
+                {/* Submit Button & Forgot Password */}
+                <div className="space-y-3 pt-2">
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
+                    disabled={isSubmitting || loginMutation.isPending}
+                    data-testid="button-submit"
                   >
-                    Forgot your password?
-                  </Link>
+                    {(isSubmitting || loginMutation.isPending) ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign in"
+                    )}
+                  </Button>
+                  <div className="text-center">
+                    <Link
+                      href="/forgot-password"
+                      className="text-sm text-slate-400 hover:text-primary transition-colors"
+                      data-testid="link-forgot-password"
+                    >
+                      Forgot your password?
+                    </Link>
+                  </div>
                 </div>
 
                 {/* reCAPTCHA Notice */}

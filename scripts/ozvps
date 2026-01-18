@@ -300,7 +300,7 @@ show_menu() {
     echo -e "${CYAN}│${NC}  ${BOLD}CONFIGURATION${NC}                                          ${CYAN}│${NC}"
     echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
     echo -e "${CYAN}│${NC}  ${BOLD}[13]${NC} View Configuration     ${BOLD}[14]${NC} Edit .env File          ${CYAN}│${NC}"
-    echo -e "${CYAN}│${NC}  ${BOLD}[15]${NC} Test Email Config                                  ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[15]${NC} Test Email Config      ${BOLD}[16]${NC} Fix NGINX Error Pages   ${CYAN}│${NC}"
     echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
     echo -e "${CYAN}│${NC}  ${BOLD}[Q]${NC} Quit                                               ${CYAN}│${NC}"
     echo -e "${CYAN}╰───────────────────────────────────────────────────────────╯${NC}"
@@ -705,6 +705,132 @@ action_test_email() {
     read -p "Press Enter to continue..." < /dev/tty
 }
 
+# 16. Fix NGINX Error Pages
+action_fix_nginx_errors() {
+    echo ""
+    echo -e "${BOLD}Fix NGINX Error Pages${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+    echo ""
+
+    local error_pages_dir="/var/www/ozvps-errors"
+    local snippets_dir="/etc/nginx/snippets"
+    local snippet_file="$snippets_dir/ozvps-errors.conf"
+    local nginx_conf="/etc/nginx/sites-available/ozvps"
+
+    # Step 1: Create error pages directory
+    info "Step 1: Creating error pages directory..."
+    mkdir -p "$error_pages_dir"
+    echo "  Directory: $error_pages_dir"
+
+    # Step 2: Copy error page files
+    info "Step 2: Copying error page files..."
+    local source_dir="$INSTALL_DIR/deploy/nginx-error-pages"
+    echo "  Source: $source_dir"
+
+    if [[ -d "$source_dir" ]]; then
+        ls -la "$source_dir/"
+        cp -v "$source_dir/"*.html "$error_pages_dir/"
+        chmod 644 "$error_pages_dir/"*.html
+        success "Files copied"
+    else
+        error "Source directory not found!"
+        echo "  Checking if files exist in install dir..."
+        ls -la "$INSTALL_DIR/" | head -20
+        read -p "Press Enter to continue..." < /dev/tty
+        return 1
+    fi
+
+    # Step 3: Verify files are in place
+    info "Step 3: Verifying error pages..."
+    echo "  Contents of $error_pages_dir:"
+    ls -la "$error_pages_dir/"
+
+    # Step 4: Create NGINX snippet
+    info "Step 4: Creating NGINX snippet..."
+    mkdir -p "$snippets_dir"
+
+    cat > "$snippet_file" << 'ERRORCONF'
+# OzVPS Custom Error Pages
+error_page 404 /404.html;
+error_page 500 /500.html;
+error_page 502 /502.html;
+error_page 503 /503.html;
+
+location = /404.html { root /var/www/ozvps-errors; internal; }
+location = /500.html { root /var/www/ozvps-errors; internal; }
+location = /502.html { root /var/www/ozvps-errors; internal; }
+location = /503.html { root /var/www/ozvps-errors; internal; }
+ERRORCONF
+
+    echo "  Created: $snippet_file"
+    echo "  Contents:"
+    cat "$snippet_file"
+
+    # Step 5: Check current NGINX config
+    info "Step 5: Checking NGINX config..."
+    echo "  Config file: $nginx_conf"
+
+    if [[ ! -f "$nginx_conf" ]]; then
+        error "NGINX config not found at $nginx_conf"
+        echo "  Available configs:"
+        ls -la /etc/nginx/sites-available/
+        read -p "Press Enter to continue..." < /dev/tty
+        return 1
+    fi
+
+    echo "  Current server blocks:"
+    grep -n "server_name\|listen\|error_page\|include.*error" "$nginx_conf" || echo "  (no matches)"
+
+    # Step 6: Add include directive if missing
+    info "Step 6: Adding include directive..."
+
+    if grep -q "include snippets/ozvps-errors.conf" "$nginx_conf"; then
+        info "Include directive already exists"
+    else
+        echo "  Adding include after each server_name line..."
+        # Backup first
+        cp "$nginx_conf" "${nginx_conf}.backup"
+
+        # Add include after each server_name line
+        sed -i '/server_name/a\    include snippets/ozvps-errors.conf;' "$nginx_conf"
+
+        echo "  Updated config:"
+        grep -n "server_name\|include.*error" "$nginx_conf"
+    fi
+
+    # Step 7: Test and reload NGINX
+    info "Step 7: Testing NGINX config..."
+    echo ""
+    if nginx -t; then
+        echo ""
+        success "Config test passed"
+        info "Reloading NGINX..."
+        systemctl reload nginx
+        success "NGINX reloaded"
+    else
+        echo ""
+        error "Config test FAILED"
+        echo "  Restoring backup..."
+        cp "${nginx_conf}.backup" "$nginx_conf"
+        warning "Restored original config"
+    fi
+
+    # Step 8: Test error page
+    info "Step 8: Testing error page (requesting non-existent page)..."
+    echo ""
+    local test_result=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/this-page-does-not-exist-test-404)
+    echo "  HTTP Status: $test_result"
+
+    echo ""
+    echo -e "${BOLD}Summary:${NC}"
+    echo "  Error pages dir: $error_pages_dir"
+    echo "  Snippet file: $snippet_file"
+    echo "  NGINX config: $nginx_conf"
+    echo ""
+
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
 # ============================================================================
 # Update Function (full update flow)
 # ============================================================================
@@ -992,6 +1118,7 @@ main_menu() {
             13) action_view_config ;;
             14) action_edit_env ;;
             15) action_test_email ;;
+            16) action_fix_nginx_errors ;;
             q|Q) echo ""; info "Goodbye!"; exit 0 ;;
             *) warning "Invalid option" ;;
         esac
