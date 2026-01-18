@@ -37,7 +37,7 @@ STOPPED="${RED}●${NC}"
 WARNING="${YELLOW}●${NC}"
 
 # ============================================================================
-# Self-Update Function
+# Self-Update Function (runs silently at startup)
 # ============================================================================
 self_update() {
     local SELF_PATH="$1"
@@ -51,8 +51,6 @@ self_update() {
         [[ -z "$BRANCH" ]] && BRANCH="main"
     fi
 
-    echo -e "  ${DIM}Checking for script updates (${BRANCH})...${NC}"
-
     local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps"
     local TEMP_SCRIPT=$(mktemp)
 
@@ -62,19 +60,13 @@ self_update() {
             local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
 
             if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
-                echo -e "  ${GREEN}✓${NC} New control panel version found, updating..."
+                echo -e "  ${GREEN}✓${NC} Control panel updated, restarting..."
                 cp "$TEMP_SCRIPT" "$SELF_PATH"
                 chmod +x "$SELF_PATH"
                 rm -f "$TEMP_SCRIPT"
                 exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
-            else
-                echo -e "  ${GREEN}✓${NC} Script is up to date"
             fi
-        else
-            echo -e "  ${YELLOW}⚠${NC} Could not verify downloaded script"
         fi
-    else
-        echo -e "  ${YELLOW}⚠${NC} Could not check for script updates"
     fi
 
     rm -f "$TEMP_SCRIPT" 2>/dev/null
@@ -308,7 +300,7 @@ show_menu() {
     echo -e "${CYAN}│${NC}  ${BOLD}CONFIGURATION${NC}                                          ${CYAN}│${NC}"
     echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
     echo -e "${CYAN}│${NC}  ${BOLD}[13]${NC} View Configuration     ${BOLD}[14]${NC} Edit .env File          ${CYAN}│${NC}"
-    echo -e "${CYAN}│${NC}  ${BOLD}[15]${NC} Test Email Config      ${BOLD}[16]${NC} Check for Script Update ${CYAN}│${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}[15]${NC} Test Email Config                                  ${CYAN}│${NC}"
     echo -e "${CYAN}├───────────────────────────────────────────────────────────┤${NC}"
     echo -e "${CYAN}│${NC}  ${BOLD}[Q]${NC} Quit                                               ${CYAN}│${NC}"
     echo -e "${CYAN}╰───────────────────────────────────────────────────────────╯${NC}"
@@ -713,45 +705,6 @@ action_test_email() {
     read -p "Press Enter to continue..." < /dev/tty
 }
 
-# 16. Check for Script Update
-action_check_update() {
-    echo ""
-    echo -e "${BOLD}Checking for Script Updates${NC}"
-    echo -e "${DIM}─────────────────────────────────────────${NC}"
-
-    local branch=$(get_branch)
-    local script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps"
-    local temp_script=$(mktemp)
-
-    info "Checking $branch branch..."
-
-    if curl -fsSL -H 'Cache-Control: no-cache' "$script_url?t=$(date +%s)" -o "$temp_script" 2>/dev/null; then
-        local current_md5=$(md5sum "$0" 2>/dev/null | cut -d' ' -f1)
-        local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
-
-        if [[ "$current_md5" != "$new_md5" ]]; then
-            success "New version available!"
-            read -p "  Update now? (y/N): " -n 1 -r < /dev/tty
-            echo ""
-
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                cp "$temp_script" "$0"
-                chmod +x "$0"
-                success "Script updated! Restarting..."
-                rm -f "$temp_script"
-                exec "$0"
-            fi
-        else
-            success "Script is up to date"
-        fi
-    else
-        error "Could not check for updates"
-    fi
-
-    rm -f "$temp_script" 2>/dev/null
-    read -p "Press Enter to continue..." < /dev/tty
-}
-
 # ============================================================================
 # Update Function (full update flow)
 # ============================================================================
@@ -775,8 +728,36 @@ EOF
         warning "Create it with: echo 'claude/dev-l5488' | sudo tee $INSTALL_DIR/.ozvps-branch"
     fi
 
+    # Step 0: Check for script updates first
+    info "Checking for control panel script updates..."
+    local script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps"
+    local temp_script=$(mktemp)
+    local self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
+
+    if curl -fsSL -H 'Cache-Control: no-cache' "$script_url?t=$(date +%s)" -o "$temp_script" 2>/dev/null; then
+        if head -1 "$temp_script" | grep -q "^#!/"; then
+            local current_md5=$(md5sum "$self_path" 2>/dev/null | cut -d' ' -f1)
+            local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
+
+            if [[ "$current_md5" != "$new_md5" ]]; then
+                success "New control panel version found, updating script..."
+                cp "$temp_script" "$self_path"
+                chmod +x "$self_path"
+                rm -f "$temp_script"
+                success "Script updated! Restarting update process..."
+                echo ""
+                exec "$self_path" --no-self-update --update
+            else
+                success "Control panel script is up to date"
+            fi
+        fi
+    else
+        warning "Could not check for script updates (continuing anyway)"
+    fi
+    rm -f "$temp_script" 2>/dev/null
+
     # Check for new commits
-    info "Checking for updates on $branch..."
+    info "Checking for application updates on $branch..."
 
     local current_commit=""
     if [[ -f "$INSTALL_DIR/.commit" ]]; then
@@ -961,7 +942,6 @@ main_menu() {
             13) action_view_config ;;
             14) action_edit_env ;;
             15) action_test_email ;;
-            16) action_check_update ;;
             q|Q) echo ""; info "Goodbye!"; exit 0 ;;
             *) warning "Invalid option" ;;
         esac
