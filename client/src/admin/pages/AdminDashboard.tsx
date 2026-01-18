@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "../layout/AdminLayout";
 import { StatCard } from "../components/StatCard";
-import { Server, HardDrive, Network, Users, RefreshCw, Loader2, UserPlus } from "lucide-react";
+import { Server, HardDrive, Network, Users, RefreshCw, Loader2, UserPlus, Webhook, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -97,6 +97,24 @@ export default function AdminDashboard() {
   });
 
   const hypervisors: Hypervisor[] = hypervisorsData?.hypervisors || [];
+
+  // Webhook health query
+  const { data: webhookHealth, isLoading: webhookLoading, refetch: refetchWebhook } = useQuery<{
+    healthy: boolean;
+    lastReceived: string | null;
+    lastEvent: string | null;
+    totalReceived: number;
+    configuredUrl: string;
+    message: string;
+  }>({
+    queryKey: ['admin', 'webhook-health'],
+    queryFn: async () => {
+      const res = await secureFetch('/api/admin/webhook-health');
+      if (!res.ok) throw new Error('Failed to fetch webhook health');
+      return res.json();
+    },
+    refetchInterval: 60000, // Check every minute
+  });
 
   return (
     <AdminLayout title="Admin Dashboard">
@@ -258,6 +276,88 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Stripe Webhook Health */}
+        <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
+                <Webhook className="h-4 w-4" />
+              </div>
+              <h2 className="text-xl font-semibold text-white">Stripe Webhook</h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refetchWebhook()}
+              className="text-slate-400 hover:text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {webhookLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
+            </div>
+          ) : webhookHealth ? (
+            <div className="space-y-3">
+              {/* Status */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+                <div className="flex items-center gap-3">
+                  {webhookHealth.healthy ? (
+                    <CheckCircle className="h-5 w-5 text-green-400" />
+                  ) : webhookHealth.lastReceived ? (
+                    <AlertCircle className="h-5 w-5 text-yellow-400" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-400" />
+                  )}
+                  <div>
+                    <p className="font-medium text-white">Status</p>
+                    <p className="text-xs text-slate-500">{webhookHealth.message}</p>
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  webhookHealth.healthy ? 'bg-green-500/20 text-green-400' :
+                  webhookHealth.lastReceived ? 'bg-yellow-500/20 text-yellow-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {webhookHealth.healthy ? 'Healthy' : webhookHealth.lastReceived ? 'Warning' : 'Not Receiving'}
+                </span>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+                  <p className="text-xs text-slate-500">Total Received</p>
+                  <p className="text-lg font-semibold text-white">{webhookHealth.totalReceived}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+                  <p className="text-xs text-slate-500">Last Event</p>
+                  <p className="text-sm font-medium text-white truncate">{webhookHealth.lastEvent || 'None'}</p>
+                </div>
+              </div>
+
+              {/* Last Received */}
+              {webhookHealth.lastReceived && (
+                <div className="p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+                  <p className="text-xs text-slate-500">Last Received</p>
+                  <p className="text-sm font-medium text-white">
+                    {new Date(webhookHealth.lastReceived).toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              {/* Configured URL */}
+              <div className="p-3 rounded-lg bg-white/5 ring-1 ring-white/5">
+                <p className="text-xs text-slate-500">Configured Endpoint</p>
+                <p className="text-xs font-mono text-slate-400 break-all">{webhookHealth.configuredUrl}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-center py-8">Failed to load webhook status</p>
+          )}
         </div>
       </div>
     </AdminLayout>

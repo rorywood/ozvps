@@ -18,6 +18,7 @@ import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClie
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail } from "./email";
+import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
 function isValidIp(ip: string): boolean {
@@ -2989,6 +2990,34 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error blocking user: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to update user status' });
+    }
+  });
+
+  // Admin: Get webhook health status
+  app.get('/api/admin/webhook-health', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const health = WebhookHandlers.getHealth();
+
+      // Also get the configured webhook URL from environment
+      const domains = process.env.REPLIT_DOMAINS?.split(',');
+      const configuredUrl = domains?.[0] ? `https://${domains[0]}/api/stripe/webhook` : 'Not configured';
+
+      res.json({
+        ...health,
+        configuredUrl,
+        message: health.healthy
+          ? 'Webhooks are working'
+          : health.lastReceived
+            ? 'No webhooks received in the last 24 hours'
+            : 'No webhooks received since server start',
+      });
+    } catch (error: any) {
+      log(`Error fetching webhook health: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch webhook health' });
     }
   });
 

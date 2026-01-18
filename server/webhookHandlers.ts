@@ -3,7 +3,21 @@ import { dbStorage } from './storage';
 import { log } from './index';
 import { retryUnpaidServers } from './billing';
 
+// Track webhook health for monitoring
+let lastWebhookReceived: Date | null = null;
+let lastWebhookEvent: string | null = null;
+let webhookCount = 0;
+
 export class WebhookHandlers {
+  static getHealth() {
+    return {
+      lastReceived: lastWebhookReceived?.toISOString() || null,
+      lastEvent: lastWebhookEvent,
+      totalReceived: webhookCount,
+      healthy: lastWebhookReceived ? (Date.now() - lastWebhookReceived.getTime() < 24 * 60 * 60 * 1000) : false,
+    };
+  }
+
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
     log(`Webhook incoming: payload size=${payload.length} bytes`, 'stripe');
     
@@ -40,6 +54,11 @@ export class WebhookHandlers {
     }
 
     log(`Webhook received: ${event.type} (${event.id}) livemode=${event.livemode}`, 'stripe');
+
+    // Track webhook health
+    lastWebhookReceived = new Date();
+    lastWebhookEvent = event.type;
+    webhookCount++;
 
     // Handle checkout.session.completed for wallet top-ups
     if (event.type === 'checkout.session.completed') {
