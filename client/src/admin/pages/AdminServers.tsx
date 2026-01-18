@@ -117,7 +117,7 @@ export default function AdminServers() {
       serverId: selectedServer.id,
       action: actionType,
       reason: actionReason || undefined,
-      newOwnerId: actionType === 'transfer' ? parseInt(transferUserId) : undefined,
+      newOwnerId: actionType === 'transfer' ? parseInt(transferUserId, 10) : undefined,
     });
   };
 

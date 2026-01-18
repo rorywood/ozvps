@@ -732,7 +732,7 @@ export default function ServerDetail() {
     
     reinstallMutation.mutate({
       id: serverId, 
-      osId: parseInt(selectedOs),
+      osId: parseInt(selectedOs, 10),
       hostname: normalizedHostname
     });
   };
@@ -849,7 +849,7 @@ export default function ServerDetail() {
     
     setupMutation.mutate({ 
       id: serverId, 
-      osId: parseInt(setupSelectedOs),
+      osId: parseInt(setupSelectedOs, 10),
       hostname: normalizedHostname
     });
   };

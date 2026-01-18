@@ -859,7 +859,7 @@ export async function registerRoutes(
   })();
 
   // Auth endpoints (public)
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register', loginRateLimiter, async (req, res) => {
     try {
       // Check if registration is disabled (database setting takes precedence)
       const registrationSetting = await dbStorage.getSecuritySetting('registration_enabled');
@@ -1084,7 +1084,7 @@ export async function registerRoutes(
   });
 
   // Reset password - set new password with token
-  app.post('/api/auth/reset-password', async (req, res) => {
+  app.post('/api/auth/reset-password', loginRateLimiter, async (req, res) => {
     try {
       const { token, password } = req.body;
 
@@ -1256,27 +1256,10 @@ export async function registerRoutes(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        // Check if email exists in Auth0 to provide better UX
-        // Only check if auth failed (not connection error) to avoid extra API calls
-        if (!auth0Result.isConnectionError) {
-          try {
-            const existingUser = await auth0Client.getUserByEmail(email);
-            if (!existingUser) {
-              // Email doesn't exist - suggest creating account
-              return res.status(401).json({
-                error: 'No account found with this email address',
-                code: 'EMAIL_NOT_FOUND'
-              });
-            }
-          } catch (lookupError) {
-            // If lookup fails, fall through to generic error
-            log(`Email lookup failed during login: ${(lookupError as Error).message}`, 'auth0');
-          }
-        }
-
-        // Email exists but password is wrong (or lookup failed) - generic error
+        // SECURITY: Return generic error message to prevent email enumeration
+        // Do NOT reveal whether the email exists or if the password was wrong
         return res.status(401).json({
-          error: auth0Result.error || 'Invalid email or password',
+          error: 'Invalid email or password',
           code: 'INVALID_CREDENTIALS'
         });
       }
@@ -2493,13 +2476,26 @@ export async function registerRoutes(
     try {
       const serverId = req.params.id;
       const session = req.userSession!;
-      const { reason, mode = 'grace' } = req.body;
-      
+      const { reason, mode = 'grace', password } = req.body;
+
       // Validate mode
       if (mode !== 'grace' && mode !== 'immediate') {
         return res.status(400).json({ error: 'Invalid mode. Must be "grace" or "immediate"' });
       }
-      
+
+      // SECURITY: Require password confirmation for immediate cancellation
+      if (mode === 'immediate') {
+        if (!password || typeof password !== 'string') {
+          return res.status(400).json({ error: 'Password confirmation is required for immediate cancellation' });
+        }
+
+        // Verify password with Auth0
+        const authResult = await auth0Client.authenticateUser(session.email, password);
+        if (!authResult.success) {
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+      }
+
       // Verify server ownership
       const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
       if (!server) {
@@ -2967,9 +2963,9 @@ export async function registerRoutes(
 
       const { token, password } = req.body;
 
-      // Require either a valid 2FA token or password
-      if (!token && !password) {
-        return res.status(400).json({ error: 'Either 2FA token or password is required' });
+      // SECURITY: Require BOTH a valid 2FA token AND password for maximum security
+      if (!token || !password) {
+        return res.status(400).json({ error: 'Both 2FA token and password are required to disable 2FA' });
       }
 
       const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
@@ -2977,21 +2973,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: '2FA is not enabled' });
       }
 
-      // Decrypt the secret for verification
-      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+      // Verify password first
+      const authResult = await auth0Client.authenticateUser(session.email, password);
+      if (!authResult.success) {
+        return res.status(400).json({ error: 'Invalid password' });
+      }
 
-      // If token is provided, verify it
-      if (token) {
-        const isValid = totpVerify(token, plaintextSecret);
-        if (!isValid) {
-          return res.status(400).json({ error: 'Invalid verification code' });
-        }
-      } else if (password) {
-        // Verify password
-        const authResult = await auth0Client.authenticateUser(session.email, password);
-        if (!authResult.success) {
-          return res.status(400).json({ error: 'Invalid password' });
-        }
+      // Decrypt the secret and verify TOTP token
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+      const isValid = totpVerify(token, plaintextSecret);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid verification code' });
       }
 
       await dbStorage.disableTwoFactorAuth(session.auth0UserId);
@@ -5886,26 +5878,63 @@ export async function registerRoutes(
   // List all tickets (admin)
   app.get('/api/admin/tickets', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      // Parse query params
+      // Parse and validate query params
       let status: TicketStatus | TicketStatus[] | undefined;
       const statusParam = req.query.status as string | undefined;
       if (statusParam) {
         if (statusParam.includes(',')) {
-          status = statusParam.split(',') as TicketStatus[];
+          const statuses = statusParam.split(',');
+          // Validate each status
+          for (const s of statuses) {
+            if (!TICKET_STATUSES.includes(s as TicketStatus)) {
+              return res.status(400).json({ error: `Invalid status: ${s}` });
+            }
+          }
+          status = statuses as TicketStatus[];
         } else {
+          if (!TICKET_STATUSES.includes(statusParam as TicketStatus)) {
+            return res.status(400).json({ error: `Invalid status: ${statusParam}` });
+          }
           status = statusParam as TicketStatus;
         }
       }
 
-      const category = req.query.category as TicketCategory | undefined;
-      const priority = req.query.priority as TicketPriority | undefined;
+      // Validate category
+      const categoryParam = req.query.category as string | undefined;
+      let category: TicketCategory | undefined;
+      if (categoryParam) {
+        if (!TICKET_CATEGORIES.includes(categoryParam as TicketCategory)) {
+          return res.status(400).json({ error: `Invalid category: ${categoryParam}` });
+        }
+        category = categoryParam as TicketCategory;
+      }
+
+      // Validate priority
+      const priorityParam = req.query.priority as string | undefined;
+      let priority: TicketPriority | undefined;
+      if (priorityParam) {
+        if (!TICKET_PRIORITIES.includes(priorityParam as TicketPriority)) {
+          return res.status(400).json({ error: `Invalid priority: ${priorityParam}` });
+        }
+        priority = priorityParam as TicketPriority;
+      }
+
       const auth0UserId = req.query.user as string | undefined;
       const virtfusionServerId = req.query.server as string | undefined;
       const assignedAdminId = req.query.assigned === 'null' ? null : req.query.assigned as string | undefined;
       const limit = parseInt(req.query.limit as string, 10) || 50;
       const offset = parseInt(req.query.offset as string, 10) || 0;
-      const sortBy = (req.query.sortBy as 'lastMessageAt' | 'priority' | 'createdAt') || 'lastMessageAt';
-      const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'desc';
+
+      // Validate sortBy
+      const sortByParam = req.query.sortBy as string | undefined;
+      const validSortBy = ['lastMessageAt', 'priority', 'createdAt'] as const;
+      const sortBy = sortByParam && validSortBy.includes(sortByParam as typeof validSortBy[number])
+        ? sortByParam as typeof validSortBy[number]
+        : 'lastMessageAt';
+
+      // Validate sortOrder
+      const sortOrderParam = req.query.sortOrder as string | undefined;
+      const sortOrder = sortOrderParam === 'asc' ? 'asc' : 'desc';
 
       const result = await dbStorage.getAllTickets({
         status,

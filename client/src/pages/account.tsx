@@ -49,6 +49,7 @@ export default function Account() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [disableToken, setDisableToken] = useState("");
+  const [disablePassword, setDisablePassword] = useState("");
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
 
   const { data: profile, isLoading, error } = useQuery({
@@ -108,10 +109,11 @@ export default function Account() {
   });
 
   const disable2FAMutation = useMutation({
-    mutationFn: (token: string) => api.disable2FA({ token }),
+    mutationFn: (params: { token: string; password: string }) => api.disable2FA(params),
     onSuccess: () => {
       setShowDisableConfirm(false);
       setDisableToken("");
+      setDisablePassword("");
       queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
       toast({
         title: "2FA Disabled",
@@ -715,10 +717,18 @@ export default function Account() {
                         <h4 className="font-medium text-red-400">Disable Two-Factor Authentication?</h4>
                         <p className="text-sm text-muted-foreground mt-1">
                           This will remove the extra security layer from your account.
-                          Enter your current 2FA code to confirm.
+                          Enter both your password and current 2FA code to confirm.
                         </p>
                       </div>
                     </div>
+                    <Input
+                      type="password"
+                      value={disablePassword}
+                      onChange={(e) => setDisablePassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="bg-card/30 border-border text-foreground"
+                      data-testid="input-disable-2fa-password"
+                    />
                     <Input
                       value={disableToken}
                       onChange={(e) => setDisableToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -733,14 +743,15 @@ export default function Account() {
                         onClick={() => {
                           setShowDisableConfirm(false);
                           setDisableToken("");
+                          setDisablePassword("");
                         }}
                         className="flex-1 border-border hover:bg-muted/50"
                       >
                         Cancel
                       </Button>
                       <Button
-                        onClick={() => disable2FAMutation.mutate(disableToken)}
-                        disabled={disableToken.length !== 6 || disable2FAMutation.isPending}
+                        onClick={() => disable2FAMutation.mutate({ token: disableToken, password: disablePassword })}
+                        disabled={disableToken.length !== 6 || !disablePassword || disable2FAMutation.isPending}
                         className="flex-1 bg-red-600 hover:bg-red-700"
                         data-testid="button-confirm-disable-2fa"
                       >

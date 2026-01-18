@@ -528,7 +528,7 @@ class ApiClient {
     return response.json();
   }
 
-  async disable2FA(options: { token?: string; password?: string }): Promise<{
+  async disable2FA(options: { token: string; password: string }): Promise<{
     success: boolean;
     message: string;
   }> {
