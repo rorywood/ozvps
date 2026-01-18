@@ -895,45 +895,47 @@ EOF
         warning "Error pages source not found at $INSTALL_DIR/deploy/nginx-error-pages"
     fi
 
-    # Update NGINX config to include error page directives
+    # Create NGINX snippet for error pages (works with both HTTP and HTTPS)
+    local snippets_dir="/etc/nginx/snippets"
+    local snippet_file="$snippets_dir/ozvps-errors.conf"
+    mkdir -p "$snippets_dir"
+
+    cat > "$snippet_file" << 'ERRORCONF'
+# OzVPS Custom Error Pages
+error_page 404 /404.html;
+error_page 500 /500.html;
+error_page 502 /502.html;
+error_page 503 /503.html;
+
+location = /404.html { root /var/www/ozvps-errors; internal; }
+location = /500.html { root /var/www/ozvps-errors; internal; }
+location = /502.html { root /var/www/ozvps-errors; internal; }
+location = /503.html { root /var/www/ozvps-errors; internal; }
+ERRORCONF
+    success "Error pages snippet created at $snippet_file"
+
+    # Update NGINX config to include the snippet in ALL server blocks
     local nginx_conf="/etc/nginx/sites-available/ozvps"
     if [[ -f "$nginx_conf" ]]; then
-        if ! grep -q "error_page 404" "$nginx_conf"; then
-            info "Adding error page directives to NGINX config..."
+        # Check if snippet is already included
+        if ! grep -q "include snippets/ozvps-errors.conf" "$nginx_conf"; then
+            info "Adding error pages snippet to NGINX config..."
 
-            # Create a temporary file with the error page config block
-            local error_block="
-    # Custom error pages
-    error_page 404 /404.html;
-    error_page 500 /500.html;
-    error_page 502 /502.html;
-    error_page 503 /503.html;
-
-    location = /404.html { root /var/www/ozvps-errors; internal; }
-    location = /500.html { root /var/www/ozvps-errors; internal; }
-    location = /502.html { root /var/www/ozvps-errors; internal; }
-    location = /503.html { root /var/www/ozvps-errors; internal; }
-"
-            # Insert after server_name line using awk (more reliable than sed)
-            awk -v block="$error_block" '
-                /server_name/ && !inserted {
-                    print
-                    print block
-                    inserted=1
-                    next
-                }
-                {print}
-            ' "$nginx_conf" > "${nginx_conf}.tmp" && mv "${nginx_conf}.tmp" "$nginx_conf"
+            # Insert include directive after EVERY server_name line (for both HTTP and HTTPS blocks)
+            sed -i '/server_name/a\    include snippets/ozvps-errors.conf;' "$nginx_conf"
 
             # Test and reload NGINX
             if nginx -t 2>/dev/null; then
                 systemctl reload nginx
                 success "NGINX config updated with error pages"
             else
-                warning "NGINX config test failed - check $nginx_conf"
+                warning "NGINX config test failed, reverting..."
+                # Remove the include lines we just added
+                sed -i '/include snippets\/ozvps-errors.conf/d' "$nginx_conf"
+                warning "Reverted changes - check NGINX config manually"
             fi
         else
-            info "Error page directives already present in NGINX config"
+            info "Error pages snippet already included in NGINX config"
         fi
     else
         warning "NGINX config not found at $nginx_conf"
