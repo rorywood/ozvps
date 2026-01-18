@@ -863,6 +863,35 @@ EOF
     npx drizzle-kit push --force 2>/dev/null || true
     success "Migrations applied"
 
+    # Step 6.5: Auto-configure REPLIT_DOMAINS for Stripe webhooks
+    info "Configuring domain for webhooks..."
+    local domain=""
+
+    # Try to detect domain from NGINX config
+    if [[ -f "/etc/nginx/sites-available/ozvps" ]]; then
+        domain=$(grep -oP "server_name\s+\K[^;]+" /etc/nginx/sites-available/ozvps 2>/dev/null | head -1 | tr -d ' ')
+    fi
+
+    # Fallback: try to get from hostname
+    if [[ -z "$domain" ]]; then
+        domain=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
+    fi
+
+    if [[ -n "$domain" && "$domain" != "localhost" ]]; then
+        # Check if REPLIT_DOMAINS already exists in .env
+        if grep -q "^REPLIT_DOMAINS=" "$INSTALL_DIR/.env" 2>/dev/null; then
+            # Update existing
+            sed -i "s|^REPLIT_DOMAINS=.*|REPLIT_DOMAINS=$domain|" "$INSTALL_DIR/.env"
+        else
+            # Add new
+            echo "REPLIT_DOMAINS=$domain" >> "$INSTALL_DIR/.env"
+        fi
+        success "Webhook domain set to: $domain"
+    else
+        warning "Could not auto-detect domain for webhooks"
+        warning "Manually add REPLIT_DOMAINS=yourdomain.com to .env"
+    fi
+
     # Step 7: Update NGINX error pages
     if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
         info "Updating NGINX error pages..."
