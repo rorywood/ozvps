@@ -340,7 +340,7 @@ export default function LoginPage() {
           </div>
 
           {/* Main Content */}
-          <div className="space-y-10">
+          <div className="space-y-12">
             <div>
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
                 High Performance<br />
@@ -352,7 +352,7 @@ export default function LoginPage() {
             </div>
 
             {/* Features */}
-            <div className="grid gap-6">
+            <div className="grid gap-8">
               <div className="flex items-center gap-4 group">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 transition-colors">
                   <Zap className="h-6 w-6 text-primary" />
@@ -387,7 +387,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <div className="text-sm text-slate-600">
-            © 2025 OzVPS. All rights reserved.
+            © {new Date().getFullYear()} OzVPS. All rights reserved.
           </div>
         </div>
       </div>
@@ -401,7 +401,7 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-10 w-auto mx-auto cursor-pointer brightness-0 invert"
+                className="h-12 w-auto mx-auto cursor-pointer brightness-0 invert"
                 data-testid="img-logo-mobile"
               />
             </Link>
