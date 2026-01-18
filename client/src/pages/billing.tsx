@@ -888,15 +888,13 @@ export default function BillingPage() {
   return (
     <AppShell>
       <div className="max-w-6xl">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6 mb-10">
-          <div>
-            <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
-              Billing
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Manage your wallet, payments, and server charges
-            </p>
-          </div>
+        <div className="mb-10">
+          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
+            Billing
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your wallet, payments, and server charges
+          </p>
         </div>
 
         {!stripeConfigured ? (
@@ -945,114 +943,165 @@ export default function BillingPage() {
               </div>
             )}
 
-            {/* Wallet Balance Section - Compact Design */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border" data-testid="wallet-section">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
-                {loadingWallet ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-foreground tracking-tight" data-testid="text-balance">
-                      {formatCurrency(wallet?.balanceCents || 0)}
-                    </span>
-                    <span className="text-sm font-medium text-muted-foreground">AUD</span>
+            {/* Wallet Balance Card - Clean Modern Design */}
+            <div className="border border-border rounded-xl p-6 bg-gradient-to-br from-card to-card/80" data-testid="wallet-section">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Wallet className="h-6 w-6 text-primary" />
                   </div>
-                )}
-              </div>
-
-              <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="lg" className="gap-2" data-testid="button-topup">
-                    <Plus className="h-5 w-5" />
-                    Add Funds
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add Funds to Wallet</DialogTitle>
-                    <DialogDescription>
-                      Choose an amount to add to your wallet balance.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      {TOPUP_AMOUNTS.map((amount) => (
-                        <Button
-                          key={amount}
-                          variant={selectedAmount === amount ? "default" : "outline"}
-                          className={selectedAmount === amount ? "" : "border-border"}
-                          onClick={() => handlePresetSelect(amount)}
-                          data-testid={`button-amount-${amount}`}
-                        >
-                          {formatCurrency(amount)}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Custom amount"
-                        value={customAmount}
-                        onChange={(e) => handleCustomAmountChange(e.target.value)}
-                        className="pl-8 bg-card border-border"
-                        data-testid="input-custom-amount"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Minimum $5.00, maximum $500.00 AUD
-                    </p>
-
-                    {/* Payment Method Selection */}
-                    {paymentMethods.length > 0 && (
-                      <div className="pt-4 border-t border-border">
-                        <Label className="mb-2 block">
-                          Pay with saved card
-                        </Label>
-                        <Select
-                          value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
-                          onValueChange={(value) => setSelectedPaymentMethodId(value)}
-                        >
-                          <SelectTrigger className="w-full bg-card border-border" data-testid="select-payment-method">
-                            <SelectValue placeholder="Select a card" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {paymentMethods.map((pm) => (
-                              <SelectItem key={pm.id} value={pm.id} data-testid={`option-card-${pm.id}`}>
-                                {formatCardBrand(pm.brand)} •••• {pm.last4} (exp {pm.expMonth}/{pm.expYear})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Your card will be charged instantly
-                        </p>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-0.5">Available Balance</p>
+                    {loadingWallet ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    ) : (
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-bold text-foreground tracking-tight" data-testid="text-balance">
+                          {formatCurrency(wallet?.balanceCents || 0)}
+                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">AUD</span>
                       </div>
                     )}
                   </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setTopupDialogOpen(false)}
-                      className="border-border"
-                    >
-                      Cancel
+                </div>
+
+                <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="lg" className="gap-2" data-testid="button-topup">
+                      <Plus className="h-5 w-5" />
+                      Add Funds
                     </Button>
-                    <Button
-                      onClick={handleTopup}
-                      disabled={topupMutation.isPending || directChargeMutation.isPending || getValidAmount() === null}
-                      data-testid="button-confirm-topup"
-                    >
-                      {(topupMutation.isPending || directChargeMutation.isPending) ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
-                      {paymentMethods.length > 0 ? 'Pay Now' : 'Continue to Payment'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Add Funds to Wallet</DialogTitle>
+                      <DialogDescription>
+                        Choose an amount to add to your wallet balance.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        {TOPUP_AMOUNTS.map((amount) => (
+                          <Button
+                            key={amount}
+                            variant={selectedAmount === amount ? "default" : "outline"}
+                            className={selectedAmount === amount ? "" : "border-border"}
+                            onClick={() => handlePresetSelect(amount)}
+                            data-testid={`button-amount-${amount}`}
+                          >
+                            {formatCurrency(amount)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Custom amount"
+                          value={customAmount}
+                          onChange={(e) => handleCustomAmountChange(e.target.value)}
+                          className="pl-8 bg-card border-border"
+                          data-testid="input-custom-amount"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Minimum $5.00, maximum $500.00 AUD
+                      </p>
+
+                      {/* Payment Method Selection */}
+                      {paymentMethods.length > 0 && (
+                        <div className="pt-4 border-t border-border">
+                          <Label className="mb-2 block">
+                            Pay with saved card
+                          </Label>
+                          <Select
+                            value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
+                            onValueChange={(value) => setSelectedPaymentMethodId(value)}
+                          >
+                            <SelectTrigger className="w-full bg-card border-border" data-testid="select-payment-method">
+                              <SelectValue placeholder="Select a card" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paymentMethods.map((pm) => (
+                                <SelectItem key={pm.id} value={pm.id} data-testid={`option-card-${pm.id}`}>
+                                  {formatCardBrand(pm.brand)} •••• {pm.last4} (exp {pm.expMonth}/{pm.expYear})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Your card will be charged instantly
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setTopupDialogOpen(false)}
+                        className="border-border"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleTopup}
+                        disabled={topupMutation.isPending || directChargeMutation.isPending || getValidAmount() === null}
+                        data-testid="button-confirm-topup"
+                      >
+                        {(topupMutation.isPending || directChargeMutation.isPending) ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        {paymentMethods.length > 0 ? 'Pay Now' : 'Continue to Payment'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {wallet?.stripeCustomerId && (
+                <div className="pt-6 mt-6 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase text-muted-foreground tracking-wide">Stripe Customer ID</span>
+                    <div className="flex items-center gap-2">
+                      <code
+                        className="text-xs font-mono text-muted-foreground bg-muted/30 px-2 py-1 rounded"
+                        data-testid="text-stripe-customer-id"
+                      >
+                        {showStripeId
+                          ? wallet.stripeCustomerId
+                          : '••••••••••••••••••••'}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowStripeId(!showStripeId)}
+                        data-testid="button-toggle-stripe-id"
+                      >
+                        {showStripeId ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </Button>
+                      {showStripeId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            navigator.clipboard.writeText(wallet.stripeCustomerId!);
+                            toast({
+                              title: "Copied",
+                              description: "Stripe Customer ID copied to clipboard",
+                            });
+                          }}
+                          data-testid="button-copy-stripe-id"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Tabbed Content - DO Style Underlined Tabs */}
