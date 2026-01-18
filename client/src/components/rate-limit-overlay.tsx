@@ -1,43 +1,79 @@
 import { useState, useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 
-// Global state for rate limit
-let rateLimitedUntil: number | null = null;
-let listeners: Set<() => void> = new Set();
+const RATE_LIMIT_KEY = "ozvps_rate_limited_until";
 
+// Persist rate limit across page reloads using localStorage
 export function triggerRateLimit(seconds: number = 10) {
-  rateLimitedUntil = Date.now() + seconds * 1000;
-  listeners.forEach(fn => fn());
+  const until = Date.now() + seconds * 1000;
+  try {
+    localStorage.setItem(RATE_LIMIT_KEY, String(until));
+  } catch {
+    // localStorage might be unavailable
+  }
+  // Force re-render by triggering storage event manually for same-tab
+  window.dispatchEvent(new Event("rate-limit-triggered"));
 }
 
 export function isRateLimited(): boolean {
-  return rateLimitedUntil !== null && Date.now() < rateLimitedUntil;
+  try {
+    const until = localStorage.getItem(RATE_LIMIT_KEY);
+    if (until && Date.now() < parseInt(until, 10)) {
+      return true;
+    }
+    // Clear expired rate limit
+    localStorage.removeItem(RATE_LIMIT_KEY);
+  } catch {
+    // localStorage might be unavailable
+  }
+  return false;
+}
+
+function getRateLimitSecondsLeft(): number {
+  try {
+    const until = localStorage.getItem(RATE_LIMIT_KEY);
+    if (until) {
+      const remaining = Math.ceil((parseInt(until, 10) - Date.now()) / 1000);
+      return remaining > 0 ? remaining : 0;
+    }
+  } catch {
+    // localStorage might be unavailable
+  }
+  return 0;
 }
 
 export function RateLimitOverlay() {
-  const [secondsLeft, setSecondsLeft] = useState(0);
-  const [visible, setVisible] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(() => getRateLimitSecondsLeft());
+  const [visible, setVisible] = useState(() => isRateLimited());
 
   useEffect(() => {
     const checkRateLimit = () => {
-      if (rateLimitedUntil && Date.now() < rateLimitedUntil) {
+      const remaining = getRateLimitSecondsLeft();
+      if (remaining > 0) {
         setVisible(true);
-        setSecondsLeft(Math.ceil((rateLimitedUntil - Date.now()) / 1000));
+        setSecondsLeft(remaining);
       } else {
         setVisible(false);
-        rateLimitedUntil = null;
+        try {
+          localStorage.removeItem(RATE_LIMIT_KEY);
+        } catch {
+          // ignore
+        }
       }
     };
 
-    // Subscribe to rate limit changes
-    listeners.add(checkRateLimit);
+    // Check immediately on mount (handles page refresh while rate limited)
     checkRateLimit();
+
+    // Listen for rate limit triggers from same tab
+    const handleTrigger = () => checkRateLimit();
+    window.addEventListener("rate-limit-triggered", handleTrigger);
 
     // Update countdown every second
     const interval = setInterval(checkRateLimit, 1000);
 
     return () => {
-      listeners.delete(checkRateLimit);
+      window.removeEventListener("rate-limit-triggered", handleTrigger);
       clearInterval(interval);
     };
   }, []);

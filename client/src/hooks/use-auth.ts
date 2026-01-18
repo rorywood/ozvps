@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { triggerRateLimit } from "@/components/rate-limit-overlay";
+import { triggerRateLimit, isRateLimited } from "@/components/rate-limit-overlay";
 
 interface AuthSession {
   authenticated: boolean;
@@ -23,6 +23,7 @@ interface AuthMeResponse {
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const rateLimited = isRateLimited();
 
   const { data: session, isLoading: sessionLoading } = useQuery<AuthSession>({
     queryKey: ["auth", "session"],
@@ -41,6 +42,7 @@ export function useAuth() {
       return response.json();
     },
     staleTime: 1000 * 60 * 5,
+    enabled: !rateLimited, // Don't fetch while rate limited
     retry: (failureCount, error) => {
       // Don't retry if rate limited
       if (error?.message?.includes("Rate limited")) return false;
@@ -66,7 +68,7 @@ export function useAuth() {
       if (!response.ok) return null;
       return response.json();
     },
-    enabled: session?.authenticated ?? false,
+    enabled: !rateLimited && (session?.authenticated ?? false),
     staleTime: 1000 * 30, // 30 seconds
   });
 
