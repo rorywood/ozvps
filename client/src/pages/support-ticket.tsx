@@ -38,12 +38,10 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  billing: "Billing",
-  server: "Server / VM",
-  network: "Network",
-  panel: "Panel / Login",
+  sales: "Sales",
+  accounts: "Accounts",
+  support: "Support",
   abuse: "Abuse",
-  general: "General",
 };
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
@@ -120,41 +118,37 @@ function formatRelativeDate(dateString: string): string {
 }
 
 function MessageBubble({ message, isUser }: { message: TicketMessage; isUser: boolean }) {
+  // DO style: Both sides left-aligned, minimal styling
   return (
-    <div className={cn("flex gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
+    <div className="flex gap-3">
       <div
         className={cn(
           "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0",
-          isUser ? "bg-primary/20" : "bg-amber-500/20"
+          isUser ? "bg-primary/10" : "bg-success/10"
         )}
       >
         {isUser ? (
           <User className="h-4 w-4 text-primary" />
         ) : (
-          <ShieldCheck className="h-4 w-4 text-amber-400" />
+          <ShieldCheck className="h-4 w-4 text-success" />
         )}
       </div>
-      <div className={cn("flex-1 max-w-[80%]", isUser ? "text-right" : "text-left")}>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-foreground">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-sm font-semibold text-foreground">
             {message.authorName || message.authorEmail.split("@")[0]}
           </span>
           {!isUser && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium">
-              STAFF
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-success/10 text-success font-medium uppercase tracking-wide">
+              Support
             </span>
           )}
           <span className="text-xs text-muted-foreground">{formatRelativeDate(message.createdAt)}</span>
         </div>
-        <div
-          className={cn(
-            "rounded-lg p-3 text-sm",
-            isUser
-              ? "bg-primary/10 text-foreground"
-              : "bg-muted/50 text-foreground"
-          )}
-        >
-          <p className="whitespace-pre-wrap break-words">{message.message}</p>
+        <div className="bg-muted/30 border border-border rounded-lg p-3">
+          <p className="whitespace-pre-wrap break-words text-sm text-foreground leading-relaxed">
+            {message.message}
+          </p>
         </div>
       </div>
     </div>
@@ -176,7 +170,7 @@ export default function SupportTicketPage() {
     queryKey: ["support", "ticket", ticketId],
     queryFn: () => api.getSupportTicket(ticketId),
     enabled: ticketId > 0,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds for real-time updates
   });
 
   useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id}` : "Support Ticket");
@@ -217,6 +211,26 @@ export default function SupportTicketPage() {
         description: "The ticket has been closed.",
       });
       setCloseDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: () => api.reopenSupportTicket(ticketId),
+    onSuccess: () => {
+      toast({
+        title: "Ticket Reopened",
+        description: "The ticket has been reopened.",
+      });
       queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
@@ -288,7 +302,9 @@ export default function SupportTicketPage() {
   }
 
   const { ticket, messages, server } = data;
-  const isClosed = ticket.status === "closed" || ticket.status === "resolved";
+  const isResolved = ticket.status === "resolved";
+  const isClosed = ticket.status === "closed";
+  const isInactive = isResolved || isClosed;
 
   return (
     <AppShell>
@@ -309,7 +325,7 @@ export default function SupportTicketPage() {
               <h1 className="text-xl font-bold text-foreground">{ticket.title}</h1>
             </div>
           </div>
-          {!isClosed && (
+          {!isInactive && (
             <Button
               variant="outline"
               onClick={() => setCloseDialogOpen(true)}
@@ -321,17 +337,17 @@ export default function SupportTicketPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Messages */}
+          {/* Messages - DO style */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="rounded-xl bg-card/50 border border-border overflow-hidden">
-              <div className="p-4 border-b border-border/50">
-                <h2 className="font-medium text-foreground flex items-center gap-2">
+            <div className="rounded-lg bg-card border border-border overflow-hidden">
+              <div className="px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   Conversation
                 </h2>
               </div>
 
-              <div className="p-4 space-y-6 max-h-[500px] overflow-y-auto">
+              <div className="p-4 space-y-6 max-h-[600px] overflow-y-auto">
                 {messages.map((message) => (
                   <MessageBubble
                     key={message.id}
@@ -342,15 +358,16 @@ export default function SupportTicketPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {!isClosed && (
-                <div className="p-4 border-t border-border/50">
+              {!isInactive && (
+                <div className="p-4 border-t border-border bg-muted/20">
                   <form onSubmit={handleSubmitReply} className="space-y-3">
                     <Textarea
                       placeholder="Type your reply..."
                       value={replyMessage}
                       onChange={(e) => setReplyMessage(e.target.value)}
-                      rows={3}
+                      rows={4}
                       disabled={replyMutation.isPending}
+                      className="resize-none"
                     />
                     <div className="flex justify-end">
                       <Button type="submit" disabled={!replyMessage.trim() || replyMutation.isPending}>
@@ -371,93 +388,94 @@ export default function SupportTicketPage() {
                 </div>
               )}
 
+              {isResolved && (
+                <div className="p-4 border-t border-border bg-success/5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-success font-medium">
+                      This ticket is resolved.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => reopenMutation.mutate()}
+                      disabled={reopenMutation.isPending}
+                      className="text-success border-success/30 hover:bg-success/10"
+                    >
+                      {reopenMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Reopening...
+                        </>
+                      ) : (
+                        "Reopen Ticket"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {isClosed && (
-                <div className="p-4 border-t border-border/50 bg-muted/30">
+                <div className="p-4 border-t border-border bg-muted/20">
                   <p className="text-sm text-muted-foreground text-center">
-                    This ticket is {ticket.status}. Reply to reopen it.
+                    This ticket is closed. Please create a new ticket if you need further assistance.
                   </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Ticket Details */}
+          {/* Ticket Details - DO style minimal sidebar */}
           <div className="space-y-4">
-            <div className="rounded-xl bg-card/50 border border-border overflow-hidden">
-              <div className="p-4 border-b border-border/50">
-                <h2 className="font-medium text-foreground">Ticket Details</h2>
+            <div className="rounded-lg bg-card border border-border overflow-hidden">
+              <div className="px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Details</h2>
               </div>
 
               <div className="p-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Tag className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Category</p>
-                    <p className="text-sm font-medium text-foreground">
-                      {CATEGORY_LABELS[ticket.category]}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Category</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {CATEGORY_LABELS[ticket.category]}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Priority</p>
-                    <PriorityBadge priority={ticket.priority} />
-                  </div>
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Priority</p>
+                  <PriorityBadge priority={ticket.priority} />
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Created</p>
-                    <p className="text-sm font-medium text-foreground">{formatDate(ticket.createdAt)}</p>
-                  </div>
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
+                  <p className="text-sm text-foreground">{formatDate(ticket.createdAt)}</p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Last Updated</p>
-                    <p className="text-sm font-medium text-foreground">
-                      {formatRelativeDate(ticket.lastMessageAt)}
-                    </p>
-                  </div>
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Last Updated</p>
+                  <p className="text-sm text-foreground">
+                    {formatRelativeDate(ticket.lastMessageAt)}
+                  </p>
                 </div>
 
                 {server && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                      <Server className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Affected Server</p>
-                      <Link href={`/servers/${server.id}`}>
-                        <span className="text-sm font-medium text-primary hover:underline">
-                          {server.name || server.hostname}
-                        </span>
-                      </Link>
-                    </div>
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Affected Server</p>
+                    <Link href={`/servers/${server.id}`}>
+                      <span className="text-sm font-medium text-primary hover:underline">
+                        {server.name || server.hostname}
+                      </span>
+                    </Link>
                   </div>
                 )}
               </div>
             </div>
 
             {ticket.status === "waiting_user" && (
-              <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4">
+              <div className="rounded-lg bg-warning/10 border border-warning/20 p-4">
                 <div className="flex items-start gap-3">
-                  <Timer className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                  <Timer className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-amber-400">Response Required</p>
-                    <p className="text-xs text-amber-400/80 mt-1">
+                    <p className="text-sm font-semibold text-warning">Response Required</p>
+                    <p className="text-xs text-muted-foreground mt-1">
                       Our support team is waiting for your reply to continue helping you.
                     </p>
                   </div>

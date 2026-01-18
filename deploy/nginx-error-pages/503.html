@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance | OzVPS</title>
+    <link rel="icon" type="image/png" href="/favicon.ico">
+    <script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js" crossorigin="anonymous"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, hsl(222, 47%, 6%) 0%, hsl(220, 50%, 8%) 50%, hsl(222, 47%, 6%) 100%);
+            color: hsl(210, 40%, 96%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .card {
+            background: linear-gradient(145deg, hsla(220, 40%, 13%, 0.8), hsla(220, 40%, 10%, 0.9));
+            backdrop-filter: blur(20px);
+            border: 1px solid hsla(220, 40%, 25%, 0.3);
+            border-radius: 1.5rem;
+            padding: 3rem;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .logo { display: flex; justify-content: center; margin-bottom: 2.5rem; }
+        .logo img { height: 40px; width: auto; filter: brightness(0) invert(1); }
+        .error-code {
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1;
+            background: linear-gradient(135deg, hsl(45, 100%, 60%), hsl(35, 100%, 50%));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: hsl(210, 40%, 98%); }
+        .description { font-size: 0.9375rem; line-height: 1.6; color: hsl(215, 20%, 65%); margin-bottom: 2rem; }
+        .actions { display: flex; gap: 0.75rem; margin-bottom: 2rem; }
+        .btn {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.625rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, hsl(217, 91%, 55%), hsl(217, 91%, 50%));
+            color: white;
+            box-shadow: 0 4px 14px hsla(217, 91%, 50%, 0.35);
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px hsla(217, 91%, 50%, 0.45); }
+        .btn-secondary {
+            background: hsla(220, 40%, 20%, 0.5);
+            border: 1px solid hsla(220, 40%, 30%, 0.5);
+            color: hsl(210, 40%, 80%);
+        }
+        .btn-secondary:hover { background: hsla(220, 40%, 25%, 0.5); border-color: hsla(220, 40%, 35%, 0.5); }
+        .divider { height: 1px; background: linear-gradient(90deg, transparent, hsla(220, 40%, 30%, 0.5), transparent); margin-bottom: 1.5rem; }
+        .error-id {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.875rem 1rem;
+            background: hsla(220, 40%, 15%, 0.5);
+            border: 1px solid hsla(220, 40%, 25%, 0.3);
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+        }
+        .error-id-label { color: hsl(215, 20%, 55%); }
+        .error-id-value { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; color: hsl(210, 40%, 80%); letter-spacing: 0.02em; }
+        .copy-btn { background: none; border: none; color: hsl(217, 91%, 60%); cursor: pointer; padding: 0.25rem; margin-left: 0.5rem; opacity: 0.7; transition: opacity 0.2s; }
+        .copy-btn:hover { opacity: 1; }
+        .footer { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid hsla(220, 40%, 25%, 0.3); text-align: center; font-size: 0.8125rem; color: hsl(215, 20%, 50%); }
+        .footer a { color: hsl(217, 91%, 60%); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 480px) {
+            .card { padding: 2rem 1.5rem; }
+            .error-code { font-size: 3rem; }
+            h1 { font-size: 1.25rem; }
+            .actions { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <img src="data:image/png;base64,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XcWifo1ASy/ahat6PnLXuhBItFDbu3O86qgzP45Yec/XM0cAHj//qtxHAnC1IwiC7V6itHWUMaT/U5V+XUSkUNurU7UsABHP1ZwpU8siczZYttajyYBPMu7SRlLtj0PgGvPBCxFCbY8FKlIDn7meSOXnPUH+GH27jyjBdnX/j1AHQFCrQ+3ZyTHixBY56LghdV+rF/YsMt6+K7IowRZGMr++Zw54Y2Wozb6jGWWH+cgE0HtR3HniMfG+F2msUoM+xe6MgQ9WhdqrgbZCmFjVOSvUXRSC7XMm3tr0e0bTxzhlxRPFznbUyE8VO6r3oh81REQtV087XOMR6gOgP3NrgyyPya1kVMfU4ddR93+ph32seEgMe9Hm/1EXjWaH2gq7rFeM7piROn6ksszwddvvmr/b+dphpJ3H1s7X/qAODrBTO8fMwGMArLVb/e8e5hlP/9rbzu2/87WfItSO83Vbt+CvHgir33+1Xa5/l+vkOe3PLDv2tR2v+bLZdz+o/o3GSJ3w0+NuR7/v7lbV/wzamFky9bXq69tqlefUnzL1+1BW7NRWa6yVO7ItZh57iFoHK1Wrl9XXsvr9+Zf2GEv9/la5TqqtF9N93e/L/ujJ8tdW5Q52pQ0q18tIWfr9T5HaO2sdXhWpDX4a0SaRr/ednnWRtQ5mqTIXaOdOVoZa2FmWgRd1ss1Sf71EbYfvhLm/etVD5jqYLet8oI07E2phrYgDMMtEG7HuRsjSHrdbnMeHr3a1HirUwSoZ5gXtO4hQC3GsHIwmWXq6+ij0Ko7WQ8U6WClSwNG2Ewi1ENuoAWqCBXY0I/SYXxeZfUsv4JjWyfExUZtMAV47Mkd+D8Dm1gSEWqjBhAvQl3k1GU8UAwAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgPaEWAID0hFoAANITagEASE+oBQAgvf8Hd1pqJ9qytzsAAAAASUVORK5CYII=" alt="OzVPS">
+        </div>
+        <div class="error-code">503</div>
+        <h1>We'll Be Right Back</h1>
+        <p class="description">
+            We're performing scheduled maintenance to improve your experience.
+            This typically takes just a few minutes.
+        </p>
+        <div class="actions">
+            <button class="btn btn-primary" onclick="location.reload()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                Refresh
+            </button>
+            <a href="https://ozvps.com.au" class="btn btn-secondary">Visit Website</a>
+        </div>
+        <div class="divider"></div>
+        <div class="error-id">
+            <span class="error-id-label">Error Reference</span>
+            <span>
+                <span class="error-id-value" id="errorId">-</span>
+                <button class="copy-btn" onclick="copyErrorId()" title="Copy to clipboard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+            </span>
+        </div>
+        <div class="footer">Need help? <a href="mailto:support@ozvps.com.au">Contact Support</a></div>
+    </div>
+    <script>
+        const errorId = 'E503-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+        document.getElementById('errorId').textContent = errorId;
+        const sentryDsn = '{{SENTRY_DSN}}';
+        if (sentryDsn && !sentryDsn.includes('{{')) {
+            try {
+                Sentry.init({ dsn: sentryDsn, environment: window.location.hostname.includes('dev.') ? 'development' : 'production' });
+                Sentry.captureMessage('NGINX 503 Error', { level: 'warning', tags: { error_type: 'nginx_503', error_id: errorId, page_url: window.location.href }, extra: { timestamp: new Date().toISOString(), userAgent: navigator.userAgent } });
+            } catch (e) {}
+        }
+        function copyErrorId() {
+            navigator.clipboard.writeText(errorId).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+                setTimeout(() => { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

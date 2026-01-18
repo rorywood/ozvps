@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/layout/app-shell";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,16 +7,24 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { 
-  User, 
-  Shield, 
-  Key, 
+import {
+  User,
+  Shield,
+  Key,
   Loader2,
   Save,
   Eye,
   EyeOff,
   Mail,
-  Clock
+  Clock,
+  Smartphone,
+  QrCode,
+  Copy,
+  Check,
+  ShieldCheck,
+  ShieldOff,
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -27,11 +35,22 @@ export default function Account() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  
+
+  // 2FA State
+  const [twoFAStep, setTwoFAStep] = useState<'idle' | 'setup' | 'verify' | 'backup'>('idle');
+  const [twoFASecret, setTwoFASecret] = useState("");
+  const [twoFAQRCode, setTwoFAQRCode] = useState("");
+  const [twoFAToken, setTwoFAToken] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [disableToken, setDisableToken] = useState("");
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['userProfile'],
     queryFn: () => api.getUserProfile(),
@@ -43,6 +62,105 @@ export default function Account() {
   });
   
   const isAdmin = userData?.user?.isAdmin ?? false;
+
+  // 2FA Status Query
+  const { data: twoFAStatus, isLoading: twoFALoading, refetch: refetchTwoFA } = useQuery({
+    queryKey: ['2fa-status'],
+    queryFn: () => api.get2FAStatus(),
+  });
+
+  // 2FA Mutations
+  const setup2FAMutation = useMutation({
+    mutationFn: () => api.setup2FA(),
+    onSuccess: (data) => {
+      setTwoFASecret(data.secret);
+      setTwoFAQRCode(data.qrCode);
+      setTwoFAStep('setup');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Setup Failed",
+        description: error.message || "Failed to start 2FA setup.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const enable2FAMutation = useMutation({
+    mutationFn: (token: string) => api.enable2FA(token),
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setTwoFAStep('backup');
+      setTwoFAToken("");
+      queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      toast({
+        title: "2FA Enabled",
+        description: "Two-factor authentication is now active on your account.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid code. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const disable2FAMutation = useMutation({
+    mutationFn: (token: string) => api.disable2FA({ token }),
+    onSuccess: () => {
+      setShowDisableConfirm(false);
+      setDisableToken("");
+      queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      toast({
+        title: "2FA Disabled",
+        description: "Two-factor authentication has been removed from your account.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Disable Failed",
+        description: error.message || "Invalid code. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const regenerateBackupCodesMutation = useMutation({
+    mutationFn: (token: string) => api.regenerate2FABackupCodes(token),
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setTwoFAStep('backup');
+      setTwoFAToken("");
+      toast({
+        title: "Backup Codes Regenerated",
+        description: "New backup codes have been generated. Save them securely.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Regeneration Failed",
+        description: error.message || "Invalid code. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const copyToClipboard = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedCode(text);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const copyAllBackupCodes = async () => {
+    const codesText = backupCodes.join('\n');
+    await navigator.clipboard.writeText(codesText);
+    toast({
+      title: "Copied",
+      description: "All backup codes copied to clipboard.",
+    });
+  };
 
   useEffect(() => {
     if (profile) {
@@ -73,12 +191,14 @@ export default function Account() {
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: (password: string) => api.changePassword(password),
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      api.changePassword(data.currentPassword, data.newPassword),
     onSuccess: () => {
       toast({
         title: "Password Changed",
         description: "Your password has been updated successfully.",
       });
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     },
@@ -96,6 +216,14 @@ export default function Account() {
   };
 
   const handleChangePassword = () => {
+    if (!currentPassword) {
+      toast({
+        title: "Current Password Required",
+        description: "Please enter your current password.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast({
         title: "Password Mismatch",
@@ -112,7 +240,7 @@ export default function Account() {
       });
       return;
     }
-    changePasswordMutation.mutate(newPassword);
+    changePasswordMutation.mutate({ currentPassword, newPassword });
   };
 
   return (
@@ -124,12 +252,12 @@ export default function Account() {
         </div>
 
         {isLoading ? (
-          <GlassCard className="p-12 flex flex-col items-center justify-center">
+          <Card className="p-12 flex flex-col items-center justify-center">
             <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
             <p className="text-muted-foreground">Loading profile...</p>
-          </GlassCard>
+          </Card>
         ) : error ? (
-          <GlassCard className="p-12 flex flex-col items-center justify-center">
+          <Card className="p-12 flex flex-col items-center justify-center">
             <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
               <User className="h-8 w-8 text-yellow-400" />
             </div>
@@ -137,10 +265,11 @@ export default function Account() {
             <p className="text-muted-foreground text-center max-w-md">
               There was an issue loading your profile. Please try again later.
             </p>
-          </GlassCard>
+          </Card>
         ) : (
+          <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <GlassCard className="p-6" data-testid="profile-section">
+            <Card className="p-6" data-testid="profile-section">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
@@ -253,9 +382,9 @@ export default function Account() {
                 )}
               </div>
 
-            </GlassCard>
+            </Card>
 
-            <GlassCard className="p-6" data-testid="security-section">
+            <Card className="p-6" data-testid="security-section">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
                   <Shield className="h-5 w-5" />
@@ -267,6 +396,19 @@ export default function Account() {
               </div>
 
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword" className="text-muted-foreground">Current Password</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
+                    data-testid="input-current-password"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="newPassword" className="text-muted-foreground">New Password</Label>
                   <div className="relative">
@@ -287,10 +429,13 @@ export default function Account() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Must be at least 8 characters long
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-muted-foreground">Confirm Password</Label>
+                  <Label htmlFor="confirmPassword" className="text-muted-foreground">Confirm New Password</Label>
                   <Input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
@@ -304,7 +449,7 @@ export default function Account() {
 
                 <Button
                   onClick={handleChangePassword}
-                  disabled={changePasswordMutation.isPending || !newPassword || !confirmPassword}
+                  disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || !confirmPassword}
                   className="w-full bg-green-600 hover:bg-green-700"
                   data-testid="button-change-password"
                 >
@@ -320,8 +465,337 @@ export default function Account() {
                   Password must be at least 8 characters long
                 </p>
               </div>
-            </GlassCard>
+            </Card>
           </div>
+
+          {/* Two-Factor Authentication Section */}
+          <Card className="p-6 mt-6" data-testid="2fa-section">
+            <div className="flex items-center gap-3 mb-6">
+              <div className={`h-10 w-10 rounded-lg flex items-center justify-center border ${
+                twoFAStatus?.enabled
+                  ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                  : 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+              }`}>
+                <Smartphone className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Two-Factor Authentication</h3>
+                <p className="text-sm text-muted-foreground">
+                  {twoFAStatus?.enabled ? 'Enabled - Your account is protected' : 'Add an extra layer of security'}
+                </p>
+              </div>
+              {twoFAStatus?.enabled && (
+                <div className="ml-auto flex items-center gap-2 text-green-500">
+                  <ShieldCheck className="h-5 w-5" />
+                  <span className="text-sm font-medium">Active</span>
+                </div>
+              )}
+            </div>
+
+            {twoFALoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+              </div>
+            ) : twoFAStep === 'idle' && !twoFAStatus?.enabled ? (
+              // Not enabled - Show setup button
+              <div className="space-y-4">
+                <div className="bg-muted/30 rounded-lg p-4 border border-border">
+                  <h4 className="font-medium text-foreground mb-2">How it works:</h4>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                    <li>Download an authenticator app (Google Authenticator, Authy, etc.)</li>
+                    <li>Scan the QR code with your app</li>
+                    <li>Enter the 6-digit code to verify</li>
+                    <li>Save your backup codes securely</li>
+                  </ol>
+                </div>
+                <Button
+                  onClick={() => setup2FAMutation.mutate()}
+                  disabled={setup2FAMutation.isPending}
+                  className="w-full bg-primary hover:bg-primary/90"
+                  data-testid="button-setup-2fa"
+                >
+                  {setup2FAMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <QrCode className="h-4 w-4 mr-2" />
+                  )}
+                  Set Up Two-Factor Authentication
+                </Button>
+              </div>
+            ) : twoFAStep === 'setup' ? (
+              // Setup step - Show QR code
+              <div className="space-y-6">
+                <div className="flex flex-col items-center">
+                  <div className="bg-white p-4 rounded-lg mb-4">
+                    <img
+                      src={twoFAQRCode}
+                      alt="2FA QR Code"
+                      className="w-48 h-48"
+                      data-testid="img-2fa-qrcode"
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center mb-2">
+                    Scan this QR code with your authenticator app
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="bg-muted/50 px-3 py-1 rounded text-xs font-mono text-foreground">
+                      {twoFASecret}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(twoFASecret)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {copiedCode === twoFASecret ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Or enter this secret key manually
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Enter verification code</Label>
+                  <Input
+                    value={twoFAToken}
+                    onChange={(e) => setTwoFAToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className="bg-card/30 border-border text-foreground text-center text-2xl tracking-widest font-mono"
+                    maxLength={6}
+                    data-testid="input-2fa-token"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTwoFAStep('idle');
+                      setTwoFASecret("");
+                      setTwoFAQRCode("");
+                      setTwoFAToken("");
+                    }}
+                    className="flex-1 border-border hover:bg-muted/50"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => enable2FAMutation.mutate(twoFAToken)}
+                    disabled={twoFAToken.length !== 6 || enable2FAMutation.isPending}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-verify-2fa"
+                  >
+                    {enable2FAMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Verify & Enable
+                  </Button>
+                </div>
+              </div>
+            ) : twoFAStep === 'backup' ? (
+              // Backup codes step
+              <div className="space-y-6">
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-yellow-500">Save Your Backup Codes</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        These codes can be used to access your account if you lose your authenticator device.
+                        Each code can only be used once. Store them securely!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {backupCodes.map((code, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-muted/30 px-3 py-2 rounded border border-border"
+                    >
+                      <code className="font-mono text-sm text-foreground">{code}</code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(code)}
+                        className="h-6 w-6 p-0"
+                      >
+                        {copiedCode === code ? (
+                          <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={copyAllBackupCodes}
+                    className="flex-1 border-border hover:bg-muted/50"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy All Codes
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setTwoFAStep('idle');
+                      setBackupCodes([]);
+                      setTwoFASecret("");
+                      setTwoFAQRCode("");
+                    }}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-done-2fa"
+                  >
+                    I've Saved My Codes
+                  </Button>
+                </div>
+              </div>
+            ) : twoFAStatus?.enabled ? (
+              // Already enabled - Show management options
+              <div className="space-y-4">
+                <div className="bg-muted/30 rounded-lg p-4 border border-border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Last used</p>
+                      <p className="font-medium text-foreground">
+                        {twoFAStatus.lastUsedAt
+                          ? new Date(twoFAStatus.lastUsedAt).toLocaleString()
+                          : 'Never'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Enabled</p>
+                      <p className="font-medium text-foreground">
+                        {twoFAStatus.verifiedAt
+                          ? new Date(twoFAStatus.verifiedAt).toLocaleDateString()
+                          : 'Unknown'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {!showDisableConfirm ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setTwoFAStep('verify');
+                        setTwoFAToken("");
+                      }}
+                      className="flex-1 border-border hover:bg-muted/50"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Regenerate Backup Codes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDisableConfirm(true)}
+                      className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    >
+                      <ShieldOff className="h-4 w-4 mr-2" />
+                      Disable 2FA
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-red-400">Disable Two-Factor Authentication?</h4>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          This will remove the extra security layer from your account.
+                          Enter your current 2FA code to confirm.
+                        </p>
+                      </div>
+                    </div>
+                    <Input
+                      value={disableToken}
+                      onChange={(e) => setDisableToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 2FA code"
+                      className="bg-card/30 border-border text-foreground text-center text-xl tracking-widest font-mono"
+                      maxLength={6}
+                      data-testid="input-disable-2fa-token"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowDisableConfirm(false);
+                          setDisableToken("");
+                        }}
+                        className="flex-1 border-border hover:bg-muted/50"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => disable2FAMutation.mutate(disableToken)}
+                        disabled={disableToken.length !== 6 || disable2FAMutation.isPending}
+                        className="flex-1 bg-red-600 hover:bg-red-700"
+                        data-testid="button-confirm-disable-2fa"
+                      >
+                        {disable2FAMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <ShieldOff className="h-4 w-4 mr-2" />
+                        )}
+                        Disable 2FA
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : twoFAStep === 'verify' ? (
+              // Verify for regenerating backup codes
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Enter your current 2FA code to regenerate backup codes. This will invalidate your old codes.
+                </p>
+                <Input
+                  value={twoFAToken}
+                  onChange={(e) => setTwoFAToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter 2FA code"
+                  className="bg-card/30 border-border text-foreground text-center text-xl tracking-widest font-mono"
+                  maxLength={6}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTwoFAStep('idle');
+                      setTwoFAToken("");
+                    }}
+                    className="flex-1 border-border hover:bg-muted/50"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => regenerateBackupCodesMutation.mutate(twoFAToken)}
+                    disabled={twoFAToken.length !== 6 || regenerateBackupCodesMutation.isPending}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                  >
+                    {regenerateBackupCodesMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Regenerate Codes
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </Card>
+          </>
         )}
 
         {profile && isAdmin && (

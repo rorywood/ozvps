@@ -104,7 +104,7 @@ export default function ErrorPage({ code: propCode, title: propTitle, descriptio
         className="max-w-lg w-full text-center space-y-8 relative z-10"
       >
         <Link href="/">
-          <img src={logo} alt="OzVPS" className="h-12 w-auto mx-auto cursor-pointer" data-testid="img-logo" />
+          <img src={logo} alt="OzVPS" className="h-12 w-auto dark:invert-0 invert mx-auto cursor-pointer" data-testid="img-logo" />
         </Link>
 
         <div className="space-y-6">

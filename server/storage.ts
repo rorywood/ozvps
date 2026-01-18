@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken } from "@shared/schema";
+import { log } from "./index";
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray, or, isNull, ne } from "drizzle-orm";
@@ -13,6 +14,7 @@ export interface Session {
   email: string;
   name?: string | null;
   isAdmin?: boolean;
+  emailVerified?: boolean;
   expiresAt: Date;
   revokedAt?: Date | null;
   revokedReason?: string | null;
@@ -24,6 +26,10 @@ export interface UserFlags {
   blocked: boolean;
   blockedReason?: string | null;
   blockedAt?: Date | null;
+  // Admin email verification override - bypasses Auth0's email_verified
+  emailVerifiedOverride?: boolean;
+  emailVerifiedOverrideAt?: Date | null;
+  emailVerifiedOverrideBy?: string | null;
 }
 
 export interface IStorage {
@@ -35,6 +41,7 @@ export interface IStorage {
     email: string;
     name?: string;
     isAdmin?: boolean;
+    emailVerified?: boolean;
     expiresAt: Date;
   }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
@@ -45,9 +52,11 @@ export interface IStorage {
   hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean>;
   revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
   updateSessionActivity(sessionId: string): Promise<void>;
-  updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name'>>): Promise<void>;
+  updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
+  setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void>;
+  getEmailVerifiedOverride(auth0UserId: string): Promise<boolean>;
 }
 
 export class MemoryStorage implements IStorage {
@@ -62,6 +71,7 @@ export class MemoryStorage implements IStorage {
     email: string;
     name?: string;
     isAdmin?: boolean;
+    emailVerified?: boolean;
     expiresAt: Date;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
@@ -75,6 +85,7 @@ export class MemoryStorage implements IStorage {
       email: data.email,
       name: data.name || null,
       isAdmin: data.isAdmin || false,
+      emailVerified: data.emailVerified ?? false,
       expiresAt: data.expiresAt,
       revokedAt: null,
       revokedReason: null,
@@ -135,7 +146,7 @@ export class MemoryStorage implements IStorage {
 
   async hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean> {
     const now = new Date();
-    for (const session of this.sessions.values()) {
+    for (const session of Array.from(this.sessions.values())) {
       if (
         session.auth0UserId === auth0UserId &&
         !session.revokedAt &&
@@ -176,7 +187,7 @@ export class MemoryStorage implements IStorage {
     }
   }
 
-  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name'>>): Promise<void> {
+  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) {
       if (updates.isAdmin !== undefined) {
@@ -184,6 +195,9 @@ export class MemoryStorage implements IStorage {
       }
       if (updates.name !== undefined) {
         session.name = updates.name;
+      }
+      if (updates.emailVerified !== undefined) {
+        session.emailVerified = updates.emailVerified;
       }
     }
   }
@@ -207,13 +221,473 @@ export class MemoryStorage implements IStorage {
       });
     }
   }
+
+  async setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void> {
+    const existing = this.userFlagsMap.get(auth0UserId);
+    if (existing) {
+      existing.emailVerifiedOverride = verified;
+      existing.emailVerifiedOverrideAt = verified ? new Date() : null;
+      existing.emailVerifiedOverrideBy = verified ? adminEmail : null;
+    } else {
+      this.userFlagsMap.set(auth0UserId, {
+        auth0UserId,
+        blocked: false,
+        emailVerifiedOverride: verified,
+        emailVerifiedOverrideAt: verified ? new Date() : null,
+        emailVerifiedOverrideBy: verified ? adminEmail : null,
+      });
+    }
+  }
+
+  async getEmailVerifiedOverride(auth0UserId: string): Promise<boolean> {
+    const flags = this.userFlagsMap.get(auth0UserId);
+    return flags?.emailVerifiedOverride ?? false;
+  }
 }
 
-export const storage = new MemoryStorage();
+// Redis-backed session storage
+export class RedisStorage implements IStorage {
+  private redisClient: any;
+  private memoryFallback: MemoryStorage;
+
+  constructor(redisClient: any) {
+    this.redisClient = redisClient;
+    this.memoryFallback = new MemoryStorage();
+  }
+
+  private isRedisAvailable(): boolean {
+    return this.redisClient?.isOpen === true;
+  }
+
+  private sessionKey(id: string): string {
+    return `session:${id}`;
+  }
+
+  private userSessionsKey(auth0UserId: string): string {
+    return `user_sessions:${auth0UserId}`;
+  }
+
+  private userFlagsKey(auth0UserId: string): string {
+    return `user_flags:${auth0UserId}`;
+  }
+
+  async createSession(data: {
+    visitorId?: number;
+    auth0UserId?: string;
+    virtFusionUserId?: number;
+    extRelationId?: string;
+    email: string;
+    name?: string;
+    isAdmin?: boolean;
+    emailVerified?: boolean;
+    expiresAt: Date;
+  }): Promise<Session> {
+    const id = randomBytes(32).toString("hex");
+    const now = new Date();
+    const session: Session = {
+      id,
+      userId: data.visitorId || null,
+      auth0UserId: data.auth0UserId || null,
+      virtFusionUserId: data.virtFusionUserId || null,
+      extRelationId: data.extRelationId || null,
+      email: data.email,
+      name: data.name || null,
+      isAdmin: data.isAdmin || false,
+      emailVerified: data.emailVerified ?? false,
+      expiresAt: data.expiresAt,
+      revokedAt: null,
+      revokedReason: null,
+      lastActivityAt: now,
+    };
+
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.createSession(data);
+    }
+
+    try {
+      const ttlSeconds = Math.ceil((data.expiresAt.getTime() - now.getTime()) / 1000);
+      await this.redisClient.setEx(
+        this.sessionKey(id),
+        ttlSeconds,
+        JSON.stringify(session)
+      );
+
+      // Track user sessions for bulk operations
+      if (data.auth0UserId) {
+        await this.redisClient.sAdd(this.userSessionsKey(data.auth0UserId), id);
+        await this.redisClient.expire(this.userSessionsKey(data.auth0UserId), ttlSeconds);
+      }
+
+      return session;
+    } catch (error: any) {
+      log(`Redis error in createSession: ${error.message}`, 'storage');
+      return this.memoryFallback.createSession(data);
+    }
+  }
+
+  async getSession(id: string): Promise<Session | undefined> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getSession(id);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.sessionKey(id));
+      if (!data) return undefined;
+
+      const session: Session = JSON.parse(data);
+
+      // Convert date strings back to Date objects
+      session.expiresAt = new Date(session.expiresAt);
+      session.lastActivityAt = new Date(session.lastActivityAt);
+      if (session.revokedAt) {
+        session.revokedAt = new Date(session.revokedAt);
+      }
+
+      // Check if expired
+      if (session.expiresAt < new Date()) {
+        await this.deleteSession(id);
+        return undefined;
+      }
+
+      return session;
+    } catch (error: any) {
+      log(`Redis error in getSession: ${error.message}`, 'storage');
+      return this.memoryFallback.getSession(id);
+    }
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteSession(id);
+    }
+
+    try {
+      // Get session to find user ID for cleanup
+      const session = await this.getSession(id);
+      if (session?.auth0UserId) {
+        await this.redisClient.sRem(this.userSessionsKey(session.auth0UserId), id);
+      }
+      await this.redisClient.del(this.sessionKey(id));
+    } catch (error: any) {
+      log(`Redis error in deleteSession: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteSession(id);
+    }
+  }
+
+  async deleteUserSessions(userId: number): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteUserSessions(userId);
+    }
+
+    try {
+      // Note: Redis implementation tracks by auth0UserId, not userId
+      // This method is kept for interface compatibility but may not find sessions
+      log(`deleteUserSessions called with userId ${userId} - Redis tracks by auth0UserId`, 'storage');
+    } catch (error: any) {
+      log(`Redis error in deleteUserSessions: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteUserSessions(userId);
+    }
+  }
+
+  async deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.deleteSessionsByAuth0UserId(auth0UserId);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      if (sessionIds.length > 0) {
+        const keys = sessionIds.map((id: string) => this.sessionKey(id));
+        await this.redisClient.del(keys);
+        await this.redisClient.del(this.userSessionsKey(auth0UserId));
+      }
+    } catch (error: any) {
+      log(`Redis error in deleteSessionsByAuth0UserId: ${error.message}`, 'storage');
+      return this.memoryFallback.deleteSessionsByAuth0UserId(auth0UserId);
+    }
+  }
+
+  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (session && !session.revokedAt) {
+          session.revokedAt = now;
+          session.revokedReason = reason;
+          const ttlSeconds = Math.ceil((session.expiresAt.getTime() - now.getTime()) / 1000);
+          if (ttlSeconds > 0) {
+            await this.redisClient.setEx(
+              this.sessionKey(id),
+              ttlSeconds,
+              JSON.stringify(session)
+            );
+          }
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in revokeSessionsByAuth0UserId: ${error.message}`, 'storage');
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+    }
+  }
+
+  async hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.hasActiveSession(auth0UserId, idleTimeoutMs);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (
+          session &&
+          !session.revokedAt &&
+          new Date(session.expiresAt) > now
+        ) {
+          const lastActivity = new Date(session.lastActivityAt);
+          const idleTime = now.getTime() - lastActivity.getTime();
+          if (idleTime <= idleTimeoutMs) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error: any) {
+      log(`Redis error in hasActiveSession: ${error.message}`, 'storage');
+      return this.memoryFallback.hasActiveSession(auth0UserId, idleTimeoutMs);
+    }
+  }
+
+  async revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.revokeIdleSessions(auth0UserId, idleTimeoutMs, reason);
+    }
+
+    try {
+      const sessionIds = await this.redisClient.sMembers(this.userSessionsKey(auth0UserId));
+      const now = new Date();
+
+      for (const id of sessionIds) {
+        const session = await this.getSession(id);
+        if (
+          session &&
+          !session.revokedAt &&
+          new Date(session.expiresAt) > now
+        ) {
+          const lastActivity = new Date(session.lastActivityAt);
+          const idleTime = now.getTime() - lastActivity.getTime();
+          if (idleTime > idleTimeoutMs) {
+            session.revokedAt = now;
+            session.revokedReason = reason;
+            const ttlSeconds = Math.ceil((session.expiresAt.getTime() - now.getTime()) / 1000);
+            if (ttlSeconds > 0) {
+              await this.redisClient.setEx(
+                this.sessionKey(id),
+                ttlSeconds,
+                JSON.stringify(session)
+              );
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in revokeIdleSessions: ${error.message}`, 'storage');
+      return this.memoryFallback.revokeIdleSessions(auth0UserId, idleTimeoutMs, reason);
+    }
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.updateSessionActivity(sessionId);
+    }
+
+    try {
+      const session = await this.getSession(sessionId);
+      if (session) {
+        session.lastActivityAt = new Date();
+        const ttlSeconds = Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000);
+        if (ttlSeconds > 0) {
+          await this.redisClient.setEx(
+            this.sessionKey(sessionId),
+            ttlSeconds,
+            JSON.stringify(session)
+          );
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in updateSessionActivity: ${error.message}`, 'storage');
+      return this.memoryFallback.updateSessionActivity(sessionId);
+    }
+  }
+
+  async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.updateSession(sessionId, updates);
+    }
+
+    try {
+      const session = await this.getSession(sessionId);
+      if (session) {
+        if (updates.isAdmin !== undefined) {
+          session.isAdmin = updates.isAdmin;
+        }
+        if (updates.name !== undefined) {
+          session.name = updates.name;
+        }
+        if (updates.emailVerified !== undefined) {
+          session.emailVerified = updates.emailVerified;
+        }
+        const ttlSeconds = Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000);
+        if (ttlSeconds > 0) {
+          await this.redisClient.setEx(
+            this.sessionKey(sessionId),
+            ttlSeconds,
+            JSON.stringify(session)
+          );
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in updateSession: ${error.message}`, 'storage');
+      return this.memoryFallback.updateSession(sessionId, updates);
+    }
+  }
+
+  async getUserFlags(auth0UserId: string): Promise<UserFlags | undefined> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getUserFlags(auth0UserId);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      if (!data) return undefined;
+
+      const flags: UserFlags = JSON.parse(data);
+      // Convert date strings back to Date objects
+      if (flags.blockedAt) {
+        flags.blockedAt = new Date(flags.blockedAt);
+      }
+      return flags;
+    } catch (error: any) {
+      log(`Redis error in getUserFlags: ${error.message}`, 'storage');
+      return this.memoryFallback.getUserFlags(auth0UserId);
+    }
+  }
+
+  async setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.setUserBlocked(auth0UserId, blocked, reason);
+    }
+
+    try {
+      // Get existing flags first to preserve other settings
+      const existingData = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      const existing: UserFlags = existingData ? JSON.parse(existingData) : { auth0UserId, blocked: false };
+
+      const flags: UserFlags = {
+        ...existing,
+        auth0UserId,
+        blocked,
+        blockedReason: blocked ? (reason || null) : null,
+        blockedAt: blocked ? new Date() : null,
+      };
+
+      // Store user flags with 30 day expiry
+      await this.redisClient.setEx(
+        this.userFlagsKey(auth0UserId),
+        30 * 24 * 60 * 60,
+        JSON.stringify(flags)
+      );
+    } catch (error: any) {
+      log(`Redis error in setUserBlocked: ${error.message}`, 'storage');
+      return this.memoryFallback.setUserBlocked(auth0UserId, blocked, reason);
+    }
+  }
+
+  async setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.setEmailVerifiedOverride(auth0UserId, verified, adminEmail);
+    }
+
+    try {
+      // Get existing flags first to preserve other settings
+      const existingData = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      const existing: UserFlags = existingData ? JSON.parse(existingData) : { auth0UserId, blocked: false };
+
+      const flags: UserFlags = {
+        ...existing,
+        auth0UserId,
+        emailVerifiedOverride: verified,
+        emailVerifiedOverrideAt: verified ? new Date() : null,
+        emailVerifiedOverrideBy: verified ? adminEmail : null,
+      };
+
+      // Store user flags with 30 day expiry
+      await this.redisClient.setEx(
+        this.userFlagsKey(auth0UserId),
+        30 * 24 * 60 * 60,
+        JSON.stringify(flags)
+      );
+      log(`Set email verified override for ${auth0UserId} to ${verified} by ${adminEmail}`, 'storage');
+    } catch (error: any) {
+      log(`Redis error in setEmailVerifiedOverride: ${error.message}`, 'storage');
+      return this.memoryFallback.setEmailVerifiedOverride(auth0UserId, verified, adminEmail);
+    }
+  }
+
+  async getEmailVerifiedOverride(auth0UserId: string): Promise<boolean> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.getEmailVerifiedOverride(auth0UserId);
+    }
+
+    try {
+      const data = await this.redisClient.get(this.userFlagsKey(auth0UserId));
+      if (!data) return false;
+
+      const flags: UserFlags = JSON.parse(data);
+      return flags.emailVerifiedOverride ?? false;
+    } catch (error: any) {
+      log(`Redis error in getEmailVerifiedOverride: ${error.message}`, 'storage');
+      return this.memoryFallback.getEmailVerifiedOverride(auth0UserId);
+    }
+  }
+}
+
+// Initialize storage - will be updated to use Redis when available
+let storageInstance: IStorage = new MemoryStorage();
+
+export function initializeStorage(redisClient?: any): IStorage {
+  if (redisClient && redisClient.isOpen) {
+    log('Initializing Redis-backed session storage', 'storage');
+    storageInstance = new RedisStorage(redisClient);
+  } else {
+    log('Redis not available, using memory-backed session storage', 'storage');
+    storageInstance = new MemoryStorage();
+  }
+  return storageInstance;
+}
+
+export const storage = new Proxy({} as IStorage, {
+  get(_, prop) {
+    return (storageInstance as any)[prop];
+  }
+});
 
 // Database storage for plans, wallets, and deploy orders
 export const dbStorage = {
   // Plans
+  async getAllPlans(): Promise<Plan[]> {
+    return db.select().from(plans);
+  },
+
   async getActivePlans(): Promise<Plan[]> {
     return db.select().from(plans).where(eq(plans.active, true));
   },
@@ -228,55 +702,50 @@ export const dbStorage = {
     return plan;
   },
 
-  async upsertPlan(plan: InsertPlan): Promise<Plan> {
+  async upsertPlan(plan: InsertPlan & Record<string, unknown>): Promise<Plan> {
     // Use virtfusionPackageId as the primary lookup for synced plans
-    if (plan.virtfusionPackageId) {
+    const planData = plan as typeof plans.$inferInsert;
+    if (planData.virtfusionPackageId) {
       const [existingByVfId] = await db
         .select()
         .from(plans)
-        .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId));
-      
+        .where(eq(plans.virtfusionPackageId, planData.virtfusionPackageId!));
+
       if (existingByVfId) {
         // Preserve existing price if the new price is 0 (VirtFusion doesn't provide pricing)
-        const updateData = { ...plan };
-        if (plan.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
+        const updateData = { ...planData };
+        if (planData.priceMonthly === 0 && existingByVfId.priceMonthly && existingByVfId.priceMonthly > 0) {
           updateData.priceMonthly = existingByVfId.priceMonthly;
         }
-        // Preserve manually-disabled plans (don't re-enable from VirtFusion sync)
-        if (existingByVfId.active === false) {
-          updateData.active = false;
-        }
-        
+        // Allow plan active status to be updated from static config and VirtFusion sync
+
         const [updated] = await db
           .update(plans)
           .set(updateData)
-          .where(eq(plans.virtfusionPackageId, plan.virtfusionPackageId))
+          .where(eq(plans.virtfusionPackageId, planData.virtfusionPackageId!))
           .returning();
         return updated;
       }
     }
-    
+
     // Fallback to code lookup for manually created plans
-    const existing = await this.getPlanByCode(plan.code);
+    const existing = await this.getPlanByCode(planData.code);
     if (existing) {
       // Preserve existing price if the new price is 0
-      const updateData = { ...plan };
-      if (plan.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
+      const updateData = { ...planData };
+      if (planData.priceMonthly === 0 && existing.priceMonthly && existing.priceMonthly > 0) {
         updateData.priceMonthly = existing.priceMonthly;
       }
-      // Preserve manually-disabled plans
-      if (existing.active === false) {
-        updateData.active = false;
-      }
-      
+      // Allow plan active status to be updated
+
       const [updated] = await db
         .update(plans)
         .set(updateData)
-        .where(eq(plans.code, plan.code))
+        .where(eq(plans.code, planData.code))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(plans).values(plan).returning();
+    const [created] = await db.insert(plans).values(planData).returning();
     return created;
   },
 
@@ -296,6 +765,7 @@ export const dbStorage = {
           priceMonthly: plan.priceMonthly,
           virtfusionPackageId: plan.virtfusionPackageId,
           active: plan.active,
+          popular: plan.popular ?? false,
         });
         seeded++;
       } catch (error: any) {
@@ -388,8 +858,8 @@ export const dbStorage = {
     return updated;
   },
 
-  async creditWallet(auth0UserId: string, amountCents: number, transaction: Omit<InsertWalletTransaction, 'auth0UserId' | 'amountCents'>): Promise<Wallet> {
-    // Check for idempotency using stripeEventId
+  async creditWallet(auth0UserId: string, amountCents: number, transaction: { type: string; stripeEventId?: string | null; stripePaymentIntentId?: string | null; stripeSessionId?: string | null; metadata?: Record<string, unknown> }): Promise<Wallet> {
+    // SECURITY: Check for idempotency using stripeEventId to prevent duplicate credits
     if (transaction.stripeEventId) {
       const [existing] = await db
         .select()
@@ -397,6 +867,20 @@ export const dbStorage = {
         .where(eq(walletTransactions.stripeEventId, transaction.stripeEventId));
       if (existing) {
         // Already processed, return current wallet
+        log(`Duplicate credit attempt blocked for stripeEventId: ${transaction.stripeEventId}`, 'security');
+        return await this.getOrCreateWallet(auth0UserId);
+      }
+    }
+
+    // SECURITY: Also check stripePaymentIntentId for idempotency (used by auto-topup and direct charges)
+    if (transaction.stripePaymentIntentId) {
+      const [existing] = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.stripePaymentIntentId, transaction.stripePaymentIntentId));
+      if (existing) {
+        // Already processed, return current wallet
+        log(`Duplicate credit attempt blocked for stripePaymentIntentId: ${transaction.stripePaymentIntentId}`, 'security');
         return await this.getOrCreateWallet(auth0UserId);
       }
     }
@@ -404,14 +888,8 @@ export const dbStorage = {
     // Create wallet if doesn't exist
     await this.getOrCreateWallet(auth0UserId);
 
-    // Insert transaction
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      amountCents,
-      ...transaction,
-    });
-
-    // Update wallet balance
+    // SECURITY: Update balance FIRST, then record transaction
+    // This ensures if balance update fails, no orphaned transaction record is created
     const [updated] = await db
       .update(wallets)
       .set({
@@ -420,6 +898,17 @@ export const dbStorage = {
       })
       .where(eq(wallets.auth0UserId, auth0UserId))
       .returning();
+
+    if (!updated) {
+      throw new Error('Failed to update wallet balance');
+    }
+
+    // Insert transaction after successful balance update
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      amountCents,
+      ...transaction,
+    });
 
     return updated;
   },
@@ -466,13 +955,8 @@ export const dbStorage = {
   async refundToWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<Wallet> {
     await this.getOrCreateWallet(auth0UserId);
 
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'refund',
-      amountCents,
-      metadata: metadata || null,
-    });
-
+    // SECURITY: Update balance FIRST, then record transaction
+    // This ensures if balance update fails, no orphaned transaction record is created
     const [updated] = await db
       .update(wallets)
       .set({
@@ -481,6 +965,18 @@ export const dbStorage = {
       })
       .where(eq(wallets.auth0UserId, auth0UserId))
       .returning();
+
+    if (!updated) {
+      throw new Error('Failed to update wallet balance');
+    }
+
+    // Record transaction after successful balance update
+    await db.insert(walletTransactions).values({
+      auth0UserId,
+      type: 'refund',
+      amountCents,
+      metadata: metadata || null,
+    });
 
     return updated;
   },
@@ -644,7 +1140,7 @@ export const dbStorage = {
 
   // Deploy Orders
   async createDeployOrder(order: InsertDeployOrder): Promise<DeployOrder> {
-    const [created] = await db.insert(deployOrders).values(order).returning();
+    const [created] = await db.insert(deployOrders).values(order as typeof deployOrders.$inferInsert).returning();
     return created;
   },
 
@@ -688,7 +1184,8 @@ export const dbStorage = {
     auth0UserId: string,
     planId: number,
     priceCents: number,
-    hostname?: string
+    hostname?: string,
+    planName?: string
   ): Promise<{ success: boolean; order?: DeployOrder; error?: string }> {
     await this.getOrCreateWallet(auth0UserId);
     
@@ -721,12 +1218,17 @@ export const dbStorage = {
       status: 'paid',
     });
 
-    // Insert debit transaction
+    // Insert debit transaction with server details for display
     await db.insert(walletTransactions).values({
       auth0UserId,
       type: 'debit',
       amountCents: -priceCents,
-      metadata: { deployOrderId: order.id },
+      metadata: {
+        deployOrderId: order.id,
+        serverName: hostname,
+        planName: planName,
+        reason: 'Server deployment'
+      },
     });
 
     return { success: true, order };
@@ -734,7 +1236,7 @@ export const dbStorage = {
 
   // Server Cancellation methods
   async createCancellationRequest(data: InsertServerCancellation): Promise<ServerCancellation> {
-    const [cancellation] = await db.insert(serverCancellations).values(data).returning();
+    const [cancellation] = await db.insert(serverCancellations).values(data as typeof serverCancellations.$inferInsert).returning();
     return cancellation;
   },
 
@@ -852,7 +1354,7 @@ export const dbStorage = {
 
   // Server Billing methods
   async createServerBilling(data: InsertServerBilling): Promise<ServerBilling> {
-    const [billing] = await db.insert(serverBilling).values(data).returning();
+    const [billing] = await db.insert(serverBilling).values(data as typeof serverBilling.$inferInsert).returning();
     return billing;
   },
 
@@ -877,8 +1379,8 @@ export const dbStorage = {
       .from(serverBilling)
       .where(
         and(
-          eq(serverBilling.status, 'active'),
-          sql`${serverBilling.nextBillingAt} <= NOW()`
+          or(eq(serverBilling.status, 'paid'), eq(serverBilling.status, 'active')),
+          sql`${serverBilling.nextBillAt} <= NOW()`
         )
       );
   },
@@ -889,8 +1391,8 @@ export const dbStorage = {
       .from(serverBilling)
       .where(
         and(
-          eq(serverBilling.status, 'overdue'),
-          sql`${serverBilling.overdueSince} <= NOW() - INTERVAL '${gracePeriodDays} days'`
+          eq(serverBilling.status, 'unpaid'),
+          sql`${serverBilling.suspendAt} <= NOW()`
         )
       );
   },
@@ -898,11 +1400,11 @@ export const dbStorage = {
   async updateServerBillingStatus(
     virtfusionServerId: string,
     status: string,
-    overdueSince?: Date | null
+    suspendAt?: Date | null
   ): Promise<ServerBilling | undefined> {
-    const updates: any = { status, updatedAt: new Date() };
-    if (overdueSince !== undefined) {
-      updates.overdueSince = overdueSince;
+    const updates: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (suspendAt !== undefined) {
+      updates.suspendAt = suspendAt;
     }
     const [updated] = await db
       .update(serverBilling)
@@ -914,15 +1416,14 @@ export const dbStorage = {
 
   async markServerBilled(
     virtfusionServerId: string,
-    nextBillingAt: Date
+    nextBillAt: Date
   ): Promise<ServerBilling | undefined> {
     const [updated] = await db
       .update(serverBilling)
       .set({
-        lastBilledAt: new Date(),
-        nextBillingAt,
-        status: 'active',
-        overdueSince: null,
+        nextBillAt,
+        status: 'paid',
+        suspendAt: null,
         updatedAt: new Date(),
       })
       .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
@@ -971,19 +1472,96 @@ export const dbStorage = {
     }
   },
 
-  getRecaptchaSettings(): { enabled: boolean; siteKey: string | null; secretKey: string | null } {
-    const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
-    const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
-    const enabled = !!(siteKey && secretKey);
-    
-    return { enabled, siteKey, secretKey };
+  // Sync version that uses cached settings - call refreshRecaptchaCache periodically
+  getRecaptchaSettings(): { enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number } {
+    return this._recaptchaCache || {
+      enabled: false,
+      siteKey: null,
+      secretKey: null,
+      version: 'v3',
+      minScore: 0.5,
+    };
+  },
+
+  _recaptchaCache: null as { enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number } | null,
+
+  async refreshRecaptchaCache(): Promise<void> {
+    const settings = await this.getRecaptchaSettingsAsync();
+    this._recaptchaCache = settings;
+  },
+
+  async getRecaptchaSettingsAsync(): Promise<{ enabled: boolean; siteKey: string | null; secretKey: string | null; version: 'v2' | 'v3'; minScore: number }> {
+    try {
+      // Try database first
+      const [siteKeySetting, secretKeySetting, versionSetting, minScoreSetting] = await Promise.all([
+        this.getSecuritySetting('recaptcha_site_key'),
+        this.getSecuritySetting('recaptcha_secret_key'),
+        this.getSecuritySetting('recaptcha_version'),
+        this.getSecuritySetting('recaptcha_min_score'),
+      ]);
+
+      // If database has settings, use them
+      if (siteKeySetting?.value && secretKeySetting?.value) {
+        const enabled = siteKeySetting.enabled && secretKeySetting.enabled;
+        const version = (versionSetting?.value === 'v2' ? 'v2' : 'v3') as 'v2' | 'v3';
+        const minScore = minScoreSetting?.value ? parseFloat(minScoreSetting.value) : 0.5;
+
+        return {
+          enabled,
+          siteKey: siteKeySetting.value,
+          secretKey: secretKeySetting.value,
+          version,
+          minScore: isNaN(minScore) ? 0.5 : Math.max(0, Math.min(1, minScore)),
+        };
+      }
+
+      // Fall back to environment variables (legacy support)
+      const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
+      const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
+      const enabled = !!(siteKey && secretKey);
+
+      return { enabled, siteKey, secretKey, version: 'v3', minScore: 0.5 };
+    } catch (error) {
+      // If database fails, fall back to env vars
+      const siteKey = process.env.RECAPTCHA_SITE_KEY || null;
+      const secretKey = process.env.RECAPTCHA_SECRET_KEY || null;
+      const enabled = !!(siteKey && secretKey);
+
+      return { enabled, siteKey, secretKey, version: 'v3', minScore: 0.5 };
+    }
+  },
+
+  async updateRecaptchaSettings(settings: { siteKey: string; secretKey: string; enabled: boolean; version?: 'v2' | 'v3'; minScore?: number }): Promise<void> {
+    await Promise.all([
+      this.upsertSecuritySetting('recaptcha_site_key', settings.siteKey, settings.enabled),
+      this.upsertSecuritySetting('recaptcha_secret_key', settings.secretKey, settings.enabled),
+      this.upsertSecuritySetting('recaptcha_version', settings.version || 'v3', settings.enabled),
+      this.upsertSecuritySetting('recaptcha_min_score', String(settings.minScore ?? 0.5), settings.enabled),
+    ]);
+    // Refresh cache after update
+    await this.refreshRecaptchaCache();
+  },
+
+  async testRecaptchaConfig(siteKey: string, secretKey: string): Promise<{ valid: boolean; error?: string }> {
+    // Basic validation - check key formats
+    if (!siteKey || siteKey.length < 30) {
+      return { valid: false, error: 'Invalid site key format' };
+    }
+    if (!secretKey || secretKey.length < 30) {
+      return { valid: false, error: 'Invalid secret key format' };
+    }
+    // Keys should start with 6L for reCAPTCHA
+    if (!siteKey.startsWith('6L')) {
+      return { valid: false, error: 'Site key should start with "6L"' };
+    }
+    return { valid: true };
   },
 
   // ========== ADMIN AUDIT LOGGING ==========
   async createAuditLog(data: InsertAdminAuditLog): Promise<AdminAuditLog> {
     const [log] = await db
       .insert(adminAuditLogs)
-      .values(data)
+      .values(data as typeof adminAuditLogs.$inferInsert)
       .returning();
     return log;
   },
@@ -1051,7 +1629,7 @@ export const dbStorage = {
 
   // Invoice functions
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
-    const [invoice] = await db.insert(invoices).values(data).returning();
+    const [invoice] = await db.insert(invoices).values(data as typeof invoices.$inferInsert).returning();
     return invoice;
   },
 
@@ -1107,7 +1685,7 @@ export const dbStorage = {
 
   // Create a new ticket
   async createTicket(data: InsertTicket): Promise<Ticket> {
-    const [ticket] = await db.insert(tickets).values(data).returning();
+    const [ticket] = await db.insert(tickets).values(data as typeof tickets.$inferInsert).returning();
     return ticket;
   },
 
@@ -1127,10 +1705,13 @@ export const dbStorage = {
 
     const conditions: any[] = [eq(tickets.auth0UserId, auth0UserId)];
 
-    if (status === 'open') {
-      conditions.push(ne(tickets.status, 'closed'));
-    } else if (status === 'closed') {
+    // "all" and "open" both exclude closed tickets (show active tickets only)
+    // "closed" shows only closed tickets
+    if (status === 'closed') {
       conditions.push(eq(tickets.status, 'closed'));
+    } else {
+      // 'all' and 'open' both show non-closed tickets
+      conditions.push(ne(tickets.status, 'closed'));
     }
 
     const whereClause = and(...conditions);
@@ -1253,6 +1834,7 @@ export const dbStorage = {
     priority: TicketPriority;
     category: TicketCategory;
     assignedAdminId: string | null;
+    resolvedAt: Date | null;
     closedAt: Date | null;
   }>): Promise<Ticket | undefined> {
     const [updated] = await db
@@ -1287,17 +1869,27 @@ export const dbStorage = {
   async reopenTicket(id: number): Promise<Ticket | undefined> {
     const [updated] = await db
       .update(tickets)
-      .set({ status: 'waiting_admin', closedAt: null, updatedAt: new Date() })
+      .set({ status: 'waiting_admin', resolvedAt: null, closedAt: null, updatedAt: new Date() })
       .where(eq(tickets.id, id))
       .returning();
     return updated;
   },
 
+  // Delete a ticket and its messages (admin only)
+  async deleteTicket(id: number): Promise<boolean> {
+    // First delete all messages for this ticket
+    await db.delete(ticketMessages).where(eq(ticketMessages.ticketId, id));
+    // Then delete the ticket itself
+    const result = await db.delete(tickets).where(eq(tickets.id, id));
+    return true;
+  },
+
   // Create a ticket message
   async createTicketMessage(data: InsertTicketMessage): Promise<TicketMessage> {
-    const [message] = await db.insert(ticketMessages).values(data).returning();
+    const messageData = data as typeof ticketMessages.$inferInsert;
+    const [message] = await db.insert(ticketMessages).values(messageData).returning();
     // Update ticket last message time
-    await this.updateTicketLastMessage(data.ticketId);
+    await this.updateTicketLastMessage(messageData.ticketId);
     return message;
   },
 
@@ -1386,5 +1978,135 @@ export const dbStorage = {
       waitingUser: waitingUserCount?.count || 0,
       total: totalCount?.count || 0,
     };
+  },
+
+  // Two-Factor Authentication
+  async getTwoFactorAuth(auth0UserId: string): Promise<TwoFactorAuth | undefined> {
+    const [tfa] = await db.select().from(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+    return tfa;
+  },
+
+  async createTwoFactorAuth(data: InsertTwoFactorAuth): Promise<TwoFactorAuth> {
+    const [tfa] = await db.insert(twoFactorAuth).values(data as typeof twoFactorAuth.$inferInsert).returning();
+    return tfa;
+  },
+
+  async updateTwoFactorAuth(auth0UserId: string, updates: Partial<Omit<TwoFactorAuth, 'id' | 'auth0UserId' | 'createdAt'>>): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async enableTwoFactorAuth(auth0UserId: string, backupCodes: string[]): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        enabled: true,
+        backupCodes: JSON.stringify(backupCodes),
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async disableTwoFactorAuth(auth0UserId: string): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        enabled: false,
+        backupCodes: null,
+        verifiedAt: null,
+        lastUsedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async deleteTwoFactorAuth(auth0UserId: string): Promise<void> {
+    await db.delete(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+  },
+
+  async updateTwoFactorLastUsed(auth0UserId: string): Promise<void> {
+    await db
+      .update(twoFactorAuth)
+      .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+  },
+
+  async updateTwoFactorBackupCodes(auth0UserId: string, backupCodes: string[]): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        backupCodes: JSON.stringify(backupCodes),
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  // Password reset token functions
+  async createPasswordResetToken(email: string): Promise<PasswordResetToken> {
+    // Generate a secure random token
+    const token = randomBytes(32).toString('hex');
+    // Token expires in 30 minutes
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    // Invalidate any existing tokens for this email
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true, usedAt: new Date() })
+      .where(and(
+        eq(passwordResetTokens.email, email.toLowerCase()),
+        eq(passwordResetTokens.used, false)
+      ));
+
+    // Create new token
+    const [resetToken] = await db
+      .insert(passwordResetTokens)
+      .values({
+        email: email.toLowerCase(),
+        token,
+        expiresAt,
+        used: false,
+      } as typeof passwordResetTokens.$inferInsert)
+      .returning();
+
+    return resetToken;
+  },
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return resetToken;
+  },
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true, usedAt: new Date() })
+      .where(eq(passwordResetTokens.token, token));
+  },
+
+  async cleanupExpiredPasswordResetTokens(): Promise<number> {
+    const result = await db
+      .delete(passwordResetTokens)
+      .where(
+        or(
+          sql`${passwordResetTokens.expiresAt} < NOW()`,
+          eq(passwordResetTokens.used, true)
+        )
+      )
+      .returning();
+    return result.length;
   },
 };

@@ -94,7 +94,30 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}=== Step 3: Configuring Nginx ===${NC}"
+echo -e "${YELLOW}=== Step 3: Setting up Custom Error Pages ===${NC}"
+echo ""
+
+# Create error pages directory
+ERROR_PAGES_DIR="/var/www/ozvps-errors"
+echo "Creating error pages directory..."
+mkdir -p "$ERROR_PAGES_DIR"
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ERROR_SRC_DIR="$SCRIPT_DIR/nginx-error-pages"
+
+# Copy error pages if they exist in the script directory
+if [ -d "$ERROR_SRC_DIR" ]; then
+    echo "Copying custom error pages..."
+    cp "$ERROR_SRC_DIR"/*.html "$ERROR_PAGES_DIR/"
+    chmod 644 "$ERROR_PAGES_DIR"/*.html
+    echo -e "${GREEN}Custom error pages installed.${NC}"
+else
+    echo -e "${YELLOW}Warning: Error pages directory not found. Skipping custom error pages.${NC}"
+fi
+
+echo ""
+echo -e "${YELLOW}=== Step 4: Configuring Nginx ===${NC}"
 echo ""
 
 # Create nginx configuration
@@ -103,6 +126,18 @@ cat > /etc/nginx/sites-available/ozvps << NGINX_CONFIG
 server {
     listen 80;
     server_name ${APP_DOMAIN};
+
+    # Custom error pages
+    error_page 404 /404.html;
+    error_page 500 /500.html;
+    error_page 502 /502.html;
+    error_page 503 /503.html;
+
+    # Error page locations
+    location ~ ^/(404|500|502|503)\.html$ {
+        root $ERROR_PAGES_DIR;
+        internal;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:${BACKEND_PORT};
@@ -133,7 +168,7 @@ systemctl reload nginx
 echo -e "${GREEN}Nginx configured successfully.${NC}"
 
 echo ""
-echo -e "${YELLOW}=== Step 4: Obtaining SSL Certificate ===${NC}"
+echo -e "${YELLOW}=== Step 5: Obtaining SSL Certificate ===${NC}"
 echo ""
 
 echo -e "${BLUE}Obtaining SSL certificate for ${APP_DOMAIN}...${NC}"

@@ -14,18 +14,28 @@ export function setSessionErrorCallback(callback: (error: SessionError) => void)
 async function handleResponse(res: Response): Promise<void> {
   if (!res.ok) {
     if (res.status === 401) {
+      let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
       try {
-        const errorData = await res.json();
-        if (sessionErrorCallback && errorData.code) {
-          sessionErrorCallback(errorData);
-        }
-        throw new Error(errorData.error || 'Authentication required');
+        errorData = await res.json();
       } catch (e) {
-        if (e instanceof Error && e.message !== 'Authentication required') {
-          throw new Error('Authentication required');
-        }
-        throw e;
+        // Failed to parse JSON, use default error
       }
+
+      // Only trigger redirect if we're not on auth pages (avoid redirect loop)
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' ||
+                         currentPath === '/register' ||
+                         currentPath === '/forgot-password' ||
+                         currentPath === '/reset-password';
+
+      if (!isAuthPage && sessionErrorCallback) {
+        sessionErrorCallback({
+          error: errorData.error || 'Authentication required',
+          code: errorData.code || 'UNAUTHORIZED'
+        });
+      }
+
+      throw new Error(errorData.error || 'Authentication required');
     }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
@@ -59,21 +69,31 @@ export const getQueryFn: <T>(options: {
     });
 
     if (res.status === 401) {
+      let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
       try {
-        const errorData = await res.json();
-        if (sessionErrorCallback && errorData.code) {
-          sessionErrorCallback(errorData);
-        }
-        if (unauthorizedBehavior === "returnNull") {
-          return null;
-        }
-        throw new Error(errorData.error || 'Authentication required');
+        errorData = await res.json();
       } catch (e) {
-        if (unauthorizedBehavior === "returnNull") {
-          return null;
-        }
-        throw e;
+        // Failed to parse JSON, use default error
       }
+
+      // Only trigger redirect if we're not on auth pages (avoid redirect loop)
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' ||
+                         currentPath === '/register' ||
+                         currentPath === '/forgot-password' ||
+                         currentPath === '/reset-password';
+
+      if (!isAuthPage && sessionErrorCallback) {
+        sessionErrorCallback({
+          error: errorData.error || 'Authentication required',
+          code: errorData.code || 'UNAUTHORIZED'
+        });
+      }
+
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      throw new Error(errorData.error || 'Authentication required');
     }
 
     if (!res.ok) {

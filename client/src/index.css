@@ -3,46 +3,46 @@
 
 @plugin "tailwindcss-animate";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (:root.dark &);
 
+/* Define theme tokens that reference CSS custom properties */
 @theme inline {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-background: hsl(222 47% 6%);
-  --color-foreground: hsl(210 40% 98%);
-
-  --color-card: hsl(222 47% 11%);
-  --color-card-foreground: hsl(210 40% 98%);
-
-  --color-sidebar: hsl(222 47% 8%);
-  --color-popover-foreground: hsl(210 40% 98%);
-
-  --color-primary: hsl(217 91% 60%);
-  --color-primary-foreground: hsl(222 47% 11%);
-
-  --color-secondary: hsl(217 19% 27%);
-  --color-secondary-foreground: hsl(210 40% 98%);
-
-  --color-muted: hsl(217 19% 27% / 0.5);
-  --color-muted-foreground: hsl(215 20% 65%);
-
-  --color-accent: hsl(217 19% 27% / 0.5);
-  --color-accent-foreground: hsl(210 40% 98%);
-
-  --color-destructive: hsl(0 62% 30%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-
-  --color-border: hsl(217 19% 27%);
-  --color-input: hsl(217 19% 27%);
-  --color-ring: hsl(217 91% 60%);
-
-  --color-chart-1: hsl(220 70% 50%);
-  --color-chart-2: hsl(160 60% 45%);
-  --color-chart-3: hsl(30 80% 55%);
-  --color-chart-4: hsl(280 65% 60%);
-  --color-chart-5: hsl(340 75% 55%);
+  /* Reference CSS custom properties for runtime theming */
+  --color-background: var(--theme-background);
+  --color-foreground: var(--theme-foreground);
+  --color-card: var(--theme-card);
+  --color-card-foreground: var(--theme-card-foreground);
+  --color-sidebar: var(--theme-sidebar);
+  --color-popover: var(--theme-popover);
+  --color-popover-foreground: var(--theme-popover-foreground);
+  --color-primary: var(--theme-primary);
+  --color-primary-foreground: var(--theme-primary-foreground);
+  --color-secondary: var(--theme-secondary);
+  --color-secondary-foreground: var(--theme-secondary-foreground);
+  --color-muted: var(--theme-muted);
+  --color-muted-foreground: var(--theme-muted-foreground);
+  --color-accent: var(--theme-accent);
+  --color-accent-foreground: var(--theme-accent-foreground);
+  --color-destructive: var(--theme-destructive);
+  --color-destructive-foreground: var(--theme-destructive-foreground);
+  --color-border: var(--theme-border);
+  --color-input: var(--theme-input);
+  --color-ring: var(--theme-ring);
+  --color-success: var(--theme-success);
+  --color-success-foreground: var(--theme-success-foreground);
+  --color-warning: var(--theme-warning);
+  --color-warning-foreground: var(--theme-warning-foreground);
+  --color-info: var(--theme-info);
+  --color-info-foreground: var(--theme-info-foreground);
+  --color-chart-1: var(--theme-chart-1);
+  --color-chart-2: var(--theme-chart-2);
+  --color-chart-3: var(--theme-chart-3);
+  --color-chart-4: var(--theme-chart-4);
+  --color-chart-5: var(--theme-chart-5);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -52,83 +52,156 @@
   --animate-out: fade-out 0.2s ease-in;
 }
 
+@layer components {
+  /* Glass panel effect for headers/navs */
+  .glass-panel {
+    @apply bg-background/95 backdrop-blur-md;
+  }
+
+  /* Solid version when scrolled */
+  .glass-panel-scrolled {
+    @apply bg-background;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  
-  :root {
+
+  /* Dark theme (default) */
+  :root,
+  :root.dark {
     color-scheme: dark;
+
+    /* DigitalOcean-style Dark Mode Colors */
+    --theme-background: hsl(219 95% 7%);
+    --theme-foreground: hsl(0 0% 95%);
+    --theme-card: hsl(219 95% 10%);
+    --theme-card-foreground: hsl(0 0% 95%);
+    --theme-sidebar: hsl(219 95% 8%);
+    --theme-popover: hsl(219 95% 10%);
+    --theme-popover-foreground: hsl(0 0% 95%);
+
+    /* Primary - Bright blue like DO */
+    --theme-primary: hsl(211 100% 50%);
+    --theme-primary-foreground: hsl(0 0% 100%);
+
+    /* Secondary - subtle gray-blue */
+    --theme-secondary: hsl(219 30% 15%);
+    --theme-secondary-foreground: hsl(0 0% 95%);
+
+    /* Muted - darker gray */
+    --theme-muted: hsl(219 30% 15%);
+    --theme-muted-foreground: hsl(215 20% 65%);
+
+    /* Accent */
+    --theme-accent: hsl(219 30% 15%);
+    --theme-accent-foreground: hsl(0 0% 95%);
+
+    /* Destructive - brighter red */
+    --theme-destructive: hsl(0 84% 60%);
+    --theme-destructive-foreground: hsl(0 0% 100%);
+
+    /* Borders - subtle in dark mode */
+    --theme-border: hsl(219 30% 18%);
+    --theme-input: hsl(219 30% 18%);
+    --theme-ring: hsl(211 100% 50%);
+
+    /* Status Colors - DigitalOcean style */
+    --theme-success: hsl(145 80% 33%);
+    --theme-success-foreground: hsl(0 0% 100%);
+    --theme-warning: hsl(14 100% 60%);
+    --theme-warning-foreground: hsl(0 0% 100%);
+    --theme-info: hsl(199 95% 48%);
+    --theme-info-foreground: hsl(0 0% 100%);
+
+    /* Chart colors - match DO */
+    --theme-chart-1: hsl(211 100% 50%);
+    --theme-chart-2: hsl(145 80% 33%);
+    --theme-chart-3: hsl(14 100% 60%);
+    --theme-chart-4: hsl(271 81% 56%);
+    --theme-chart-5: hsl(45 93% 47%);
   }
-  
+
+  /* Light theme */
   :root.light {
     color-scheme: light;
-    --color-background: hsl(0 0% 98%);
-    --color-foreground: hsl(222 47% 11%);
-    --color-card: hsl(0 0% 100%);
-    --color-card-foreground: hsl(222 47% 11%);
-    --color-sidebar: hsl(0 0% 96%);
-    --color-popover-foreground: hsl(222 47% 11%);
-    --color-primary: hsl(217 91% 50%);
-    --color-primary-foreground: hsl(0 0% 100%);
-    --color-secondary: hsl(217 19% 85%);
-    --color-secondary-foreground: hsl(222 47% 11%);
-    --color-muted: hsl(217 19% 90%);
-    --color-muted-foreground: hsl(215 20% 45%);
-    --color-accent: hsl(217 19% 92%);
-    --color-accent-foreground: hsl(222 47% 11%);
-    --color-destructive: hsl(0 62% 55%);
-    --color-destructive-foreground: hsl(0 0% 100%);
-    --color-border: hsl(217 19% 85%);
-    --color-input: hsl(217 19% 88%);
-    --color-ring: hsl(217 91% 50%);
+
+    /* DigitalOcean-style Light Mode - Pure white, dark navy text for better contrast */
+    --theme-background: hsl(0 0% 100%);
+    --theme-foreground: hsl(219 30% 10%);
+    --theme-card: hsl(0 0% 100%);
+    --theme-card-foreground: hsl(219 30% 10%);
+    --theme-sidebar: hsl(214 15% 97%);
+    --theme-popover: hsl(0 0% 100%);
+    --theme-popover-foreground: hsl(219 30% 10%);
+
+    /* Primary - Bright blue */
+    --theme-primary: hsl(211 100% 50%);
+    --theme-primary-foreground: hsl(0 0% 100%);
+
+    /* Secondary - light gray */
+    --theme-secondary: hsl(214 20% 95%);
+    --theme-secondary-foreground: hsl(219 95% 15%);
+
+    /* Muted - subtle gray */
+    --theme-muted: hsl(214 15% 95%);
+    --theme-muted-foreground: hsl(215 15% 45%);
+
+    /* Accent */
+    --theme-accent: hsl(214 20% 95%);
+    --theme-accent-foreground: hsl(219 95% 15%);
+
+    /* Destructive - bright red */
+    --theme-destructive: hsl(0 84% 60%);
+    --theme-destructive-foreground: hsl(0 0% 100%);
+
+    /* Borders - very subtle gray */
+    --theme-border: hsl(214 15% 91%);
+    --theme-input: hsl(214 15% 91%);
+    --theme-ring: hsl(211 100% 50%);
+
+    /* Chart colors - same as dark */
+    --theme-chart-1: hsl(211 100% 50%);
+    --theme-chart-2: hsl(145 80% 33%);
+    --theme-chart-3: hsl(14 100% 60%);
+    --theme-chart-4: hsl(271 81% 56%);
+    --theme-chart-5: hsl(45 93% 47%);
+
+    /* Status colors - same as dark */
+    --theme-success: hsl(145 80% 33%);
+    --theme-success-foreground: hsl(0 0% 100%);
+    --theme-warning: hsl(14 100% 60%);
+    --theme-warning-foreground: hsl(0 0% 100%);
+    --theme-info: hsl(199 95% 48%);
+    --theme-info-foreground: hsl(0 0% 100%);
   }
-  
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
+    font-feature-settings: "kern" 1;
+    letter-spacing: -0.011em;
   }
-  
-  /* Glassmorphism Utilities - adjusted for theme */
-  .glass {
-    @apply bg-card/60 backdrop-blur-md border border-border/50 shadow-lg;
+
+  /* Typography hierarchy - DO style */
+  h1 {
+    @apply text-3xl font-bold tracking-tight text-foreground;
+    letter-spacing: -0.025em;
   }
-  
-  .glass-card {
-    @apply bg-card/40 backdrop-blur-xl border border-border/50 hover:border-border transition-colors duration-200;
+
+  h2 {
+    @apply text-2xl font-semibold tracking-tight text-foreground;
   }
-  
-  .glass-panel {
-    @apply bg-sidebar/95 backdrop-blur-2xl border-r border-border/50;
+
+  h3 {
+    @apply text-xl font-semibold text-foreground;
   }
-  
-  .light .glass {
-    @apply bg-white/80 border-gray-200/50;
-  }
-  
-  .light .glass-card {
-    @apply bg-white/60 border-gray-200/50 hover:border-gray-300;
-  }
-  
-  .light .glass-panel {
-    @apply bg-white/90 border-gray-200/50;
-  }
-  
-  /* Light theme global overrides for hardcoded dark colors */
-  .light [class*="bg-[#0a"] {
-    background-color: hsl(0 0% 98%) !important;
-  }
-  
-  .light [class*="border-white/"] {
-    border-color: hsl(217 19% 85%) !important;
-  }
-  
-  .light [class*="bg-white/"][class*="hover:"] {
-    background-color: hsl(217 19% 92%) !important;
-  }
-  
-  .light [class*="bg-black/"] {
-    background-color: hsl(0 0% 100%) !important;
+
+  /* Labels - uppercase and tracked */
+  label {
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -142,11 +215,18 @@
   [data-testid="vnc-container"] * canvas {
     cursor: crosshair !important;
   }
-  
+
   canvas[class*="vnc"],
   canvas[class*="rfb"],
   .vnc-screen canvas,
   div[class*="vnc"] canvas {
     cursor: crosshair !important;
+  }
+
+  /* Hide reCAPTCHA v3 badge - branding is shown on forms instead */
+  .grecaptcha-badge {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 }

@@ -17,37 +17,65 @@ Simple deployment workflow for OzVPS Panel - separate production and development
 Use the **unified installer** that works for both production and development:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/main/public/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/rorywood/ozvps/main/public/install.sh | sudo bash
+```
+
+Or download and run directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rorywood/ozvps/main/scripts/ozvps-install.sh -o ozvps-install.sh
+sudo bash ozvps-install.sh --prod  # For production
+sudo bash ozvps-install.sh --dev   # For development
 ```
 
 The installer will:
-1. Ask which environment (Production or Development)
+1. Ask which environment (Production or Development) if no flag provided
 2. Collect all configuration upfront (API keys, database, SSL, etc.)
 3. Show a summary and confirm
 4. Install everything automatically with progress indicators
+5. Install the `ozvps` control panel command
 
 **What it installs:**
-- ✅ Node.js 20.x
-- ✅ PM2 process manager
-- ✅ NGINX + SSL (optional)
-- ✅ PostgreSQL database
-- ✅ Downloads code from appropriate GitHub branch
-- ✅ Configures all services
-- ✅ Installs update command
+- Node.js 20.x
+- PM2 process manager
+- NGINX + SSL (optional)
+- PostgreSQL database
+- Downloads code from appropriate GitHub branch
+- Configures all services
+- Installs `ozvps` control command
 
-### Alternative: Environment-Specific Installers
+## Control Panel
 
-If you prefer separate installers:
+After installation, use the `ozvps` command to manage your installation:
 
-**Production Server:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/main/public/install-prod.sh | sudo bash
+# Open interactive control panel menu
+sudo ozvps
+
+# Direct update (no menu)
+sudo ozvps --update
+
+# Show status dashboard
+sudo ozvps --status
+
+# Show help
+sudo ozvps --help
 ```
 
-**Development Server:**
-```bash
-curl -sSL https://raw.githubusercontent.com/rorywood/ozvps/claude/dev-l5488/public/install-dev.sh | sudo bash
-```
+**Control Panel Features:**
+- Application status and health monitoring
+- Database status and table count
+- Live log viewing
+- System resource monitoring
+- One-click restart/stop
+- Database migrations
+- Billing job execution
+- Application updates
+- Database backup and restore
+- SSL certificate renewal
+- Configuration viewing and editing
+- Email testing
+- Self-updating
 
 ## Configuration
 
@@ -55,12 +83,14 @@ The unified installer collects all configuration during setup, so manual editing
 
 ```bash
 sudo nano /opt/ozvps-panel/.env
+# Or use the control panel:
+sudo ozvps  # Select option 14 (Edit .env File)
 ```
 
 **Configuration Variables:**
 - `DATABASE_URL` - PostgreSQL connection string
-- `VIRTFUSION_API_URL` - https://panel.ozvps.com.au
-- `VIRTFUSION_API_KEY` - Your VirtFusion API key
+- `VIRTFUSION_PANEL_URL` - https://panel.ozvps.com.au
+- `VIRTFUSION_API_TOKEN` - Your VirtFusion API token
 - `STRIPE_SECRET_KEY` - Stripe API key (TEST for dev, LIVE for prod)
 - `STRIPE_PUBLISHABLE_KEY` - Stripe public key
 - `AUTH0_*` - Auth0 authentication settings
@@ -74,6 +104,8 @@ After editing, restart the application:
 
 ```bash
 sudo pm2 restart ozvps-panel
+# Or use the control panel:
+sudo ozvps  # Select option 5 (Restart Application)
 ```
 
 ## Daily Workflow
@@ -91,7 +123,7 @@ sudo pm2 restart ozvps-panel
 3. Update dev server:
    ```bash
    ssh dev-server
-   sudo update-ozvps-dev
+   sudo ozvps --update
    ```
 4. Test at https://dev.ozvps.com.au
 
@@ -106,31 +138,38 @@ sudo pm2 restart ozvps-panel
 3. Update production server:
    ```bash
    ssh prod-server
-   sudo update-ozvps-prod
+   sudo ozvps --update
    ```
 4. Verify at https://app.ozvps.com.au
 
 ## Update Commands
 
-**Production Server:**
+The `ozvps` command handles updates for both environments automatically:
+
 ```bash
-sudo update-ozvps-prod
+# Interactive menu
+sudo ozvps
+# Select option 9 (Update Application)
+
+# Or direct update
+sudo ozvps --update
 ```
 
-**Development Server:**
-```bash
-sudo update-ozvps-dev
-```
-
-Both commands will:
+Updates will:
+- Check for new commits
 - Create a backup
 - Download latest code from GitHub
 - Update dependencies
+- Run database migrations
 - Restart PM2 service
+- Verify application health
 
 ## Useful Commands
 
 ```bash
+# Open control panel
+sudo ozvps
+
 # Check application status
 pm2 status
 
@@ -155,13 +194,17 @@ sudo certbot renew --dry-run
 If you need to rollback to a previous version:
 
 ```bash
+# Use the control panel
+sudo ozvps  # Select option 11 (Restore Backup)
+
+# Or manually:
 # List backups
-ls -la /opt/ozvps-panel.backup.*
+ls -la /opt/ozvps-backups/
 
 # Restore from backup
 sudo pm2 stop ozvps-panel
 sudo mv /opt/ozvps-panel /opt/ozvps-panel.failed
-sudo cp -r /opt/ozvps-panel.backup.YYYYMMDDHHMMSS /opt/ozvps-panel
+sudo tar -xzf /opt/ozvps-backups/pre-update_YYYYMMDD_HHMMSS.tar.gz -C /opt/ozvps-panel
 sudo pm2 restart ozvps-panel
 ```
 
@@ -195,9 +238,11 @@ cat /var/log/nginx/error.log
 ### File Locations
 - **Application:** `/opt/ozvps-panel`
 - **Configuration:** `/opt/ozvps-panel/.env`
-- **NGINX Config:** `/etc/nginx/sites-available/ozvps-prod` or `ozvps-dev`
+- **Environment marker:** `/opt/ozvps-panel/.ozvps-env`
+- **Branch marker:** `/opt/ozvps-panel/.ozvps-branch`
+- **NGINX Config:** `/etc/nginx/sites-available/ozvps-production` or `ozvps-development`
 - **PM2 Logs:** `~/.pm2/logs/`
-- **Backups:** `/opt/ozvps-panel.backup.*`
+- **Backups:** `/opt/ozvps-backups/`
 
 ### Ports
 - **Application:** 3000 (internal)

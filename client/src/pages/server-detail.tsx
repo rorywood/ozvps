@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { 
-  ArrowLeft, 
-  Power, 
-  RotateCw, 
-  TerminalSquare, 
-  Cpu, 
-  HardDrive, 
-  Network, 
+import {
+  ArrowLeft,
+  Power,
+  RotateCw,
+  TerminalSquare,
+  Cpu,
+  HardDrive,
+  Network,
   Activity,
   HardDrive as StorageIcon,
   Loader2,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   X,
   ArrowDownToLine,
+  Globe,
   ArrowUpFromLine,
   Gauge,
   Calendar,
@@ -37,7 +39,9 @@ import {
   Key,
   Eye,
   EyeOff,
-  Shield
+  Shield,
+  Server,
+  Mail
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -123,68 +127,50 @@ export default function ServerDetail() {
   
   // Cancellation state
   const [cancellationReason, setCancellationReason] = useState<string>("");
-  const [immediateConfirmOpen, setImmediateConfirmOpen] = useState(false);
   const [immediateConfirmText, setImmediateConfirmText] = useState("");
   
   // Password reset state
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
-  
-  // Persistent setup credentials (survives dialog close and page refreshes)
-  const [savedCredentials, setSavedCredentials] = useState<{
-    serverIp: string;
-    username: string;
-    password: string;
-  } | null>(() => {
-    // Restore from sessionStorage on mount (guard for SSR)
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = sessionStorage.getItem(`credentials:${serverId}`);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null;
-  });
-  const [showSavedCredentials, setShowSavedCredentials] = useState(() => {
+
+  // Track if credentials were emailed (persists after reinstallTask.reset())
+  const [credentialsWereEmailed, setCredentialsWereEmailed] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
-      return !!sessionStorage.getItem(`credentials:${serverId}`);
+      return sessionStorage.getItem(`credentialsEmailed:${serverId}`) === 'true';
     } catch {
       return false;
     }
   });
-  const [showCredentialsPassword, setShowCredentialsPassword] = useState(false);
-  
-  // Persist credentials to sessionStorage when they change
-  const updateSavedCredentials = (creds: { serverIp: string; username: string; password: string } | null) => {
-    setSavedCredentials(creds);
+
+  // Track if banner was dismissed (for immediate UI response)
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
     try {
-      if (creds) {
-        sessionStorage.setItem(`credentials:${serverId}`, JSON.stringify(creds));
-      } else {
-        sessionStorage.removeItem(`credentials:${serverId}`);
-      }
+      return sessionStorage.getItem(`credentialsDismissed:${serverId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Track when server last booted to disable password reset for 2 minutes
+  const [serverBootedAt, setServerBootedAt] = useState<number | null>(null);
+  const [isPasswordResetDisabled, setIsPasswordResetDisabled] = useState(false);
+
+  // Tab state for controlled navigation
+  const [activeTab, setActiveTab] = useState("overview");
+
+  // Dismiss credentials banner
+  const dismissCredentials = () => {
+    setBannerDismissed(true);
+    try {
+      sessionStorage.setItem(`credentialsDismissed:${serverId}`, 'true');
     } catch {
       // Ignore storage errors
     }
   };
-  
-  // Auto-hide credentials banner after 2 minutes
-  useEffect(() => {
-    if (showSavedCredentials && savedCredentials) {
-      const timer = setTimeout(() => {
-        setShowSavedCredentials(false);
-        updateSavedCredentials(null);
-      }, 2 * 60 * 1000); // 2 minutes
-      return () => clearTimeout(timer);
-    }
-  }, [showSavedCredentials, savedCredentials]);
-  
-  
+
   // Setup progress minimized state (persistent banner when minimized)
   const [setupMinimized, setSetupMinimized] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -211,12 +197,41 @@ export default function ServerDetail() {
   
   const reinstallTask = useReinstallTask(serverId || '');
 
+  // FIXED: Simplified - isSetupMode is already synced with sessionStorage on mount
+  // No need to check sessionStorage again, trust the state
+  const isInitialSetup = isSetupMode;
+
+  // Check if we're in setup mode before loading server data
+  // This prevents the flash of server overview before showing checklist
+  const isCheckingSetupMode = isInitialSetup || (reinstallTask.isActive && reinstallTask.status !== 'complete');
+
   const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 10000, // Poll every 10 seconds for status updates
+    refetchInterval: (data) => {
+      // During provisioning/setup, poll aggressively (1 second)
+      // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
+      // If server needs setup or is provisioning, poll faster
+      if (data?.needsSetup || data?.status === 'provisioning') {
+        return 1000; // REDUCED from 500ms to 1s to be less aggressive
+      }
+      // Normal operation: poll every 2 seconds for real-time updates
+      return 2000; // REDUCED from 1s to 2s for better performance
+    },
   });
+
+  // Auto-dismiss banner after 60 seconds once it's visible
+  const bannerVisible = credentialsWereEmailed && server?.status === 'running' && !bannerDismissed;
+  useEffect(() => {
+    if (!bannerVisible) return;
+
+    const timer = setTimeout(() => {
+      dismissCredentials();
+    }, 60 * 1000);
+
+    return () => clearTimeout(timer);
+  }, [bannerVisible]);
 
   // Dynamic page title
   useDocumentTitle(server?.name ? `${server.name}` : 'Server Details');
@@ -247,119 +262,120 @@ export default function ServerDetail() {
   });
   
   
-  // Fetch cancellation status
+  // Fetch cancellation status - poll aggressively for real-time deletion status
   const { data: cancellationData, refetch: refetchCancellation } = useQuery({
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
-    enabled: !!serverId
+    enabled: !!serverId,
+    refetchInterval: 1000, // Poll every 1 second for deletion progress
   });
 
-  // Live stats polling every 5 seconds
+  // Live stats polling - fast updates for real-time monitoring
   const { data: liveStats } = useQuery({
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && server?.status === 'running',
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: 1000, // Poll every 1 second for real-time stats
   });
 
   // Console lock hook - must be after server query
   const consoleLock = useConsoleLock(serverId || '', server?.status);
-  
-  // Clear building flags when server no longer needs setup AND reinstall task is complete
+
+  // Auto-clear stale flags when user navigates back after setup is complete
+  // This handles the case where setup completed in another tab/window
   useEffect(() => {
-    if (server && !server.needsSetup && serverId && !reinstallTask.isActive) {
-      try {
-        // Server setup is complete and task is done, clear any leftover building flags
-        if (sessionStorage.getItem(`setupMode:${serverId}`) || 
-            sessionStorage.getItem(`setupMinimized:${serverId}`)) {
-          sessionStorage.removeItem(`setupMode:${serverId}`);
-          sessionStorage.removeItem(`setupMinimized:${serverId}`);
-          setIsSetupMode(false);
-          setSetupMinimized(false);
+    if (server && !server.needsSetup && serverId) {
+      // Only clear if setup mode is OFF (auto-dismiss already handled it)
+      // AND there are stale flags in sessionStorage
+      if (!isSetupMode) {
+        try {
+          const hasSetupFlags = sessionStorage.getItem(`setupMode:${serverId}`) ||
+                                sessionStorage.getItem(`setupMinimized:${serverId}`);
+
+          if (hasSetupFlags) {
+            sessionStorage.removeItem(`setupMode:${serverId}`);
+            sessionStorage.removeItem(`setupMinimized:${serverId}`);
+          }
+        } catch (e) {
+          console.error('Error clearing setup flags:', e);
         }
-      } catch {
-        // Ignore storage errors
       }
     }
-  }, [server?.needsSetup, serverId, reinstallTask.isActive]);
-  
-  // Set credentials in state when they become available (persists to sessionStorage)
+  }, [server?.needsSetup, serverId, isSetupMode]);
+
+  // CRITICAL: Start reinstall task immediately when server needsSetup is detected
+  // This ensures the checklist UI activates immediately without any flash of overview
   useEffect(() => {
-    if (reinstallTask.credentials && serverId && !savedCredentials) {
-      updateSavedCredentials(reinstallTask.credentials);
-      setShowSavedCredentials(true);
+    // CRITICAL: Don't restart setup if it was already completed once
+    // Check sessionStorage for completion flag to prevent race conditions during query refetches
+    try {
+      const setupCompleted = sessionStorage.getItem(`setupCompleted:${serverId}`) === 'true';
+      if (setupCompleted) {
+        // Setup was already completed, don't restart
+        return;
+      }
+    } catch {
+      // Ignore storage errors
     }
-  }, [reinstallTask.credentials, serverId, savedCredentials]);
-  
-  // Refetch server data when build completes to update needsSetup status
-  // This ensures the UI transitions properly after a build finishes (even if tabbed out)
+
+    if (server && server.needsSetup && !reinstallTask.isActive) {
+      // Server needs setup but task isn't tracking it yet
+      // Start tracking immediately to show checklist
+      reinstallTask.startTask(undefined, undefined, server.primaryIp);
+      // Ensure setupMode is set
+      updateSetupMode(true);
+    }
+  }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
+
+  // Note: Auto-dismiss removed - user must click "Continue to Server" button
+  // This ensures they see the "Server is Ready" banner and credentials
+
+  // Mark when build starts (so banner shows after auto-dismiss)
   useEffect(() => {
-    if (reinstallTask.status === 'complete' && serverId) {
+    if (reinstallTask.isActive && !credentialsWereEmailed) {
+      setCredentialsWereEmailed(true);
+      try {
+        sessionStorage.setItem(`credentialsEmailed:${serverId}`, 'true');
+      } catch {}
+    }
+  }, [reinstallTask.isActive, serverId, credentialsWereEmailed]);
+
+  // Refetch server data when build completes OR enters rebooting status
+  useEffect(() => {
+    if ((reinstallTask.status === 'complete' || reinstallTask.status === 'rebooting') && serverId) {
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
   }, [reinstallTask.status, serverId, queryClient]);
-  
-  // Track if we've already triggered auto-password-reset to avoid duplicates
-  const autoPasswordResetTriggeredRef = useRef(false);
-  const autoPasswordResetInProgressRef = useRef(false);
-  
-  // Auto-fetch credentials when setup completes but no password was returned from build
-  // This handles cases where VirtFusion doesn't include the password in the build response
-  // Uses a 2-second delay to allow credentials to be populated from the build response first
+
+  // Track server boot to disable password reset for 60 seconds (guest agent needs time)
+  const prevServerStatus = useRef<string | null>(null);
   useEffect(() => {
-    const shouldAutoReset = 
-      reinstallTask.status === 'complete' && 
-      !reinstallTask.credentials && 
-      !savedCredentials &&
-      serverId && 
-      server?.primaryIp &&
-      !autoPasswordResetTriggeredRef.current &&
-      !autoPasswordResetInProgressRef.current;
-    
-    if (shouldAutoReset) {
-      autoPasswordResetTriggeredRef.current = true;
-      autoPasswordResetInProgressRef.current = true;
-      
-      // Add a short delay before auto-reset to give time for any async credential updates
-      const timeoutId = setTimeout(() => {
-        // Double-check we still need credentials after the delay
-        if (!savedCredentials) {
-          api.resetServerPassword(serverId).then(response => {
-            if (response.password) {
-              const creds = {
-                serverIp: server.primaryIp || 'N/A',
-                username: response.username || 'root',
-                password: response.password
-              };
-              updateSavedCredentials(creds);
-              setShowSavedCredentials(true);
-            }
-          }).catch(() => {
-            // Silent fail - user can manually reset password
-          }).finally(() => {
-            autoPasswordResetInProgressRef.current = false;
-          });
-        } else {
-          autoPasswordResetInProgressRef.current = false;
-        }
-      }, 2000);
-      
-      return () => clearTimeout(timeoutId);
+    if (server?.status === 'running' && prevServerStatus.current !== 'running') {
+      setServerBootedAt(Date.now());
+      setIsPasswordResetDisabled(true);
+
+      const timer = setTimeout(() => {
+        setIsPasswordResetDisabled(false);
+      }, 60 * 1000);
+
+      return () => clearTimeout(timer);
     }
-    
-    // Reset the flag when task is reset
-    if (!reinstallTask.isActive) {
-      autoPasswordResetTriggeredRef.current = false;
-    }
-  }, [reinstallTask.status, reinstallTask.credentials, reinstallTask.isActive, savedCredentials, serverId, server?.primaryIp]);
+    prevServerStatus.current = server?.status || null;
+  }, [server?.status]);
 
   const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
   
   useSyncPowerActions(server ? [server] : []);
-  
-  const displayStatus = server ? getDisplayStatus(server.id, server.status) : 'unknown';
+
+  // Get display status (reboot, starting, stopping, deleting, or actual)
+  const activeCancellation = cancellationData?.cancellation;
+  const displayStatus = server ? getDisplayStatus(
+    server.id,
+    server.status,
+    activeCancellation ? { mode: activeCancellation.mode || 'grace', status: activeCancellation.status } : undefined
+  ) : 'unknown';
   const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
 
   const powerMutation = useMutation({
@@ -379,10 +395,8 @@ export default function ServerDetail() {
                      "Shutting down server...",
       });
       
-      // Start console lock for boot/reboot actions
-      if (action === 'boot' || action === 'reboot') {
-        consoleLock.startLock(action);
-      }
+      // Start console lock for all power actions to prevent button spamming
+      consoleLock.startLock(action);
       
       // Poll for status updates with stabilization delay
       let completionDetectedAt: number | null = null;
@@ -460,7 +474,12 @@ export default function ServerDetail() {
       
       // Mark as reinstall mode (not initial setup)
       updateSetupMode(false);
-      
+
+      // Clear the credentials dismissed flag so banner shows again after reinstall
+      try {
+        sessionStorage.removeItem(`credentialsDismissed:${serverId}`);
+      } catch {}
+
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
@@ -496,11 +515,19 @@ export default function ServerDetail() {
       
       // Mark as setup mode (initial setup, not reinstall)
       updateSetupMode(true);
-      
+
+      // Clear setupCompleted and credentialsDismissed flags
+      try {
+        sessionStorage.removeItem(`setupCompleted:${serverId}`);
+        sessionStorage.removeItem(`credentialsDismissed:${serverId}`);
+      } catch {
+        // Ignore storage errors
+      }
+
       // Start the reinstall task polling with the generated password and server IP
       const password = response.data?.generatedPassword;
       reinstallTask.startTask(undefined, password, server?.primaryIp);
-      
+
       // Refetch server data to update the UI
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       
@@ -547,20 +574,19 @@ export default function ServerDetail() {
       api.requestCancellation(id, reason, mode),
     onSuccess: (_, variables) => {
       setCancellationReason("");
-      setImmediateConfirmOpen(false);
       setImmediateConfirmText("");
       refetchCancellation();
       toast({
-        title: variables.mode === 'immediate' ? "Immediate Deletion Scheduled" : "Cancellation Requested",
-        description: variables.mode === 'immediate' 
-          ? "Your server will be permanently deleted within 5 minutes. This cannot be undone."
-          : "Your server will be deleted in 30 days. You can revoke this at any time.",
+        title: variables.mode === 'immediate' ? "Server Destruction Started" : "Scheduled for Deletion",
+        description: variables.mode === 'immediate'
+          ? "Your server is being destroyed. This cannot be undone."
+          : "Your server will be deleted in 30 days. You can cancel this anytime.",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Cancellation Failed",
-        description: error.message || "Failed to request cancellation. Please try again.",
+        title: "Failed",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     }
@@ -892,7 +918,23 @@ export default function ServerDetail() {
     });
   }, [allTemplates, osSearchQuery, selectedCategory]);
 
-  if (isLoading) {
+  // If reinstall task is active, show checklist immediately (prevents flash of overview)
+  if (isCheckingSetupMode && !isError) {
+    // Still loading server data but we know we're in setup mode
+    if (isLoading || !server) {
+      return (
+        <AppShell>
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
+            <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+            <p>Loading server setup...</p>
+          </div>
+        </AppShell>
+      );
+    }
+
+    // Server loaded, show checklist (this will be handled by the isSettingUp check below)
+    // Continue to normal render flow
+  } else if (isLoading) {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
@@ -904,6 +946,31 @@ export default function ServerDetail() {
   }
 
   if (isError || !server) {
+    // Don't show error if we're in active setup/reinstall mode - server might not be fully ready
+    const serverNeedsSetup = server?.needsSetup === true;
+    // Show loading state if reinstall task is active (any status except failed)
+    // This prevents "Server not found" flashing during reinstall
+    const taskIsActive = reinstallTask.isActive && reinstallTask.status !== 'failed';
+
+    if (taskIsActive || serverNeedsSetup || isLoading) {
+      // Customize message based on task status
+      let loadingMessage = 'Server is being provisioned...';
+      if (reinstallTask.status === 'rebooting') {
+        loadingMessage = 'Server is rebooting...';
+      } else if (reinstallTask.status === 'complete') {
+        loadingMessage = 'Loading server details...';
+      }
+
+      return (
+        <AppShell>
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground h-[50vh]">
+            <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+            <p>{loadingMessage}</p>
+          </div>
+        </AppShell>
+      );
+    }
+
     return (
       <AppShell>
          <div className="flex flex-col items-center justify-center py-20 text-red-400 h-[50vh]">
@@ -919,203 +986,82 @@ export default function ServerDetail() {
 
   const isSuspended = server?.suspended === true;
   const needsSetup = server?.needsSetup === true;
-  
-  // Check if initial setup is in progress (blocks server usage until complete)
-  // reinstallTask now hydrates from backend on mount, so isActive is authoritative
-  // isSetupMode distinguishes initial setup from reinstall (for UI purposes)
-  const isSettingUp = reinstallTask.isActive && (needsSetup || isSetupMode);
-  
+
+  // Determine if server is still being provisioned/built
+  // Show checklist if ANY of these conditions are true:
+  // 1. Server explicitly needs setup (commissioned=0)
+  // 2. Server status is 'provisioning' (actively building)
+  // 3. Server is 'setting up' per our display status
+  // 4. Reinstall task is active and not complete
+  const serverDisplayStatus = displayStatus;
+  const isProvisioningOrBuilding =
+    needsSetup ||
+    server?.status === 'provisioning' ||
+    serverDisplayStatus === 'setting up' ||
+    (reinstallTask.isActive && reinstallTask.status !== 'complete');
+
+  // SIMPLE LOGIC: Show checklist if setup mode is on AND server isn't ready yet
+  // As soon as setup mode is cleared (by auto-dismiss), show overview
+  const isSettingUp = isSetupMode && (needsSetup || server?.status === 'provisioning' || reinstallTask.isActive);
+
   // Also block server usage during ANY active build task (setup or reinstall)
   // This ensures cross-session protection even without sessionStorage
 
-  // If server needs setup, show the setup wizard
-  if (needsSetup && !reinstallTask.isActive) {
+  // REMOVED: This "waiting" screen causes an extra flash
+  // Instead, we go straight to the checklist which handles all states
+
+  // If server is being provisioned, show full-page provisioning view (DO style)
+  if (isSettingUp) {
     return (
       <AppShell>
-        <div className="py-6 space-y-6">
+        <div className="max-w-3xl mx-auto py-12 space-y-8">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-6">
             <Link href="/servers">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back-setup">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-display font-bold text-foreground tracking-tight">{server.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}</h1>
-              <p className="text-sm text-muted-foreground">Complete setup to start using your server</p>
+              <h1 className="text-2xl font-bold text-foreground">
+                {server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+              </h1>
+              <p className="text-sm text-muted-foreground">{server?.primaryIp}</p>
             </div>
           </div>
-          
-          {/* Setup Wizard Card */}
-          <div className="glass-card rounded-xl border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/20 to-blue-500/20 p-6 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-primary/20">
-                  <Settings className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-display font-semibold text-foreground">Setup Your Server</h2>
-                  <p className="text-sm text-muted-foreground">Choose an operating system and set your hostname</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Server Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/50 border border-border">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Plan</p>
-                  <p className="text-sm font-medium text-foreground">{server.plan.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
-                  <p className="text-sm font-medium text-foreground">{server.location.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">IP Address</p>
-                  <p className="text-sm font-mono text-foreground">{server.primaryIp}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                  <p className="text-sm font-medium text-yellow-400">Awaiting Setup</p>
-                </div>
-              </div>
-              
-              {/* Hostname Input */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground">Hostname</Label>
-                <Input
-                  placeholder="e.g. web-server-1"
-                  value={setupHostname}
-                  onChange={(e) => handleSetupHostnameChange(e.target.value)}
-                  className={cn(
-                    "bg-card/30 border-border text-foreground placeholder:text-muted-foreground focus:border-primary",
-                    setupHostnameError && "border-red-500 focus:border-red-500"
-                  )}
-                  data-testid="input-setup-hostname"
-                />
-                {setupHostnameError && (
-                  <p className="text-xs text-red-400">{setupHostnameError}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
-                </p>
-              </div>
-              
-              {/* OS Selection */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-foreground">Operating System</Label>
-                  <div className="relative w-48">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search OS..."
-                      value={setupOsSearchQuery}
-                      onChange={(e) => setSetupOsSearchQuery(e.target.value)}
-                      className="pl-9 h-8 bg-card/30 border-border text-foreground text-sm"
-                      data-testid="input-setup-search"
-                    />
-                  </div>
-                </div>
-                
-                {/* OS Grid */}
-                {loadingSetupTemplates ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : setupGroupedTemplates.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No operating systems found
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {setupGroupedTemplates.map(({ category, templates }) => (
-                      <div key={category}>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                          {category}
-                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                            {templates.length}
-                          </span>
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                          {templates.map(template => {
-                            const templateId = String(template.id);
-                            const isSelected = setupSelectedOs === templateId;
-                            const displayName = template.version && !template.name.includes(template.version)
-                              ? `${template.name} ${template.version}`
-                              : template.name;
-                            
-                            return (
-                              <button
-                                key={templateId}
-                                onClick={() => setSetupSelectedOs(templateId)}
-                                className={cn(
-                                  "flex flex-col items-center p-4 rounded-xl border transition-all text-center",
-                                  isSelected
-                                    ? "bg-primary/15 border-primary ring-1 ring-primary/50"
-                                    : "bg-muted/20 border-border hover:bg-muted/30 hover:border-border"
-                                )}
-                                data-testid={`button-setup-os-${templateId}`}
-                              >
-                                <img
-                                  src={getOsLogoUrl({ id: template.id, name: template.name, distro: template.distro })}
-                                  alt={template.name}
-                                  className="h-10 w-10 object-contain mb-2"
-                                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
-                                />
-                                <span className="text-sm font-medium text-foreground leading-tight">
-                                  {displayName}
-                                </span>
-                                {isSelected && (
-                                  <div className="mt-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                                    <Check className="h-3 w-3 text-foreground" />
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              {/* Setup Button */}
-              <Button
-                className="w-full bg-primary hover:bg-primary/90 text-foreground font-medium py-3 h-12"
-                onClick={handleSetup}
-                disabled={!setupSelectedOs || !isSetupHostnameValid || setupMutation.isPending}
-                data-testid="button-start-setup"
-              >
-                {setupMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Starting Setup...
-                  </>
-                ) : (
-                  <>
-                    <Rocket className="h-5 w-5 mr-2" />
-                    Setup Server
-                  </>
-                )}
-              </Button>
-              
-              {!isSetupHostnameValid && setupHostname.trim() === '' && (
-                <p className="text-xs text-muted-foreground text-center">
-                  Enter a hostname to continue
-                </p>
-              )}
-            </div>
-          </div>
+
+          {/* Full-page provisioning view */}
+          <SetupProgressChecklist
+            state={reinstallTask}
+            serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+            onDismiss={() => {
+              reinstallTask.reset();
+              updateSetupMode(false);
+              updateSetupMinimized(false);
+              try {
+                sessionStorage.removeItem(`setupMode:${serverId}`);
+                sessionStorage.removeItem(`setupMinimized:${serverId}`);
+                sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
+              } catch {}
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+              setActiveTab('overview');
+            }}
+            onClose={() => {
+              reinstallTask.reset();
+              updateSetupMode(false);
+              updateSetupMinimized(false);
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+            }}
+          />
         </div>
       </AppShell>
     );
   }
 
   // If server has immediate mode cancellation OR is in processing status (VirtFusion deleting), show locked deletion state
-  const activeCancellation = cancellationData?.cancellation;
-  const isBeingDeleted = activeCancellation && 
+  const isBeingDeleted = activeCancellation &&
     (activeCancellation.mode === 'immediate' || activeCancellation.status === 'processing');
   
   if (isBeingDeleted && activeCancellation) {
@@ -1124,71 +1070,92 @@ export default function ServerDetail() {
     const timeRemaining = Math.max(0, scheduledAt.getTime() - now.getTime());
     const minutesRemaining = Math.ceil(timeRemaining / (1000 * 60));
     const isProcessing = activeCancellation.status === 'processing';
-    
+
     return (
       <AppShell>
-        <div className="flex flex-col items-center justify-center py-20 h-[70vh]">
-          <div className="max-w-md mx-auto text-center space-y-6">
-            {/* Animated deletion icon */}
-            <div className="relative mx-auto w-24 h-24">
-              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ animationDuration: '2s' }} />
-              <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-red-500/30 border-2 border-red-500/50">
-                <Trash2 className="h-10 w-10 text-red-400" />
+        <div className="max-w-2xl mx-auto py-12">
+          {/* Back button */}
+          <Link href="/servers">
+            <Button variant="ghost" className="mb-6">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Servers
+            </Button>
+          </Link>
+
+          {/* Server info card */}
+          <Card className="p-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <Server className="h-8 w-8 text-muted-foreground" />
               </div>
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-foreground">{server.name}</h1>
+                <p className="text-sm text-muted-foreground">{server.primaryIp}</p>
+              </div>
+              <Badge variant="destructive" className="h-7">
+                {isProcessing ? 'Removing' : 'Queued'}
+              </Badge>
             </div>
-            
-            <div className="space-y-2">
-              <h2 className="text-2xl font-display font-bold text-foreground">
-                {isProcessing ? 'Server Deletion In Progress' : 'Server Queued for Deletion'}
-              </h2>
-              <p className="text-muted-foreground">
-                <span className="font-semibold text-foreground">{server.name}</span> {isProcessing ? 'is being permanently deleted.' : 'will be permanently deleted shortly.'}
-              </p>
-            </div>
-            
-            {/* Status indicator */}
-            <div className="glass-card rounded-xl border border-red-500/30 p-6 bg-red-500/10">
-              {isProcessing ? (
-                <>
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
-                    <span className="text-red-400 font-medium">Actively deleting...</span>
-                  </div>
+          </Card>
+
+          {/* Status card */}
+          <Card className="p-6 border-red-500/30 bg-red-500/5">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                {isProcessing ? (
+                  <Loader2 className="h-5 w-5 text-red-400 animate-spin mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground mb-1">
+                    {isProcessing ? 'Server Removal in Progress' : 'Server Queued for Removal'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    Your server has been submitted for deletion and is now being removed from our systems.
+                    {isProcessing ? (
+                      'This server is currently being removed from our infrastructure. This process typically completes within 5 minutes.'
+                    ) : timeRemaining > 0 ? (
+                      `Removal will begin in approximately ${minutesRemaining} minute${minutesRemaining !== 1 ? 's' : ''}. Once started, the process cannot be stopped.`
+                    ) : (
+                      'Removal is about to begin. This process cannot be stopped once started.'
+                    )}
                   </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <Clock className="h-5 w-5 text-orange-400" />
-                    <span className="text-orange-400 font-medium">Queued for deletion</span>
+                </div>
+              </div>
+
+              {isProcessing && (
+                <div className="pt-4 border-t border-red-500/20">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className="text-red-400 font-medium">Removing server resources...</span>
                   </div>
-                  {timeRemaining > 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Deletion will begin in approximately {minutesRemaining} minute{minutesRemaining !== 1 ? 's' : ''}. Once started, the server will be fully removed within a few minutes.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Deletion is about to begin. The server will be fully removed within a few minutes.
-                    </p>
-                  )}
-                </>
+                </div>
               )}
             </div>
-            
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>This action cannot be stopped or reversed.</p>
-              <p>All data on this server will be permanently destroyed.</p>
-            </div>
-            
-            <Link href="/servers">
-              <Button variant="outline" className="mt-4 border-border text-foreground hover:bg-muted/50">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Return to Fleet
-              </Button>
-            </Link>
-          </div>
+          </Card>
+
+          {/* Info box */}
+          <Card className="p-6 mt-6 bg-muted/30">
+            <h3 className="font-semibold text-foreground mb-3">What happens next?</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>All data on this server will be permanently deleted</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>The IP address will be released back to the pool</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>You will no longer be charged for this server</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>This action cannot be reversed</span>
+              </li>
+            </ul>
+          </Card>
         </div>
       </AppShell>
     );
@@ -1196,153 +1163,210 @@ export default function ServerDetail() {
 
   return (
     <AppShell>
-      <div className="space-y-6 pb-20">
-        
-        {/* Building Banner - Shown when setup is minimized (but not when complete) */}
-        {reinstallTask.isActive && isSetupMode && setupMinimized && reinstallTask.status !== 'complete' && (
-          <div 
-            className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/30 transition-colors" 
-            data-testid="banner-building"
-            onClick={() => updateSetupMinimized(false)}
-          >
+      <div className="space-y-6 pt-6 pb-20">
+
+        {/* Credentials Emailed Banner - Shows after server provisioning completes, auto-dismisses after 60s */}
+        {bannerVisible && (
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-5 mb-8" data-testid="banner-credentials">
             <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 text-blue-400 animate-spin flex-shrink-0" />
+              <Mail className="h-5 w-5 text-primary flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-primary">Your Server is Ready!</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    SSH login credentials have been emailed to your account email address.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Check your inbox for login details. Don't forget to check your spam folder if you don't see it.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={dismissCredentials}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+        )}
+
+
+        {/* Overdue/Unpaid Banner */}
+        {server.billing?.status === 'unpaid' && !isSuspended && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-overdue">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-blue-300">Server Building</h3>
-                <p className="text-sm text-blue-300/80">
-                  Your server is being set up. Click to view progress. ({reinstallTask.percent}% complete)
+                <h3 className="font-semibold text-red-300">Payment Overdue</h3>
+                <p className="text-sm text-red-300/80">
+                  Your server payment is overdue. Please add funds to avoid suspension
+                  {server.billing?.suspendAt && (
+                    <> by {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</>
+                  )}.
                 </p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="border-blue-400/50 text-blue-300 hover:bg-blue-500/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                updateSetupMinimized(false);
-              }}
-            >
-              View Progress
-            </Button>
-          </div>
-        )}
-        
-        {/* Saved Credentials Banner - Shows after build completes and setup dialog closes */}
-        {showSavedCredentials && savedCredentials && (!reinstallTask.isActive || reinstallTask.status === 'complete') && (
-          <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4" data-testid="banner-credentials">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <div>
-                  <h3 className="font-semibold text-green-300">SSH Login Credentials</h3>
-                  <p className="text-sm text-green-300/80">
-                    Save these credentials - they won't be shown again
-                  </p>
-                </div>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-8 w-8 text-green-400 hover:bg-green-500/20"
-                onClick={() => {
-                  setShowSavedCredentials(false);
-                  updateSavedCredentials(null);
-                }}
-                data-testid="button-close-credentials"
-              >
-                <X className="h-4 w-4" />
+            <Link href="/billing">
+              <Button variant="outline" size="sm" className="border-red-500/50 text-red-300 hover:bg-red-500/20">
+                Add Funds
               </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Server IP</span>
-                  <span className="font-mono text-green-300">{savedCredentials.serverIp}</span>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
-                  onClick={() => {
-                    navigator.clipboard.writeText(savedCredentials.serverIp);
-                    toast({ title: "Copied", description: "Server IP copied to clipboard" });
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Username</span>
-                  <span className="font-mono text-green-300">{savedCredentials.username}</span>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-7 w-7 text-green-400 hover:bg-green-500/20"
-                  onClick={() => {
-                    navigator.clipboard.writeText(savedCredentials.username);
-                    toast({ title: "Copied", description: "Username copied to clipboard" });
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="bg-card/30 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Password</span>
-                  <span className="font-mono text-green-300">
-                    {showCredentialsPassword ? savedCredentials.password : '••••••••••••'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
-                    onClick={() => setShowCredentialsPassword(!showCredentialsPassword)}
-                    data-testid="button-toggle-password-visibility"
-                  >
-                    {showCredentialsPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
-                    onClick={() => {
-                      navigator.clipboard.writeText(savedCredentials.password);
-                      toast({ title: "Copied", description: "Password copied to clipboard" });
-                      // Dismiss the credentials banner after copying password
-                      setShowSavedCredentials(false);
-                      updateSavedCredentials(null);
-                    }}
-                    data-testid="button-copy-password"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
+            </Link>
           </div>
         )}
-        
+
         {/* Suspension Banner */}
         {isSuspended && (
-          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center gap-3" data-testid="banner-suspended">
-            <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
-            <div>
-              <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
-              <p className="text-sm text-yellow-300/80">
-                Please contact support for assistance.
-              </p>
+          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-suspended">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
+                <p className="text-sm text-yellow-300/80">
+                  {server.billing?.status === 'suspended'
+                    ? 'Payment is overdue. Please add funds to restore your server.'
+                    : 'Please contact support for assistance.'}
+                </p>
+              </div>
             </div>
+            {server.billing?.status === 'suspended' ? (
+              <Link href="/billing">
+                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
+                  Add Funds
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/support">
+                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
+                  Open Ticket
+                </Button>
+              </Link>
+            )}
           </div>
         )}
         
-        {/* Header Section */}
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 pb-6 border-b border-border">
+        {/* DigitalOcean-style Layout: Sidebar + Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+
+          {/* LEFT SIDEBAR - Server Info */}
           <div className="space-y-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Plan</p>
+                  <p className="text-sm font-semibold text-foreground">{server.plan?.name || 'Unknown Plan'}</p>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Specs</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Cpu className="h-4 w-4" />
+                      <span>{server.plan.specs.vcpu} vCPU</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Activity className="h-4 w-4" />
+                      <span>{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'} RAM</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <StorageIcon className="h-4 w-4" />
+                      <span>{server.plan.specs.disk} GB Storage</span>
+                    </div>
+                    {server.plan.specs.traffic > 0 && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Globe className="h-4 w-4" />
+                        <span>{server.plan.specs.traffic >= 1000 ? `${(server.plan.specs.traffic / 1000).toFixed(0)} TB` : `${server.plan.specs.traffic} GB`} Bandwidth</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Location</p>
+                  <div className="flex items-center gap-2">
+                    {server.location?.country === 'Australia' && (
+                      <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
+                    )}
+                    <span className="text-sm text-foreground">
+                      {server.location?.name || server.location?.city || 'Unknown'}{server.location?.country ? `, ${server.location.country}` : ''}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Primary IP</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-foreground">{server.primaryIp}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        navigator.clipboard.writeText(server.primaryIp);
+                        toast({ title: "Copied to clipboard" });
+                      }}
+                      title="Copy IP address"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {server.uuid && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">UUID</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-foreground truncate" title={server.uuid}>{server.uuid}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(server.uuid);
+                          toast({ title: "Copied to clipboard" });
+                        }}
+                        title="Copy UUID"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {server.billing?.nextBillAt && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      {server.billing.status === 'unpaid' ? 'Payment Due' : 'Next Due'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {server.billing.status === 'unpaid' && (
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                      )}
+                      <p className={`text-sm font-medium ${server.billing.status === 'unpaid' ? 'text-red-400' : 'text-foreground'}`}>
+                        {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                    {server.billing.status === 'unpaid' && server.billing.suspendAt && (
+                      <p className="text-xs text-red-400/80 mt-1">
+                        Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* RIGHT MAIN CONTENT */}
+          <div className="space-y-6">
+
+        {/* Header Section */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
                <Link href="/servers">
                 <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
@@ -1411,14 +1435,15 @@ export default function ServerDetail() {
                   <span className="text-xs text-orange-400 font-medium">
                     {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
                      consoleLock.isLocked && consoleLock.action === 'reboot' ? 'Rebooting...' :
-                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Rebooting...' :
-                     consoleLock.isLocked ? 'Rebooting...' :
+                     consoleLock.isLocked && consoleLock.action === 'reinstall' ? 'Reinstalling...' :
+                     consoleLock.isLocked ? 'Processing...' :
                      displayStatus === 'starting' ? 'Starting...' :
                      displayStatus === 'rebooting' ? 'Rebooting...' :
                      displayStatus === 'stopping' ? 'Stopping...' :
                      powerActionPending === 'boot' ? 'Starting...' :
                      powerActionPending === 'reboot' ? 'Rebooting...' :
-                     powerActionPending === 'poweroff' ? 'Stopping...' :
+                     powerActionPending === 'shutdown' ? 'Shutting down...' :
+                     powerActionPending === 'poweroff' ? 'Force stopping...' :
                      'Processing...'}
                   </span>
                 </div>
@@ -1459,179 +1484,125 @@ export default function ServerDetail() {
                   <span className="text-foreground">{server.image.name}</span>
                 </div>
               )}
-              {server.billing?.nextBillAt && (
-                <div className="flex items-center gap-2">
-                  <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">NEXT BILL</div>
-                  <span className="text-foreground">
-                    {new Date(server.billing.nextBillAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="secondary" 
-              className={cn(
-                "shadow-none font-medium h-9",
-                (powerActionPending || server.status !== 'running' || isSuspended || reinstallTask.isActive)
-                  ? "bg-muted/50 text-muted-foreground border-border cursor-not-allowed" 
-                  : "bg-muted/50 hover:bg-muted text-foreground border-border"
-              )}
+          {/* DigitalOcean-style Power Controls - Prominent Buttons */}
+          <div className="flex flex-wrap items-center gap-3 mt-6">
+            {/* Primary Console Button */}
+            <Button
+              className="h-10"
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
+              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
               data-testid="button-console"
             >
-              {reinstallTask.isActive ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  {isSettingUp ? "Setting up..." : "Building..."}
-                </>
-              ) : consoleLock.isLocked ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-muted-foreground" />
-                  {consoleLock.action === 'boot' ? 'Starting...' :
-                   consoleLock.action === 'reinstall' ? 'Rebuilding...' : 'Restarting...'}
-                </>
-              ) : (
-                <>
-                  <TerminalSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                  Console
-                </>
-              )}
+              <TerminalSquare className="h-4 w-4 mr-2" />
+              Console
             </Button>
-            
+
+            {/* Power Control Buttons - Separate, Not Dropdown */}
+            {displayStatus === 'stopped' ? (
+              <Button
+                variant="outline"
+                className="h-10 border-success/50 text-success hover:bg-success/10"
+                onClick={() => handlePowerAction('boot')}
+                disabled={isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
+                data-testid="button-start"
+              >
+                <Power className="h-4 w-4 mr-2" />
+                Start
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-10 border-orange-500/50 text-orange-500 hover:bg-orange-500/10"
+                  onClick={() => handlePowerAction('reboot')}
+                  disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
+                  data-testid="button-reboot"
+                >
+                  <RotateCw className="h-4 w-4 mr-2" />
+                  Reboot
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 border-destructive/50 text-destructive hover:bg-destructive/10"
+                  onClick={() => handlePowerAction('shutdown')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
+                  data-testid="button-shutdown"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Shutdown
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => handlePowerAction('poweroff')}
+                  disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || consoleLock.isLocked || isSuspended || reinstallTask.isActive}
+                  data-testid="button-force-stop"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Force Stop
+                </Button>
+              </>
+            )}
+
+            {/* More Menu - Secondary Actions */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  className={cn(
-                    "font-medium h-9 border-0",
-                    (isSuspended || consoleLock.isLocked || reinstallTask.isActive)
-                      ? "bg-muted text-muted-foreground cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]"
-                  )}
-                  data-testid="button-power-options"
-                  disabled={!!powerActionPending || isSuspended || consoleLock.isLocked || reinstallTask.isActive}
-                >
-                  {(powerActionPending || consoleLock.isLocked || reinstallTask.isActive) ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Power className="h-4 w-4 mr-2" />
-                  )}
-                  {reinstallTask.isActive ? (isSettingUp ? "Setting up..." : "Building...") :
-                   consoleLock.isLocked && consoleLock.action === 'boot' ? "Starting..." :
-                   consoleLock.isLocked && consoleLock.action === 'reinstall' ? "Rebuilding..." :
-                   consoleLock.isLocked ? "Restarting..." : "Power Options"}
-                  {!consoleLock.isLocked && !reinstallTask.isActive && <ChevronDown className="h-3 w-3 ml-2 opacity-70" />}
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Settings className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border text-foreground">
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-green-400 focus:text-green-400"
-                    disabled={displayStatus === 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('boot')}
-                    data-testid="menu-item-start"
-                  >
-                   <Power className="h-4 w-4 mr-2" /> Start Server
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-yellow-400 focus:text-yellow-400"
-                    disabled={displayStatus !== 'running' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('reboot')}
-                    data-testid="menu-item-reboot"
-                  >
-                   <RotateCw className="h-4 w-4 mr-2" /> Reboot
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-orange-400 focus:text-orange-400"
-                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('shutdown')}
-                    data-testid="menu-item-shutdown"
-                  >
-                   <Power className="h-4 w-4 mr-2" /> Shutdown
-                 </DropdownMenuItem>
-                 <DropdownMenuItem 
-                    className="focus:bg-muted cursor-pointer text-red-400 focus:text-red-400"
-                    disabled={displayStatus === 'stopped' || isTransitioning || !!powerActionPending || isSuspended || reinstallTask.isActive}
-                    onClick={() => handlePowerAction('poweroff')}
-                    data-testid="menu-item-poweroff"
-                  >
-                   <Power className="h-4 w-4 mr-2 rotate-180" /> Force Stop
-                 </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => setPasswordResetDialogOpen(true)}
+                  disabled={isSuspended || isPasswordResetDisabled}
+                >
+                  <Key className="h-4 w-4 mr-2" /> Reset Password
+                  {isPasswordResetDisabled && <span className="text-[10px] text-muted-foreground ml-auto">(wait 1min)</span>}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        {/* Specs Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Cpu className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.vcpu} vCore</div>
-                <div className="text-xs text-muted-foreground">CPU Allocated</div>
-             </div>
-          </GlassCard>
-          
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Activity className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.ram >= 1024 ? (server.plan.specs.ram / 1024).toFixed(0) : server.plan.specs.ram} {server.plan.specs.ram >= 1024 ? 'GB' : 'MB'}</div>
-                <div className="text-xs text-muted-foreground">RAM Allocated</div>
-             </div>
-          </GlassCard>
-
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <StorageIcon className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground">{server.plan.specs.disk} GB</div>
-                <div className="text-xs text-muted-foreground">Storage Allocated</div>
-             </div>
-          </GlassCard>
-
-          <GlassCard className="p-4 flex items-center gap-4 bg-muted/20 border-border">
-             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center text-foreground/70">
-                <Network className="h-5 w-5" />
-             </div>
-             <div>
-                <div className="text-sm font-bold text-foreground" data-testid="text-traffic">
-                  {server.primaryIp !== 'N/A' ? server.primaryIp : 'No IP'}
-                </div>
-                <div className="text-xs text-muted-foreground">Primary IP</div>
-             </div>
-          </GlassCard>
-        </div>
-
-        {/* Navigation Tabs */}
-        <Tabs defaultValue="statistics" className="space-y-6">
+        {/* Navigation Tabs - Restructured to 3 Tabs (DO Style) */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6 mt-8">
           <div className="border-b border-border">
             <TabsList className="bg-transparent h-auto p-0 gap-6 w-full flex flex-wrap justify-start">
-              {["Statistics", "IP Management", "Reset Password", "Reinstallation", "Cancellation"].map(tab => (
-                 <TabsTrigger 
-                    key={tab} 
-                    value={tab.toLowerCase().replace(' ', '-')}
-                    className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-blue-500 data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
-                    data-testid={`tab-${tab.toLowerCase().replace(' ', '-')}`}
-                  >
-                    {tab}
-                 </TabsTrigger>
-              ))}
+              <TabsTrigger
+                value="overview"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-overview"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="access"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-access"
+              >
+                Access
+              </TabsTrigger>
+              <TabsTrigger
+                value="destroy"
+                className="bg-transparent border-b-2 border-transparent rounded-none px-1 py-3 text-muted-foreground data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all hover:text-foreground"
+                data-testid="tab-destroy"
+              >
+                Destroy
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="statistics" className="space-y-6 animate-in fade-in duration-300">
+          {/* OVERVIEW TAB - Combines Statistics + IP Management */}
+          <TabsContent value="overview" className="space-y-6 animate-in fade-in duration-300">
             
             {/* Live Stats - CPU, Memory, Disk */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* CPU Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CPU</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1645,8 +1616,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
-                       powerActionPending ? 'Please wait...' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
@@ -1664,10 +1634,10 @@ export default function ServerDetail() {
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span>{server.plan.specs.vcpu} Core{server.plan.specs.vcpu > 1 ? 's' : ''}</span>
                 </div>
-              </GlassCard>
+              </Card>
 
               {/* Memory Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Memory</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1681,8 +1651,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
-                       powerActionPending ? 'Please wait...' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
@@ -1704,10 +1673,10 @@ export default function ServerDetail() {
                       : '—'}
                   </span>
                 </div>
-              </GlassCard>
+              </Card>
 
               {/* Disk Card */}
-              <GlassCard className="p-4">
+              <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
@@ -1721,8 +1690,7 @@ export default function ServerDetail() {
                       {(powerActionPending || server.status !== 'stopped') && (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       )}
-                      {powerActionPending === 'boot' ? 'Starting...' : 
-                       powerActionPending ? 'Please wait...' :
+                      {powerActionPending ? '' :
                        server.status === 'stopped' ? 'Offline' : 'Loading...'}
                     </span>
                   )}
@@ -1744,11 +1712,11 @@ export default function ServerDetail() {
                       : '—'}
                   </span>
                 </div>
-              </GlassCard>
+              </Card>
             </div>
 
             {/* Bandwidth Stats Card - Compact */}
-            <GlassCard className="p-4">
+            <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-foreground uppercase tracking-wider flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-400" />
@@ -1774,8 +1742,9 @@ export default function ServerDetail() {
                 const formatBytes = (bytes: number): string => {
                   if (bytes === 0) return '0 MB';
                   const gb = bytes / (1024 * 1024 * 1024);
+                  // Bandwidth uses decimal units (1TB = 1000GB), not binary (1TiB = 1024GiB)
                   if (gb >= 1000) {
-                    const tb = gb / 1024;
+                    const tb = gb / 1000;
                     return `${tb.toFixed(2)} TB`;
                   }
                   if (gb >= 1) {
@@ -1831,7 +1800,7 @@ export default function ServerDetail() {
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1024).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
+                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1000).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
                       </span>
                       {remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
@@ -1891,16 +1860,14 @@ export default function ServerDetail() {
                   </div>
                 );
               })()}
-            </GlassCard>
-          </TabsContent>
+            </Card>
 
-          {/* IP Management Tab */}
-          <TabsContent value="ip-management" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            {/* IP Management - Inline in Overview */}
+            <Card className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-foreground">Network Interfaces</h3>
               </div>
-              
+
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
                 <div className="space-y-4">
                   {networkInfo.interfaces.map((iface, index) => (
@@ -1908,39 +1875,33 @@ export default function ServerDetail() {
                       <div className="flex items-center gap-3 mb-4">
                         <Network className="h-5 w-5 text-blue-400" />
                         <span className="font-mono font-bold text-foreground">{iface.name}</span>
-                        <span className="text-xs text-muted-foreground">MAC: {iface.mac}</span>
                       </div>
-                      
+
                       {iface.ipv4.length > 0 && (
                         <div className="space-y-2">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
                           {iface.ipv4.map((ip, ipIndex) => (
                             <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                              <div className="flex items-center gap-3">
-                                <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Gateway: {ip.gateway}</span>
-                                <button 
-                                  onClick={() => copyToClipboard(ip.address)}
-                                  className="text-muted-foreground hover:text-foreground p-1"
-                                  data-testid={`button-copy-ip-${index}-${ipIndex}`}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </button>
-                              </div>
+                              <span className="font-mono text-foreground" data-testid={`text-ip-${index}-${ipIndex}`}>{ip.address}</span>
+                              <button
+                                onClick={() => copyToClipboard(ip.address)}
+                                className="text-muted-foreground hover:text-foreground p-1"
+                                data-testid={`button-copy-ip-${index}-${ipIndex}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
                             </div>
                           ))}
                         </div>
                       )}
-                      
+
                       {iface.ipv6.length > 0 && (
                         <div className="space-y-2 mt-4">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv6 Addresses</div>
                           {iface.ipv6.map((ip, ipIndex) => (
                             <div key={ipIndex} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                               <span className="font-mono text-foreground text-sm">{ip.address}</span>
-                              <button 
+                              <button
                                 onClick={() => copyToClipboard(ip.address)}
                                 className="text-muted-foreground hover:text-foreground p-1"
                               >
@@ -1959,12 +1920,12 @@ export default function ServerDetail() {
                   <p>No network interfaces found</p>
                 </div>
               )}
-            </GlassCard>
+            </Card>
           </TabsContent>
 
-          {/* Reset Password Tab */}
-          <TabsContent value="reset-password" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+          {/* ACCESS TAB - Password Reset */}
+          <TabsContent value="access" className="space-y-4 animate-in fade-in duration-300">
+            <Card className="p-6">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-foreground mb-2">Reset Server Password</h3>
@@ -1988,20 +1949,25 @@ export default function ServerDetail() {
                 </div>
 
                 <div className="space-y-4">
-                  <Button 
+                  <Button
                     className={cn(
                       "text-foreground",
-                      (isSuspended || cancellationData?.cancellation)
+                      (isSuspended || cancellationData?.cancellation || isPasswordResetDisabled)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
                         : "bg-blue-600 hover:bg-blue-700"
                     )}
                     onClick={() => setPasswordResetDialogOpen(true)}
-                    disabled={isSuspended || !!cancellationData?.cancellation}
+                    disabled={isSuspended || !!cancellationData?.cancellation || isPasswordResetDisabled}
                     data-testid="button-reset-password"
                   >
                     <Key className="h-4 w-4 mr-2" />
                     Reset Password
                   </Button>
+                  {isPasswordResetDisabled && (
+                    <p className="text-sm text-amber-400/80 mt-2">
+                      Password reset is temporarily disabled.
+                    </p>
+                  )}
                   {isSuspended && (
                     <p className="text-sm text-yellow-400/80 mt-2">
                       Password reset is disabled while the server is suspended.
@@ -2014,153 +1980,196 @@ export default function ServerDetail() {
                   )}
                 </div>
               </div>
-            </GlassCard>
+            </Card>
           </TabsContent>
 
-          {/* Reinstallation Tab */}
-          <TabsContent value="reinstallation" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-foreground mb-2">Reinstall Operating System</h3>
-                  <p className="text-sm text-muted-foreground">
-                    This will completely erase all data on your server and install a fresh operating system.
-                    Make sure to backup any important data before proceeding.
-                  </p>
-                </div>
-                
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+          {/* DESTROY TAB - Combines Reinstallation + Cancellation (Danger Zone) */}
+          <TabsContent value="destroy" className="space-y-6 animate-in fade-in duration-300">
+
+            {/* Reinstall Section */}
+            {reinstallTask.isActive && !isSetupMode ? (
+              // Show progress panel when reinstalling
+              <Card className="overflow-hidden border-blue-500/30">
+                <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <RefreshCw className="h-5 w-5 text-white" />
+                    </div>
                     <div>
-                      <div className="font-medium text-red-400">Warning: Data Loss</div>
-                      <div className="text-sm text-red-400/80">
-                        All existing data on the server will be permanently deleted. This action cannot be undone.
+                      <h3 className="text-lg font-bold text-white">Reinstalling Server</h3>
+                      <p className="text-sm text-white/80">{server.name}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <ReinstallProgressPanel
+                    state={reinstallTask}
+                    onDismiss={() => {
+                      reinstallTask.reset();
+                      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+                      setActiveTab('overview');
+                    }}
+                  />
+                </div>
+              </Card>
+            ) : (
+              // Show normal reinstall card
+              <Card className="p-6 border-destructive/30">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/20 rounded-xl">
+                      <RefreshCw className="h-6 w-6 text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-foreground">Reinstall Operating System</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Fresh install with new credentials
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Current Server Info */}
+                  <div className="p-4 bg-muted/30 border border-border rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-background rounded-lg border border-border">
+                        <Server className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-mono font-semibold text-foreground">{server?.name}</div>
+                        <div className="text-sm text-muted-foreground space-x-3">
+                          <span>{server?.primaryIp || 'No IP'}</span>
+                          <span>•</span>
+                          <span>{server?.os?.name || server?.image?.name || 'Unknown OS'}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-2 block">Current Operating System</label>
-                    <div className="p-3 bg-muted/50 rounded-md border border-border">
-                      <span className="text-foreground">{server.image?.name || 'Unknown'}</span>
+                  {/* Warning Box */}
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <div className="font-semibold text-amber-400">Warning: Data Loss</div>
+                        <ul className="text-sm text-amber-400/80 space-y-0.5">
+                          <li>• All existing data will be permanently erased</li>
+                          <li>• You'll receive new login credentials</li>
+                          <li>• The server will reboot during installation</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 
-                  <Button 
+                  <Button
                     className={cn(
-                      "text-foreground",
+                      "w-full h-12 text-base font-semibold",
                       (isSuspended || cancellationData?.cancellation)
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
-                        : "bg-red-600 hover:bg-red-700"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
                     )}
-                    onClick={() => setReinstallDialogOpen(true)}
+                    onClick={() => {
+                      // Pre-fill hostname with current server name
+                      setHostname(server?.name || '');
+                      setReinstallDialogOpen(true);
+                    }}
                     disabled={isSuspended || !!cancellationData?.cancellation}
                     data-testid="button-reinstall"
                   >
-                    <RefreshCw className="h-4 w-4 mr-2" />
+                    <RefreshCw className="h-5 w-5 mr-2" />
                     Reinstall Server
                   </Button>
                   {isSuspended && (
-                    <p className="text-sm text-yellow-400/80 mt-2">
+                    <p className="text-sm text-yellow-400/80 text-center">
                       Reinstall is disabled while the server is suspended.
                     </p>
                   )}
                   {cancellationData?.cancellation && !isSuspended && (
-                    <p className="text-sm text-red-400/80 mt-2">
+                    <p className="text-sm text-red-400/80 text-center">
                       Reinstall is disabled because this server is scheduled for deletion.
                     </p>
                   )}
                 </div>
-              </div>
-            </GlassCard>
-          </TabsContent>
+              </Card>
+            )}
 
-          {/* Cancellation Tab */}
-          <TabsContent value="cancellation" className="space-y-4 animate-in fade-in duration-300">
-            <GlassCard className="p-6">
+            {/* Destroy Server Section - DigitalOcean Style */}
+            <Card className="p-6 border-destructive/50">
               <div className="space-y-6">
                 {cancellationData?.cancellation ? (
-                  // Show existing cancellation request
+                  // Show existing deletion status
                   <>
-                    <div className="flex items-start gap-4">
-                      <div className={cn("p-3 rounded-lg", cancellationData.cancellation.mode === 'immediate' ? "bg-red-500/20" : "bg-orange-500/20")}>
-                        {cancellationData.cancellation.mode === 'immediate' ? (
-                          <Trash2 className="h-6 w-6 text-red-400" />
-                        ) : (
-                          <Calendar className="h-6 w-6 text-orange-400" />
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-foreground mb-1">
-                          {cancellationData.cancellation.mode === 'immediate' ? 'Immediate Deletion in Progress' : 'Cancellation Scheduled'}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {cancellationData.cancellation.mode === 'immediate' ? (
-                            <>This server will be permanently deleted within 5 minutes.</>
-                          ) : (
-                            <>
-                              This server is scheduled for deletion on{' '}
-                              <span className="text-orange-400 font-medium">
-                                {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
-                                  weekday: 'long',
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric'
-                                })}
-                              </span>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    
                     {cancellationData.cancellation.mode === 'immediate' ? (
-                      <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
-                          <div>
-                            <div className="font-medium text-red-400">Cannot Be Revoked</div>
-                            <div className="text-sm text-red-400/80">
-                              Immediate deletion cannot be stopped. Your server and all data will be permanently destroyed.
-                            </div>
+                      // Immediate deletion in progress
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-red-500/20 rounded-lg">
+                            <Trash2 className="h-6 w-6 text-red-400" />
                           </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-red-400">Server Being Destroyed</h3>
+                            <p className="text-sm text-muted-foreground">This process cannot be stopped</p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+                            <span className="font-semibold text-red-400">Destruction in progress...</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-mono font-bold text-foreground">{server?.name}</span> and all associated data will be permanently destroyed within 5 minutes.
+                          </p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5" />
+                      // Scheduled deletion (grace period)
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-amber-500/20 rounded-lg">
+                            <Calendar className="h-6 w-6 text-amber-400" />
+                          </div>
                           <div>
-                            <div className="font-medium text-yellow-400">Days Remaining</div>
-                            <div className="text-sm text-yellow-400/80">
-                              {Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days until deletion
+                            <h3 className="text-xl font-bold text-amber-400">Scheduled for Destruction</h3>
+                            <p className="text-sm text-muted-foreground">You can cancel this before the scheduled date</p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Server</span>
+                              <span className="font-mono font-bold text-foreground">{server?.name}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Destruction Date</span>
+                              <span className="font-semibold text-amber-400">
+                                {new Date(cancellationData.cancellation.scheduledDeletionAt).toLocaleDateString('en-AU', {
+                                  weekday: 'short',
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Time Remaining</span>
+                              <span className="font-semibold text-amber-400">
+                                {Math.max(0, Math.ceil((new Date(cancellationData.cancellation.scheduledDeletionAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                              </span>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    
-                    {cancellationData.cancellation.reason && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground block mb-2">Reason for Cancellation</label>
-                        <div className="p-3 bg-muted/50 rounded-md border border-border">
-                          <span className="text-foreground text-sm">{cancellationData.cancellation.reason}</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Only show revoke option for grace period cancellations */}
-                    {cancellationData.cancellation.mode !== 'immediate' && (
-                      <div className="pt-4 border-t border-border">
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Changed your mind? You can revoke the cancellation request and keep your server.
-                        </p>
-                        <Button 
+
+                        {cancellationData.cancellation.reason && (
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Reason: </span>
+                            <span className="text-foreground">{cancellationData.cancellation.reason}</span>
+                          </div>
+                        )}
+
+                        <Button
                           variant="outline"
-                          className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                          className="w-full border-green-500/50 text-green-400 hover:bg-green-500/10 hover:text-green-300"
                           onClick={() => serverId && revokeCancellationMutation.mutate(serverId)}
                           disabled={revokeCancellationMutation.isPending}
                           data-testid="button-revoke-cancellation"
@@ -2168,12 +2177,12 @@ export default function ServerDetail() {
                           {revokeCancellationMutation.isPending ? (
                             <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Revoking...
+                              Cancelling...
                             </>
                           ) : (
                             <>
                               <XCircle className="h-4 w-4 mr-2" />
-                              Revoke Cancellation
+                              Cancel Scheduled Destruction
                             </>
                           )}
                         </Button>
@@ -2181,68 +2190,125 @@ export default function ServerDetail() {
                     )}
                   </>
                 ) : (
-                  // Show cancellation options
+                  // Show destroy options - DigitalOcean style
                   <>
                     <div>
-                      <h3 className="text-lg font-bold text-foreground mb-2">Cancel This Server</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Choose how you want to cancel this server. Once cancelled, your data will be permanently deleted.
+                      <h3 className="text-xl font-bold text-red-400 mb-2">Destroy Server</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Once you destroy a server, there is no going back. Please be certain.
                       </p>
                     </div>
-                    
-                    {/* Global Warning */}
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-6">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="font-bold text-red-400">No Refunds</div>
-                          <div className="text-sm text-red-400/80">
-                            Cancelling your server does not entitle you to any refunds. All prepaid credit will remain in your wallet for future use.
+
+                    {/* Server Info Card */}
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-background rounded-lg border border-border">
+                          <Server className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-mono font-bold text-lg text-foreground">{server?.name}</div>
+                          <div className="text-sm text-muted-foreground space-x-3">
+                            <span>{server?.primaryIp || 'No IP'}</span>
+                            <span>•</span>
+                            <span>{server?.os?.name || server?.image?.name || 'Unknown OS'}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Reason Input */}
-                    <div className="mb-6">
-                      <Label className="text-sm font-medium text-foreground mb-2 block">
-                        Reason for Cancellation (Optional)
+                    {/* Warning Box */}
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                        <div className="space-y-2">
+                          <div className="font-semibold text-red-400">This action is irreversible</div>
+                          <ul className="text-sm text-red-400/80 space-y-1">
+                            <li>• All data on this server will be permanently destroyed</li>
+                            <li>• The server's IP address will be released</li>
+                            <li>• Any associated configurations will be lost</li>
+                            <li>• No refunds will be provided for remaining credit</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Confirmation Input */}
+                    <div className="space-y-3">
+                      <Label className="text-sm text-foreground block">
+                        Enter the server name <span className="font-mono font-bold text-red-400">{server?.name}</span> to confirm:
                       </Label>
                       <Input
-                        value={cancellationReason}
-                        onChange={(e) => setCancellationReason(e.target.value)}
-                        placeholder="e.g., No longer needed, switching providers..."
-                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
-                        data-testid="input-cancellation-reason"
+                        value={immediateConfirmText}
+                        onChange={(e) => setImmediateConfirmText(e.target.value)}
+                        placeholder={server?.name || "server name"}
+                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
+                        data-testid="input-confirm-delete"
+                        autoComplete="off"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Help us improve by sharing why you're cancelling.
-                      </p>
                     </div>
-                    
-                    {/* Two Options */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {/* Option 1: 30-Day Grace Period */}
-                      <div className="p-4 bg-muted/50 border border-border rounded-lg space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-5 w-5 text-orange-400" />
-                          <h4 className="font-semibold text-foreground">30-Day Grace Period</h4>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Your server will remain active for 30 days. You can revoke the cancellation at any time during this period.
-                        </p>
-                        <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded text-xs text-orange-400">
-                          Server deleted after 30 days. Can be revoked.
-                        </div>
-                        <Button 
+
+                    {/* Destroy Button */}
+                    <Button
+                      className={cn(
+                        "w-full h-12 text-base font-semibold",
+                        immediateConfirmText === server?.name && !isSuspended
+                          ? "bg-red-600 hover:bg-red-700 text-white"
+                          : "bg-red-600/30 text-red-400/50 cursor-not-allowed"
+                      )}
+                      disabled={immediateConfirmText !== server?.name || isSuspended || requestCancellationMutation.isPending}
+                      onClick={() => serverId && requestCancellationMutation.mutate({
+                        id: serverId,
+                        reason: cancellationReason || undefined,
+                        mode: 'immediate'
+                      })}
+                      data-testid="button-destroy-server"
+                    >
+                      {requestCancellationMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Destroying Server...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-5 w-5 mr-2" />
+                          Destroy this Server
+                        </>
+                      )}
+                    </Button>
+
+                    {isSuspended && (
+                      <p className="text-sm text-yellow-400/80 text-center">
+                        Contact support to destroy a suspended server.
+                      </p>
+                    )}
+
+                    {/* Alternative: Schedule Deletion */}
+                    <div className="pt-6 border-t border-border">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Prefer to schedule deletion?</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Schedule your server for deletion in 30 days. You can cancel anytime during this period.
+                      </p>
+                      <div className="flex gap-3 items-center">
+                        <Input
+                          value={cancellationReason}
+                          onChange={(e) => setCancellationReason(e.target.value)}
+                          placeholder="Reason (optional)"
+                          className="flex-1 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-sm"
+                          data-testid="input-cancellation-reason"
+                        />
+                        <Button
+                          variant="outline"
                           className={cn(
-                            "w-full text-foreground",
-                            isSuspended 
-                              ? "bg-muted text-muted-foreground cursor-not-allowed"
-                              : "bg-orange-600 hover:bg-orange-700"
+                            "shrink-0",
+                            isSuspended
+                              ? "border-border text-muted-foreground cursor-not-allowed"
+                              : "border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
                           )}
-                          onClick={() => serverId && requestCancellationMutation.mutate({ 
-                            id: serverId, 
+                          onClick={() => serverId && requestCancellationMutation.mutate({
+                            id: serverId,
                             reason: cancellationReason || undefined,
                             mode: 'grace'
                           })}
@@ -2250,62 +2316,31 @@ export default function ServerDetail() {
                           data-testid="button-cancel-grace"
                         >
                           {requestCancellationMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Processing...
-                            </>
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
-                              <Clock className="h-4 w-4 mr-2" />
-                              Cancel with Grace Period
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Schedule Deletion
                             </>
                           )}
-                        </Button>
-                      </div>
-
-                      {/* Option 2: Delete Immediately */}
-                      <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-lg space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Trash2 className="h-5 w-5 text-red-400" />
-                          <h4 className="font-semibold text-foreground">Delete Immediately</h4>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Your server will be permanently deleted within 5 minutes. This action cannot be undone or revoked.
-                        </p>
-                        <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 font-medium">
-                          WARNING: Cannot be undone. All data will be lost.
-                        </div>
-                        <Button 
-                          variant="outline"
-                          className={cn(
-                            "w-full",
-                            isSuspended 
-                              ? "bg-muted text-muted-foreground cursor-not-allowed border-border"
-                              : "border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                          )}
-                          onClick={() => setImmediateConfirmOpen(true)}
-                          disabled={isSuspended || requestCancellationMutation.isPending}
-                          data-testid="button-cancel-immediate"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Now
                         </Button>
                       </div>
                     </div>
-                    
-                    {isSuspended && (
-                      <p className="text-sm text-yellow-400/80 mt-4">
-                        Contact support to cancel a suspended server.
-                      </p>
-                    )}
                   </>
                 )}
               </div>
-            </GlassCard>
+            </Card>
           </TabsContent>
 
         </Tabs>
+        </div>
+        {/* End of main content area */}
+
       </div>
+      {/* End of grid layout (sidebar + main content) */}
+
+      </div>
+      {/* End of main wrapper (space-y-6 pb-20) */}
 
       {/* Reinstall Dialog - Searchable Template Picker */}
       <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
@@ -2339,9 +2374,29 @@ export default function ServerDetail() {
 
           {/* Hostname Input - Required */}
           <div className="px-6 pt-4">
-            <label className="text-sm font-medium text-foreground block mb-2">
-              Hostname <span className="text-red-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-foreground">
+                Hostname <span className="text-red-400">*</span>
+              </label>
+              {server?.name && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHostname(server.name);
+                    setHostnameError('');
+                  }}
+                  className={cn(
+                    "text-xs px-2 py-1 rounded transition-colors",
+                    hostname === server?.name
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                  data-testid="button-use-current-hostname"
+                >
+                  {hostname === server?.name ? 'Using current hostname' : 'Use current hostname'}
+                </button>
+              )}
+            </div>
             <Input
               value={hostname}
               onChange={(e) => handleHostnameChange(e.target.value)}
@@ -2421,8 +2476,8 @@ export default function ServerDetail() {
 
           {/* Footer with Install Button */}
           <div className="border-t border-border p-6">
-            <Button 
-              className="w-full bg-red-600 hover:bg-red-700 h-12 text-base font-semibold disabled:opacity-50"
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold text-white disabled:opacity-50"
               onClick={handleReinstall}
               disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
               data-testid="button-confirm-reinstall"
@@ -2433,7 +2488,10 @@ export default function ServerDetail() {
                   Installing...
                 </>
               ) : (
-                'Reinstall Server'
+                <>
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Reinstall Server
+                </>
               )}
             </Button>
             {!isHostnameValid && hostname.trim() === '' && (
@@ -2445,181 +2503,7 @@ export default function ServerDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Immediate Deletion Confirmation Dialog */}
-      <Dialog open={immediateConfirmOpen} onOpenChange={(open) => {
-        setImmediateConfirmOpen(open);
-        if (!open) setImmediateConfirmText("");
-      }}>
-        <DialogContent className="bg-background border-border text-foreground max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-400">
-              <AlertTriangle className="h-5 w-5" />
-              Confirm Immediate Deletion
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              This action is permanent and cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-2">
-              <p className="text-sm text-red-400 font-medium">
-                You are about to permanently delete this server:
-              </p>
-              <p className="text-foreground font-bold">{server?.name || serverId}</p>
-              <ul className="text-sm text-red-400/80 space-y-1 mt-3">
-                <li>• All data will be permanently destroyed</li>
-                <li>• This action cannot be revoked or undone</li>
-                <li>• The server will be deleted within 5 minutes</li>
-                <li>• No refunds will be provided</li>
-              </ul>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-foreground mb-2 block">
-                Type <span className="font-mono font-bold text-red-400">delete my server</span> to confirm:
-              </Label>
-              <Input
-                value={immediateConfirmText}
-                onChange={(e) => setImmediateConfirmText(e.target.value)}
-                placeholder="delete my server"
-                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground font-mono"
-                data-testid="input-confirm-delete"
-              />
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 border-border"
-              onClick={() => {
-                setImmediateConfirmOpen(false);
-                setImmediateConfirmText("");
-              }}
-              data-testid="button-cancel-confirm"
-            >
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
-              disabled={immediateConfirmText.toLowerCase() !== 'delete my server' || requestCancellationMutation.isPending}
-              onClick={() => serverId && requestCancellationMutation.mutate({
-                id: serverId,
-                reason: cancellationReason || undefined,
-                mode: 'immediate'
-              })}
-              data-testid="button-confirm-delete"
-            >
-              {requestCancellationMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Server
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Setup/Reinstall Progress Dialog */}
-      <Dialog open={reinstallTask.isActive && !setupMinimized} onOpenChange={() => {}}>
-        <DialogContent 
-          className={cn(
-            "bg-background border-border text-foreground",
-            isSetupMode ? "max-w-lg" : "max-w-md"
-          )} 
-          hideCloseButton
-        >
-          {isSetupMode ? (
-            /* New Setup Progress Checklist */
-            <SetupProgressChecklist 
-              state={reinstallTask}
-              serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
-              onDismiss={() => {
-                // Save credentials before resetting so user can still view them
-                if (reinstallTask.credentials) {
-                  updateSavedCredentials(reinstallTask.credentials);
-                  setShowSavedCredentials(true);
-                }
-                reinstallTask.reset();
-                updateSetupMode(false);
-                updateSetupMinimized(false);
-                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                queryClient.invalidateQueries({ queryKey: ['servers'] });
-              }}
-              onMinimize={() => {
-                updateSetupMinimized(true);
-              }}
-              onClose={() => {
-                // Save credentials and close dialog without continuing
-                if (reinstallTask.credentials) {
-                  updateSavedCredentials(reinstallTask.credentials);
-                  setShowSavedCredentials(true);
-                }
-                reinstallTask.reset();
-                updateSetupMode(false);
-                updateSetupMinimized(false);
-                queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                queryClient.invalidateQueries({ queryKey: ['servers'] });
-              }}
-            />
-          ) : (
-            /* Reinstall Progress Panel (original) */
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  {reinstallTask.status === 'complete' ? (
-                    <>
-                      <Check className="h-5 w-5 text-green-500" />
-                      Reinstall Complete
-                    </>
-                  ) : reinstallTask.status === 'failed' ? (
-                    <>
-                      <AlertCircle className="h-5 w-5 text-red-500" />
-                      Reinstall Failed
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                      Reinstalling Server
-                    </>
-                  )}
-                </DialogTitle>
-                <DialogDescription className="text-muted-foreground">
-                  {reinstallTask.status === 'complete' 
-                    ? 'Your server has been reinstalled successfully.'
-                    : reinstallTask.status === 'failed'
-                    ? 'There was a problem reinstalling your server.'
-                    : 'Please wait while your server is being reinstalled. This may take several minutes.'}
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="py-4">
-                <ReinstallProgressPanel 
-                  state={reinstallTask} 
-                  onDismiss={() => {
-                    reinstallTask.reset();
-                    queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                    queryClient.invalidateQueries({ queryKey: ['servers'] });
-                  }}
-                />
-              </div>
-              
-              {reinstallTask.status !== 'complete' && reinstallTask.status !== 'failed' && (
-                <div className="text-xs text-muted-foreground text-center">
-                  Do not close this window. Your server will be available shortly.
-                </div>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Provisioning dialog removed - now showing full-page view */}
 
       {/* Password Reset Dialog */}
       <Dialog 

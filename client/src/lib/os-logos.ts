@@ -11,6 +11,10 @@ const OS_LOGO_MAP: Record<string, string> = {
   suse: `${VIRTFUSION_PANEL_URL}/img/logo/opensuse_logo.png`,
   oracle: `${VIRTFUSION_PANEL_URL}/img/logo/oracle_linux_logo.png`,
   oraclelinux: `${VIRTFUSION_PANEL_URL}/img/logo/oracle_linux_logo.png`,
+  rocky: `${VIRTFUSION_PANEL_URL}/img/logo/rocky_linux_logo.png`,
+  rockylinux: `${VIRTFUSION_PANEL_URL}/img/logo/rocky_linux_logo.png`,
+  freebsd: `${VIRTFUSION_PANEL_URL}/img/logo/freebsd_logo.png`,
+  bsd: `${VIRTFUSION_PANEL_URL}/img/logo/freebsd_logo.png`,
 };
 
 const FALLBACK_LOGO = `${VIRTFUSION_PANEL_URL}/img/logo/linux_logo.png`;
@@ -71,6 +75,9 @@ export function getOsCategory(template: OsTemplate): string {
   }
   if (normalized.includes('suse') || normalized.includes('opensuse')) {
     return 'SUSE';
+  }
+  if (normalized.includes('bsd') || normalized.includes('freebsd')) {
+    return 'BSD';
   }
   return 'Other';
 }

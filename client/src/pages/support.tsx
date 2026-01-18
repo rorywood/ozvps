@@ -14,14 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -42,12 +34,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  billing: "Billing",
-  server: "Server / VM",
-  network: "Network",
-  panel: "Panel / Login",
+  sales: "Sales",
+  accounts: "Accounts",
+  support: "Support",
   abuse: "Abuse",
-  general: "General",
 };
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
@@ -57,11 +47,11 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
   urgent: "Urgent",
 };
 
-const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot }> = {
+const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot; userAction?: boolean }> = {
   new: { label: "New", color: "text-blue-400 bg-blue-500/10", icon: CircleDot },
   open: { label: "Open", color: "text-cyan-400 bg-cyan-500/10", icon: CircleDot },
-  waiting_user: { label: "Awaiting Reply", color: "text-amber-400 bg-amber-500/10", icon: Timer },
-  waiting_admin: { label: "In Progress", color: "text-purple-400 bg-purple-500/10", icon: Clock },
+  waiting_user: { label: "Your Reply Needed", color: "text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30", icon: Timer, userAction: true },
+  waiting_admin: { label: "Waiting for Support", color: "text-purple-400 bg-purple-500/10", icon: Clock },
   resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
   closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
 };
@@ -115,43 +105,58 @@ function formatDate(dateString: string): string {
 }
 
 function TicketRow({ ticket }: { ticket: SupportTicket }) {
+  const needsAction = ticket.status === "waiting_user";
+
+  // Priority left border colors
+  const priorityBorderColor = {
+    urgent: "border-l-destructive",
+    high: "border-l-warning",
+    normal: "border-l-transparent",
+    low: "border-l-transparent",
+  }[ticket.priority];
+
   return (
     <Link href={`/support/${ticket.id}`}>
-      <div className="flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer border-b border-border/50 last:border-b-0">
+      <div className={cn(
+        "flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer border-b border-border last:border-b-0 border-l-4",
+        priorityBorderColor,
+        needsAction && "bg-warning/5 hover:bg-warning/10"
+      )}>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs text-muted-foreground">#{ticket.id}</span>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-xs text-muted-foreground font-mono">#{ticket.id}</span>
             <StatusBadge status={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
           </div>
-          <h3 className="font-medium text-foreground truncate">{ticket.title}</h3>
+          <h3 className="font-semibold text-foreground truncate">{ticket.title}</h3>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
             <span>{CATEGORY_LABELS[ticket.category]}</span>
+            <span>•</span>
             <span>Updated {formatDate(ticket.lastMessageAt)}</span>
           </div>
         </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       </div>
     </Link>
   );
 }
 
-function NewTicketDialog({
-  open,
-  onOpenChange,
+function NewTicketForm({
+  isOpen,
+  onToggle,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<TicketCategory>("general");
+  const [category, setCategory] = useState<TicketCategory>("support");
   const [priority, setPriority] = useState<TicketPriority>("normal");
   const [description, setDescription] = useState("");
-  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [selectedServer, setSelectedServer] = useState<string>("none");
 
   const { data: serversData } = useQuery({
     queryKey: ["servers"],
@@ -173,7 +178,8 @@ function NewTicketDialog({
       });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
-      onOpenChange(false);
+      resetForm();
+      onToggle();
       setLocation(`/support/${data.ticket.id}`);
     },
     onError: (error: Error) => {
@@ -192,96 +198,56 @@ function NewTicketDialog({
       category,
       priority,
       description,
-      virtfusionServerId: selectedServer || undefined,
+      virtfusionServerId: selectedServer === "none" ? undefined : selectedServer,
     });
   };
 
   const resetForm = () => {
     setTitle("");
-    setCategory("general");
+    setCategory("support");
     setPriority("normal");
     setDescription("");
-    setSelectedServer("");
+    setSelectedServer("none");
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) resetForm();
-        onOpenChange(isOpen);
-      }}
-    >
-      <DialogContent className="max-w-lg bg-card/95 backdrop-blur-xl border-border">
-        <DialogHeader>
-          <DialogTitle>Create Support Ticket</DialogTitle>
-          <DialogDescription>
-            Describe your issue and we'll get back to you as soon as possible.
-          </DialogDescription>
-        </DialogHeader>
+    <div className="rounded-lg bg-card border border-border overflow-hidden mb-6">
+      <div className="px-4 py-3 border-b border-border bg-muted/30">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+          Create New Ticket
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Describe your issue and we'll get back to you as soon as possible.
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="title">Subject</Label>
+          <Input
+            id="title"
+            placeholder="Brief description of your issue"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            minLength={3}
+            maxLength={200}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Subject</Label>
-            <Input
-              id="title"
-              placeholder="Brief description of your issue"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              minLength={3}
-              maxLength={200}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as TicketCategory)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="server">Affected Server (Optional)</Label>
-            <Select value={selectedServer} onValueChange={setSelectedServer}>
+            <Label htmlFor="category">Category</Label>
+            <Select value={category} onValueChange={(v) => setCategory(v as TicketCategory)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a server if applicable" />
+                <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None / General</SelectItem>
-                {serversData?.map((server) => (
-                  <SelectItem key={server.id} value={server.id}>
-                    <span className="flex items-center gap-2">
-                      <Server className="h-4 w-4" />
-                      {server.name}
-                    </span>
+              <SelectContent position="popper" sideOffset={4}>
+                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -289,63 +255,119 @@ function NewTicketDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Please provide as much detail as possible..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              minLength={10}
-              maxLength={10000}
-              rows={6}
-            />
+            <Label htmlFor="priority">Priority</Label>
+            <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" sideOffset={4}>
+                {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+        </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={createMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Ticket"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor="server">Affected Server (Optional)</Label>
+          <Select value={selectedServer} onValueChange={setSelectedServer}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a server if applicable" />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              <SelectItem value="none">None / General</SelectItem>
+              {serversData?.map((server) => (
+                <SelectItem key={server.id} value={server.id}>
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4" />
+                    {server.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            placeholder="Please provide as much detail as possible..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+            minLength={10}
+            maxLength={10000}
+            rows={6}
+            className="resize-none"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              resetForm();
+              onToggle();
+            }}
+            disabled={createMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={createMutation.isPending}>
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Ticket"
+            )}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
 export default function SupportPage() {
   useDocumentTitle("Support");
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
+  const [categoryFilter, setCategoryFilter] = useState<TicketCategory | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [search, setSearch] = useState("");
-  const [newTicketOpen, setNewTicketOpen] = useState(false);
+  const [showNewTicketForm, setShowNewTicketForm] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["support", "tickets", filter],
     queryFn: () => api.getSupportTickets({ status: filter }),
   });
 
+  // Count tickets needing user action
+  const actionNeededCount = data?.tickets.filter(t => t.status === "waiting_user").length || 0;
+
   const filteredTickets = data?.tickets.filter((ticket) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      ticket.title.toLowerCase().includes(searchLower) ||
-      ticket.id.toString().includes(searchLower)
-    );
+    // Search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      if (!ticket.title.toLowerCase().includes(searchLower) &&
+          !ticket.id.toString().includes(searchLower)) {
+        return false;
+      }
+    }
+    // Category filter
+    if (categoryFilter !== "all" && ticket.category !== categoryFilter) {
+      return false;
+    }
+    // Priority filter
+    if (priorityFilter !== "all" && ticket.priority !== priorityFilter) {
+      return false;
+    }
+    return true;
   });
 
   return (
@@ -358,30 +380,116 @@ export default function SupportPage() {
               Get help with your account or servers
             </p>
           </div>
-          <Button onClick={() => setNewTicketOpen(true)}>
+          <Button onClick={() => setShowNewTicketForm(!showNewTicketForm)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Ticket
+            {showNewTicketForm ? "Cancel" : "New Ticket"}
           </Button>
         </div>
 
-        <div className="rounded-xl bg-card/50 border border-border overflow-hidden">
-          <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search tickets..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+        {/* Inline collapsible form - DO style */}
+        <NewTicketForm isOpen={showNewTicketForm} onToggle={() => setShowNewTicketForm(!showNewTicketForm)} />
+
+        {/* Action needed alert */}
+        {actionNeededCount > 0 && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <Timer className="h-5 w-5 text-amber-400" />
             </div>
+            <div className="flex-1">
+              <p className="font-medium text-amber-400">
+                {actionNeededCount} ticket{actionNeededCount > 1 ? "s" : ""} need{actionNeededCount === 1 ? "s" : ""} your reply
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Our team is waiting for additional information from you
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg bg-card border border-border overflow-hidden">
+          {/* DO-style underlined tabs */}
+          <div className="px-4 pt-4">
             <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "open" | "closed")}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="open">Open</TabsTrigger>
-                <TabsTrigger value="closed">Closed</TabsTrigger>
+              <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start rounded-none w-full">
+                <TabsTrigger
+                  value="all"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
+                >
+                  All Tickets
+                </TabsTrigger>
+                <TabsTrigger
+                  value="open"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
+                >
+                  Open
+                </TabsTrigger>
+                <TabsTrigger
+                  value="closed"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
+                >
+                  Closed
+                </TabsTrigger>
               </TabsList>
             </Tabs>
+          </div>
+
+          {/* Horizontal filters bar - DO style */}
+          <div className="px-4 py-3 border-b border-border bg-muted/30">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tickets..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as TicketCategory | "all")}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" sideOffset={4}>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as TicketPriority | "all")}>
+                  <SelectTrigger className="w-[130px] h-9">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" sideOffset={4}>
+                    <SelectItem value="all">All Priorities</SelectItem>
+                    {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {(categoryFilter !== "all" || priorityFilter !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      setPriorityFilter("all");
+                    }}
+                    className="text-muted-foreground hover:text-foreground h-9"
+                  >
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
 
           {isLoading ? (
@@ -402,7 +510,7 @@ export default function SupportPage() {
                   : "Create your first support ticket to get help from our team."}
               </p>
               {!search && (
-                <Button onClick={() => setNewTicketOpen(true)} className="mt-4">
+                <Button onClick={() => setShowNewTicketForm(true)} className="mt-4">
                   <Plus className="mr-2 h-4 w-4" />
                   Create Ticket
                 </Button>
@@ -417,8 +525,6 @@ export default function SupportPage() {
           )}
         </div>
       </div>
-
-      <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} />
     </AppShell>
   );
 }

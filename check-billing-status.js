@@ -51,7 +51,7 @@ async function checkBilling() {
       console.log('❌ Billing tables are MISSING!');
       console.log('\n💡 Fix:');
       console.log('  1. Run: bash fix-billing-now.sh');
-      console.log('  2. Or run: sudo update-ozvps-dev');
+      console.log('  2. Or run: sudo ozvps --update');
       console.log('');
       await pool.end();
       return;

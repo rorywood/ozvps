@@ -267,6 +267,48 @@ export class VirtFusionClient {
     }
   }
 
+  /**
+   * Get connection status by checking if VirtFusion API is responding
+   * Returns: { connected: boolean, errorType?: string }
+   */
+  async getConnectionStatus(): Promise<{ connected: boolean; errorType?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/connect`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      // Any successful response means API is working
+      // Don't check for specific status codes or license issues
+      if (response.ok) {
+        return { connected: true };
+      }
+
+      // Even 401/403 means API is responding, just auth issues
+      // This is fine for health check purposes
+      if (response.status === 401 || response.status === 403) {
+        log('VirtFusion API responding but auth issue detected', 'virtfusion');
+        return { connected: true }; // API is up, just config issue
+      }
+
+      // Only consider 5xx errors as API being down
+      if (response.status >= 500) {
+        return { connected: false, errorType: 'api_error' };
+      }
+
+      // For any other status, consider API as available
+      return { connected: true };
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        return { connected: false, errorType: 'timeout' };
+      }
+      return { connected: false, errorType: 'network_error' };
+    }
+  }
+
   async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
     try {
       const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`);
@@ -464,7 +506,7 @@ export class VirtFusionClient {
 
   async getServer(serverId: string, useCache = true) {
     const cacheKey = `server:${serverId}`;
-    
+
     // Check cache first
     if (useCache) {
       const cached = apiCache.get<ReturnType<typeof this.transformServer>>(cacheKey);
@@ -473,11 +515,17 @@ export class VirtFusionClient {
         return cached;
       }
     }
-    
+
     // Fetch with remoteState=true to get live power status from hypervisor
     const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
+
+    // DEBUG: Log what VirtFusion returns for the server endpoint
+    log(`[DEBUG] getServer raw data for ${serverId}: commissionStatus=${response.data.commissionStatus}, state=${response.data.state}, status=${response.data.status}`, 'virtfusion');
+
     const server = this.transformServer(response.data);
-    
+
+    log(`[DEBUG] After transformServer for ${serverId}: needsSetup=${server.needsSetup}, status=${server.status}`, 'virtfusion');
+
     // Cache the result
     apiCache.set(cacheKey, server);
     return server;
@@ -544,6 +592,17 @@ export class VirtFusionClient {
 
   async suspendServer(serverId: string) {
     try {
+      // Force stop the server before suspending to ensure it's not running
+      try {
+        await this.request(`/servers/${serverId}/power/poweroff`, {
+          method: 'POST',
+        });
+        log(`Server ${serverId} powered off before suspension`, 'virtfusion');
+      } catch (powerError: any) {
+        // Continue with suspension even if poweroff fails (server might already be stopped)
+        log(`Could not poweroff server ${serverId} before suspension (may already be stopped): ${powerError.message}`, 'virtfusion');
+      }
+
       await this.request(`/servers/${serverId}/suspend`, {
         method: 'POST',
       });
@@ -781,42 +840,57 @@ export class VirtFusionClient {
     try {
       const response = await this.request<{ data: any }>(`/servers/${serverId}`);
       const server = response.data;
-      
+
+      // DEBUG: Log raw server response to see what VirtFusion actually returns
+      log(`[DEBUG] Raw VirtFusion server data for ${serverId}: ${JSON.stringify({
+        state: server.state,
+        buildFailed: server.buildFailed,
+        commissioned: server.commissioned,
+        commissionStatus: server.commissionStatus,
+        status: server.status,
+      })}`, 'virtfusion');
+
       // Extract the raw build state information
       const state = server.state || '';
       const buildFailed = server.buildFailed === true;
       const suspended = server.suspended === true;
-      const commissionStatus = server.commissionStatus;
-      
+      const commissionStatus = server.commissionStatus; // 0 = not built, 1 = building, 2 = paused, 3 = complete
+      // CRITICAL FIX: Field is commissionStatus, not commissioned!
+      const commissioned = commissionStatus;
+
       // Check if server is in a transitional/building state
-      const isTransitionalState = ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
-      
+      // IMPORTANT: commissioned takes priority - if 0, 1, or undefined, server is not ready
+      const isTransitionalState = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null || ['queued', 'pending', 'provisioning', 'building', 'installing'].includes(state);
+
       // Determine the build phase based on VirtFusion state
       // Important: VirtFusion temporarily sets buildFailed=true during rebuilds
       // Only consider it a real error if buildFailed is true AND state is NOT transitional
-      let phase: 'queued' | 'building' | 'complete' | 'error' = 'complete';
-      
-      if (state === 'queued' || state === 'pending') {
-        phase = 'queued';
+      let phase: 'queued' | 'building' | 'complete' | 'error' = 'building';
+
+      if (commissioned === 0) {
+        phase = 'queued'; // Not built yet
+      } else if (commissioned === 1 || commissioned === undefined || commissioned === null || state === 'queued' || state === 'pending') {
+        phase = 'building'; // Currently building or commissioned field not available yet
       } else if (state === 'provisioning' || state === 'building' || state === 'installing') {
         phase = 'building';
-      } else if (state === 'complete' || state === 'running') {
-        phase = 'complete';
+      } else if ((state === 'complete' || state === 'running') && commissioned === 3) {
+        phase = 'complete'; // Fully commissioned and complete
       } else if (buildFailed && !isTransitionalState) {
         // Only mark as error if buildFailed is true AND we're not in a building state
         phase = 'error';
       }
-      
+
       // isError should only be true if we have a confirmed error (not during transition)
       const isRealError = buildFailed && !isTransitionalState && state !== 'complete' && state !== 'running';
-      
+
       return {
         state,
         phase,
         buildFailed,
         suspended,
         commissionStatus,
-        isComplete: (state === 'complete' || state === 'running') && !isRealError,
+        commissioned,
+        isComplete: commissioned === 3 && (state === 'complete' || state === 'running') && !isRealError,
         isError: isRealError,
         isBuilding: isTransitionalState,
       };
@@ -856,7 +930,12 @@ export class VirtFusionClient {
         body: JSON.stringify({ action: 'disable' }),
       });
       return data.data;
-    } catch (error) {
+    } catch (error: any) {
+      // 423 Locked means VNC is already disabled or in process - treat as success
+      if (error.message?.includes('423')) {
+        log(`VNC already disabled for server ${serverId}`, 'virtfusion');
+        return { disabled: true };
+      }
       log(`Failed to disable VNC for server ${serverId}: ${error}`, 'virtfusion');
       throw error;
     }
@@ -948,44 +1027,38 @@ export class VirtFusionClient {
 
   async reinstallServer(serverId: string, osId: number, hostname?: string) {
     try {
-      const body: any = { 
+      const body: any = {
         operatingSystemId: osId,
+        sendMail: false, // Don't email password, return it in response instead
       };
-      
+
       // Include hostname if provided
       if (hostname) {
         body.name = hostname;
       }
-      
+
       log(`Reinstalling server ${serverId} with OS template ${osId}${hostname ? `, hostname: ${hostname}` : ''}`, 'virtfusion');
-      
-      const data = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
+
+      const response = await this.request<{ data: any }>(`/servers/${serverId}/build`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      
+
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);
-      
-      // Log the response structure to debug password location
-      log(`Build response for server ${serverId}: settings keys = ${Object.keys(data.data?.settings || {}).join(', ')}`, 'virtfusion');
-      
-      // VirtFusion may return password in various fields depending on version
-      // Check settings.decryptedPassword, settings.password, or root level
-      const generatedPassword = 
-        data.data?.settings?.decryptedPassword || 
-        data.data?.settings?.password ||
-        data.data?.decryptedPassword ||
-        data.data?.password ||
-        null;
-      
-      if (generatedPassword) {
-        log(`Password found for server ${serverId} in build response`, 'virtfusion');
-      } else {
-        log(`No password returned in build response for server ${serverId}`, 'virtfusion');
-      }
-      
-      return { ...data.data, generatedPassword };
+
+      // Extract password from response - check all possible locations
+      const password =
+        (response as any).password ||
+        response.data?.password ||
+        response.data?.settings?.password ||
+        response.data?.settings?.decryptedPassword ||
+        undefined;
+
+      return {
+        ...response.data,
+        password,
+      };
     } catch (error) {
       log(`Failed to reinstall server ${serverId}: ${error}`, 'virtfusion');
       throw error;
@@ -1015,24 +1088,50 @@ export class VirtFusionClient {
       // Response includes expectedPassword field (admin API v4.1.0+)
       // Required: "user" parameter specifies which user's password to reset
       // Optional: "sendMail" parameter (v5.0.0+) controls email notification
-      const data = await this.request<{ data: { queueId?: number; expectedPassword?: string; password?: string; decryptedPassword?: string } }>(`/servers/${serverId}/resetPassword`, {
+      const data = await this.request<{
+        data: {
+          queueId?: number;
+          expectedPassword?: string;
+          password?: string;
+          decryptedPassword?: string;
+          system?: {
+            success?: boolean;
+            data?: {
+              reset_password?: boolean;
+            };
+          };
+        }
+      }>(`/servers/${serverId}/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ user: resetUser, sendMail: false }),
       });
-      
+
+      // Log full response to debug structure
+      log(`[PASSWORD RESET] Full response for ${serverId}: ${JSON.stringify(data.data)}`, 'virtfusion');
+
+      // Check if guest agent responded successfully
+      // VirtFusion returns data.system.data.reset_password: false when guest agent fails
+      const resetPasswordSuccess = data.data?.system?.data?.reset_password;
+      if (resetPasswordSuccess === false) {
+        log(`Password reset for server ${serverId} failed: Guest agent not responding (reset_password=false)`, 'virtfusion');
+        throw new Error('Password reset failed. The QEMU guest agent is not responding. Please wait 30-60 seconds after deployment and try again.');
+      }
+
+      // VirtFusion returns the new password via expectedPassword
+      // Response includes: { queueId: number, expectedPassword: string }
+      // The reset is queued and executed asynchronously, but password is returned immediately
+      const newPassword = data.data?.expectedPassword || data.data?.decryptedPassword || data.data?.password || null;
+
+      // Verify we actually got a password - without it, reset didn't work properly
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length === 0) {
+        log(`Password reset for server ${serverId} failed: No password returned in response. Data: ${JSON.stringify(data.data)}`, 'virtfusion');
+        throw new Error('Password reset failed. No password was returned by VirtFusion. The server may not be ready yet. Please wait 30-60 seconds and try again.');
+      }
+
       // Invalidate cache since server credentials have changed
       this.invalidateServerCache(serverId);
-      
-      // VirtFusion returns the new password - check various possible field names
-      // v4.1.0+ uses expectedPassword, older versions may use password or decryptedPassword
-      const newPassword = data.data?.expectedPassword || data.data?.decryptedPassword || data.data?.password || null;
-      
-      if (!newPassword) {
-        log(`Password reset for server ${serverId} succeeded but no password returned in response`, 'virtfusion');
-      } else {
-        log(`Password reset for server ${serverId} completed successfully`, 'virtfusion');
-      }
-      
+
+      log(`Password reset for server ${serverId} completed successfully`, 'virtfusion');
       return { success: true, password: newPassword, username: resetUser };
     } catch (error) {
       log(`Failed to reset password for server ${serverId}: ${error}`, 'virtfusion');
@@ -1087,19 +1186,34 @@ export class VirtFusionClient {
     // Check remoteState first for live power status from hypervisor
     const remoteState = (server as any).remoteState;
     let status: 'running' | 'stopped' | 'provisioning' | 'error';
-    
+
+    // Check commissioned state FIRST before determining power status
+    // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
+    // CRITICAL: VirtFusion returns "commissionStatus" not "commissioned"!
+    const rawServerData = server as any;
+    const commissioned = rawServerData.commissionStatus ?? rawServerData.commissioned;
+
     // server.state is the COMMISSION state (queued, building, complete, etc.)
     // remoteState.state is the POWER state from hypervisor (running, stopped, etc.)
     // remoteState.running is a boolean for power state
     const commissionState = server.state?.toLowerCase() || '';
     const powerState = remoteState?.state?.toLowerCase() || '';
-    
-    // Priority: suspended > buildFailed > commission state (if building) > power state
+
+    // Priority: suspended > buildFailed > commissioned undefined/null > NOT COMMISSIONED (0 or 1) > commission state > power state
     if (server.suspended) {
       status = 'stopped';
     } else if (server.buildFailed) {
       status = 'error';
-    } else if (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying') {
+    } else if (commissioned === undefined || commissioned === null) {
+      // CRITICAL: If commissioned field is not set yet (very new server), assume provisioning
+      // This handles race condition where server is created but VirtFusion hasn't populated fields yet
+      status = 'provisioning';
+    } else if (commissioned === 0 || commissioned === 1) {
+      // Server not yet commissioned or currently building - always show as provisioning
+      status = 'provisioning';
+    } else if (commissioned !== 3 && (commissionState === 'queued' || commissionState === 'building' || commissionState === 'deploying')) {
+      // Commission state indicates building ONLY if not already commissioned
+      // This prevents FQDN hostnames from getting stuck on 'provisioning' after commission completes
       status = 'provisioning';
     } else if (powerState) {
       // Use remoteState.state for power status - most reliable
@@ -1144,18 +1258,12 @@ export class VirtFusionClient {
     const osDistro = qemuAgentOs.dist || server.os?.dist || 'linux';
     
     // A server needs setup if:
-    // - No OS template name is set (server created without OS build)
-    // - Server is not in a transitional building state
-    const rawServerData = server as any;
-    const commissioned = rawServerData.commissioned;
+    // - commissioned === 0 (not built yet)
+    // - commissioned === 1 (currently building)
+    // - commissioned is undefined/null (very new server, fields not populated yet)
+    // Note: commissioned is already checked above when determining status
     // commissioned: 0 = not built, 1 = building, 2 = paused, 3 = complete
-    const needsSetup = commissioned === 0 || (
-      !osTemplateName && 
-      !osFullName && 
-      !server.os?.name && 
-      status !== 'error' && 
-      status !== 'provisioning'
-    );
+    const needsSetup = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
     
     // Get created date
     const createdAt = server.created_at || server.createdAt || new Date().toISOString();
@@ -1468,58 +1576,113 @@ export class VirtFusionClient {
     extRelationId: string;
     osId?: number; // Optional - if not provided, server is created without OS (awaiting setup)
     hypervisorGroupId?: number;
-  }): Promise<{ serverId: number; name: string }> {
+  }): Promise<{ serverId: number; name: string; uuid?: string; password?: string; primaryIp?: string; osName?: string }> {
     const { userId, packageId, hostname, extRelationId, osId, hypervisorGroupId } = params;
-    
+
     log(`Provisioning server for user ${userId} with package ${packageId}, OS ${osId || 'none (awaiting setup)'}, hypervisorGroupId ${hypervisorGroupId}`, 'virtfusion');
-    
+
     try {
       // Step 1: Create the server
-      // IMPORTANT: VirtFusion API expects "hypervisorId" (which is the hypervisor GROUP ID)
-      // and "ipv4: 1" to allocate an IPv4 address
       const createPayload: Record<string, any> = {
         userId,
         packageId,
         name: hostname,
-        ipv4: 1, // Allocate one IPv4 address
+        ipv4: 1,
       };
-      
-      // VirtFusion uses "hypervisorId" for hypervisor group selection
+
       if (hypervisorGroupId) {
         createPayload.hypervisorId = hypervisorGroupId;
       }
-      
-      const response = await this.request<{ data: VirtFusionServerResponse }>('/servers', {
+
+      const response = await this.request<{ data: any }>('/servers', {
         method: 'POST',
         body: JSON.stringify(createPayload),
       });
-      
+
       const server = response.data;
       log(`Server created: ID=${server.id}, name=${server.name}`, 'virtfusion');
-      
-      // Step 2: Build/install the OS on the server (only if osId is provided)
+      log(`CREATE response data: ${JSON.stringify(server)}`, 'virtfusion');
+
+      let password: string | undefined = undefined;
+      let primaryIp: string | undefined = undefined;
+
+      // Try to get IP from CREATE response first
+      primaryIp = server.primaryIp || server.primary_ip || server.ip || server.ipAddress || undefined;
+      if (server.network?.primaryIp) primaryIp = server.network.primaryIp;
+      if (server.networks?.[0]?.ip) primaryIp = server.networks[0].ip;
+
+      log(`IP from CREATE response: ${primaryIp || 'not found'}`, 'virtfusion');
+
+      // Step 2: Build the OS on the server
       if (osId) {
         try {
           log(`Building server ${server.id} with OS template ${osId}`, 'virtfusion');
-          await this.request(`/servers/${server.id}/build`, {
+          const buildBody: Record<string, any> = {
+            operatingSystemId: osId,
+            name: hostname,
+          };
+
+          const buildResponse = await this.request<{ data: any }>(`/servers/${server.id}/build`, {
             method: 'POST',
-            body: JSON.stringify({
-              osid: osId,
-              hostname: hostname,
-            }),
+            body: JSON.stringify(buildBody),
           });
+
+          log(`BUILD response: ${JSON.stringify(buildResponse)}`, 'virtfusion');
+
+          // VirtFusion returns password in the build response - check multiple locations
+          const buildData = buildResponse.data;
+          password =
+            buildData?.settings?.decryptedPassword ||
+            buildData?.settings?.password ||
+            buildData?.decryptedPassword ||
+            buildData?.password ||
+            buildData?.rootPassword ||
+            buildData?.credentials?.password ||
+            undefined;
+
+          log(`Password from BUILD response: ${password ? 'FOUND' : 'NOT FOUND'}`, 'virtfusion');
+
+          // If we didn't get IP from CREATE, try BUILD response
+          if (!primaryIp) {
+            primaryIp = buildData?.primaryIp || buildData?.ip || buildData?.ipAddress || undefined;
+            log(`IP from BUILD response: ${primaryIp || 'not found'}`, 'virtfusion');
+          }
+
           log(`Server ${server.id} build initiated`, 'virtfusion');
+
+          // If still no IP, wait a moment and fetch server details (IP assigned async)
+          if (!primaryIp) {
+            log(`No IP yet, waiting 2 seconds then fetching server details...`, 'virtfusion');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Try up to 3 times with 2 second delays
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const serverDetails = await this.getServer(server.id.toString(), false);
+                primaryIp = serverDetails?.primaryIp;
+                log(`Attempt ${attempt}: Fetched IP = ${primaryIp || 'not found'}`, 'virtfusion');
+                if (primaryIp) break;
+                if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 2000));
+              } catch (ipError: any) {
+                log(`Attempt ${attempt}: Failed to fetch server details: ${ipError.message}`, 'virtfusion');
+              }
+            }
+          }
         } catch (buildError: any) {
           log(`Server build failed: ${buildError.message}`, 'virtfusion');
-          // Don't throw - server is created, build may be queued
         }
       } else {
         log(`Server ${server.id} created without OS - awaiting setup`, 'virtfusion');
       }
-      
+
+      log(`FINAL: serverId=${server.id}, uuid=${server.uuid || 'NONE'}, password=${password ? 'SET' : 'NONE'}, primaryIp=${primaryIp || 'NONE'}`, 'virtfusion');
+
       return {
         serverId: server.id,
         name: server.name,
+        uuid: server.uuid,
+        password,
+        primaryIp,
       };
     } catch (error: any) {
       log(`Failed to provision server: ${error.message}`, 'virtfusion');
@@ -1606,7 +1769,7 @@ export class VirtFusionClient {
       return packages.map(pkg => {
         // Try to extract prices from various VirtFusion formats
         let prices: Array<{ price: number; billingPeriod?: string }> = [];
-        
+
         // Format 1: prices array with billingPeriod
         if (Array.isArray(pkg.prices) && pkg.prices.length > 0) {
           prices = pkg.prices.map((p: any) => ({
@@ -1629,12 +1792,26 @@ export class VirtFusionClient {
         else if (pkg.monthlyPrice) {
           prices = [{ price: pkg.monthlyPrice, billingPeriod: 'monthly' }];
         }
-        
+
         // Log price info for debugging
         if (prices.length === 0 || prices.every(p => p.price === 0)) {
           log(`Package ${pkg.id} (${pkg.name}) has no valid pricing data`, 'virtfusion');
         }
-        
+
+        // Parse enabled status - check multiple possible fields
+        // VirtFusion may use 'enabled', 'status', or 'active'
+        let enabled = true; // Default to enabled if no field found
+        if (typeof pkg.enabled === 'boolean') {
+          enabled = pkg.enabled;
+        } else if (typeof pkg.active === 'boolean') {
+          enabled = pkg.active;
+        } else if (pkg.status) {
+          enabled = pkg.status === 'active' || pkg.status === 'enabled' || pkg.status === 1;
+        }
+
+        // Log raw package data for debugging
+        log(`VirtFusion Package ${pkg.id}: name="${pkg.name}", enabled field="${pkg.enabled}", active field="${pkg.active}", status field="${pkg.status}", parsed enabled=${enabled}`, 'virtfusion');
+
         return {
           id: pkg.id,
           code: pkg.code || `pkg-${pkg.id}`,
@@ -1643,7 +1820,7 @@ export class VirtFusionClient {
           memory: pkg.memory || 1024,
           primaryStorage: pkg.primaryStorage || 20,
           traffic: pkg.traffic || 1000,
-          enabled: pkg.enabled !== false,
+          enabled,
           prices,
         };
       });
@@ -1657,6 +1834,10 @@ export class VirtFusionClient {
     try {
       log(`Fetching OS templates for package ${packageId}`, 'virtfusion');
       const data = await this.request<{ data: any }>(`/media/templates/fromServerPackageSpec/${packageId}`);
+
+      // DEBUG: Log the full response structure
+      log(`[VIRTFUSION TEMPLATES] Raw response for package ${packageId}: ${JSON.stringify(data.data)}`, 'virtfusion');
+
       return data.data;
     } catch (error) {
       log(`Failed to fetch OS templates for package ${packageId}: ${error}`, 'virtfusion');
@@ -1693,15 +1874,26 @@ export class VirtFusionClient {
     created: string;
   }>> {
     try {
-      const response = await this.request<{ data: any[] }>('/compute/hypervisors?with=servers&results=200');
+      // Try fetching with stats included
+      const response = await this.request<{ data: any[] }>('/compute/hypervisors?with=servers,stats&results=200');
       const hypervisors = response.data || [];
       log(`Fetched ${hypervisors.length} hypervisors`, 'virtfusion');
-      
+
+      // Debug log first hypervisor structure to understand the response
+      if (hypervisors.length > 0) {
+        const sample = hypervisors[0];
+        log(`Hypervisor sample keys: ${Object.keys(sample).join(', ')}`, 'virtfusion');
+        if (sample.resources) log(`Resources keys: ${Object.keys(sample.resources).join(', ')}`, 'virtfusion');
+        if (sample.stats) log(`Stats keys: ${Object.keys(sample.stats).join(', ')}`, 'virtfusion');
+        if (sample.settings) log(`Settings keys: ${Object.keys(sample.settings).join(', ')}`, 'virtfusion');
+      }
+
       return hypervisors.map(h => {
-        // Extract resource usage from VirtFusion response
-        const resources = h.resources || {};
-        const stats = h.stats || {};
-        
+        // Extract resource usage from VirtFusion response - check multiple possible locations
+        const resources = h.resources || h.resource || h.usage || {};
+        const stats = h.stats || h.statistics || {};
+        const settings = h.settings || {};
+
         // Helper to get first defined value (including 0) or null
         const getFirstDefined = (...values: any[]): number | null => {
           for (const v of values) {
@@ -1709,27 +1901,47 @@ export class VirtFusionClient {
           }
           return null;
         };
-        
-        // Memory calculations - return null only if data truly not available
-        const ramTotalMb = getFirstDefined(resources.memoryTotal, resources.memory_total, h.maxMemory);
-        const ramUsedMb = getFirstDefined(resources.memoryUsed, resources.memory_used);
-        const memoryUsage = (ramTotalMb !== null && ramUsedMb !== null && ramTotalMb > 0) 
-          ? Math.round((ramUsedMb / ramTotalMb) * 100) 
+
+        // Memory calculations - check multiple possible field names
+        // VirtFusion might use: maxMemory, memoryMb, memory, ramMb, etc.
+        const ramTotalMb = getFirstDefined(
+          resources.memoryTotal, resources.memory_total, resources.totalMemory,
+          h.maxMemory, h.memoryMb, h.memory, h.ramMb, h.ram,
+          settings.maxMemory, stats.memoryTotal
+        );
+        const ramUsedMb = getFirstDefined(
+          resources.memoryUsed, resources.memory_used, resources.usedMemory,
+          stats.memoryUsed, stats.memory_used, stats.usedMemory,
+          h.usedMemory, h.memoryUsed
+        );
+        const memoryUsage = (ramTotalMb !== null && ramUsedMb !== null && ramTotalMb > 0)
+          ? Math.round((ramUsedMb / ramTotalMb) * 100)
           : null;
-        
-        // Disk calculations - return null only if data truly not available
-        const diskTotalGb = getFirstDefined(resources.diskTotal, resources.disk_total);
-        const diskUsedGb = getFirstDefined(resources.diskUsed, resources.disk_used);
-        const diskUsage = (diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0) 
-          ? Math.round((diskUsedGb / diskTotalGb) * 100) 
+
+        // Disk calculations - check multiple possible field names
+        const diskTotalGb = getFirstDefined(
+          resources.diskTotal, resources.disk_total, resources.totalDisk,
+          h.diskGb, h.disk, h.storage, stats.diskTotal
+        );
+        const diskUsedGb = getFirstDefined(
+          resources.diskUsed, resources.disk_used, resources.usedDisk,
+          stats.diskUsed, stats.disk_used, stats.usedDisk,
+          h.usedDisk, h.diskUsed
+        );
+        const diskUsage = (diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0)
+          ? Math.round((diskUsedGb / diskTotalGb) * 100)
           : null;
-        
+
         // VM counts - use servers array length if available
-        const vmCount = getFirstDefined(stats.instances, stats.servers, h.servers?.length) ?? 0;
-        const maxVms = h.maxServers ?? 100;
-        
-        // CPU usage - return null only if data truly not available
-        const cpuUsage = getFirstDefined(resources.cpuUsage, resources.cpu_usage, stats.cpu);
+        const vmCount = getFirstDefined(stats.instances, stats.servers, stats.vms, h.servers?.length) ?? 0;
+        const maxVms = h.maxServers ?? settings.maxServers ?? 100;
+
+        // CPU usage - check multiple possible field names
+        const cpuUsage = getFirstDefined(
+          resources.cpuUsage, resources.cpu_usage, resources.cpu,
+          stats.cpu, stats.cpuUsage, stats.cpu_usage,
+          h.cpuUsage, h.cpu
+        );
         
         return {
           id: h.id,
@@ -1836,7 +2048,33 @@ export class VirtFusionClient {
     }
   }
 
-  // Get IP allocations (derived from servers since VirtFusion doesn't have a direct IP list endpoint)
+  // Get individual IP addresses from a block
+  async getIpAddressesFromBlock(blockId: number): Promise<Array<{
+    id: number;
+    address: string;
+    serverId?: number;
+    serverName?: string;
+  }>> {
+    try {
+      // VirtFusion API: /ipAddressBlocks/{id}/addresses
+      const response = await this.request<{ data: any[] }>(`/ipAddressBlocks/${blockId}/addresses?results=500`);
+      const addresses = response.data || [];
+      return addresses.map(ip => ({
+        id: ip.id,
+        address: ip.address || ip.ip || '',
+        serverId: ip.serverId || ip.server_id || undefined,
+        serverName: ip.server?.name || undefined,
+      }));
+    } catch (error: any) {
+      // This endpoint may not exist in all VirtFusion versions
+      if (!error?.message?.includes('404') && !error?.message?.includes('405')) {
+        log(`Failed to fetch IPs from block ${blockId}: ${error}`, 'virtfusion');
+      }
+      return [];
+    }
+  }
+
+  // Get IP allocations - Enhanced to fetch from multiple sources
   async getIpAllocations(): Promise<Array<{
     id: number;
     address: string;
@@ -1845,12 +2083,9 @@ export class VirtFusionClient {
     serverName?: string;
     userId?: number;
     blockId: number;
+    inUse: boolean;
   }>> {
     try {
-      // Fetch all servers to extract their primary IPs
-      // Note: We only use primary IPs to avoid making sequential API calls per server
-      // which would be slow and risk rate limiting
-      const servers = await this.listServers();
       const allocations: Array<{
         id: number;
         address: string;
@@ -1859,28 +2094,117 @@ export class VirtFusionClient {
         serverName?: string;
         userId?: number;
         blockId: number;
+        inUse: boolean;
       }> = [];
-      
-      let ipId = 1;
-      for (const server of servers) {
-        // Add primary IP if exists and is not 'N/A'
-        if (server.primaryIp && server.primaryIp !== 'N/A') {
-          allocations.push({
-            id: ipId++,
-            address: server.primaryIp,
-            type: server.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
-            serverId: parseInt(server.id) || undefined,
-            serverName: server.name,
-            userId: server.userId,
-            blockId: 0,
-          });
+      let globalId = 1;
+
+      // Strategy 1: Try to get IP blocks and their addresses directly
+      try {
+        const ipBlocks = await this.getIpBlocks();
+        log(`Found ${ipBlocks.length} IP blocks`, 'virtfusion');
+
+        for (const block of ipBlocks) {
+          const blockIps = await this.getIpAddressesFromBlock(block.id);
+          log(`Block ${block.id} (${block.name}): ${blockIps.length} addresses`, 'virtfusion');
+
+          for (const ip of blockIps) {
+            allocations.push({
+              id: globalId++,
+              address: ip.address,
+              type: block.type,
+              serverId: ip.serverId,
+              serverName: ip.serverName,
+              userId: undefined,
+              blockId: block.id,
+              inUse: !!ip.serverId,
+            });
+          }
         }
+      } catch (blockError: any) {
+        log(`Failed to fetch from IP blocks: ${blockError.message}`, 'virtfusion');
       }
-      
-      log(`Derived ${allocations.length} IP allocations from ${servers.length} servers`, 'virtfusion');
-      return allocations;
-    } catch (error) {
-      log(`Failed to derive IP allocations: ${error}`, 'virtfusion');
+
+      // Strategy 2: Fetch servers and extract all network interfaces
+      try {
+        const response = await this.request<{ data: VirtFusionServerResponse[] }>('/servers?results=500&remoteState=true');
+        const servers = response.data || [];
+        log(`Fetching IPs from ${servers.length} servers`, 'virtfusion');
+
+        for (const server of servers) {
+          const serverData = this.transformServer(server);
+
+          // Extract IPs from network interfaces
+          if (server.network?.interfaces && Array.isArray(server.network.interfaces)) {
+            for (const iface of server.network.interfaces) {
+              // Add IPv4 addresses
+              if (iface.ipv4 && Array.isArray(iface.ipv4)) {
+                for (const ipv4 of iface.ipv4) {
+                  if (ipv4.address && ipv4.address !== '0.0.0.0') {
+                    allocations.push({
+                      id: globalId++,
+                      address: ipv4.address,
+                      type: 'ipv4',
+                      serverId: server.id,
+                      serverName: server.name || `Server ${server.id}`,
+                      userId: server.userId,
+                      blockId: 0,
+                      inUse: true,
+                    });
+                  }
+                }
+              }
+
+              // Add IPv6 addresses
+              if (iface.ipv6 && Array.isArray(iface.ipv6)) {
+                for (const ipv6 of iface.ipv6) {
+                  if (ipv6.address && ipv6.address !== '::') {
+                    allocations.push({
+                      id: globalId++,
+                      address: ipv6.address,
+                      type: 'ipv6',
+                      serverId: server.id,
+                      serverName: server.name || `Server ${server.id}`,
+                      userId: server.userId,
+                      blockId: 0,
+                      inUse: true,
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // Fallback: If no network interfaces, use primary IP
+          if (serverData.primaryIp && serverData.primaryIp !== 'N/A') {
+            // Check if this IP was already added from network interfaces
+            const alreadyExists = allocations.some(a => a.address === serverData.primaryIp);
+            if (!alreadyExists) {
+              allocations.push({
+                id: globalId++,
+                address: serverData.primaryIp,
+                type: serverData.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
+                serverId: server.id,
+                serverName: server.name || `Server ${server.id}`,
+                userId: server.userId,
+                blockId: 0,
+                inUse: true,
+              });
+            }
+          }
+        }
+      } catch (serverError: any) {
+        log(`Failed to fetch from servers: ${serverError.message}`, 'virtfusion');
+      }
+
+      // Remove duplicates based on IP address
+      const uniqueAllocations = allocations.filter((allocation, index, self) =>
+        index === self.findIndex(a => a.address === allocation.address)
+      );
+
+      log(`Fetched ${uniqueAllocations.length} unique IP allocations (${allocations.length} total before dedup)`, 'virtfusion');
+      return uniqueAllocations;
+    } catch (error: any) {
+      log(`Failed to fetch IP allocations: ${error.message}`, 'virtfusion');
       return [];
     }
   }

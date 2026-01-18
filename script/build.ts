@@ -62,6 +62,23 @@ async function buildAll() {
 }
 
 buildAll().catch((err) => {
-  console.error(err);
+  console.error("Build failed!");
+  if (err.errors && Array.isArray(err.errors)) {
+    console.error("Errors:");
+    err.errors.forEach((e: any, i: number) => {
+      console.error(`  ${i + 1}. ${e.text || e.message || JSON.stringify(e)}`);
+      if (e.location) {
+        console.error(`     at ${e.location.file}:${e.location.line}:${e.location.column}`);
+      }
+    });
+  } else if (err.message) {
+    console.error(err.message);
+  } else {
+    console.error(JSON.stringify(err, null, 2));
+  }
+  if (err.stack) {
+    console.error("\nStack trace:");
+    console.error(err.stack);
+  }
   process.exit(1);
 });

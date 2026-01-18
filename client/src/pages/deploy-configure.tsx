@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useSearch } from "wouter";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppShell } from "@/components/layout/app-shell";
 import { useToast } from "@/hooks/use-toast";
-import { 
+import {
   ArrowLeft,
   Check,
   Loader2,
@@ -16,7 +16,8 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  ArrowUpDown
+  ArrowUpDown,
+  Network
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -264,7 +265,7 @@ export default function DeployConfigurePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <GlassCard className="p-5">
+            <Card className="p-5">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                 Hostname
               </h2>
@@ -272,7 +273,7 @@ export default function DeployConfigurePage() {
                 <Label htmlFor="hostname">Server Hostname</Label>
                 <Input
                   id="hostname"
-                  placeholder="my-server"
+                  placeholder="example.yourhostname.com"
                   value={hostname}
                   onChange={handleHostnameChange}
                   className={hostnameError ? "border-red-500" : ""}
@@ -286,9 +287,9 @@ export default function DeployConfigurePage() {
                   </p>
                 )}
               </div>
-            </GlassCard>
+            </Card>
 
-            <GlassCard className="p-5">
+            <Card className="p-5">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                 Operating System
               </h2>
@@ -345,12 +346,12 @@ export default function DeployConfigurePage() {
                   ))}
                 </div>
               )}
-            </GlassCard>
+            </Card>
           </div>
 
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-6">
-              <GlassCard className="p-5">
+              <Card className="p-5">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Summary</h2>
                 
                 <div className="space-y-4">
@@ -374,7 +375,11 @@ export default function DeployConfigurePage() {
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <ArrowUpDown className="h-3.5 w-3.5" />
-                      <span>{formatTransfer(plan.transferGb)}</span>
+                      <span>{formatTransfer(plan.transferGb)} Transfer</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Network className="h-3.5 w-3.5" />
+                      <span>500Mbps Bandwidth</span>
                     </div>
                   </div>
 
@@ -475,7 +480,7 @@ export default function DeployConfigurePage() {
                     Charges deduct from wallet balance
                   </p>
                 </div>
-              </GlassCard>
+              </Card>
             </div>
           </div>
         </div>

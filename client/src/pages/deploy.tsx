@@ -1,30 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
-import { 
+import {
   Check,
   Loader2,
   Zap,
-  Wallet,
   Server,
   MapPin,
-  AlertTriangle
+  HardDrive,
+  ChevronRight,
+  AlertCircle,
+  Mail,
+  Wallet,
+  HelpCircle
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
+import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
+import { cn } from "@/lib/utils";
 import flagAU from "@/assets/flag-au.png";
 
 interface Plan {
@@ -54,9 +53,20 @@ interface Wallet {
   balanceCents: number;
 }
 
+interface OsTemplate {
+  id: number;
+  name: string;
+  version?: string;
+  description?: string;
+}
+
+interface TemplateGroup {
+  name: string;
+  templates: OsTemplate[];
+}
+
 function formatCurrency(cents: number): string {
-  const dollars = cents / 100;
-  return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatRAM(mb: number): string {
@@ -78,14 +88,51 @@ export default function DeployPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  const [selectedLocationCode, setSelectedLocationCode] = useState<string>("BNE");
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedLocationCode, setSelectedLocationCode] = useState<string>("");
+  const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
+  const [hostname, setHostname] = useState("");
+  const [hostnameError, setHostnameError] = useState("");
+
+  // Check email verification status
+  const { data: authData, isLoading: authLoading } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: () => api.getMe(),
+  });
+
+  // Resend verification email mutation
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const csrfToken = localStorage.getItem('csrfToken') ||
+        document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to send verification email');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Verification email sent!', description: 'Please check your inbox and spam folder.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const { data: plansData, isLoading: loadingPlans } = useQuery<{ plans: Plan[] }>({
     queryKey: ['plans'],
     queryFn: () => api.getPlans(),
+    refetchInterval: 30000, // Auto-refresh every 30 seconds to catch plan availability changes
   });
 
   const { data: locationsData } = useQuery<{ locations: Location[] }>({
@@ -93,318 +140,714 @@ export default function DeployPage() {
     queryFn: () => api.getLocations(),
   });
 
+  const { data: templatesData, isLoading: loadingTemplates } = useQuery<TemplateGroup[]>({
+    queryKey: ['plan-templates', selectedPlanId],
+    queryFn: () => api.getPlanTemplates(selectedPlanId!),
+    enabled: !!selectedPlanId && selectedPlanId > 0,
+  });
+
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
   });
 
+  const { data: stripeStatus } = useQuery({
+    queryKey: ['stripe-status'],
+    queryFn: () => api.getStripeStatus(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const stripeConfigured = stripeStatus?.configured ?? false;
+
   const deployMutation = useMutation({
-    mutationFn: (data: { planId: number; locationCode: string }) => api.deployServer(data),
+    mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string }) =>
+      api.deployServer(data),
     onSuccess: (data: { orderId: number; serverId: number }) => {
       toast({
-        title: "Server created!",
-        description: "Complete the setup to install your operating system.",
+        title: "Server deployed!",
+        description: "Your new VPS is being provisioned.",
       });
+      // Set setupMode flag so server-detail page shows provisioning view
+      try {
+        sessionStorage.setItem(`setupMode:${data.serverId}`, 'true');
+      } catch {
+        // Ignore storage errors
+      }
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setLocation(`/servers/${data.serverId}`);
     },
     onError: (error: any) => {
+      const errorMessage = error.message || "Unable to deploy server. Please try again.";
       toast({
-        title: "Deployment failed",
-        description: error.message || "Failed to create server",
+        title: "Deployment Failed",
+        description: errorMessage,
         variant: "destructive",
       });
     },
   });
 
-  const plans = (plansData?.plans || []).filter(p => p.active);
+  const plans = plansData?.plans || [];
   const locations = locationsData?.locations || [];
   const wallet = walletData?.wallet;
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
+  const templates = templatesData || [];
   const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
 
-  const handleDeployClick = () => {
-    if (!selectedPlanId || !selectedLocationCode) return;
-    setConfirmDialogOpen(true);
+  // Check if all plans are out of stock (using strict equality for reliability)
+  const allPlansOutOfStock = plans.length > 0 && plans.every(p => p.active === false);
+
+  const validateHostname = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length === 0) {
+      setHostnameError("Hostname is required");
+      return false;
+    }
+    if (trimmed.length > 253) {
+      setHostnameError("Hostname must be 253 characters or less");
+      return false;
+    }
+    const labels = trimmed.split('.');
+    for (const label of labels) {
+      if (label.length === 0) {
+        setHostnameError("Hostname cannot have empty labels");
+        return false;
+      }
+      if (label.length > 63) {
+        setHostnameError("Each part must be 63 characters or less");
+        return false;
+      }
+      if (label.length === 1 && !/^[a-zA-Z0-9]$/.test(label)) {
+        setHostnameError("Single character parts must be a letter or number");
+        return false;
+      }
+      if (label.length > 1 && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)) {
+        setHostnameError("Each part must start and end with a letter or number");
+        return false;
+      }
+    }
+    setHostnameError("");
+    return true;
   };
 
-  const handleConfirmDeploy = () => {
-    if (!selectedPlanId || !selectedLocationCode) return;
-    setConfirmDialogOpen(false);
-    deployMutation.mutate({ planId: selectedPlanId, locationCode: selectedLocationCode });
+  const handleHostnameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setHostname(value);
+    if (value.trim()) {
+      validateHostname(value);
+    } else {
+      setHostnameError("");
+    }
   };
 
-  const handleAddFunds = () => {
-    setLocation('/billing');
+  const handleDeploy = () => {
+    if (!selectedPlan || !selectedOsId || !selectedLocationCode) return;
+    if (!validateHostname(hostname)) return;
+
+    deployMutation.mutate({
+      planId: selectedPlan.id,
+      osId: selectedOsId,
+      hostname: hostname.trim().toLowerCase(),
+      locationCode: selectedLocationCode,
+    });
   };
+
+  // Determine current step for progress indicator
+  // Order: Plan → Region → Hostname → OS
+  const currentStep = !selectedPlanId ? 1 : !selectedLocationCode ? 2 : !hostname ? 3 : !selectedOsId ? 4 : 5;
+  const selectedOs = templates.flatMap(g => g.templates).find(t => t.id === selectedOsId);
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  // If email is not verified, show only the verification message
+  // Handle both data structures: { emailVerified, email } or { user: { emailVerified, email } }
+  const isEmailVerified = authData?.emailVerified || authData?.user?.emailVerified;
+  const userEmail = authData?.email || authData?.user?.email;
+
+  if (authData && !isEmailVerified) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto py-12">
+          <div className="bg-warning/10 border-l-4 border-l-warning rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="h-6 w-6 text-warning flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-foreground mb-2">
+                  Email Verification Required
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  You need to verify your email address before you can deploy servers.
+                  We've sent a verification link to <span className="font-medium text-foreground">{userEmail}</span>.
+                </p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Please check your inbox and spam folder for the verification email. If you haven't received it, you can request a new one.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => resendMutation.mutate()}
+                    disabled={resendMutation.isPending || resendMutation.isSuccess}
+                    className="border-warning/50 text-warning hover:bg-warning/20"
+                  >
+                    {resendMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : resendMutation.isSuccess ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Email Sent
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Resend Verification Email
+                      </>
+                    )}
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link href="/dashboard">
+                      Go to Dashboard
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="min-h-[calc(100vh-12rem)] flex flex-col overflow-x-hidden">
+      <TooltipProvider>
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <Server className="h-6 w-6 text-blue-400" />
-            <h1 className="text-2xl font-display font-bold text-foreground" data-testid="text-page-title">
-              Deploy Server
-            </h1>
-          </div>
-          <p className="text-muted-foreground text-sm ml-9">
-            Select a plan and region to get started
+          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">
+            Deploy New Server
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Choose your configuration and deploy in seconds
           </p>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 space-y-8 pb-32 overflow-x-hidden">
-          
-          {/* Location Selection */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <MapPin className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-foreground">
-                Region
-              </h2>
+        {/* Step Progress */}
+        <div className="mb-8 flex items-center gap-2">
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 1 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedPlanId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedPlanId ? <Check className="h-3 w-3" /> : "1"}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {locations.map((location) => (
-                <button
-                  key={location.code}
-                  type="button"
-                  disabled={!location.enabled}
-                  onClick={() => location.enabled && setSelectedLocationCode(location.code)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-                    !location.enabled 
-                      ? 'opacity-40 cursor-not-allowed bg-muted/50 border-border/50' 
-                      : selectedLocationCode === location.code 
-                        ? 'bg-blue-500/10 border-blue-500/50 text-foreground' 
-                        : 'bg-muted/50 border-border hover:border-primary/50 text-muted-foreground hover:text-foreground'
-                  }`}
-                  data-testid={`radio-location-${location.code.toLowerCase()}`}
-                >
-                  <img 
-                    src={flagAU} 
-                    alt={location.countryCode} 
-                    className="h-4 w-5 object-cover rounded-sm"
-                  />
-                  <span className="text-sm font-medium">{location.name}</span>
-                  {selectedLocationCode === location.code && (
-                    <Check className="h-3.5 w-3.5 text-blue-400" />
-                  )}
-                  {!location.enabled && (
-                    <span className="text-[10px] text-muted-foreground">Soon</span>
-                  )}
-                </button>
-              ))}
+            <span>Plan</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 2 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedLocationCode ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedLocationCode ? <Check className="h-3 w-3" /> : "2"}
             </div>
-          </section>
-
-          {/* Plan Selection */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-foreground">
-                Select Plan
-              </h2>
+            <span>Region</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 3 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              hostname ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {hostname ? <Check className="h-3 w-3" /> : "3"}
             </div>
-            
-            {loadingPlans ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 text-blue-400 animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                {plans.map((plan) => {
-                  const isSelected = selectedPlanId === plan.id;
-                  const isPopular = plan.code === 'lite';
-                  
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => setSelectedPlanId(plan.id)}
-                      className={`relative p-4 rounded-xl border text-left transition-all ${
-                        isSelected
-                          ? 'bg-blue-500/10 border-blue-500/50'
-                          : 'bg-card/50 border-border hover:border-primary/30 hover:bg-card/70'
-                      }`}
-                      data-testid={`card-plan-${plan.code}`}
-                    >
-                      {/* Popular Badge */}
-                      {isPopular && (
-                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                          <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-blue-500 text-white rounded-full">
-                            Popular
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* Selected Check */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3">
-                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
-                            <Check className="h-3 w-3 text-foreground" />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Plan Name & Price */}
-                      <div className="mb-4">
-                        <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
-                        <div className="flex items-baseline gap-0.5 mt-1">
-                          <span className="text-2xl font-bold text-foreground">
-                            {formatCurrency(plan.priceMonthly)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">/mo</span>
-                        </div>
-                      </div>
-                      
-                      {/* Specs */}
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">vCPU</span>
-                          <span className="text-foreground font-medium">{plan.vcpu}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">RAM</span>
-                          <span className="text-foreground font-medium">{formatRAM(plan.ramMb)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">NVMe</span>
-                          <span className="text-foreground font-medium">{plan.storageGb} GB</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Transfer</span>
-                          <span className="text-foreground font-medium">{formatTransfer(plan.transferGb)}</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+            <span>Hostname</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            currentStep >= 4 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            <div className={cn(
+              "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+              selectedOsId ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+            )}>
+              {selectedOsId ? <Check className="h-3 w-3" /> : "4"}
+            </div>
+            <span>OS</span>
+          </div>
         </div>
 
-        {/* Sticky Bottom Bar */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:pl-64">
-          <div className="bg-gradient-to-t from-background via-background to-transparent h-6 pointer-events-none" />
-          <div className="bg-background/95 backdrop-blur-sm border-t border-border">
-            <div className="max-w-5xl mx-auto px-4 py-3">
-              <div className="flex items-center justify-between gap-4">
-                {/* Left: Summary */}
-                <div className="flex items-center gap-4 text-sm">
-                  {selectedLocation && (
-                    <div className="flex items-center gap-2">
-                      <img src={flagAU} alt="AU" className="h-3.5 w-5 object-cover rounded-sm" />
-                      <span className="text-foreground/80">{selectedLocation.name}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-8">
+
+            {/* Step 1: Choose Plan */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <Server className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">Choose a Plan</h2>
+              </div>
+
+              {loadingPlans ? (
+                <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
+                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                </div>
+              ) : allPlansOutOfStock ? (
+                <div className="border border-border rounded-lg p-6 bg-card">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="h-6 w-6 text-warning flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-foreground mb-3">
+                        Service Plans Unavailable
+                      </h3>
+                      <p className="text-muted-foreground mb-4 leading-relaxed">
+                        All service plans are currently unavailable due to capacity constraints. New deployments are temporarily suspended while infrastructure expansion is underway. Existing services remain fully operational. Availability will resume once additional resources are provisioned.
+                      </p>
+                      <Link href="/support">
+                        <Button variant="outline" className="border-warning/50 text-warning hover:bg-warning/20">
+                          Open a Support Ticket
+                        </Button>
+                      </Link>
                     </div>
-                  )}
-                  {selectedPlan && (
-                    <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground">
-                      <span className="text-border">|</span>
-                      <span className="text-foreground">{selectedPlan.name}</span>
-                      <span className="text-border">-</span>
-                      <span>{selectedPlan.vcpu} vCPU, {formatRAM(selectedPlan.ramMb)}</span>
-                    </div>
-                  )}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {plans.map((plan) => {
+                    const isSelected = selectedPlanId === plan.id;
+                    const isPopular = plan.popular;
+                    const isOutOfStock = !plan.active;
+
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => !isOutOfStock && setSelectedPlanId(plan.id)}
+                        disabled={isOutOfStock}
+                        className={cn(
+                          "relative p-4 rounded-lg border text-left transition-all",
+                          isOutOfStock
+                            ? "opacity-60 cursor-not-allowed bg-muted/30 border-border"
+                            : isSelected
+                              ? "bg-primary/5 border-primary shadow-sm"
+                              : "bg-card border-border hover:border-primary/50"
+                        )}
+                        data-testid={`card-plan-${plan.code}`}
+                      >
+                        {isPopular && !isOutOfStock && (
+                          <div className="mb-2">
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-primary text-primary-foreground rounded">
+                              Popular
+                            </span>
+                          </div>
+                        )}
+
+                        {isOutOfStock && (
+                          <div className="mb-2">
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-muted-foreground/20 text-muted-foreground rounded">
+                              Out of Stock
+                            </span>
+                          </div>
+                        )}
+
+                        {isSelected && !isOutOfStock && (
+                          <div className="absolute top-3 right-3">
+                            <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mb-3">
+                          <h3 className={cn("text-base font-semibold", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.name}</h3>
+                          <div className="flex items-baseline gap-1 mt-1">
+                            <span className={cn("text-3xl font-bold tracking-tight", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>
+                              ${(plan.priceMonthly / 100).toFixed(0)}
+                            </span>
+                            <span className="text-sm text-muted-foreground">/mo</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  vCPU <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Virtual CPU cores for processing power</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.vcpu}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  RAM <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Memory for running applications and processes</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatRAM(plan.ramMb)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Storage <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Fast NVMe SSD disk space for your files and databases</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.storageGb} GB</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Transfer <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Monthly bandwidth allowance for incoming and outgoing traffic</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatTransfer(plan.transferGb)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  Network Speed <HelpCircle className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Maximum inbound and outbound network speed</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>500 Mbps</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Step 2: Choose Region - Only show after plan is selected */}
+            {selectedPlanId && (
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-2 mb-4">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Choose a Region</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {locations.map((location) => (
+                    <button
+                      key={location.code}
+                      type="button"
+                      disabled={!location.enabled}
+                      onClick={() => location.enabled && setSelectedLocationCode(location.code)}
+                      className={cn(
+                        "flex items-center gap-3 p-4 rounded-lg border transition-all",
+                        !location.enabled
+                          ? "opacity-50 cursor-not-allowed bg-muted/30 border-border"
+                          : selectedLocationCode === location.code
+                            ? "bg-primary/5 border-primary shadow-sm"
+                            : "bg-card border-border hover:border-primary/50"
+                      )}
+                      data-testid={`radio-location-${location.code.toLowerCase()}`}
+                    >
+                      <img
+                        src={flagAU}
+                        alt={location.countryCode}
+                        className="h-8 w-12 object-cover rounded"
+                      />
+                      <div className="flex-1 text-left">
+                        <div className="font-medium text-foreground">{location.name}</div>
+                        <div className="text-xs text-muted-foreground">{location.country}</div>
+                      </div>
+                      {selectedLocationCode === location.code && (
+                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      )}
+                      {!location.enabled && (
+                        <span className="text-xs text-muted-foreground">Soon</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Step 3: Set Hostname - Only show after region is selected */}
+            {selectedPlanId && selectedLocationCode && (
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-2 mb-4">
+                  <Server className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Set Hostname</h2>
+                </div>
+                <div className="border border-border rounded-lg p-6 bg-card">
+                  <div className="space-y-2">
+                    <Label htmlFor="hostname">Server Hostname</Label>
+                    <Input
+                      id="hostname"
+                      placeholder="example.yourhostname.com"
+                      value={hostname}
+                      onChange={handleHostnameChange}
+                      className={hostnameError ? "border-destructive" : ""}
+                      data-testid="input-hostname"
+                    />
+                    {hostnameError ? (
+                      <p className="text-xs text-destructive">{hostnameError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Step 4: Choose OS - Only show after hostname is entered */}
+            {selectedPlanId && selectedLocationCode && hostname && (
+              <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-2 mb-4">
+                  <HardDrive className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Choose Operating System</h2>
                 </div>
 
-                {/* Right: Balance, Price & Deploy */}
-                <div className="flex items-center gap-4">
-                  {/* Balance */}
-                  <div className="hidden sm:block text-right">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
-                    <div className={`text-sm font-mono font-medium ${canAfford ? 'text-green-400' : 'text-foreground'}`}>
-                      {loadingWallet ? "..." : `$${((wallet?.balanceCents || 0) / 100).toFixed(2)}`}
+                {loadingTemplates ? (
+                  <div className="flex items-center justify-center py-12 border border-border rounded-lg bg-card">
+                    <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center py-8 border border-border rounded-lg bg-card">
+                    <p className="text-sm text-muted-foreground">
+                      No operating systems available for this plan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {templates.map((group, groupIndex) => (
+                      <div key={groupIndex}>
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                          {group.name}
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {group.templates.map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => setSelectedOsId(template.id)}
+                              className={cn(
+                                "relative flex items-center gap-3 p-4 rounded-lg border transition-all text-left",
+                                selectedOsId === template.id
+                                  ? "bg-primary/5 border-primary shadow-sm"
+                                  : "bg-card border-border hover:border-primary/50"
+                              )}
+                              data-testid={`radio-os-${template.id}`}
+                            >
+                              <img
+                                src={getOsLogoUrl({ id: template.id, name: template.name, group: group.name })}
+                                alt={template.name}
+                                className="h-10 w-10 object-contain flex-shrink-0"
+                                onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground truncate">
+                                  {template.name}
+                                </div>
+                                {template.version && (
+                                  <div className="text-xs text-muted-foreground">{template.version}</div>
+                                )}
+                              </div>
+                              {selectedOsId === template.id && (
+                                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+
+          {/* Summary Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="lg:sticky lg:top-6">
+              <div className="border border-border rounded-lg p-6 bg-card">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Summary</h2>
+
+                <div className="space-y-4">
+                  {/* Plan */}
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Plan</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedPlan ? selectedPlan.name : <span className="text-muted-foreground italic">Not selected</span>}
+                    </div>
+                    {selectedPlan && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>{selectedPlan.vcpu} vCPU</div>
+                        <div>{formatRAM(selectedPlan.ramMb)} RAM</div>
+                        <div>{selectedPlan.storageGb} GB NVMe</div>
+                        <div>{formatTransfer(selectedPlan.transferGb)} Bandwidth</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Region */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Region</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedLocation ? selectedLocation.name : <span className="text-muted-foreground italic">Not selected</span>}
                     </div>
                   </div>
 
-                  {/* Price */}
-                  {selectedPlan && (
-                    <div className="text-right">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Due Now</div>
-                      <div className="text-sm font-mono font-bold text-foreground">
-                        ${(selectedPlan.priceMonthly / 100).toFixed(2)}
-                      </div>
+                  {/* OS */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Operating System</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {selectedOs ? selectedOs.name : <span className="text-muted-foreground italic">Not selected</span>}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Hostname */}
+                  <div className="border-t border-border pt-4">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide mb-1">Hostname</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {hostname || <span className="text-muted-foreground italic">Not set</span>}
+                    </div>
+                  </div>
+
+                  {/* Pricing */}
+                  <div className="border-t border-border pt-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Monthly price</span>
+                      <span className="font-mono font-medium text-foreground">
+                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Balance</span>
+                      <span className={cn(
+                        "font-mono font-medium",
+                        canAfford ? "text-success" : "text-foreground"
+                      )}>
+                        {loadingWallet ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading...
+                          </span>
+                        ) : formatCurrency(wallet?.balanceCents || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-border">
+                      <span className="font-medium text-foreground">Due now</span>
+                      <span className="font-mono font-bold text-xl text-primary">
+                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                      </span>
+                    </div>
+                  </div>
 
                   {/* Deploy Button */}
-                  {!selectedPlan ? (
-                    <Button 
-                      className="h-9 px-5 bg-muted text-muted-foreground hover:bg-muted cursor-not-allowed border-0" 
-                      disabled 
-                      data-testid="button-deploy-disabled"
-                    >
-                      Select a plan
-                    </Button>
-                  ) : canAfford ? (
-                    <Button 
-                      className="h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white border-0" 
-                      onClick={handleDeployClick}
-                      disabled={loadingWallet || deployMutation.isPending}
-                      data-testid="button-deploy"
-                    >
-                      {deployMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-1.5" />
-                          Deploy
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button 
-                      className="h-9 px-5 bg-muted hover:bg-muted/80 text-foreground border-0" 
-                      onClick={handleAddFunds}
-                      data-testid="button-add-funds"
-                    >
-                      <Wallet className="h-4 w-4 mr-1.5" />
-                      Add Funds
-                    </Button>
-                  )}
+                  <div className="pt-2">
+                    {!selectedPlanId || !hostname || !selectedOsId ? (
+                      <Button
+                        className="w-full h-11"
+                        disabled
+                        data-testid="button-deploy-disabled"
+                      >
+                        {!selectedPlanId ? 'Select plan' : !hostname ? 'Enter hostname' : 'Select OS'}
+                      </Button>
+                    ) : canAfford ? (
+                      <Button
+                        className="w-full h-11 gap-2"
+                        onClick={handleDeploy}
+                        disabled={deployMutation.isPending || loadingWallet}
+                        data-testid="button-deploy"
+                      >
+                        {deployMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4" />
+                            Deploy Server
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <Wallet className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground mb-1">
+                                Insufficient Balance
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                You need {selectedPlan ? formatCurrency(selectedPlan.priceMonthly - (wallet?.balanceCents || 0)) : '—'} more to deploy this server.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          asChild
+                          className="w-full h-11"
+                          variant="outline"
+                        >
+                          <Link href="/billing">
+                            Go to Billing
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Charges deduct from wallet balance
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Deploy Confirmation Dialog */}
-      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <AlertDialogContent className="bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
-              Confirm Deployment
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              You are about to spend{" "}
-              <span className="font-semibold text-foreground">
-                {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "$0"}
-              </span>{" "}
-              to deploy this server.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-muted" data-testid="button-cancel-deploy">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleConfirmDeploy}
-              className="bg-blue-600 hover:bg-blue-700"
-              data-testid="button-confirm-deploy"
-            >
-              <Zap className="h-4 w-4 mr-1.5" />
-              Deploy
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </TooltipProvider>
     </AppShell>
   );
 }

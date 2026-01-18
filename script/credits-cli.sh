@@ -36,12 +36,12 @@ export $(grep -v '^#' "$INSTALL_DIR/.env" | xargs 2>/dev/null)
 if [[ -z "$DATABASE_URL" ]]; then
     echo ""
     echo -e "  ${YELLOW}DATABASE_URL not configured.${NC}"
-    echo -e "  ${DIM}Running update-ozvps to auto-configure database...${NC}"
+    echo -e "  ${DIM}Running ozvps --update to auto-configure database...${NC}"
     echo ""
-    update-ozvps
+    ozvps --update
     # Re-source .env after update
     export $(grep -v '^#' "$INSTALL_DIR/.env" | xargs 2>/dev/null)
-    [[ -z "$DATABASE_URL" ]] && error_exit "Database configuration failed. Check update-ozvps logs."
+    [[ -z "$DATABASE_URL" ]] && error_exit "Database configuration failed. Check ozvps logs."
 fi
 
 read -sp "  Enter Password: " INPUT_PASS < /dev/tty

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Server, Cpu, HardDrive, Activity, Zap, LogIn, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -48,7 +48,7 @@ export default function PricingPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col items-center mb-12">
           <Link href={isLoggedIn ? "/dashboard" : "/login"}>
-            <img src={logo} alt="OzVPS" className="h-16 w-auto mb-6 cursor-pointer" data-testid="img-logo" />
+            <img src={logo} alt="OzVPS" className="h-16 w-auto dark:invert-0 invert mb-6 cursor-pointer" data-testid="img-logo" />
           </Link>
           <h1 className="text-3xl font-display font-bold text-foreground text-center" data-testid="text-page-title">
             VPS Pricing
@@ -66,7 +66,7 @@ export default function PricingPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             {plans.map((plan) => (
-              <GlassCard key={plan.id} className="p-6" data-testid={`card-plan-${plan.code}`}>
+              <Card key={plan.id} className="p-6" data-testid={`card-plan-${plan.code}`}>
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="text-xl font-semibold text-foreground">{plan.name}</h3>
@@ -105,12 +105,12 @@ export default function PricingPage() {
                     {isLoggedIn ? "Deploy Now" : "Get Started"}
                   </Button>
                 </Link>
-              </GlassCard>
+              </Card>
             ))}
           </div>
         )}
 
-        <GlassCard className="p-8 text-center">
+        <Card className="p-8 text-center">
           <h2 className="text-xl font-semibold text-foreground mb-4">Ready to get started?</h2>
           {isLoggedIn ? (
             <div className="space-y-4">
@@ -137,7 +137,7 @@ export default function PricingPage() {
               </Link>
             </div>
           )}
-        </GlassCard>
+        </Card>
 
         <p className="text-center text-sm text-muted-foreground mt-8">
           All prices in AUD. Need help? Contact support@ozvps.com

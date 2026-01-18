@@ -1,4 +1,86 @@
 import { Server, SupportTicket, TicketMessage } from "./types";
+import { SessionError } from "./queryClient";
+
+// CSRF token management
+const CSRF_COOKIE = 'ozvps_csrf';
+
+// Session error callback (set by App.tsx)
+let sessionErrorCallback: ((error: SessionError) => void) | null = null;
+
+export function setApiSessionErrorCallback(callback: (error: SessionError) => void) {
+  sessionErrorCallback = callback;
+}
+
+function getCsrfToken(): string | null {
+  // Get CSRF token from cookie
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === CSRF_COOKIE) {
+      return decodeURIComponent(value);
+    }
+  }
+  // Fallback to localStorage (set after login response)
+  return localStorage.getItem('csrfToken');
+}
+
+// Store CSRF token from login response
+export function storeCsrfToken(token: string): void {
+  localStorage.setItem('csrfToken', token);
+}
+
+// Clear CSRF token on logout
+export function clearCsrfToken(): void {
+  localStorage.removeItem('csrfToken');
+}
+
+// Enhanced fetch that includes CSRF token for mutating requests
+async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const method = (options.method || 'GET').toUpperCase();
+
+  // Add CSRF token for mutating requests
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      options.headers = {
+        ...options.headers,
+        'X-CSRF-Token': csrfToken,
+      };
+    }
+  }
+
+  const response = await fetch(url, options);
+
+  // Handle 401 errors - trigger session error callback to redirect to login
+  // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
+  if (response.status === 401) {
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/login' ||
+                       currentPath === '/register' ||
+                       currentPath === '/forgot-password' ||
+                       currentPath === '/reset-password';
+
+    if (!isAuthPage) {
+      let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
+      try {
+        const clone = response.clone();
+        errorData = await clone.json();
+      } catch (e) {
+        // Failed to parse JSON, use default error
+      }
+
+      // Trigger session error callback (will redirect to login)
+      if (sessionErrorCallback) {
+        sessionErrorCallback({
+          error: errorData.error || 'Authentication required',
+          code: errorData.code || 'UNAUTHORIZED'
+        });
+      }
+    }
+  }
+
+  return response;
+}
 
 export interface NetworkInterface {
   name: string;
@@ -31,7 +113,7 @@ class ApiClient {
 
   async checkHealth(): Promise<{ status: string; errorCode?: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/health`);
+      const response = await secureFetch(`${this.baseUrl}/health`);
       const data = await response.json();
       return data;
     } catch (error) {
@@ -40,33 +122,50 @@ class ApiClient {
   }
 
   async listServers(): Promise<Server[]> {
-    const response = await fetch(`${this.baseUrl}/servers`);
-    if (!response.ok) throw new Error('Failed to fetch servers');
+    const response = await secureFetch(`${this.baseUrl}/servers`);
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      if (response.status === 500) throw new Error('Unable to load servers. Our servers may be experiencing issues. Please try again in a moment.');
+      throw new Error('Unable to load your servers. Please check your internet connection and try again.');
+    }
     return response.json();
   }
 
   async getServer(id: string): Promise<Server> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch server');
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}`);
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Server not found. It may have been deleted or you may not have access to it.');
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      throw new Error('Unable to load server details. Please try again.');
+    }
     return response.json();
   }
 
   async powerAction(id: string, action: 'boot' | 'reboot' | 'shutdown' | 'poweroff'): Promise<{ success: boolean }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/power`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/power`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Failed to perform power action');
+      if (response.status === 409) {
+        throw new Error(data.error || 'This server is currently being modified. Please wait a moment and try again.');
+      }
+      if (response.status === 503) {
+        throw new Error('Unable to control the server right now. The infrastructure may be temporarily unavailable.');
+      }
+      throw new Error(data.error || `Unable to ${action} the server. Please try again in a moment.`);
     }
     return response.json();
   }
 
   async getMetrics(id: string): Promise<{ cpu: number[], ram: number[], net: number[] }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/metrics`);
-    if (!response.ok) throw new Error('Failed to fetch metrics');
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/metrics`);
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Server metrics are not available yet. The server may still be setting up.');
+      throw new Error('Unable to load server metrics. Metrics will be available once the server is fully running.');
+    }
     return response.json();
   }
 
@@ -81,7 +180,7 @@ class ApiClient {
     disk_total_gb?: number,
     running?: boolean 
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/stats`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/stats`);
     if (!response.ok) throw new Error('Failed to fetch live stats');
     return response.json();
   }
@@ -98,7 +197,7 @@ class ApiClient {
       };
     };
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/vnc`);
     if (!response.ok) throw new Error('Failed to fetch VNC details');
     return response.json();
   }
@@ -115,7 +214,7 @@ class ApiClient {
       };
     };
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc/enable`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/vnc/enable`, {
       method: 'POST',
     });
     if (!response.ok) throw new Error('Failed to enable VNC');
@@ -123,14 +222,14 @@ class ApiClient {
   }
 
   async disableVnc(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/vnc/disable`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/vnc/disable`, {
       method: 'POST',
     });
     if (!response.ok) throw new Error('Failed to disable VNC');
   }
 
   async getTrafficHistory(id: string): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/traffic`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/traffic`);
     if (!response.ok) throw new Error('Failed to fetch traffic data');
     return response.json();
   }
@@ -141,37 +240,52 @@ class ApiClient {
     interval: number;
     period: string;
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/traffic/statistics?period=${period}`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/traffic/statistics?period=${period}`);
     if (!response.ok) throw new Error('Failed to fetch traffic statistics');
     return response.json();
   }
 
   async getTotalBandwidth(): Promise<{ totalBandwidth: number; totalLimit: number; serverCount: number }> {
-    const response = await fetch(`${this.baseUrl}/bandwidth/total`);
+    const response = await secureFetch(`${this.baseUrl}/bandwidth/total`);
     if (!response.ok) throw new Error('Failed to fetch total bandwidth');
     return response.json();
   }
 
+  // Combined dashboard endpoint - reduces 4 API calls to 1
+  async getDashboardOverview(): Promise<{
+    servers: Server[];
+    cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: string; status: string }>;
+    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number }>;
+    bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/dashboard/overview`);
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('Your session has expired. Please log in again.');
+      throw new Error('Unable to load dashboard. Please check your internet connection and try again.');
+    }
+    return response.json();
+  }
+
   async getNetworkInfo(id: string): Promise<{ interfaces: NetworkInterface[] }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/network`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/network`);
     if (!response.ok) throw new Error('Failed to fetch network info');
     return response.json();
   }
 
   async getOsTemplates(id: string): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/os-templates`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/os-templates`);
     if (!response.ok) throw new Error('Failed to fetch OS templates');
     return response.json();
   }
 
   async getReinstallTemplates(id: string): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall/templates`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/reinstall/templates`);
     if (!response.ok) throw new Error('Failed to fetch available templates');
     return response.json();
   }
 
   async renameServer(id: string, name: string): Promise<{ success: boolean; name: string }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/name`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
@@ -181,7 +295,7 @@ class ApiClient {
   }
 
   async reinstallServer(id: string, osId: number, hostname: string): Promise<{ success: boolean; error?: string; data?: { generatedPassword?: string } }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/reinstall`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/reinstall`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ osId, hostname })
@@ -194,7 +308,7 @@ class ApiClient {
   }
 
   async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; username?: string; error?: string }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/reset-password`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -207,7 +321,7 @@ class ApiClient {
 
 
   async updateServerName(id: string, name: string): Promise<{ success: boolean; name: string }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/name`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/name`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
@@ -225,11 +339,12 @@ class ApiClient {
     buildFailed: boolean;
     suspended: boolean;
     commissionStatus: number;
+    commissioned: number; // 0 = not built, 1 = building, 2 = paused, 3 = complete (AUTHORITATIVE)
     isComplete: boolean;
     isError: boolean;
     isBuilding: boolean;
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/build-status`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/build-status`);
     if (!response.ok) throw new Error('Failed to fetch build status');
     return response.json();
   }
@@ -240,7 +355,7 @@ class ApiClient {
   async getAllCancellations(): Promise<{
     cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: 'grace' | 'immediate'; status: string }>;
   }> {
-    const response = await fetch(`${this.baseUrl}/cancellations`);
+    const response = await secureFetch(`${this.baseUrl}/cancellations`);
     if (!response.ok) throw new Error('Failed to fetch cancellations');
     return response.json();
   }
@@ -260,13 +375,13 @@ class ApiClient {
       completedAt: string | null;
     } | null;
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`);
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/cancellation`);
     if (!response.ok) throw new Error('Failed to fetch cancellation status');
     return response.json();
   }
 
   async requestCancellation(id: string, reason?: string, mode: 'grace' | 'immediate' = 'grace'): Promise<{ success: boolean; cancellation: any }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/cancellation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason, mode })
@@ -279,7 +394,7 @@ class ApiClient {
   }
 
   async revokeCancellation(id: string): Promise<{ success: boolean; cancellation: any }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/cancellation`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/cancellation`, {
       method: 'DELETE'
     });
     if (!response.ok) {
@@ -302,7 +417,7 @@ class ApiClient {
       password: string; 
     }; 
   }> {
-    const response = await fetch(`${this.baseUrl}/servers/${id}/console-url`, {
+    const response = await secureFetch(`${this.baseUrl}/servers/${id}/console-url`, {
       method: 'POST',
     });
     if (!response.ok) throw new Error('Failed to generate console URL');
@@ -323,7 +438,7 @@ class ApiClient {
     updated?: string;
     createdAt?: string;
   }> {
-    const response = await fetch(`${this.baseUrl}/user/profile`);
+    const response = await secureFetch(`${this.baseUrl}/user/profile`);
     if (!response.ok) throw new Error('Failed to fetch user profile');
     return response.json();
   }
@@ -334,7 +449,7 @@ class ApiClient {
     email: string;
     timezone?: string;
   }> {
-    const response = await fetch(`${this.baseUrl}/user/profile`, {
+    const response = await secureFetch(`${this.baseUrl}/user/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -343,31 +458,123 @@ class ApiClient {
     return response.json();
   }
 
-  async changePassword(newPassword: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${this.baseUrl}/user/password`, {
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newPassword })
-    });
-    if (!response.ok) throw new Error('Failed to change password');
-    return response.json();
-  }
-
-  async login(email: string, password: string, recaptchaToken?: string): Promise<{ user: { id: number; email: string; name: string } }> {
-    const response = await fetch(`${this.baseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, recaptchaToken })
+      body: JSON.stringify({ currentPassword, newPassword })
     });
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Invalid email or password');
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to change password');
     }
     return response.json();
   }
 
-  async register(email: string, password: string, name?: string): Promise<{ user: { id: number; email: string; name: string } }> {
-    const response = await fetch(`${this.baseUrl}/auth/register`, {
+  // Two-Factor Authentication
+  async get2FAStatus(): Promise<{
+    enabled: boolean;
+    verifiedAt: string | null;
+    lastUsedAt: string | null;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/status`);
+    if (!response.ok) throw new Error('Failed to get 2FA status');
+    return response.json();
+  }
+
+  async setup2FA(): Promise<{
+    secret: string;
+    qrCode: string;
+    otpAuthUrl: string;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/setup`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to set up 2FA');
+    }
+    return response.json();
+  }
+
+  async enable2FA(token: string): Promise<{
+    success: boolean;
+    backupCodes: string[];
+    message: string;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to enable 2FA');
+    }
+    return response.json();
+  }
+
+  async disable2FA(options: { token?: string; password?: string }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/disable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to disable 2FA');
+    }
+    return response.json();
+  }
+
+  async regenerate2FABackupCodes(token: string): Promise<{
+    success: boolean;
+    backupCodes: string[];
+    message: string;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/backup-codes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to generate backup codes');
+    }
+    return response.json();
+  }
+
+  async login(
+    email: string,
+    password: string,
+    recaptchaToken?: string,
+    totpToken?: string,
+    backupCode?: string
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string }> {
+    const response = await secureFetch(`${this.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, recaptchaToken, totpToken, backupCode })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const error = new Error(data.error || 'Invalid email or password') as Error & { code?: string };
+      error.code = data.code;
+      throw error;
+    }
+    const data = await response.json();
+    // Store CSRF token if provided
+    if (data.csrfToken) {
+      storeCsrfToken(data.csrfToken);
+    }
+    return data;
+  }
+
+  async register(email: string, password: string, name?: string): Promise<{ user: { id: number; email: string; name: string }; csrfToken?: string }> {
+    const response = await secureFetch(`${this.baseUrl}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name })
@@ -376,57 +583,64 @@ class ApiClient {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Registration failed');
     }
-    return response.json();
+    const data = await response.json();
+    // Store CSRF token if provided
+    if (data.csrfToken) {
+      storeCsrfToken(data.csrfToken);
+    }
+    return data;
   }
 
   async logout(): Promise<void> {
-    await fetch(`${this.baseUrl}/auth/logout`, { method: 'POST' });
+    await secureFetch(`${this.baseUrl}/auth/logout`, { method: 'POST' });
+    // Clear CSRF token on logout
+    clearCsrfToken();
   }
 
   async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string; isAdmin?: boolean } } | null> {
-    const response = await fetch(`${this.baseUrl}/auth/me`);
+    const response = await secureFetch(`${this.baseUrl}/auth/me`);
     if (!response.ok) return null;
     return response.json();
   }
 
   async getCurrentUser(): Promise<{ user: { id: number | string; email: string; name?: string; isAdmin?: boolean } }> {
-    const response = await fetch(`${this.baseUrl}/auth/me`);
+    const response = await secureFetch(`${this.baseUrl}/auth/me`);
     if (!response.ok) throw new Error('Not authenticated');
     return response.json();
   }
 
   async getPlans(): Promise<{ plans: any[] }> {
-    const response = await fetch(`${this.baseUrl}/plans`);
+    const response = await secureFetch(`${this.baseUrl}/plans`);
     if (!response.ok) throw new Error('Failed to fetch plans');
     return response.json();
   }
 
   async getLocations(): Promise<{ locations: any[] }> {
-    const response = await fetch(`${this.baseUrl}/locations`);
+    const response = await secureFetch(`${this.baseUrl}/locations`);
     if (!response.ok) throw new Error('Failed to fetch locations');
     return response.json();
   }
 
   async getMe(): Promise<{ user: any; balance: number; balanceFormatted: string }> {
-    const response = await fetch(`${this.baseUrl}/me`);
+    const response = await secureFetch(`${this.baseUrl}/me`);
     if (!response.ok) throw new Error('Failed to fetch user info');
     return response.json();
   }
 
   async getWallet(): Promise<{ wallet: any }> {
-    const response = await fetch(`${this.baseUrl}/wallet`);
+    const response = await secureFetch(`${this.baseUrl}/wallet`);
     if (!response.ok) throw new Error('Failed to fetch wallet');
     return response.json();
   }
 
   async getWalletTransactions(): Promise<{ transactions: any[] }> {
-    const response = await fetch(`${this.baseUrl}/wallet/transactions`);
+    const response = await secureFetch(`${this.baseUrl}/wallet/transactions`);
     if (!response.ok) throw new Error('Failed to fetch transactions');
     return response.json();
   }
 
   async createTopup(amountCents: number): Promise<{ url: string }> {
-    const response = await fetch(`${this.baseUrl}/wallet/topup`, {
+    const response = await secureFetch(`${this.baseUrl}/wallet/topup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountCents })
@@ -439,13 +653,13 @@ class ApiClient {
   }
 
   async getPlanTemplates(planId: number): Promise<any[]> {
-    const response = await fetch(`${this.baseUrl}/plans/${planId}/templates`);
+    const response = await secureFetch(`${this.baseUrl}/plans/${planId}/templates`);
     if (!response.ok) throw new Error('Failed to fetch OS templates');
     return response.json();
   }
 
   async deployServer(data: { planId: number; osId?: number; hostname?: string; locationCode?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
-    const response = await fetch(`${this.baseUrl}/deploy`, {
+    const response = await secureFetch(`${this.baseUrl}/deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -458,7 +672,7 @@ class ApiClient {
   }
 
   async getDeployOrder(orderId: number): Promise<{ order: any }> {
-    const response = await fetch(`${this.baseUrl}/deploy/${orderId}`);
+    const response = await secureFetch(`${this.baseUrl}/deploy/${orderId}`);
     if (!response.ok) throw new Error('Failed to fetch order');
     return response.json();
   }
@@ -468,13 +682,13 @@ class ApiClient {
     publishableKey?: string;
     error?: string;
   }> {
-    const response = await fetch(`${this.baseUrl}/billing/stripe/status`);
+    const response = await secureFetch(`${this.baseUrl}/billing/stripe/status`);
     if (!response.ok) throw new Error('Failed to fetch Stripe status');
     return response.json();
   }
 
   async createBillingPortalSession(): Promise<{ url: string }> {
-    const response = await fetch(`${this.baseUrl}/billing/portal`, {
+    const response = await secureFetch(`${this.baseUrl}/billing/portal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -493,7 +707,7 @@ class ApiClient {
     expYear: number;
     fingerprint?: string;
   }> }> {
-    const response = await fetch(`${this.baseUrl}/billing/payment-methods`);
+    const response = await secureFetch(`${this.baseUrl}/billing/payment-methods`);
     if (!response.ok) throw new Error('Failed to fetch payment methods');
     return response.json();
   }
@@ -504,7 +718,7 @@ class ApiClient {
     duplicate?: boolean;
     existingCard?: { brand: string; last4: string };
   }> {
-    const response = await fetch(`${this.baseUrl}/billing/payment-methods/validate`, {
+    const response = await secureFetch(`${this.baseUrl}/billing/payment-methods/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paymentMethodId }),
@@ -525,24 +739,20 @@ class ApiClient {
     clientSecret?: string;
     paymentIntentId?: string;
   }> {
-    console.log(`[API] Direct topup request: $${(amountCents / 100).toFixed(2)}, payment method: ${paymentMethodId}`);
-    const response = await fetch(`${this.baseUrl}/wallet/topup/direct`, {
+    const response = await secureFetch(`${this.baseUrl}/wallet/topup/direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountCents, paymentMethodId }),
     });
-    console.log(`[API] Direct topup response status: ${response.status}`);
     const data = await response.json();
-    console.log('[API] Direct topup response data:', data);
     if (!response.ok) {
-      console.error('[API] Direct topup failed:', data.error);
       throw new Error(data.error || 'Payment failed');
     }
     return data;
   }
 
   async createSetupIntent(): Promise<{ clientSecret: string }> {
-    const response = await fetch(`${this.baseUrl}/billing/setup-intent`, {
+    const response = await secureFetch(`${this.baseUrl}/billing/setup-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -554,7 +764,7 @@ class ApiClient {
   }
 
   async deletePaymentMethod(id: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${this.baseUrl}/billing/payment-methods/${id}`, {
+    const response = await secureFetch(`${this.baseUrl}/billing/payment-methods/${id}`, {
       method: 'DELETE',
     });
     if (!response.ok) {
@@ -568,11 +778,12 @@ class ApiClient {
     id: number;
     type: string;
     amountCents: number;
+    description?: string | null;
     createdAt: string;
     stripeEventId?: string;
     metadata?: Record<string, unknown>;
   }> }> {
-    const response = await fetch(`${this.baseUrl}/billing/transactions`);
+    const response = await secureFetch(`${this.baseUrl}/billing/transactions`);
     if (!response.ok) throw new Error('Failed to fetch transactions');
     return response.json();
   }
@@ -584,8 +795,9 @@ class ApiClient {
     description: string;
     status: string;
     createdAt: string;
+    pdfUrl?: string | null;
   }> }> {
-    const response = await fetch(`${this.baseUrl}/billing/invoices`);
+    const response = await secureFetch(`${this.baseUrl}/billing/invoices`);
     if (!response.ok) throw new Error('Failed to fetch invoices');
     return response.json();
   }
@@ -600,13 +812,13 @@ class ApiClient {
     suspendAt: string | null;
     autoRenew: boolean;
   }> }> {
-    const response = await fetch(`${this.baseUrl}/billing/upcoming`);
+    const response = await secureFetch(`${this.baseUrl}/billing/upcoming`);
     if (!response.ok) throw new Error('Failed to fetch upcoming charges');
     return response.json();
   }
 
   async downloadInvoice(invoiceId: number): Promise<Blob> {
-    const response = await fetch(`${this.baseUrl}/billing/invoices/${invoiceId}/download`);
+    const response = await secureFetch(`${this.baseUrl}/billing/invoices/${invoiceId}/download`);
     if (!response.ok) throw new Error('Failed to download invoice');
     return response.blob();
   }
@@ -623,7 +835,7 @@ class ApiClient {
     amountCents: number;
     paymentMethodId: string | null;
   }> {
-    const response = await fetch(`${this.baseUrl}/billing/auto-topup`);
+    const response = await secureFetch(`${this.baseUrl}/billing/auto-topup`);
     if (!response.ok) throw new Error('Failed to fetch auto top-up settings');
     return response.json();
   }
@@ -639,7 +851,7 @@ class ApiClient {
     amountCents: number;
     paymentMethodId: string | null;
   }> {
-    const response = await fetch(`${this.baseUrl}/billing/auto-topup`, {
+    const response = await secureFetch(`${this.baseUrl}/billing/auto-topup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -651,23 +863,37 @@ class ApiClient {
     return response.json();
   }
 
+  async updateAutoTopup(config: {
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }): Promise<{
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    paymentMethodId: string | null;
+  }> {
+    return this.updateAutoTopupSettings(config);
+  }
+
   async getServerBillingStatuses(): Promise<{
     billing: Record<string, { status: string; overdueSince: Date | null }>;
   }> {
-    const response = await fetch(`${this.baseUrl}/billing/servers`);
+    const response = await secureFetch(`${this.baseUrl}/billing/servers`);
     if (!response.ok) throw new Error('Failed to fetch server billing statuses');
     return response.json();
   }
 
   // Admin Settings
   async getRegistrationSetting(): Promise<{ enabled: boolean }> {
-    const response = await fetch(`${this.baseUrl}/admin/settings/registration`);
+    const response = await secureFetch(`${this.baseUrl}/admin/settings/registration`);
     if (!response.ok) throw new Error('Failed to fetch registration setting');
     return response.json();
   }
 
   async updateRegistrationSetting(enabled: boolean): Promise<{ enabled: boolean }> {
-    const response = await fetch(`${this.baseUrl}/admin/settings/registration`, {
+    const response = await secureFetch(`${this.baseUrl}/admin/settings/registration`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
@@ -675,6 +901,60 @@ class ApiClient {
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to update registration setting');
+    }
+    return response.json();
+  }
+
+  // ==========================================
+  // ADMIN RATE LIMIT MANAGEMENT
+  // ==========================================
+
+  async getRateLimits(): Promise<{
+    entries: Array<{
+      type: 'email' | 'ip' | 'email_ip_combo';
+      key: string;
+      attempts: number;
+      lockedUntil: string | null;
+      lastAttempt: string;
+      remainingMs: number | null;
+    }>;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/admin/security/rate-limits`);
+    if (!response.ok) throw new Error('Failed to fetch rate limits');
+    return response.json();
+  }
+
+  async unblockRateLimit(type: string, key: string): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(
+      `${this.baseUrl}/admin/security/rate-limits/${type}/${encodeURIComponent(key)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to unblock');
+    }
+    return response.json();
+  }
+
+  async unblockEmail(email: string): Promise<{ success: boolean; cleared: number; message: string }> {
+    const response = await secureFetch(
+      `${this.baseUrl}/admin/security/rate-limits/email/${encodeURIComponent(email)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to unblock email');
+    }
+    return response.json();
+  }
+
+  async clearAllRateLimits(): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/admin/security/rate-limits`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to clear rate limits');
     }
     return response.json();
   }
@@ -688,7 +968,7 @@ class ApiClient {
     waitingUser: number;
     total: number;
   }> {
-    const response = await fetch(`${this.baseUrl}/support/counts`);
+    const response = await secureFetch(`${this.baseUrl}/support/counts`);
     if (!response.ok) throw new Error('Failed to fetch ticket counts');
     return response.json();
   }
@@ -719,7 +999,7 @@ class ApiClient {
     description: string;
     virtfusionServerId?: string;
   }): Promise<{ ticket: SupportTicket }> {
-    const response = await fetch(`${this.baseUrl}/support/tickets`, {
+    const response = await secureFetch(`${this.baseUrl}/support/tickets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -736,7 +1016,7 @@ class ApiClient {
     messages: TicketMessage[];
     server: any | null;
   }> {
-    const response = await fetch(`${this.baseUrl}/support/tickets/${id}`);
+    const response = await secureFetch(`${this.baseUrl}/support/tickets/${id}`);
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to fetch ticket');
@@ -745,7 +1025,7 @@ class ApiClient {
   }
 
   async replyToSupportTicket(id: number, message: string): Promise<{ message: TicketMessage }> {
-    const response = await fetch(`${this.baseUrl}/support/tickets/${id}/messages`, {
+    const response = await secureFetch(`${this.baseUrl}/support/tickets/${id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
@@ -758,12 +1038,23 @@ class ApiClient {
   }
 
   async closeSupportTicket(id: number): Promise<{ ticket: SupportTicket }> {
-    const response = await fetch(`${this.baseUrl}/support/tickets/${id}/close`, {
+    const response = await secureFetch(`${this.baseUrl}/support/tickets/${id}/close`, {
       method: 'POST',
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to close ticket');
+    }
+    return response.json();
+  }
+
+  async reopenSupportTicket(id: number): Promise<{ ticket: SupportTicket }> {
+    const response = await secureFetch(`${this.baseUrl}/support/tickets/${id}/reopen`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to reopen ticket');
     }
     return response.json();
   }
@@ -778,7 +1069,7 @@ class ApiClient {
     open: number;
     total: number;
   }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/counts`);
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/counts`);
     if (!response.ok) throw new Error('Failed to fetch admin ticket counts');
     return response.json();
   }
@@ -826,7 +1117,7 @@ class ApiClient {
     server: any | null;
     user: any | null;
   }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}`);
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}`);
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to fetch ticket');
@@ -835,7 +1126,7 @@ class ApiClient {
   }
 
   async adminReplyToTicket(id: number, message: string, status?: string): Promise<{ message: TicketMessage }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/messages`, {
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, status }),
@@ -853,7 +1144,7 @@ class ApiClient {
     category?: string;
     assignedAdminId?: string | null;
   }): Promise<{ ticket: SupportTicket }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}`, {
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -866,7 +1157,7 @@ class ApiClient {
   }
 
   async adminCloseTicket(id: number): Promise<{ ticket: SupportTicket }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/close`, {
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}/close`, {
       method: 'POST',
     });
     if (!response.ok) {
@@ -877,12 +1168,23 @@ class ApiClient {
   }
 
   async adminReopenTicket(id: number): Promise<{ ticket: SupportTicket }> {
-    const response = await fetch(`${this.baseUrl}/admin/tickets/${id}/reopen`, {
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}/reopen`, {
       method: 'POST',
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to reopen ticket');
+    }
+    return response.json();
+  }
+
+  async adminDeleteTicket(id: number): Promise<{ success: boolean }> {
+    const response = await secureFetch(`${this.baseUrl}/admin/tickets/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete ticket');
     }
     return response.json();
   }

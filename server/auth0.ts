@@ -32,10 +32,14 @@ class Auth0Client {
   private managementToken: string | null = null;
   private managementTokenExpiry: number = 0;
   private userExistsCache: Map<string, { exists: boolean; checkedAt: number }> = new Map();
+  // Cache for admin status to reduce Auth0 API calls
+  private adminStatusCache: Map<string, { isAdmin: boolean; cachedAt: number }> = new Map();
   // SECURITY: Very short cache TTL to ensure deleted users are locked out quickly
   // Only cache "exists: false" longer since that's a permanent state
   private readonly USER_EXISTS_CACHE_TTL_MS = 30 * 1000; // 30 seconds for exists: true
   private readonly USER_NOT_EXISTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for exists: false
+  // Admin status cache - 5 minutes is reasonable since admin changes are rare
+  private readonly ADMIN_STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     if (!AUTH0_DOMAIN) {
@@ -72,7 +76,7 @@ class Auth0Client {
     return this.managementToken;
   }
 
-  async authenticateUser(email: string, password: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
+  async authenticateUser(email: string, password: string): Promise<{ success: boolean; user?: Auth0User; error?: string; isConnectionError?: boolean }> {
     try {
       const response = await fetch(`${this.baseUrl}/oauth/token`, {
         method: 'POST',
@@ -138,7 +142,7 @@ class Auth0Client {
       };
     } catch (error: any) {
       log(`Auth0 authentication error: ${error.message}`, 'auth0');
-      return { success: false, error: 'Authentication service unavailable' };
+      return { success: false, error: 'Authentication service unavailable', isConnectionError: true };
     }
   }
 
@@ -164,7 +168,8 @@ class Auth0Client {
         log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
         
         if (error.code === 'invalid_signup' || error.description?.includes('already exists')) {
-          return { success: false, error: 'An account with this email already exists' };
+          // SECURITY: Generic message to prevent email enumeration
+          return { success: false, error: 'Unable to create account. Please try a different email or log in if you already have an account.' };
         }
         if (error.code === 'password_strength_error' || error.name === 'PasswordStrengthError') {
           return { success: false, error: 'Password is too weak. Please use a stronger password.' };
@@ -287,6 +292,51 @@ class Auth0Client {
     }
   }
 
+  async updateUser(auth0UserId: string, data: { email_verified?: boolean; name?: string }): Promise<boolean> {
+    log(`========== AUTH0 UPDATE USER START ==========`, 'auth0');
+    log(`User ID: "${auth0UserId}"`, 'auth0');
+    log(`Data to update: ${JSON.stringify(data)}`, 'auth0');
+
+    try {
+      log(`Getting management token...`, 'auth0');
+      const managementToken = await this.getManagementToken();
+      log(`Management token obtained (length: ${managementToken.length})`, 'auth0');
+
+      const url = `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`;
+      log(`Making PATCH request to: ${url}`, 'auth0');
+
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${managementToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      log(`Response status: ${response.status} ${response.statusText}`, 'auth0');
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        log(`ERROR: Auth0 API returned error`, 'auth0');
+        log(`Error response body: ${errorText}`, 'auth0');
+        log(`========== AUTH0 UPDATE USER END (FAILED) ==========`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status} - ${errorText}`);
+      }
+
+      const responseBody = await response.text();
+      log(`SUCCESS: Auth0 user updated`, 'auth0');
+      log(`Response body: ${responseBody}`, 'auth0');
+      log(`========== AUTH0 UPDATE USER END ==========`, 'auth0');
+      return true;
+    } catch (error: any) {
+      log(`EXCEPTION in updateUser: ${error.message}`, 'auth0');
+      log(`Stack trace: ${error.stack}`, 'auth0');
+      log(`========== AUTH0 UPDATE USER END (EXCEPTION) ==========`, 'auth0');
+      throw error;
+    }
+  }
+
   async setVirtFusionUserId(auth0UserId: string, virtFusionUserId: number | null): Promise<boolean> {
     try {
       const managementToken = await this.getManagementToken();
@@ -330,9 +380,31 @@ class Auth0Client {
     return user?.app_metadata?.virtfusion_user_id || null;
   }
 
-  async isUserAdmin(auth0UserId: string): Promise<boolean> {
+  async isUserAdmin(auth0UserId: string, forceRefresh: boolean = false): Promise<boolean> {
+    // Check cache first (unless force refresh requested)
+    if (!forceRefresh) {
+      const cached = this.adminStatusCache.get(auth0UserId);
+      if (cached && Date.now() - cached.cachedAt < this.ADMIN_STATUS_CACHE_TTL_MS) {
+        return cached.isAdmin;
+      }
+    }
+
+    // Fetch from Auth0
     const user = await this.getUserById(auth0UserId);
-    return user?.app_metadata?.is_admin === true;
+    const isAdmin = user?.app_metadata?.is_admin === true;
+
+    // Cache the result
+    this.adminStatusCache.set(auth0UserId, { isAdmin, cachedAt: Date.now() });
+
+    return isAdmin;
+  }
+
+  /**
+   * Invalidate admin status cache for a user
+   * Call this when admin status might have changed
+   */
+  invalidateAdminStatusCache(auth0UserId: string): void {
+    this.adminStatusCache.delete(auth0UserId);
   }
 
   async userExists(auth0UserId: string): Promise<boolean> {
@@ -419,6 +491,104 @@ class Auth0Client {
     } catch (error: any) {
       log(`Auth0 password change error: ${error.message}`, 'auth0');
       return { success: false, error: 'Password change service unavailable' };
+    }
+  }
+
+  async resendVerificationEmail(auth0UserId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/jobs/verification-email`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: auth0UserId,
+            client_id: AUTH0_CLIENT_ID,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Failed to resend verification email: ${response.status} ${JSON.stringify(error)}`, 'auth0');
+
+        if (error.statusCode === 429 || error.error === 'too_many_requests') {
+          return { success: false, error: 'Please wait a few minutes before requesting another verification email.' };
+        }
+        return { success: false, error: error.message || 'Failed to send verification email' };
+      }
+
+      log(`Verification email resent for user ${auth0UserId}`, 'auth0');
+      return { success: true };
+    } catch (error: any) {
+      log(`Auth0 resend verification error: ${error.message}`, 'auth0');
+      return { success: false, error: 'Verification service unavailable' };
+    }
+  }
+
+  async isEmailVerified(auth0UserId: string): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}?fields=email_verified`,
+        {
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to check email verification status: ${response.status}`, 'auth0');
+        return false;
+      }
+
+      const user = await response.json() as any;
+      return user.email_verified === true;
+    } catch (error: any) {
+      log(`Auth0 email verification check error: ${error.message}`, 'auth0');
+      return false;
+    }
+  }
+
+  /**
+   * Delete a user from Auth0 (for rollback during failed registration)
+   */
+  async deleteUser(auth0UserId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json() as any;
+        log(`Failed to delete Auth0 user ${auth0UserId}: ${response.status} ${JSON.stringify(error)}`, 'auth0');
+        return { success: false, error: error.message || 'Failed to delete user' };
+      }
+
+      // Invalidate caches
+      this.userExistsCache.delete(auth0UserId);
+      this.adminStatusCache.delete(auth0UserId);
+
+      log(`Deleted Auth0 user ${auth0UserId}`, 'auth0');
+      return { success: true };
+    } catch (error: any) {
+      log(`Auth0 delete user error: ${error.message}`, 'auth0');
+      return { success: false, error: 'User deletion service unavailable' };
     }
   }
 }

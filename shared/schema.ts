@@ -45,6 +45,10 @@ export const userFlags = pgTable("user_flags", {
   blocked: boolean("blocked").default(false).notNull(),
   blockedReason: text("blocked_reason"),
   blockedAt: timestamp("blocked_at"),
+  // Admin can manually verify email, bypassing Auth0's email_verified status
+  emailVerifiedOverride: boolean("email_verified_override").default(false).notNull(),
+  emailVerifiedOverrideAt: timestamp("email_verified_override_at"),
+  emailVerifiedOverrideBy: text("email_verified_override_by"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -60,6 +64,7 @@ export const plans = pgTable("plans", {
   priceMonthly: integer("price_monthly_cents").notNull(),
   virtfusionPackageId: integer("virtfusion_package_id"),
   active: boolean("active").default(true).notNull(),
+  popular: boolean("popular").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -112,6 +117,7 @@ export const serverBilling = pgTable("server_billing", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull(),
   virtfusionServerId: text("virtfusion_server_id").notNull().unique(),
+  virtfusionServerUuid: text("virtfusion_server_uuid"), // Immutable UUID for reliable lookup
   planId: integer("plan_id").notNull(),
 
   // Billing state
@@ -200,14 +206,48 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Support ticket categories
+// Two-Factor Authentication settings
+export const twoFactorAuth = pgTable("two_factor_auth", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull().unique(),
+  secret: text("secret").notNull(), // Base32 encoded TOTP secret
+  enabled: boolean("enabled").default(false).notNull(),
+  backupCodes: text("backup_codes"), // JSON array of hashed backup codes
+  verifiedAt: timestamp("verified_at"), // When 2FA was first verified/enabled
+  lastUsedAt: timestamp("last_used_at"), // Last time 2FA was used for login
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Rate limiting table for persistent brute-force protection
+export const rateLimits = pgTable("rate_limits", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  limitType: varchar("limit_type", { length: 20 }).notNull(), // 'email', 'ip', 'email_ip_combo'
+  limitKey: varchar("limit_key", { length: 255 }).notNull(), // email, IP, or combo key
+  attempts: integer("attempts").notNull().default(0),
+  windowStart: timestamp("window_start").defaultNow().notNull(),
+  lockedUntil: timestamp("locked_until"), // NULL if not locked
+  lastAttempt: timestamp("last_attempt").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: varchar("email", { length: 255 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  usedAt: timestamp("used_at"),
+});
+
+// Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
-  'billing',
-  'server',
-  'network',
-  'panel',
+  'sales',
+  'accounts',
+  'support',
   'abuse',
-  'general',
 ] as const;
 export type TicketCategory = typeof TICKET_CATEGORIES[number];
 
@@ -231,7 +271,7 @@ export const tickets = pgTable("tickets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull(),
   title: text("title").notNull(),
-  category: text("category").notNull().default("general"), // billing, server, network, panel, abuse, general
+  category: text("category").notNull().default("support"), // sales, accounts, support, abuse
   priority: text("priority").notNull().default("normal"), // low, normal, high, urgent
   status: text("status").notNull().default("new"), // new, open, waiting_user, waiting_admin, resolved, closed
   virtfusionServerId: text("virtfusion_server_id"), // nullable - affected server
@@ -239,6 +279,7 @@ export const tickets = pgTable("tickets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"), // when ticket was marked as resolved (for 7-day auto-close)
   closedAt: timestamp("closed_at"),
 });
 
@@ -273,19 +314,21 @@ export const deployOrdersRelations = relations(deployOrders, ({ one }) => ({
   }),
 }));
 
-// Insert schemas
-export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
-export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
-export const insertDeployOrderSchema = createInsertSchema(deployOrders).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertServerBillingSchema = createInsertSchema(serverBilling).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertBillingLedgerSchema = createInsertSchema(billingLedger).omit({ id: true, createdAt: true });
-export const insertServerCancellationSchema = createInsertSchema(serverCancellations).omit({ id: true, requestedAt: true, revokedAt: true, completedAt: true });
-export const insertSecuritySettingSchema = createInsertSchema(securitySettings).omit({ id: true, updatedAt: true });
-export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
-export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
-export const insertTicketSchema = createInsertSchema(tickets).omit({ id: true, createdAt: true, updatedAt: true, lastMessageAt: true, closedAt: true });
-export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit({ id: true, createdAt: true });
+// Insert schemas - simplified without .omit() to avoid drizzle-zod type issues
+export const insertPlanSchema = createInsertSchema(plans);
+export const insertWalletSchema = createInsertSchema(wallets);
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions);
+export const insertDeployOrderSchema = createInsertSchema(deployOrders);
+export const insertServerBillingSchema = createInsertSchema(serverBilling);
+export const insertBillingLedgerSchema = createInsertSchema(billingLedger);
+export const insertServerCancellationSchema = createInsertSchema(serverCancellations);
+export const insertSecuritySettingSchema = createInsertSchema(securitySettings);
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs);
+export const insertInvoiceSchema = createInsertSchema(invoices);
+export const insertTicketSchema = createInsertSchema(tickets);
+export const insertTicketMessageSchema = createInsertSchema(ticketMessages);
+export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth);
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -312,6 +355,10 @@ export type Ticket = typeof tickets.$inferSelect;
 export type InsertTicket = z.infer<typeof insertTicketSchema>;
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
+export type TwoFactorAuth = typeof twoFactorAuth.$inferSelect;
+export type InsertTwoFactorAuth = z.infer<typeof insertTwoFactorAuthSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -369,6 +416,8 @@ export const SESSION_REVOKE_REASONS = {
   IDLE_TIMEOUT: 'IDLE_TIMEOUT',
   ALREADY_LOGGED_IN: 'ALREADY_LOGGED_IN',
   USER_DELETED: 'USER_DELETED',
+  FORCE_LOGOUT: 'FORCE_LOGOUT',
+  NEW_LOGIN: 'NEW_LOGIN',
 } as const;
 
 export type SessionRevokeReason = typeof SESSION_REVOKE_REASONS[keyof typeof SESSION_REVOKE_REASONS];

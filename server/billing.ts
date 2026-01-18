@@ -1,6 +1,6 @@
 import { db } from './db';
-import { serverBilling, billingLedger, wallets, type InsertServerBilling, type InsertBillingLedger } from '../shared/schema';
-import { eq, and, lte, isNull, or } from 'drizzle-orm';
+import { serverBilling, billingLedger, wallets } from '../shared/schema';
+import { eq, and, lte, isNull, or, not } from 'drizzle-orm';
 import { log } from './index';
 import { virtfusionClient } from './virtfusion';
 
@@ -22,6 +22,7 @@ function addMonth(date: Date): Date {
 export async function createServerBilling(params: {
   auth0UserId: string;
   virtfusionServerId: string;
+  virtfusionServerUuid?: string; // Immutable UUID for reliable lookup
   planId: number;
   monthlyPriceCents: number;
   deployedAt?: Date; // Optional - use server's actual creation date if available
@@ -29,9 +30,10 @@ export async function createServerBilling(params: {
   const deployedAt = params.deployedAt || new Date();
   const nextBillAt = addMonth(deployedAt);
 
-  const billingRecord: InsertServerBilling = {
+  await db.insert(serverBilling).values({
     auth0UserId: params.auth0UserId,
     virtfusionServerId: params.virtfusionServerId,
+    virtfusionServerUuid: params.virtfusionServerUuid || null,
     planId: params.planId,
     deployedAt,
     monthlyPriceCents: params.monthlyPriceCents,
@@ -39,10 +41,8 @@ export async function createServerBilling(params: {
     autoRenew: true,
     nextBillAt,
     suspendAt: null,
-  };
-
-  await db.insert(serverBilling).values(billingRecord);
-  log(`Created billing record for server ${params.virtfusionServerId}, next bill: ${nextBillAt.toISOString()}`, 'billing');
+  });
+  log(`Created billing record for server ${params.virtfusionServerId} (UUID: ${params.virtfusionServerUuid || 'N/A'}), next bill: ${nextBillAt.toISOString()}`, 'billing');
 }
 
 // Charge a server's monthly fee
@@ -87,15 +87,13 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise
       .where(eq(wallets.auth0UserId, billing.auth0UserId));
 
     // Record in ledger
-    const ledgerEntry: InsertBillingLedger = {
+    await tx.insert(billingLedger).values({
       auth0UserId: billing.auth0UserId,
       virtfusionServerId: billing.virtfusionServerId,
       amountCents: billing.monthlyPriceCents,
       description: `Monthly server billing for ${billing.virtfusionServerId}`,
       idempotencyKey,
-    };
-
-    await tx.insert(billingLedger).values(ledgerEntry);
+    });
 
     // Update billing record
     const newNextBillAt = addMonth(billing.nextBillAt);
@@ -104,7 +102,6 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise
         status: 'paid',
         nextBillAt: newNextBillAt,
         suspendAt: null,
-        lastBilledAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(serverBilling.id, billing.id));
@@ -121,10 +118,15 @@ export async function runBillingJob(): Promise<void> {
   log('Starting billing job...', 'billing');
 
   // Step A: Charge due servers
+  // Include 'active' status - new servers start as 'active' and need to be billed
   const dueServers = await db.select().from(serverBilling)
     .where(
       and(
-        or(eq(serverBilling.status, 'paid'), eq(serverBilling.status, 'unpaid')),
+        or(
+          eq(serverBilling.status, 'active'),
+          eq(serverBilling.status, 'paid'),
+          eq(serverBilling.status, 'unpaid')
+        ),
         eq(serverBilling.autoRenew, true),
         lte(serverBilling.nextBillAt, now)
       )
@@ -162,8 +164,8 @@ export async function runBillingJob(): Promise<void> {
     .where(
       and(
         eq(serverBilling.status, 'unpaid'),
-        lte(serverBilling.suspendAt, now),
-        isNull(serverBilling.suspendAt).not()
+        not(isNull(serverBilling.suspendAt)),
+        lte(serverBilling.suspendAt, now)
       )
     );
 
@@ -226,10 +228,81 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
 }
 
 // Get billing status for a server
-export async function getServerBillingStatus(virtfusionServerId: string) {
-  const billing = await db.select().from(serverBilling)
-    .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
+// Optionally pass auth0UserId and serverUuid for robust fallback lookup
+export async function getServerBillingStatus(
+  virtfusionServerId: string | number,
+  auth0UserId?: string,
+  serverUuid?: string
+) {
+  // Ensure consistent string type for database query
+  const serverId = String(virtfusionServerId);
+  const numericId = parseInt(serverId, 10);
+
+  // Try exact match by server ID first (fastest)
+  let billing = await db.select().from(serverBilling)
+    .where(eq(serverBilling.virtfusionServerId, serverId))
     .limit(1);
+
+  // If not found and the ID is numeric, try without leading zeros
+  if (billing.length === 0 && !isNaN(numericId)) {
+    const trimmedId = String(numericId);
+    if (trimmedId !== serverId) {
+      billing = await db.select().from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, trimmedId))
+        .limit(1);
+    }
+  }
+
+  // If not found but we have UUID, try lookup by UUID (most reliable)
+  if (billing.length === 0 && serverUuid) {
+    billing = await db.select().from(serverBilling)
+      .where(eq(serverBilling.virtfusionServerUuid, serverUuid))
+      .limit(1);
+
+    if (billing.length > 0) {
+      // Found via UUID - update the server ID to current value (self-healing)
+      const record = billing[0];
+      if (record.virtfusionServerId !== serverId) {
+        await db.update(serverBilling)
+          .set({ virtfusionServerId: serverId, updatedAt: new Date() })
+          .where(eq(serverBilling.id, record.id));
+        log(`Self-healed billing record via UUID: server ID ${record.virtfusionServerId} -> ${serverId}`, 'billing');
+        return { ...record, virtfusionServerId: serverId };
+      }
+      return record;
+    }
+  }
+
+  // Legacy fallback: search user's billing records for numeric ID match
+  if (billing.length === 0 && auth0UserId) {
+    const userBillings = await db.select().from(serverBilling)
+      .where(eq(serverBilling.auth0UserId, auth0UserId));
+
+    for (const b of userBillings) {
+      const storedNumericId = parseInt(b.virtfusionServerId, 10);
+      if (!isNaN(storedNumericId) && storedNumericId === numericId) {
+        // Found a match - update the record with correct ID and UUID if available
+        const updates: any = { virtfusionServerId: serverId, updatedAt: new Date() };
+        if (serverUuid && !b.virtfusionServerUuid) {
+          updates.virtfusionServerUuid = serverUuid;
+        }
+        await db.update(serverBilling)
+          .set(updates)
+          .where(eq(serverBilling.id, b.id));
+        log(`Fixed billing record ID mismatch: ${b.virtfusionServerId} -> ${serverId}${serverUuid ? ` (added UUID: ${serverUuid})` : ''}`, 'billing');
+        return { ...b, virtfusionServerId: serverId, virtfusionServerUuid: serverUuid || b.virtfusionServerUuid };
+      }
+    }
+  }
+
+  // If found but missing UUID, update with UUID for future reliability
+  if (billing.length > 0 && serverUuid && !billing[0].virtfusionServerUuid) {
+    await db.update(serverBilling)
+      .set({ virtfusionServerUuid: serverUuid, updatedAt: new Date() })
+      .where(eq(serverBilling.id, billing[0].id));
+    log(`Added UUID to existing billing record for server ${serverId}: ${serverUuid}`, 'billing');
+    return { ...billing[0], virtfusionServerUuid: serverUuid };
+  }
 
   return billing.length > 0 ? billing[0] : null;
 }
@@ -240,7 +313,7 @@ export async function getUpcomingCharges(auth0UserId: string) {
     .where(
       and(
         eq(serverBilling.auth0UserId, auth0UserId),
-        // Show active, paid, and unpaid servers (exclude only suspended)
+        // Show active, paid, and unpaid servers (exclude suspended - they don't exist in VirtFusion)
         or(
           eq(serverBilling.status, 'active'),
           eq(serverBilling.status, 'paid'),

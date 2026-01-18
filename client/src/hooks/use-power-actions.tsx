@@ -15,7 +15,7 @@ interface PowerActionContextType {
   clearPending: (serverId: string) => void;
   isPending: (serverId: string) => boolean;
   getPendingAction: (serverId: string) => string | null;
-  getDisplayStatus: (serverId: string, actualStatus: string) => string;
+  getDisplayStatus: (serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }, needsSetup?: boolean) => string;
 }
 
 const STORAGE_KEY = "ozvps_pending_power_actions";
@@ -98,7 +98,29 @@ export function PowerActionProvider({ children }: { children: ReactNode }) {
     return pendingActions[serverId]?.action || null;
   }, [pendingActions]);
 
-  const getDisplayStatus = useCallback((serverId: string, actualStatus: string): string => {
+  const getDisplayStatus = useCallback((serverId: string, actualStatus: string, cancellationData?: { mode: string; status: string }, needsSetup?: boolean): string => {
+    // Check for deletion status first (highest priority)
+    if (cancellationData) {
+      if (cancellationData.mode === 'immediate') {
+        return cancellationData.status === 'processing' ? 'destroying' : 'queued_deletion';
+      }
+      // Grace period deletions show as scheduled
+      return 'scheduled_deletion';
+    }
+
+    // IMPORTANT: Only show "setting up" if server NEEDS setup (not commissioned yet)
+    // If server is commissioned (needsSetup=false), show actual status even if provisioning
+    // This allows the status to show "running" when the server is booting after commission
+    if (needsSetup === true) {
+      return 'setting up';
+    }
+
+    // If commissioned but still showing provisioning, it's booting - show actual status
+    if (actualStatus === 'provisioning' && needsSetup === false) {
+      // Server is commissioned and booting, show the real status
+      return actualStatus;
+    }
+
     const pending = pendingActions[serverId];
     if (!pending) return actualStatus;
 

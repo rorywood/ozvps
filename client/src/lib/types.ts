@@ -87,7 +87,7 @@ export interface IpAddress {
   server_id: string | null;
 }
 
-export type TicketCategory = 'billing' | 'server' | 'network' | 'panel' | 'abuse' | 'general';
+export type TicketCategory = 'sales' | 'accounts' | 'support' | 'abuse';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TicketStatus = 'new' | 'open' | 'waiting_user' | 'waiting_admin' | 'resolved' | 'closed';
 

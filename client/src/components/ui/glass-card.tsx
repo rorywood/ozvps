@@ -1,22 +1,29 @@
-import { cn } from "@/lib/utils";
-import { HTMLAttributes, forwardRef } from "react";
+import { Card, type CardProps } from "./card";
+import { forwardRef } from "react";
 
-interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
+interface GlassCardProps extends CardProps {
   variant?: "default" | "panel" | "interactive";
 }
 
+/**
+ * @deprecated Use Card component directly with appropriate variants instead.
+ * This component exists for backwards compatibility only.
+ */
 const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
-  ({ className, variant = "default", ...props }, ref) => {
+  ({ variant = "default", ...props }, ref) => {
+    // Map old glass-card variants to new Card variants
+    const cardVariant =
+      variant === "panel" ? "elevated" :
+      variant === "interactive" ? "default" :
+      "default";
+
+    const interactive = variant === "interactive";
+
     return (
-      <div
+      <Card
         ref={ref}
-        className={cn(
-          "rounded-xl border shadow-sm transition-all duration-200",
-          variant === "default" && "bg-card/40 backdrop-blur-xl border-border/30",
-          variant === "panel" && "bg-card/60 backdrop-blur-2xl border-border/30",
-          variant === "interactive" && "bg-card/40 backdrop-blur-xl border-border/30 hover:bg-card/50 hover:border-border/50 cursor-pointer hover:shadow-lg hover:-translate-y-0.5",
-          className
-        )}
+        variant={cardVariant}
+        interactive={interactive}
         {...props}
       />
     );

@@ -1,33 +1,264 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { createServer, type Server } from "http";
-import { createHmac, timingSafeEqual } from "crypto";
+import crypto, { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
-import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger } from "./billing";
+import { db } from "./db";
+import { plans, serverBilling, billingLedger } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from "./index";
+import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked } from "./security";
+import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
+import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail } from "./email";
+import { WebhookHandlers } from "./webhookHandlers";
 
-// Helper to get client IP from request
-function getClientIp(req: any): string {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-         req.headers['x-real-ip'] || 
-         req.socket?.remoteAddress || 
-         req.ip || 
-         'unknown';
+// Helper to validate IP address format (prevents header injection)
+function isValidIp(ip: string): boolean {
+  // IPv4 pattern
+  const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  // IPv6 pattern (simplified - covers most cases)
+  const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$|^::1$|^::ffff:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+  if (ipv4Pattern.test(ip)) {
+    // Validate each octet is 0-255
+    const octets = ip.split('.').map(Number);
+    return octets.every(o => o >= 0 && o <= 255);
+  }
+  return ipv6Pattern.test(ip);
 }
 
-// Helper to handle API errors with proper status codes
-function handleApiError(res: Response, error: any, defaultMessage: string = 'Internal server error') {
-  if (error instanceof VirtFusionTimeoutError) {
-    return res.status(504).json({ error: 'The server management service is taking too long to respond. Please try again.' });
+// Helper to get client IP from request
+// SECURITY: Only trust proxy headers in production behind reverse proxy (nginx/cloudflare)
+// The TRUST_PROXY env var should only be set when running behind a trusted proxy
+function getClientIp(req: any): string {
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  if (trustProxy) {
+    // When behind a trusted proxy, use X-Forwarded-For but validate format
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      // Take the leftmost IP (original client) and validate it
+      const clientIp = forwardedFor.split(',')[0]?.trim();
+      if (clientIp && isValidIp(clientIp)) {
+        return clientIp;
+      }
+    }
+
+    // Fallback to X-Real-IP if X-Forwarded-For is invalid
+    const realIp = req.headers['x-real-ip'];
+    if (realIp && isValidIp(realIp)) {
+      return realIp;
+    }
   }
-  log(`API Error: ${error.message}`, 'routes');
-  return res.status(500).json({ error: defaultMessage });
+
+  // Direct connection or untrusted proxy - use socket address
+  const socketIp = req.socket?.remoteAddress || req.ip;
+  if (socketIp) {
+    // Handle IPv6-mapped IPv4 addresses (::ffff:127.0.0.1)
+    const cleanIp = socketIp.replace(/^::ffff:/, '');
+    if (isValidIp(cleanIp)) {
+      return cleanIp;
+    }
+  }
+
+  return 'unknown';
+}
+
+// Error codes for consistent error handling
+const ErrorCodes = {
+  // Client errors (4xx)
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  AUTHENTICATION_REQUIRED: 'AUTHENTICATION_REQUIRED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCESS_DENIED: 'ACCESS_DENIED',
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  RESOURCE_CONFLICT: 'RESOURCE_CONFLICT',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  SERVER_SUSPENDED: 'SERVER_SUSPENDED',
+
+  // Server errors (5xx)
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
+  EXTERNAL_SERVICE_TIMEOUT: 'EXTERNAL_SERVICE_TIMEOUT',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+} as const;
+
+type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
+
+interface ApiErrorResponse {
+  error: string;
+  code: ErrorCode;
+  details?: string;
+}
+
+// Helper to handle API errors with proper status codes and error codes
+function handleApiError(
+  res: Response,
+  error: any,
+  defaultMessage: string = 'An unexpected error occurred',
+  context?: string
+): Response<ApiErrorResponse> {
+  // Handle VirtFusion timeout specifically
+  if (error instanceof VirtFusionTimeoutError) {
+    log(`VirtFusion timeout${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionTimeout' });
+    return res.status(504).json({
+      error: 'The server management service is taking too long to respond. Please try again in a moment.',
+      code: ErrorCodes.EXTERNAL_SERVICE_TIMEOUT,
+    });
+  }
+
+  // Handle VirtFusion connection errors
+  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+    log(`VirtFusion connection error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionConnection' });
+    return res.status(503).json({
+      error: 'Unable to connect to the server management service. Please try again later.',
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+    });
+  }
+
+  // Handle VirtFusion API errors (often contain status codes)
+  if (error.message?.includes('VirtFusion API error') || error.message?.includes('status')) {
+    log(`VirtFusion API error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'VirtFusionAPI' });
+    return res.status(502).json({
+      error: 'The server management service returned an error. Please try again.',
+      code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+    });
+  }
+
+  // Handle database errors
+  if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
+    log(`Database constraint error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'DatabaseConstraint' });
+    return res.status(409).json({
+      error: 'This resource already exists or conflicts with existing data.',
+      code: ErrorCodes.RESOURCE_CONFLICT,
+    });
+  }
+
+  if (error.code?.startsWith('2') || error.code?.startsWith('SQLITE')) {
+    log(`Database error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+    captureException(error, { context: context || 'unknown', errorType: 'Database' });
+    return res.status(500).json({
+      error: 'A database error occurred. Please try again later.',
+      code: ErrorCodes.DATABASE_ERROR,
+    });
+  }
+
+  // Log the error for debugging
+  log(`API Error${context ? ` in ${context}` : ''}: ${error.message}`, 'routes');
+
+  // Send to Sentry for all unhandled errors
+  captureException(error, { context: context || 'unknown', errorType: 'Unhandled' });
+
+  // Return generic error with default message
+  return res.status(500).json({
+    error: defaultMessage,
+    code: ErrorCodes.INTERNAL_ERROR,
+  });
+}
+
+// TOTP helper functions using otplib
+import { generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI, verifySync as otplibVerifySync } from 'otplib';
+
+function totpGenerateSecret(): string {
+  return otplibGenerateSecret();
+}
+
+function totpVerify(token: string, secret: string): boolean {
+  try {
+    // SECURITY: window: 1 allows codes from ±30 seconds to handle time drift
+    // This is a balance between security (smaller window = less attack surface)
+    // and usability (allow for reasonable clock drift between client and server)
+    const result = otplibVerifySync({ token, secret, window: 1 });
+    return result?.valid === true;
+  } catch (error) {
+    console.error('TOTP verification error:', error);
+    return false;
+  }
+}
+
+function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
+  return otplibGenerateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
+}
+
+// Helper to verify reCAPTCHA v3 token with score threshold
+interface RecaptchaVerifyResult {
+  success: boolean;
+  score?: number;
+  action?: string;
+  errorCodes?: string[];
+}
+
+async function verifyRecaptchaToken(
+  token: string,
+  secretKey: string,
+  expectedAction?: string,
+  minScore: number = 0.5
+): Promise<{ valid: boolean; score?: number; error?: string }> {
+  try {
+    const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
+    });
+
+    const result = await verifyResponse.json() as {
+      success: boolean;
+      score?: number;
+      action?: string;
+      'error-codes'?: string[];
+      challenge_ts?: string;
+      hostname?: string;
+    };
+
+    if (!result.success) {
+      return {
+        valid: false,
+        error: `Verification failed: ${result['error-codes']?.join(', ') || 'Unknown error'}`,
+      };
+    }
+
+    // For v3, check the score
+    if (result.score !== undefined) {
+      if (result.score < minScore) {
+        log(`reCAPTCHA score too low: ${result.score} < ${minScore}`, 'security');
+        return {
+          valid: false,
+          score: result.score,
+          error: 'Verification score too low. Please try again.',
+        };
+      }
+
+      // Optionally verify the action matches
+      if (expectedAction && result.action !== expectedAction) {
+        log(`reCAPTCHA action mismatch: expected ${expectedAction}, got ${result.action}`, 'security');
+        // Don't fail on action mismatch, just log it
+      }
+
+      log(`reCAPTCHA v3 verified: score=${result.score}, action=${result.action}`, 'security');
+      return { valid: true, score: result.score };
+    }
+
+    // v2 checkpoint - just success/fail
+    return { valid: true };
+  } catch (error: any) {
+    log(`reCAPTCHA verification error: ${error.message}`, 'security');
+    return { valid: false, error: 'Verification service unavailable' };
+  }
 }
 
 declare global {
@@ -42,24 +273,57 @@ declare global {
         email: string;
         name?: string;
         isAdmin: boolean;
+        emailVerified: boolean;
       };
     }
   }
 }
 
 const SESSION_COOKIE = 'ozvps_session';
+const CSRF_COOKIE = 'ozvps_csrf';
+const CSRF_HEADER = 'x-csrf-token';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-// CSRF protection middleware - validates Origin header for mutating requests
+/**
+ * Generate a cryptographically secure CSRF token
+ */
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Set CSRF token cookie
+ */
+function setCsrfCookie(res: Response, token: string, expiresAt: Date): void {
+  res.cookie(CSRF_COOKIE, token, {
+    httpOnly: false, // Must be readable by JavaScript to include in headers
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    expires: expiresAt,
+  });
+}
+
+/**
+ * CSRF protection middleware - implements double-submit cookie pattern
+ * Combined with Origin/Referer validation for defense in depth
+ */
 function csrfProtection(req: Request, res: Response, next: NextFunction) {
   // Only check mutating methods
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
   }
 
-  // Skip CSRF for webhook endpoints (they use their own auth)
+  // Skip CSRF for webhook endpoints (they use their own auth via signatures)
   if (req.originalUrl.startsWith('/api/hooks/') || req.originalUrl.startsWith('/api/stripe/webhook')) {
+    return next();
+  }
+
+  // Skip CSRF for login/register (no session yet)
+  if (req.originalUrl === '/api/auth/login' ||
+      req.originalUrl === '/api/auth/register' ||
+      req.originalUrl === '/api/auth/force-logout') {
     return next();
   }
 
@@ -72,31 +336,54 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
-  // Validate origin or referer matches the host
+  // Layer 1: Origin/Referer validation
+  let originValid = false;
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (originUrl.host !== host) {
-        log(`CSRF blocked: Origin ${origin} doesn't match host ${host}`, 'security');
-        return res.status(403).json({ error: 'Invalid request origin' });
-      }
+      originValid = originUrl.host === host;
     } catch {
-      return res.status(403).json({ error: 'Invalid request origin' });
+      // Invalid origin URL
     }
   } else if (referer) {
     try {
       const refererUrl = new URL(referer);
-      if (refererUrl.host !== host) {
-        log(`CSRF blocked: Referer ${referer} doesn't match host ${host}`, 'security');
-        return res.status(403).json({ error: 'Invalid request origin' });
+      originValid = refererUrl.host === host;
+    } catch {
+      // Invalid referer URL
+    }
+  }
+
+  if (!originValid) {
+    log(`CSRF blocked: Invalid or missing origin/referer`, 'security');
+    return res.status(403).json({ error: 'Invalid request origin', code: 'CSRF_ORIGIN' });
+  }
+
+  // Layer 2: Double-submit cookie validation (for authenticated requests)
+  const csrfCookie = req.cookies?.[CSRF_COOKIE];
+  const csrfHeader = req.headers[CSRF_HEADER] as string | undefined;
+
+  // If user has a session, require CSRF token
+  if (req.cookies?.[SESSION_COOKIE]) {
+    if (!csrfCookie || !csrfHeader) {
+      log(`CSRF blocked: Missing CSRF token`, 'security');
+      return res.status(403).json({ error: 'Missing security token', code: 'CSRF_MISSING' });
+    }
+
+    // Timing-safe comparison to prevent timing attacks
+    try {
+      const cookieBuffer = Buffer.from(csrfCookie, 'utf8');
+      const headerBuffer = Buffer.from(csrfHeader, 'utf8');
+
+      if (cookieBuffer.length !== headerBuffer.length ||
+          !crypto.timingSafeEqual(cookieBuffer, headerBuffer)) {
+        log(`CSRF blocked: Token mismatch`, 'security');
+        return res.status(403).json({ error: 'Invalid security token', code: 'CSRF_INVALID' });
       }
     } catch {
-      return res.status(403).json({ error: 'Invalid request origin' });
+      log(`CSRF blocked: Token comparison error`, 'security');
+      return res.status(403).json({ error: 'Invalid security token', code: 'CSRF_INVALID' });
     }
-  } else {
-    // No origin or referer - block in production
-    log(`CSRF blocked: No origin or referer header`, 'security');
-    return res.status(403).json({ error: 'Missing request origin' });
   }
 
   next();
@@ -114,18 +401,21 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     
     if (!session) {
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
     }
 
     if (new Date(session.expiresAt) < new Date()) {
       await storage.deleteSession(sessionId);
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
     }
 
     // Check if session was revoked
     if (session.revokedAt) {
       res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       const reason = session.revokedReason;
       
       if (reason === SESSION_REVOKE_REASONS.CONCURRENT_LOGIN) {
@@ -159,6 +449,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ 
           error: 'Your session expired due to inactivity. Please sign in again.',
           code: 'SESSION_IDLE_TIMEOUT'
@@ -176,6 +467,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         // Revoke the session and return blocked error
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ 
           error: 'Your account has been suspended. Please contact support.',
           code: 'SESSION_REVOKED_BLOCKED'
@@ -190,6 +482,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         // User was deleted from Auth0 - revoke all their sessions
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_DELETED);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         log(`Auth0 user ${session.auth0UserId} deleted - revoking sessions`, 'auth0');
         return res.status(401).json({ 
           error: 'Your account no longer exists. Please contact support if this is unexpected.',
@@ -207,6 +500,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       email: session.email,
       name: session.name ?? undefined,
       isAdmin: session.isAdmin ?? false,
+      emailVerified: session.emailVerified ?? false,
     };
 
     next();
@@ -214,6 +508,22 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     log(`Auth middleware error: ${error}`, 'api');
     return res.status(500).json({ error: 'Authentication error' });
   }
+}
+
+// Middleware to require email verification
+async function requireEmailVerified(req: Request, res: Response, next: NextFunction) {
+  if (!req.userSession) {
+    return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+  }
+
+  if (!req.userSession.emailVerified) {
+    return res.status(403).json({
+      error: 'Email verification required. Please verify your email address before performing this action.',
+      code: 'EMAIL_NOT_VERIFIED'
+    });
+  }
+
+  next();
 }
 
 async function verifyServerOwnership(serverId: string, userVirtFusionId: number | null): Promise<boolean> {
@@ -372,42 +682,142 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Rate limiters for sensitive endpoints
+  const mfaRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // 10 attempts per window
+    message: { error: 'Too many 2FA attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      // Rate limit by IP + user ID if available
+      const ip = getClientIp(req);
+      const userId = (req as any).userSession?.auth0UserId || '';
+      return `${ip}:${userId}`;
+    },
+  });
+
+  const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 login attempts per window
+    message: { error: 'Too many login attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => getClientIp(req),
+  });
+
+  const deploymentRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 3, // 3 deployments per minute
+    message: { error: 'Too many deployment requests. Please wait before deploying again.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const ticketRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // 5 tickets per minute
+    message: { error: 'Too many ticket creation requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const walletTopupRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // 10 topup requests per minute
+    message: { error: 'Too many topup requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const serverActionRateLimiter = rateLimit({
+    windowMs: 30 * 1000, // 30 seconds
+    max: 10, // 10 server actions per 30 seconds
+    message: { error: 'Too many server actions. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
   // System health check (public)
   app.get('/api/health', async (req, res) => {
     try {
-      const isConnected = await virtfusionClient.validateConnection();
-      if (!isConnected) {
-        log('Health check failed: VirtFusion API unreachable', 'api');
-        return res.status(503).json({ 
-          status: 'error', 
+      const connectionStatus = await virtfusionClient.getConnectionStatus();
+      if (!connectionStatus.connected) {
+        // Log the actual error type for admins
+        log(`Health check failed: VirtFusion ${connectionStatus.errorType || 'unknown error'}`, 'api');
+
+        // Return generic error to users (don't expose license/config details)
+        return res.status(503).json({
+          status: 'error',
           errorCode: 'VF_API_UNAVAILABLE',
-          message: 'VirtFusion API is unreachable'
+          message: 'Server management system is temporarily unavailable. Please try again later.'
         });
       }
       res.json({ status: 'ok' });
     } catch (error: any) {
       log(`Health check error: ${error.message}`, 'api');
-      res.status(503).json({ 
-        status: 'error', 
+      res.status(503).json({
+        status: 'error',
         errorCode: 'SYSTEM_ERROR',
         message: 'System health check failed'
       });
     }
   });
 
-  // Seed plans from static config on startup (non-blocking)
+  // Sync plans from VirtFusion on startup (non-blocking)
   (async () => {
     try {
-      const result = await dbStorage.seedPlansFromConfig();
-      log(`Plans seeded: ${result.seeded} plans`, 'startup');
-      if (result.errors.length > 0) {
-        result.errors.forEach(err => log(`Plan seed error: ${err}`, 'startup'));
+      log('Syncing plans from VirtFusion...', 'startup');
+
+      // First seed from static config to ensure base plans exist
+      const seedResult = await dbStorage.seedPlansFromConfig();
+      log(`Plans seeded: ${seedResult.seeded} plans from static config`, 'startup');
+
+      // Then sync enabled/disabled status from VirtFusion
+      const vfPackages = await virtfusionClient.getPackages();
+      log(`Fetched ${vfPackages.length} packages from VirtFusion`, 'startup');
+
+      // Log what VirtFusion returned for debugging
+      vfPackages.forEach(pkg => {
+        log(`VirtFusion Package ${pkg.id} (${pkg.name}): enabled=${pkg.enabled}`, 'startup');
+      });
+
+      const currentPlans = await db.select().from(plans);
+      const plansMap = new Map(currentPlans.map(p => [p.virtfusionPackageId, p]));
+
+      let synced = 0;
+      for (const vfPkg of vfPackages) {
+        const existingPlan = plansMap.get(vfPkg.id);
+        if (existingPlan) {
+          log(`Checking plan ${existingPlan.code} (VF ID: ${vfPkg.id}): DB active=${existingPlan.active}, VF enabled=${vfPkg.enabled}`, 'startup');
+
+          if (existingPlan.active !== vfPkg.enabled) {
+            await db
+              .update(plans)
+              .set({ active: vfPkg.enabled, name: vfPkg.name })
+              .where(eq(plans.virtfusionPackageId, vfPkg.id));
+
+            log(`✓ Updated plan ${existingPlan.code}: ${existingPlan.active ? 'enabled' : 'disabled'} → ${vfPkg.enabled ? 'enabled' : 'disabled'}`, 'startup');
+            synced++;
+          } else {
+            log(`  No change needed for plan ${existingPlan.code}`, 'startup');
+          }
+        } else {
+          log(`⚠ No plan found in DB for VirtFusion package ${vfPkg.id} (${vfPkg.name})`, 'startup');
+        }
       }
+
+      log(`Plans sync complete: ${synced} plans updated from VirtFusion`, 'startup');
     } catch (error: any) {
-      log(`Failed to seed plans: ${error.message}`, 'startup');
+      log(`Failed to sync plans from VirtFusion: ${error.message}`, 'startup');
+      log('Falling back to static plan config', 'startup');
     }
   })();
 
@@ -431,30 +841,25 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
-      // Check reCAPTCHA if enabled (configured via env vars)
+      // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
         if (!recaptchaToken) {
-          // Allow registration without token if reCAPTCHA failed to load on client
-          log(`Registration without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
-        } else {
-          try {
-            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-            });
-            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-            
-            if (!verifyResult.success) {
-              log(`reCAPTCHA verification failed for registration: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-            }
-          } catch (err: any) {
-            log(`reCAPTCHA verification error during registration: ${err.message}`, 'security');
-            // Allow registration even if verification fails - don't lock users out
-            log(`Allowing registration despite reCAPTCHA error for: ${email}`, 'security');
-          }
+          // SECURITY: Reject registration without reCAPTCHA token
+          log(`Registration blocked - missing reCAPTCHA token for: ${email}`, 'security');
+          return res.status(400).json({ error: 'Security verification required. Please refresh the page and try again.' });
+        }
+
+        const verifyResult = await verifyRecaptchaToken(
+          recaptchaToken,
+          recaptchaSettings.secretKey,
+          'register',
+          recaptchaSettings.minScore
+        );
+
+        if (!verifyResult.valid) {
+          log(`reCAPTCHA verification failed for registration: ${verifyResult.error}`, 'security');
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
       }
 
@@ -471,14 +876,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: auth0Result.error || 'Failed to create account' });
       }
 
-      // Create VirtFusion user
+      // Build the Auth0 user ID early - we need it for potential rollback
+      const auth0UserId = `auth0|${auth0Result.user.user_id}`;
+
+      // Create VirtFusion user - if this fails, rollback Auth0 user
       const virtFusionUser = await virtfusionClient.findOrCreateUser(email, name || email.split('@')[0]);
       if (!virtFusionUser) {
+        // Rollback: Delete the Auth0 user we just created
+        log(`VirtFusion user creation failed for ${email}, rolling back Auth0 user`, 'auth');
+        await auth0Client.deleteUser(auth0UserId);
         return res.status(500).json({ error: 'Failed to create account. Please try again or contact support.' });
       }
-
-      // Store VirtFusion user ID in Auth0 metadata (no local database needed)
-      const auth0UserId = `auth0|${auth0Result.user.user_id}`;
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
       
@@ -541,7 +949,7 @@ export async function registerRoutes(
         log(`Failed to create Stripe customer during registration: ${stripeError.message}`, 'stripe');
       }
 
-      // Create local session
+      // Create local session (new users start with emailVerified: false)
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
@@ -550,6 +958,7 @@ export async function registerRoutes(
         email: email,
         name: name || virtFusionUser.name,
         auth0UserId: auth0UserId, // Use the prefixed version for consistency
+        emailVerified: false, // New users start unverified
         expiresAt,
       });
 
@@ -557,15 +966,22 @@ export async function registerRoutes(
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
+        path: '/',
         expires: expiresAt,
       });
+
+      // Set CSRF token cookie for double-submit pattern
+      const csrfToken = generateCsrfToken();
+      setCsrfCookie(res, csrfToken, expiresAt);
 
       res.status(201).json({
         user: {
           id: auth0UserId,
           email: email,
           name: name || virtFusionUser.name,
+          emailVerified: false, // New users start unverified
         },
+        csrfToken, // Include in response for initial setup
       });
     } catch (error: any) {
       log(`Registration error: ${error.message}`, 'api');
@@ -573,7 +989,153 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  // Forgot password - request reset link
+  app.post('/api/auth/forgot-password', loginRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Check if user exists in Auth0
+      const user = await auth0Client.getUserByEmail(email);
+
+      // Always return success message to prevent email enumeration
+      // But only send email if user exists
+      if (user) {
+        // Create password reset token
+        const resetToken = await dbStorage.createPasswordResetToken(email);
+
+        // Build reset URL
+        const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+        const resetLink = `${baseUrl}/reset-password?token=${resetToken.token}`;
+
+        // Send password reset email
+        const emailResult = await sendPasswordResetEmail(email, resetLink, 30);
+
+        if (emailResult.success) {
+          log(`Password reset email sent to ${email}`, 'auth');
+        } else {
+          log(`Failed to send password reset email to ${email}: ${emailResult.error}`, 'auth');
+        }
+      } else {
+        log(`Password reset requested for non-existent email: ${email}`, 'auth');
+      }
+
+      // Always return success to prevent email enumeration
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link shortly.'
+      });
+    } catch (error: any) {
+      log(`Forgot password error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to process password reset request' });
+    }
+  });
+
+  // Reset password - set new password with token
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Reset token is required' });
+      }
+
+      if (!password || typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+
+      // Get and validate token
+      const resetToken = await dbStorage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        log(`Invalid password reset token attempted`, 'security');
+        return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+      }
+
+      if (resetToken.used) {
+        log(`Already used password reset token attempted for ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'This reset link has already been used. Please request a new one.' });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        log(`Expired password reset token attempted for ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+      }
+
+      // Get user from Auth0
+      const user = await auth0Client.getUserByEmail(resetToken.email);
+      if (!user) {
+        log(`Password reset attempted for non-existent user: ${resetToken.email}`, 'security');
+        return res.status(400).json({ error: 'Account not found. Please contact support.' });
+      }
+
+      // Update password in Auth0
+      const updateResult = await auth0Client.changePassword(user.user_id, password);
+      if (!updateResult.success) {
+        log(`Failed to update password for ${resetToken.email}: ${updateResult.error}`, 'auth');
+        return res.status(500).json({ error: updateResult.error || 'Failed to update password' });
+      }
+
+      // Mark token as used
+      await dbStorage.markPasswordResetTokenUsed(token);
+
+      // Send confirmation email
+      await sendPasswordChangedEmail(resetToken.email);
+
+      // Revoke all existing sessions for security
+      await storage.revokeSessionsByAuth0UserId(user.user_id, SESSION_REVOKE_REASONS.PASSWORD_CHANGED);
+
+      log(`Password successfully reset for ${resetToken.email}`, 'auth');
+
+      res.json({
+        success: true,
+        message: 'Your password has been reset successfully. You can now log in with your new password.'
+      });
+    } catch (error: any) {
+      log(`Reset password error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
+  // Validate reset token (for frontend)
+  app.get('/api/auth/validate-reset-token', async (req, res) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ valid: false, error: 'Token is required' });
+      }
+
+      const resetToken = await dbStorage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        return res.json({ valid: false, error: 'Invalid reset link' });
+      }
+
+      if (resetToken.used) {
+        return res.json({ valid: false, error: 'This reset link has already been used' });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return res.json({ valid: false, error: 'This reset link has expired' });
+      }
+
+      res.json({ valid: true, email: resetToken.email });
+    } catch (error: any) {
+      log(`Validate reset token error: ${error.message}`, 'api');
+      res.status(500).json({ valid: false, error: 'Failed to validate token' });
+    }
+  });
+
+  app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -583,31 +1145,30 @@ export async function registerRoutes(
       const { email, password } = parsed.data;
       const { recaptchaToken } = req.body;
 
-      // Check reCAPTCHA if enabled (configured via env vars)
+      // Check reCAPTCHA if enabled
+      // Check if this is a 2FA verification step (user already passed reCAPTCHA on initial login)
+      const { totpToken, backupCode } = req.body;
+      const is2FAStep = !!(totpToken || backupCode);
+
+      // Only check reCAPTCHA on initial login, not on 2FA verification step
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
-      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey && !is2FAStep) {
         if (!recaptchaToken) {
-          // Allow login without token if reCAPTCHA failed to load on client
-          // This prevents lockout when domain is misconfigured in Google console
-          log(`Login without reCAPTCHA token - widget may have failed to load for: ${email}`, 'security');
-        } else {
-          try {
-            const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${encodeURIComponent(recaptchaSettings.secretKey)}&response=${encodeURIComponent(recaptchaToken)}`,
-            });
-            const verifyResult = await verifyResponse.json() as { success: boolean; 'error-codes'?: string[] };
-            
-            if (!verifyResult.success) {
-              log(`reCAPTCHA verification failed: ${JSON.stringify(verifyResult['error-codes'])}`, 'security');
-              return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
-            }
-          } catch (err: any) {
-            log(`reCAPTCHA verification error: ${err.message}`, 'security');
-            // Allow login even if verification fails - don't lock users out
-            log(`Allowing login despite reCAPTCHA error for: ${email}`, 'security');
-          }
+          // SECURITY: Reject login without reCAPTCHA token
+          log(`Login blocked - missing reCAPTCHA token for: ${email}`, 'security');
+          return res.status(400).json({ error: 'Security verification required. Please refresh the page and try again.' });
+        }
+
+        const verifyResult = await verifyRecaptchaToken(
+          recaptchaToken,
+          recaptchaSettings.secretKey,
+          'login',
+          recaptchaSettings.minScore
+        );
+
+        if (!verifyResult.valid) {
+          log(`reCAPTCHA verification failed for login: ${verifyResult.error}`, 'security');
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
       }
 
@@ -615,64 +1176,144 @@ export async function registerRoutes(
       const clientIp = getClientIp(req);
       
       // Check if IP is blocked (distributed attack protection)
-      const ipBlockStatus = isIpBlocked(clientIp);
+      const ipBlockStatus = await isIpBlocked(clientIp);
       if (ipBlockStatus.blocked) {
         const remainingMins = Math.ceil((ipBlockStatus.remainingMs || 0) / 60000);
         log(`Blocked login attempt from blocked IP: ${clientIp}`, 'security');
-        return res.status(429).json({ 
+        return res.status(429).json({
           error: `Too many login attempts from your location. Try again in ${remainingMins} minutes.`,
           code: 'IP_BLOCKED'
         });
       }
-      
+
       // Check if account is locked due to too many failed attempts
-      const lockStatus = isAccountLocked(email, clientIp);
+      const lockStatus = await isAccountLocked(email, clientIp);
       if (lockStatus.locked) {
         const remainingMins = Math.ceil((lockStatus.remainingMs || 0) / 60000);
         log(`Blocked login attempt for locked account: ${email} from IP: ${clientIp} (${lockStatus.reason})`, 'security');
-        return res.status(429).json({ 
+        return res.status(429).json({
           error: `Account temporarily locked due to too many failed attempts. Try again in ${remainingMins} minutes.`,
           code: 'ACCOUNT_LOCKED'
         });
       }
 
-      // Apply progressive delay based on failed attempts
-      const delay = getProgressiveDelay(email, clientIp);
-      if (delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-
       // Authenticate with Auth0
+      // SECURITY: Do NOT check if user exists separately - this enables email enumeration attacks
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
-        recordFailedLogin(email, clientIp);
-        return res.status(401).json({ error: auth0Result.error || 'Invalid email or password' });
+        // Only record failed login if it's an authentication failure, not a connection error
+        if (!auth0Result.isConnectionError) {
+          await recordFailedLogin(email, clientIp);
+        }
+
+        // Apply progressive delay ONLY on failed login attempts (after authentication fails)
+        // This prevents legitimate users from experiencing delays on successful logins
+        const delay = await getProgressiveDelay(email, clientIp);
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        // SECURITY: Return generic error message to prevent email enumeration
+        // Do NOT reveal whether the email exists or if the password was wrong
+        return res.status(401).json({
+          error: 'Invalid email or password',
+          code: 'INVALID_CREDENTIALS'
+        });
       }
-      
+
       // Clear failed login attempts on successful auth
-      clearFailedLogins(email, clientIp);
+      await clearFailedLogins(email, clientIp);
 
       // Check if user is blocked
       const userFlags = await storage.getUserFlags(auth0Result.user.user_id);
       if (userFlags?.blocked) {
         log(`Blocked user attempted login: ${email}`, 'auth');
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: 'Your account has been suspended. Please contact support.',
           code: 'USER_BLOCKED'
         });
       }
 
-      // Revoke any idle sessions first (sessions that exceeded 15 min idle timeout)
-      await storage.revokeIdleSessions(auth0Result.user.user_id, IDLE_TIMEOUT_MS, SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
+      // Check if 2FA is enabled for this user
+      const tfa = await dbStorage.getTwoFactorAuth(auth0Result.user.user_id);
+      if (tfa?.enabled) {
+        // 2FA required - check if token was provided (totpToken/backupCode already extracted above)
+        if (!totpToken && !backupCode) {
+          // Return 2FA required status - client should prompt for code
+          log(`2FA required for user: ${email}`, 'auth');
+          return res.status(200).json({
+            requires2FA: true,
+            message: 'Two-factor authentication required',
+          });
+        }
 
-      // Check if user already has an active session (strict single-session)
+        let tfaValid = false;
+
+        // Decrypt the secret for TOTP verification
+        let plaintextSecret: string;
+        try {
+          plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+          log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
+        } catch (decryptError: any) {
+          log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
+          return res.status(500).json({ error: 'Authentication error. Please contact support.' });
+        }
+
+        // Try TOTP token first
+        if (totpToken) {
+          log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
+          tfaValid = totpVerify(totpToken, plaintextSecret);
+          log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
+        }
+
+        // If TOTP failed, try backup code
+        if (!tfaValid && backupCode) {
+          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+
+          // Check each backup code with argon2 (or fallback to sha256 for legacy codes)
+          for (let i = 0; i < backupCodes.length; i++) {
+            const storedHash = backupCodes[i];
+            // Check if it's an argon2 hash (starts with $argon2)
+            if (storedHash.startsWith('$argon2')) {
+              if (await verifyBackupCode(backupCode, storedHash)) {
+                tfaValid = true;
+                // Remove used backup code
+                backupCodes.splice(i, 1);
+                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                log(`Backup code used for 2FA login: ${email}`, 'security');
+                break;
+              }
+            } else {
+              // Legacy sha256 hash - check and migrate if valid
+              const crypto = await import('crypto');
+              const hashedInput = crypto.createHash('sha256').update(backupCode.toUpperCase()).digest('hex');
+              if (hashedInput === storedHash) {
+                tfaValid = true;
+                // Remove used backup code
+                backupCodes.splice(i, 1);
+                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                log(`Legacy backup code used for 2FA login: ${email}`, 'security');
+                break;
+              }
+            }
+          }
+        }
+
+        if (!tfaValid) {
+          await recordFailedLogin(email, clientIp);
+          return res.status(401).json({ error: 'Invalid two-factor authentication code' });
+        }
+
+        // Update last used timestamp
+        await dbStorage.updateTwoFactorLastUsed(auth0Result.user.user_id);
+      }
+
+      // Revoke ALL existing sessions for this user (single-session policy)
+      // This allows users who lost their cookie to log in again without waiting
       const hasExistingSession = await storage.hasActiveSession(auth0Result.user.user_id, IDLE_TIMEOUT_MS);
       if (hasExistingSession) {
-        log(`User ${email} already has an active session - login blocked`, 'auth');
-        return res.status(403).json({ 
-          error: 'You are already logged in from another location. Please log out there first or wait for your session to expire.',
-          code: 'ALREADY_LOGGED_IN'
-        });
+        log(`User ${email} has existing session - revoking to allow new login`, 'auth');
+        await storage.revokeSessionsByAuth0UserId(auth0Result.user.user_id, SESSION_REVOKE_REASONS.NEW_LOGIN);
       }
 
       // Check for existing VirtFusion user ID in Auth0 metadata
@@ -748,6 +1389,14 @@ export async function registerRoutes(
         log(`Admin user logged in: ${email}`, 'auth');
       }
 
+      // Get email verification status - check both Auth0 and database override
+      const emailVerifiedFromAuth0 = auth0Result.user.email_verified === true;
+      const emailVerifiedOverride = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
+      const emailVerified = emailVerifiedFromAuth0 || emailVerifiedOverride;
+      if (emailVerifiedOverride && !emailVerifiedFromAuth0) {
+        log(`User ${email} email verified via database override`, 'auth');
+      }
+
       // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
@@ -758,6 +1407,7 @@ export async function registerRoutes(
         name: auth0Result.user.name,
         auth0UserId: auth0UserIdPrefixed, // Use prefixed version for consistency with Auth0 API
         isAdmin,
+        emailVerified,
         expiresAt,
       });
 
@@ -765,8 +1415,13 @@ export async function registerRoutes(
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
+        path: '/',
         expires: expiresAt,
       });
+
+      // Set CSRF token cookie for double-submit pattern
+      const csrfToken = generateCsrfToken();
+      setCsrfCookie(res, csrfToken, expiresAt);
 
       res.json({
         user: {
@@ -774,11 +1429,56 @@ export async function registerRoutes(
           email: email,
           name: auth0Result.user.name,
           isAdmin,
+          emailVerified,
         },
+        csrfToken, // Include in response for initial setup
       });
     } catch (error: any) {
       log(`Login error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  // Force logout other sessions (requires password verification for security)
+  app.post('/api/auth/force-logout', async (req, res) => {
+    try {
+      const { email, password, recaptchaToken } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+
+      // Verify reCAPTCHA if enabled (same as login)
+      const recaptchaSettings = dbStorage.getRecaptchaSettings();
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+        if (!recaptchaToken) {
+          return res.status(400).json({ error: 'reCAPTCHA verification required' });
+        }
+        const recaptchaValid = await verifyRecaptchaToken(recaptchaToken, recaptchaSettings.secretKey!, 'force_logout', recaptchaSettings.minScore || 0.5);
+        if (!recaptchaValid) {
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+        }
+      }
+
+      // Verify credentials with Auth0 (this ensures the user owns the account)
+      const auth0Result = await auth0Client.authenticateUser(email, password);
+      if (!auth0Result.success || !auth0Result.user) {
+        log(`Force logout failed for ${email} - invalid credentials`, 'auth');
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      // Revoke all existing sessions for this user
+      const auth0UserId = auth0Result.user.user_id.startsWith('auth0|')
+        ? auth0Result.user.user_id
+        : `auth0|${auth0Result.user.user_id}`;
+
+      await storage.revokeSessionsByAuth0UserId(auth0UserId, SESSION_REVOKE_REASONS.FORCE_LOGOUT);
+      log(`Force logout successful for ${email} - all sessions revoked`, 'auth');
+
+      res.json({ success: true, message: 'All other sessions have been logged out. You can now login.' });
+    } catch (error: any) {
+      log(`Force logout error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to force logout' });
     }
   });
 
@@ -794,6 +1494,7 @@ export async function registerRoutes(
     }
     
     res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
     res.json({ success: true });
   });
 
@@ -810,23 +1511,51 @@ export async function registerRoutes(
       if (!session || new Date(session.expiresAt) < new Date()) {
         if (session) await storage.deleteSession(sessionId);
         res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ error: 'Session expired' });
       }
 
-      // Check Auth0 for updated admin status (refreshes every call)
+      // Check Auth0 for updated admin status and email verification (refreshes every call)
       let isAdmin = session.isAdmin ?? false;
+      let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
+          // Check database override for email verification first
+          log(`[/api/auth/me] Checking override for: ${session.auth0UserId}`, 'auth');
+          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
+          log(`[/api/auth/me] Override result: ${emailVerifiedOverride}`, 'auth');
+
+          const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
+            auth0Client.isUserAdmin(session.auth0UserId),
+            auth0Client.isEmailVerified(session.auth0UserId),
+          ]);
+          log(`[/api/auth/me] Auth0 emailVerified: ${currentEmailVerifiedFromAuth0}`, 'auth');
+
+          // Email is verified if EITHER Auth0 says so OR we have a database override
+          const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
+          log(`[/api/auth/me] Final emailVerified: ${currentEmailVerified}`, 'auth');
+
+          const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
+
           if (currentAdminStatus !== isAdmin) {
             log(`Admin status changed for ${session.email}: ${isAdmin} -> ${currentAdminStatus}`, 'auth');
             isAdmin = currentAdminStatus;
-            // Update session with new admin status
-            await storage.updateSession(sessionId, { isAdmin: currentAdminStatus });
+            updates.isAdmin = currentAdminStatus;
+          }
+
+          if (currentEmailVerified !== emailVerified) {
+            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}${emailVerifiedOverride ? ' (override)' : ''}`, 'auth');
+            emailVerified = currentEmailVerified;
+            updates.emailVerified = currentEmailVerified;
+          }
+
+          // Update session if anything changed
+          if (Object.keys(updates).length > 0) {
+            await storage.updateSession(sessionId, updates);
           }
         } catch (err: any) {
           // If Auth0 check fails, use cached session value
-          log(`Failed to refresh admin status from Auth0: ${err.message}`, 'auth');
+          log(`Failed to refresh status from Auth0: ${err.message}`, 'auth');
         }
       }
 
@@ -838,11 +1567,40 @@ export async function registerRoutes(
           virtFusionUserId: session.virtFusionUserId,
           extRelationId: session.extRelationId,
           isAdmin,
+          emailVerified,
         },
       });
     } catch (error: any) {
       log(`Auth check error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Authentication check failed' });
+    }
+  });
+
+  // Resend verification email - requires authentication
+  app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      // Check if already verified
+      if (session.emailVerified) {
+        return res.status(400).json({ error: 'Email is already verified' });
+      }
+
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User account not properly configured' });
+      }
+
+      const result = await auth0Client.resendVerificationEmail(session.auth0UserId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Failed to send verification email' });
+      }
+
+      log(`Verification email resent for ${session.email}`, 'auth');
+      res.json({ success: true, message: 'Verification email sent. Please check your inbox.' });
+    } catch (error: any) {
+      log(`Resend verification error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send verification email' });
     }
   });
 
@@ -869,29 +1627,9 @@ export async function registerRoutes(
               bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
             }
 
-            // Fetch billing status, create if doesn't exist (for existing servers)
-            let billingStatus = await getServerBillingStatus(server.id);
-
-            // Auto-initialize billing for existing servers that don't have a record
-            if (!billingStatus && server.plan?.priceMonthly) {
-              try {
-                // Use server's actual creation date for accurate billing
-                const serverCreatedAt = server.created_at || server.createdAt;
-                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-                await createServerBilling({
-                  auth0UserId: req.userSession!.auth0UserId!,
-                  virtfusionServerId: server.id,
-                  planId: server.plan.id,
-                  monthlyPriceCents: server.plan.priceMonthly,
-                  deployedAt,
-                });
-                // Fetch the newly created billing record
-                billingStatus = await getServerBillingStatus(server.id);
-              } catch (billingCreateError: any) {
-                log(`Could not auto-initialize billing for server ${server.id}: ${billingCreateError.message}`, 'api');
-              }
-            }
+            // Fetch billing status for the server (using UUID for reliable lookup)
+            // Note: Billing records are created during server deployment, not auto-initialized
+            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId, server.uuid);
 
             return {
               ...server,
@@ -914,7 +1652,107 @@ export async function registerRoutes(
       res.json(serversWithBandwidthAndBilling);
     } catch (error: any) {
       log(`Error fetching servers: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch servers');
+      return handleApiError(res, error, 'Unable to retrieve your servers. Please try again.', 'listServers');
+    }
+  });
+
+  // Combined dashboard endpoint - reduces 4 API calls to 1
+  // Returns servers, cancellations, billing statuses, and total bandwidth in a single request
+  app.get('/api/dashboard/overview', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const userId = session.virtFusionUserId;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'VirtFusion account not linked' });
+      }
+
+      // Fetch all data in parallel
+      const [servers, cancellations, billingRecords] = await Promise.all([
+        virtfusionClient.listServersWithStats(userId),
+        dbStorage.getUserCancellations(session.auth0UserId!),
+        dbStorage.getServerBillingByUser(session.auth0UserId!),
+      ]);
+
+      // Build cancellation map
+      const activeCancellations = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
+      const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
+      for (const c of activeCancellations) {
+        cancellationMap[c.virtfusionServerId] = {
+          scheduledDeletionAt: c.scheduledDeletionAt,
+          reason: c.reason,
+          mode: c.mode || 'grace',
+          status: c.status,
+        };
+      }
+
+      // Build billing map
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number }> = {};
+      for (const b of billingRecords) {
+        billingMap[b.virtfusionServerId] = {
+          status: b.status,
+          nextBillAt: b.nextBillAt,
+          suspendAt: b.suspendAt,
+          monthlyPriceCents: b.monthlyPriceCents,
+        };
+      }
+
+      // Track total bandwidth while processing servers
+      let totalBandwidth = 0;
+      let totalBandwidthLimit = 0;
+
+      // Fetch bandwidth and billing for each server in parallel (with traffic data reuse)
+      const serversWithData = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            // Fetch bandwidth status
+            const traffic = await virtfusionClient.getServerTrafficHistory(server.id);
+            let bandwidthExceeded = false;
+
+            if (traffic?.current) {
+              const usedBytes = traffic.current.total || 0;
+              const limitGB = traffic.current.limit || 0;
+              const usedGB = usedBytes / (1024 * 1024 * 1024);
+              bandwidthExceeded = limitGB > 0 && usedGB >= limitGB;
+
+              // Accumulate for total bandwidth calculation
+              totalBandwidth += usedBytes;
+              totalBandwidthLimit += limitGB;
+            }
+
+            // Fetch billing status for the server (using UUID for reliable lookup)
+            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId, server.uuid);
+
+            return {
+              ...server,
+              bandwidthExceeded,
+              billing: billingStatus ? {
+                status: billingStatus.status,
+                nextBillAt: billingStatus.nextBillAt,
+                suspendAt: billingStatus.suspendAt,
+                monthlyPriceCents: billingStatus.monthlyPriceCents,
+                autoRenew: billingStatus.autoRenew,
+              } : null,
+            };
+          } catch (error) {
+            return { ...server, bandwidthExceeded: false, billing: null };
+          }
+        })
+      );
+
+      res.json({
+        servers: serversWithData,
+        cancellations: cancellationMap,
+        billingStatuses: billingMap,
+        bandwidth: {
+          totalBandwidth,
+          totalLimit: totalBandwidthLimit,
+          serverCount: servers.length,
+        },
+      });
+    } catch (error: any) {
+      log(`Error fetching dashboard overview: ${error.message}`, 'api');
+      return handleApiError(res, error, 'Unable to load dashboard data. Please refresh the page.', 'dashboardOverview');
     }
   });
 
@@ -940,26 +1778,47 @@ export async function registerRoutes(
       }
 
       // Fetch billing status for this server (non-critical, don't fail if it errors)
+      // Use UUID for reliable lookup - it never changes even if server ID format changes
       let billingStatus = null;
       try {
-        billingStatus = await getServerBillingStatus(req.params.id);
+        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
 
         // Auto-initialize billing for existing servers that don't have a record
-        if (!billingStatus && server.plan?.priceMonthly) {
+        if (!billingStatus) {
           try {
-            // Use server's actual creation date for accurate billing
-            const serverCreatedAt = server.created_at || server.createdAt;
-            const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+            // Look up plan price from our database based on server specs
+            const serverSpecs = server.plan?.specs;
+            if (serverSpecs) {
+              const matchingPlan = await db.select().from(plans)
+                .where(
+                  and(
+                    eq(plans.vcpu, serverSpecs.vcpu),
+                    eq(plans.ramMb, serverSpecs.ram),
+                    eq(plans.storageGb, serverSpecs.disk),
+                    eq(plans.active, true)
+                  )
+                )
+                .limit(1);
 
-            await createServerBilling({
-              auth0UserId: req.userSession!.auth0UserId!,
-              virtfusionServerId: req.params.id,
-              planId: server.plan.id,
-              monthlyPriceCents: server.plan.priceMonthly,
-              deployedAt,
-            });
-            // Fetch the newly created billing record
-            billingStatus = await getServerBillingStatus(req.params.id);
+              if (matchingPlan.length > 0) {
+                const plan = matchingPlan[0];
+                // Use server's actual creation date for accurate billing
+                const serverCreatedAt = server.created_at || server.createdAt;
+                const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
+
+                await createServerBilling({
+                  auth0UserId: req.userSession!.auth0UserId!,
+                  virtfusionServerId: req.params.id,
+                  virtfusionServerUuid: server.uuid, // Store UUID for reliable future lookups
+                  planId: plan.id,
+                  monthlyPriceCents: plan.priceMonthly,
+                  deployedAt,
+                });
+                // Fetch the newly created billing record
+                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
+                log(`Auto-initialized billing for server ${req.params.id} (UUID: ${server.uuid}) with plan ${plan.code}`, 'billing');
+              }
+            }
           } catch (billingCreateError: any) {
             log(`Could not auto-initialize billing for server ${req.params.id}: ${billingCreateError.message}`, 'api');
           }
@@ -982,11 +1841,11 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       log(`Error fetching server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch server');
+      return handleApiError(res, error, 'Unable to retrieve server details. Please try again.', 'getServer');
     }
   });
 
-  app.post('/api/servers/:id/power', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/power', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -1012,7 +1871,15 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to perform power action');
+
+      // VirtFusion returns 423 Locked when there are pending tasks in queue
+      if (error.message?.includes('423') || error.message?.includes('Locked') || error.message?.includes('pending tasks')) {
+        return res.status(423).json({
+          error: 'Server is busy with another operation. Please wait for the current task to complete and try again.'
+        });
+      }
+
+      return handleApiError(res, error, 'Unable to perform the power action. The server may be busy. Please try again.', 'powerAction');
     }
   });
 
@@ -1026,7 +1893,7 @@ export async function registerRoutes(
       res.json(metrics || { cpu: [], ram: [], net: [] });
     } catch (error: any) {
       log(`Error fetching metrics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch metrics');
+      return handleApiError(res, error, 'Unable to retrieve server metrics.', 'getMetrics');
     }
   });
 
@@ -1040,7 +1907,7 @@ export async function registerRoutes(
       res.json(stats || { cpu_usage: 0, ram_usage: 0, disk_usage: 0, net_in: 0, net_out: 0 });
     } catch (error: any) {
       log(`Error fetching live stats for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch live stats');
+      return handleApiError(res, error, 'Unable to retrieve live statistics.', 'getLiveStats');
     }
   });
 
@@ -1054,7 +1921,7 @@ export async function registerRoutes(
       res.json(traffic || []);
     } catch (error: any) {
       log(`Error fetching traffic for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic data');
+      return handleApiError(res, error, 'Unable to retrieve traffic data.', 'getTrafficData');
     }
   });
 
@@ -1074,7 +1941,7 @@ export async function registerRoutes(
       res.json(statistics || { supported: false, points: [], interval: 60, period });
     } catch (error: any) {
       log(`Error fetching traffic statistics for server ${req.params.id}: ${error.message}`, 'api');
-      return handleApiError(res, error, 'Failed to fetch traffic statistics');
+      return handleApiError(res, error, 'Unable to retrieve traffic statistics.', 'getTrafficStats');
     }
   });
 
@@ -1145,21 +2012,29 @@ export async function registerRoutes(
       await virtfusionClient.updateServerName(req.params.id, name.trim());
       res.json({ success: true, name: name.trim() });
     } catch (error: any) {
-      log(`Error updating server name for ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to update server name' });
+      return handleApiError(res, error, 'Unable to update server name.', 'updateServerName');
     }
   });
 
   app.get('/api/servers/:id/vnc', authMiddleware, async (req, res) => {
     try {
+      // Verify ownership before returning VNC details
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      if (!server) {
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
+      }
+
+      if (server.suspended) {
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
+      }
+
       const vnc = await virtfusionClient.getVncDetails(req.params.id);
       if (!vnc) {
-        return res.status(404).json({ error: 'VNC not available for this server' });
+        return res.status(404).json({ error: 'VNC not available for this server', code: ErrorCodes.RESOURCE_NOT_FOUND });
       }
       res.json(vnc);
     } catch (error: any) {
-      log(`Error fetching VNC details for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch VNC details' });
+      return handleApiError(res, error, 'Unable to fetch VNC details.', 'getVncDetails');
     }
   });
 
@@ -1167,18 +2042,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.enableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error enabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to enable VNC' });
+      return handleApiError(res, error, 'Unable to enable VNC console.', 'enableVnc');
     }
   });
 
@@ -1186,18 +2060,17 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
 
       if (server.suspended) {
-        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.' });
+        return res.status(403).json({ error: 'Server is suspended. VNC access is disabled.', code: ErrorCodes.SERVER_SUSPENDED });
       }
 
       const vnc = await virtfusionClient.disableVnc(req.params.id);
       res.json(vnc);
     } catch (error: any) {
-      log(`Error disabling VNC for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to disable VNC' });
+      return handleApiError(res, error, 'Unable to disable VNC console.', 'disableVnc');
     }
   });
 
@@ -1205,13 +2078,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const network = await virtfusionClient.getServerNetworkInfo(req.params.id);
       res.json(network || { interfaces: [] });
     } catch (error: any) {
-      log(`Error fetching network info for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch network info' });
+      return handleApiError(res, error, 'Unable to fetch network information.', 'getNetworkInfo');
     }
   });
 
@@ -1219,13 +2091,12 @@ export async function registerRoutes(
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
-        return res.status(status || 403).json({ error: error || 'Access denied' });
+        return res.status(status || 403).json({ error: error || 'Access denied', code: ErrorCodes.ACCESS_DENIED });
       }
       const templates = await virtfusionClient.getOsTemplates(req.params.id);
       res.json(templates || []);
     } catch (error: any) {
-      log(`Error fetching OS templates for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch OS templates' });
+      return handleApiError(res, error, 'Unable to fetch available operating systems.', 'getOsTemplates');
     }
   });
 
@@ -1246,7 +2117,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/reinstall', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/reinstall', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -1276,27 +2147,42 @@ export async function registerRoutes(
       // Templates are returned in groups, each group has a templates array
       const templateGroups = await virtfusionClient.getOsTemplates(req.params.id);
       let templateAllowed = false;
-      
+      let selectedTemplate: any = null;
+
       if (templateGroups && Array.isArray(templateGroups)) {
         for (const group of templateGroups) {
           if (group.templates && Array.isArray(group.templates)) {
-            const found = group.templates.some((t: any) => 
+            const found = group.templates.find((t: any) =>
               String(t.id) === String(osId) || t.id === osId
             );
             if (found) {
               templateAllowed = true;
+              selectedTemplate = found;
               break;
             }
           }
         }
       }
-      
+
       if (!templateAllowed) {
         return res.status(403).json({ error: 'Selected OS template is not available for this server' });
       }
 
       const result = await virtfusionClient.reinstallServer(req.params.id, Number(osId), hostname);
-      res.json({ success: true, data: result });
+
+      // Email credentials if password was returned
+      if (result.password && req.userSession?.email && server.primaryIp) {
+        sendServerReinstallEmail(
+          req.userSession.email,
+          hostname || server.name || `Server ${server.id}`,
+          server.primaryIp,
+          'root',
+          result.password,
+          selectedTemplate?.name || 'Linux'
+        ).catch(() => {});  // Fire and forget
+      }
+
+      res.json({ success: true });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reinstall server' });
@@ -1305,11 +2191,22 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/build-status', authMiddleware, async (req, res) => {
     try {
+      // CRITICAL FIX: Get build status FIRST to check if commissioned
+      // This prevents caching stale data before we know to invalidate
+      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+
+      // If commissioned, invalidate cache BEFORE ownership check to prevent stale data
+      if (buildStatus.commissioned === 3) {
+        log(`Server ${req.params.id} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
+        virtfusionClient.invalidateServerCache(req.params.id);
+      }
+
+      // Now do ownership check - will fetch fresh data if cache was invalidated
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
-      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+
       res.json(buildStatus);
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
@@ -1318,7 +2215,7 @@ export async function registerRoutes(
   });
 
   // Reset server password - security-sensitive endpoint with ownership verification
-  app.post('/api/servers/:id/reset-password', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
@@ -1336,13 +2233,18 @@ export async function registerRoutes(
       }
 
       const result = await virtfusionClient.resetServerPassword(req.params.id);
-      
+
+      log(`[DEBUG] Password reset result for ${req.params.id}: ${JSON.stringify({ success: result.success, hasPassword: !!result.password, username: result.username })}`, 'api');
+
       if (!result.password) {
+        log(`[ERROR] Password reset for ${req.params.id} succeeded but no password returned`, 'api');
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
-      
+
       log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
-      res.json({ success: true, password: result.password, username: result.username });
+      const response = { success: true, password: result.password, username: result.username };
+      log(`[DEBUG] Sending response: ${JSON.stringify({ success: true, hasPassword: !!result.password, username: result.username })}`, 'api');
+      res.json(response);
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reset server password' });
@@ -1407,73 +2309,58 @@ export async function registerRoutes(
     }
   });
 
-  // Get upcoming charges for the user
+  // Get upcoming charges for the user (with server name enrichment)
   app.get('/api/billing/upcoming', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
 
-      // Auto-initialize billing for any servers that don't have records yet
-      // Also clean up billing records for deleted servers
-      try {
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
-        const activeServerIds = new Set(servers.map(s => s.id));
-
-        // Get all billing records for this user
-        const allBillingRecords = await dbStorage.getServerBillingByUser(session.auth0UserId!);
-
-        // Remove billing records for servers that no longer exist
-        for (const billing of allBillingRecords) {
-          if (!activeServerIds.has(billing.virtfusionServerId)) {
-            await db.delete(serverBilling)
-              .where(eq(serverBilling.id, billing.id));
-            log(`Removed billing record for deleted server ${billing.virtfusionServerId}`, 'billing');
-          }
-        }
-
-        // Create billing records for new servers
-        for (const server of servers) {
-          if (server.plan?.priceMonthly) {
-            // Check if billing record exists
-            let billingStatus = await getServerBillingStatus(server.id);
-
-            if (!billingStatus) {
-              // Use server's actual creation date for accurate billing
-              const serverCreatedAt = server.created_at || server.createdAt;
-              const deployedAt = serverCreatedAt ? new Date(serverCreatedAt) : undefined;
-
-              // Create billing record
-              await createServerBilling({
-                auth0UserId: session.auth0UserId!,
-                virtfusionServerId: server.id,
-                planId: server.plan.id,
-                monthlyPriceCents: server.plan.priceMonthly,
-                deployedAt,
-              });
-              log(`Auto-initialized billing for server ${server.id}`, 'billing');
-            }
-          }
-        }
-      } catch (initError: any) {
-        log(`Warning: Could not auto-initialize billing: ${initError.message}`, 'billing');
-      }
-
       // Fetch upcoming charges
-      let upcoming = [];
+      let upcoming: Array<{
+        id: number;
+        virtfusionServerId: string;
+        planId: number;
+        monthlyPriceCents: number;
+        status: string;
+        nextBillAt: Date;
+        suspendAt: Date | null;
+        autoRenew: boolean;
+        serverName?: string;
+      }> = [];
+
       try {
         const billingRecords = await getUpcomingCharges(session.auth0UserId!);
 
-        // Fetch servers to enrich with names and verify they still exist
-        const servers = await virtfusionClient.listServersWithStats(session.virtfusionUserId);
-        const serverMap = new Map(servers.map(s => [s.id, s.name]));
+        // If no billing records, return empty
+        if (billingRecords.length === 0) {
+          return res.json({ upcoming: [] });
+        }
 
-        // Only include billing records for servers that actually exist
-        // This filters out any orphaned records that haven't been cleaned up yet
-        upcoming = billingRecords
-          .filter(billing => serverMap.has(billing.virtfusionServerId))
-          .map(billing => ({
+        // Fetch servers to enrich with names and verify they still exist
+        if (!session.virtFusionUserId) {
+          log(`Warning: Session missing virtFusionUserId for ${session.email}, returning billing without server names`, 'billing');
+          // Return billing records without server name enrichment
+          upcoming = billingRecords.map(billing => ({
             ...billing,
-            serverName: serverMap.get(billing.virtfusionServerId),
+            serverName: undefined,
           }));
+          return res.json({ upcoming });
+        }
+
+        const servers = await virtfusionClient.listServersWithStats(session.virtFusionUserId);
+        // Convert server IDs to strings since serverBilling stores virtfusionServerId as text
+        // Store both name and uuid for each server
+        const serverMap = new Map(servers.map(s => [String(s.id), { name: s.name, uuid: s.uuid }]));
+
+        // Include all billing records, even if server is temporarily not visible (e.g., during reinstall)
+        // Just enrich with server name and UUID if available
+        upcoming = billingRecords.map(billing => {
+          const serverInfo = serverMap.get(billing.virtfusionServerId);
+          return {
+            ...billing,
+            serverName: serverInfo?.name || `Server #${billing.virtfusionServerId}`,
+            serverUuid: serverInfo?.uuid || billing.virtfusionServerUuid || undefined,
+          };
+        });
       } catch (billingError: any) {
         log(`Warning: Could not fetch upcoming charges: ${billingError.message}`, 'api');
       }
@@ -1635,7 +2522,8 @@ export async function registerRoutes(
       let vncAccess = null;
       try {
         vncAccess = await virtfusionClient.getServerVncAccess(serverId);
-        log(`VNC access for server ${serverId}: ${JSON.stringify(vncAccess)}`, 'api');
+        // Log without exposing password
+        log(`VNC access retrieved for server ${serverId}: ip=${vncAccess?.ip}, port=${vncAccess?.port}, hasPassword=${!!vncAccess?.password}`, 'api');
       } catch (vncErr: any) {
         log(`Failed to get VNC access: ${vncErr.message}`, 'api');
       }
@@ -1691,10 +2579,14 @@ export async function registerRoutes(
       } catch (tokenErr: any) {
         log(`Token generation failed: ${tokenErr.message}`, 'api');
       }
-      
-      // Last fallback to direct VNC URL
-      const consoleUrl = `${panelUrl}/server/${server.uuid}/vnc`;
-      res.json({ url: consoleUrl });
+
+      // SECURITY: Do NOT fallback to unauthenticated URL
+      // If token generation fails, return an error instead of exposing unprotected console
+      log(`Console URL generation failed for server ${req.params.id} - no valid authentication method`, 'security');
+      return res.status(503).json({
+        error: 'Console temporarily unavailable. Please try again in a few moments.',
+        retryable: true
+      });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
@@ -1768,22 +2660,34 @@ export async function registerRoutes(
   app.post('/api/user/password', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
-      const { newPassword } = req.body;
-      
+      const { currentPassword, newPassword } = req.body;
+
+      // SECURITY: Require current password verification
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password is required' });
+      }
+
       if (!newPassword) {
         return res.status(400).json({ error: 'New password is required' });
       }
-      
+
       if (newPassword.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
-      
+
       if (!session.auth0UserId) {
         return res.status(400).json({ error: 'Unable to change password. Please contact support.' });
       }
-      
+
+      // SECURITY: Verify current password before allowing change
+      const authResult = await auth0Client.authenticateUser(session.email, currentPassword);
+      if (!authResult.success) {
+        log(`Password change blocked - invalid current password for: ${session.email}`, 'security');
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+
       const result = await auth0Client.changePassword(session.auth0UserId, newPassword);
-      
+
       if (!result.success) {
         return res.status(400).json({ error: result.error || 'Failed to change password' });
       }
@@ -1792,6 +2696,272 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  // ===========================================
+  // TWO-FACTOR AUTHENTICATION ENDPOINTS
+  // ===========================================
+
+  // Get 2FA status for current user
+  app.get('/api/user/2fa/status', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+
+      res.json({
+        enabled: tfa?.enabled || false,
+        verifiedAt: tfa?.verifiedAt || null,
+        lastUsedAt: tfa?.lastUsedAt || null,
+      });
+    } catch (error: any) {
+      log(`Error getting 2FA status: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to get 2FA status' });
+    }
+  });
+
+  // Begin 2FA setup - generate secret and QR code
+  app.post('/api/user/2fa/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      log(`2FA setup: starting for user ${session.email}`, 'security');
+
+      // Import QR code library
+      let QRCode;
+      try {
+        QRCode = await import('qrcode');
+        log(`2FA setup: QRCode library loaded`, 'security');
+      } catch (qrErr: any) {
+        log(`2FA setup: Failed to load QRCode library: ${qrErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to load QR code library' });
+      }
+
+      // Check if 2FA is already enabled
+      const existing = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (existing?.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled. Disable it first to set up again.' });
+      }
+
+      // Generate a new secret
+      let plaintextSecret: string;
+      try {
+        plaintextSecret = totpGenerateSecret();
+        log(`2FA setup: Secret generated (length: ${plaintextSecret.length})`, 'security');
+      } catch (secretErr: any) {
+        log(`2FA setup: Failed to generate secret: ${secretErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to generate secret' });
+      }
+
+      // Encrypt the secret for storage
+      let encryptedSecret: string;
+      try {
+        encryptedSecret = encryptSecret(plaintextSecret);
+        log(`2FA setup: Secret encrypted`, 'security');
+      } catch (encryptErr: any) {
+        log(`2FA setup: Failed to encrypt secret: ${encryptErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to encrypt secret' });
+      }
+
+      // Create or update the 2FA record with encrypted secret
+      try {
+        if (existing) {
+          await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret: encryptedSecret, enabled: false });
+          log(`2FA setup: Updated existing record`, 'security');
+        } else {
+          await dbStorage.createTwoFactorAuth({
+            auth0UserId: session.auth0UserId,
+            secret: encryptedSecret,
+            enabled: false,
+          });
+          log(`2FA setup: Created new record`, 'security');
+        }
+      } catch (dbErr: any) {
+        log(`2FA setup: Database error: ${dbErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to save 2FA configuration' });
+      }
+
+      // Generate QR code URL using plaintext secret (user needs to scan it)
+      let otpAuthUrl: string;
+      let qrCodeDataUrl: string;
+      try {
+        otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
+        log(`2FA setup: URI generated: ${otpAuthUrl.substring(0, 50)}...`, 'security');
+        qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+        log(`2FA setup: QR code generated`, 'security');
+      } catch (qrGenErr: any) {
+        log(`2FA setup: Failed to generate QR code: ${qrGenErr.message}`, 'api');
+        return res.status(500).json({ error: 'Failed to generate QR code' });
+      }
+
+      log(`2FA setup completed successfully for user ${session.email}`, 'security');
+
+      res.json({
+        secret: plaintextSecret, // Show plaintext to user for manual entry
+        qrCode: qrCodeDataUrl,
+        otpAuthUrl,
+      });
+    } catch (error: any) {
+      log(`Error setting up 2FA: ${error.message}\n${error.stack}`, 'api');
+      res.status(500).json({ error: 'Failed to set up 2FA' });
+    }
+  });
+
+  // Enable 2FA after verifying token
+  app.post('/api/user/2fa/enable', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Verification token is required' });
+      }
+
+      // Get the pending 2FA setup
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa) {
+        return res.status(400).json({ error: 'Please set up 2FA first by calling /api/user/2fa/setup' });
+      }
+
+      if (tfa.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled' });
+      }
+
+      // Decrypt the secret for verification
+      let plaintextSecret: string;
+      try {
+        plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+        log(`2FA enable: decrypted secret length=${plaintextSecret.length}, encrypted=${isEncrypted(tfa.secret)}`, 'security');
+      } catch (decryptError: any) {
+        log(`2FA enable: failed to decrypt secret: ${decryptError.message}`, 'security');
+        return res.status(500).json({ error: 'Failed to verify 2FA. Please try setting up again.' });
+      }
+
+      // Verify the token
+      log(`2FA enable: verifying token ${token} against secret`, 'security');
+      const isValid = totpVerify(token, plaintextSecret);
+      log(`2FA enable: verification result=${isValid}`, 'security');
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
+      }
+
+      // Generate backup codes with argon2 hashing
+      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
+
+      // Enable 2FA with backup codes
+      await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
+
+      log(`2FA enabled for user ${session.email}`, 'security');
+
+      res.json({
+        success: true,
+        backupCodes, // Return plaintext codes only once
+        message: '2FA has been enabled. Please save your backup codes in a safe place.',
+      });
+    } catch (error: any) {
+      log(`Error enabling 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to enable 2FA' });
+    }
+  });
+
+  // Disable 2FA
+  app.post('/api/user/2fa/disable', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token, password } = req.body;
+
+      // Require either a valid 2FA token or password
+      if (!token && !password) {
+        return res.status(400).json({ error: 'Either 2FA token or password is required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa?.enabled) {
+        return res.status(400).json({ error: '2FA is not enabled' });
+      }
+
+      // Decrypt the secret for verification
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+
+      // If token is provided, verify it
+      if (token) {
+        const isValid = totpVerify(token, plaintextSecret);
+        if (!isValid) {
+          return res.status(400).json({ error: 'Invalid verification code' });
+        }
+      } else if (password) {
+        // Verify password
+        const authResult = await auth0Client.authenticateUser(session.email, password);
+        if (!authResult.success) {
+          return res.status(400).json({ error: 'Invalid password' });
+        }
+      }
+
+      await dbStorage.disableTwoFactorAuth(session.auth0UserId);
+      log(`2FA disabled for user ${session.email}`, 'security');
+
+      res.json({ success: true, message: '2FA has been disabled' });
+    } catch (error: any) {
+      log(`Error disabling 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+  });
+
+  // Generate new backup codes
+  app.post('/api/user/2fa/backup-codes', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: '2FA token is required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa?.enabled) {
+        return res.status(400).json({ error: '2FA is not enabled' });
+      }
+
+      // Decrypt the secret for verification
+      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+
+      // Verify the token
+      const isValid = totpVerify(token, plaintextSecret);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      // Generate new backup codes with argon2 hashing
+      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
+
+      await dbStorage.updateTwoFactorBackupCodes(session.auth0UserId, hashedBackupCodes);
+      log(`New backup codes generated for user ${session.email}`, 'security');
+
+      res.json({
+        success: true,
+        backupCodes,
+        message: 'New backup codes generated. Please save them in a safe place.',
+      });
+    } catch (error: any) {
+      log(`Error generating backup codes: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to generate backup codes' });
     }
   });
 
@@ -1823,6 +2993,34 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get webhook health status
+  app.get('/api/admin/webhook-health', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const health = WebhookHandlers.getHealth();
+
+      // Also get the configured webhook URL from environment
+      const appDomain = process.env.APP_DOMAIN;
+      const configuredUrl = appDomain ? `https://${appDomain}/api/stripe/webhook` : 'Not configured';
+
+      res.json({
+        ...health,
+        configuredUrl,
+        message: health.healthy
+          ? 'Webhooks are working'
+          : health.lastReceived
+            ? 'No webhooks received in the last 24 hours'
+            : 'No webhooks received since server start',
+      });
+    } catch (error: any) {
+      log(`Error fetching webhook health: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch webhook health' });
+    }
+  });
+
   // Admin: Get all wallets
   app.get('/api/admin/wallets', authMiddleware, async (req, res) => {
     try {
@@ -1839,9 +3037,12 @@ export async function registerRoutes(
   });
 
   // Admin: Adjust wallet balance
+  const MAX_ADJUSTMENT_CENTS = 1000000; // $10,000 max per adjustment
   const walletAdjustSchema = z.object({
     auth0UserId: z.string().min(1, 'User ID is required'),
-    amountCents: z.number().int().refine(val => val !== 0, 'Amount cannot be zero'),
+    amountCents: z.number().int()
+      .refine(val => val !== 0, 'Amount cannot be zero')
+      .refine(val => Math.abs(val) <= MAX_ADJUSTMENT_CENTS, `Adjustment cannot exceed $${(MAX_ADJUSTMENT_CENTS / 100).toLocaleString()}`),
     reason: z.string().min(3, 'Reason must be at least 3 characters').max(500, 'Reason too long'),
   });
 
@@ -2062,13 +3263,218 @@ export async function registerRoutes(
     }
   });
 
-  // Get public reCAPTCHA config (for login page - returns site key if configured via env vars)
+  // Admin: Verify user email manually (bypass email verification requirement)
+  const verifyEmailSchema = z.object({
+    auth0UserId: z.string().min(1, 'Auth0 user ID is required'),
+  });
+
+  app.post('/api/admin/verify-email', authMiddleware, async (req, res) => {
+    log(`========== ADMIN VERIFY EMAIL START ==========`, 'admin');
+    log(`Request body: ${JSON.stringify(req.body)}`, 'admin');
+    log(`User session: ${JSON.stringify({ email: req.userSession?.email, isAdmin: req.userSession?.isAdmin })}`, 'admin');
+
+    try {
+      if (!req.userSession?.isAdmin) {
+        log(`REJECTED: User ${req.userSession?.email} is not admin`, 'admin');
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const result = verifyEmailSchema.safeParse(req.body);
+      if (!result.success) {
+        const errorMessages = result.error.errors.map(e => e.message).join(', ');
+        log(`REJECTED: Validation failed - ${errorMessages}`, 'admin');
+        return res.status(400).json({ error: errorMessages });
+      }
+
+      const { auth0UserId } = result.data;
+      log(`Admin ${req.userSession.email} manually verifying email for Auth0 user ${auth0UserId}`, 'admin');
+
+      // Set email verified override in our database (bypasses Auth0)
+      log(`Setting email verified override in database...`, 'admin');
+      await storage.setEmailVerifiedOverride(auth0UserId, true, req.userSession.email);
+      log(`Email verified override set successfully`, 'admin');
+
+      // Also try to update Auth0 (but don't fail if it doesn't work)
+      try {
+        log(`Attempting to update Auth0 as well...`, 'admin');
+        await auth0Client.updateUser(auth0UserId, { email_verified: true });
+        log(`Auth0 update succeeded`, 'admin');
+      } catch (auth0Error: any) {
+        log(`Auth0 update failed (using database override instead): ${auth0Error.message}`, 'admin');
+        // Don't throw - the database override will work
+      }
+
+      // Audit log
+      await dbStorage.createAuditLog({
+        adminAuth0UserId: req.userSession.auth0UserId!,
+        adminEmail: req.userSession.email,
+        action: 'EMAIL_VERIFIED_MANUALLY',
+        targetType: 'user',
+        targetId: auth0UserId,
+        reason: `Admin manually verified email for user ${auth0UserId} (database override)`,
+        status: 'success',
+      });
+
+      log(`SUCCESS: Admin ${req.userSession.email} verified email for user ${auth0UserId}`, 'admin');
+      log(`========== ADMIN VERIFY EMAIL END ==========`, 'admin');
+      res.json({ success: true, message: 'Email verified successfully' });
+    } catch (error: any) {
+      log(`ERROR: Admin email verification failed`, 'admin');
+      log(`Error message: ${error.message}`, 'admin');
+      log(`Error stack: ${error.stack}`, 'admin');
+
+      // Audit log for failure
+      try {
+        await dbStorage.createAuditLog({
+          adminAuth0UserId: req.userSession!.auth0UserId!,
+          adminEmail: req.userSession!.email,
+          action: 'EMAIL_VERIFIED_MANUALLY',
+          targetType: 'user',
+          targetId: req.body.auth0UserId,
+          reason: `Failed to verify email: ${error.message}`,
+          status: 'failed',
+        });
+      } catch {}
+
+      log(`========== ADMIN VERIFY EMAIL END (FAILED) ==========`, 'admin');
+      res.status(500).json({ error: `Failed to verify email: ${error.message}` });
+    }
+  });
+
+  // User: Resend verification email
+  app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.auth0UserId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      log(`User ${req.userSession.email} requesting verification email resend`, 'auth');
+
+      // Call Auth0 to resend verification email
+      const result = await auth0Client.resendVerificationEmail(req.userSession.auth0UserId);
+
+      if (!result.success) {
+        log(`Failed to resend verification email for ${req.userSession.email}: ${result.error}`, 'auth');
+        return res.status(400).json({ error: result.error || 'Failed to send verification email' });
+      }
+
+      log(`Verification email resent successfully for ${req.userSession.email}`, 'auth');
+      res.json({ success: true, message: 'Verification email sent successfully' });
+    } catch (error: any) {
+      log(`Resend verification email error: ${error.message}`, 'auth');
+      res.status(500).json({ error: 'Failed to send verification email' });
+    }
+  });
+
+  // Get public reCAPTCHA config (for login/register pages)
   app.get('/api/security/recaptcha-config', (req, res) => {
     const settings = dbStorage.getRecaptchaSettings();
     res.json({
       enabled: settings.enabled,
       siteKey: settings.enabled ? settings.siteKey : null,
+      version: settings.version, // 'v2' or 'v3'
     });
+  });
+
+  // Admin: Get full reCAPTCHA settings (includes secret key status)
+  app.get('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const settings = await dbStorage.getRecaptchaSettingsAsync();
+      res.json({
+        enabled: settings.enabled,
+        siteKey: settings.siteKey || '',
+        secretKey: settings.secretKey ? '********' + settings.secretKey.slice(-4) : '', // Mask the key
+        hasSecretKey: !!settings.secretKey,
+        version: settings.version,
+      });
+    } catch (error: any) {
+      log(`Error fetching reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch reCAPTCHA settings' });
+    }
+  });
+
+  // Admin: Update reCAPTCHA settings
+  app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const schema = z.object({
+        siteKey: z.string().min(1, 'Site key is required'),
+        secretKey: z.string().optional(), // Optional - keep existing if not provided
+        enabled: z.boolean(),
+        version: z.enum(['v2', 'v3']).default('v3'),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
+      }
+
+      const { siteKey, secretKey, enabled, version } = parsed.data;
+
+      // Get existing settings to preserve secret key if not provided
+      const existingSettings = await dbStorage.getRecaptchaSettingsAsync();
+      const finalSecretKey = (secretKey && secretKey.trim()) ? secretKey : existingSettings.secretKey;
+
+      // Require secret key if none exists
+      if (!finalSecretKey) {
+        return res.status(400).json({ error: 'Secret key is required' });
+      }
+
+      // Validate key format (only if new secret key provided)
+      if (secretKey && secretKey.trim()) {
+        const validation = await dbStorage.testRecaptchaConfig(siteKey, secretKey);
+        if (!validation.valid) {
+          return res.status(400).json({ error: validation.error });
+        }
+      }
+
+      // Always use secure default minScore of 0.5 (Google's recommendation)
+      await dbStorage.updateRecaptchaSettings({
+        siteKey,
+        secretKey: finalSecretKey,
+        enabled,
+        version,
+        minScore: 0.5,
+      });
+
+      log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, version=${version}`, 'admin');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to update reCAPTCHA settings' });
+    }
+  });
+
+  // Admin: Test reCAPTCHA configuration
+  app.post('/api/admin/security/recaptcha/test', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const schema = z.object({
+        siteKey: z.string().min(1),
+        secretKey: z.string().min(1),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid keys provided' });
+      }
+
+      const validation = await dbStorage.testRecaptchaConfig(parsed.data.siteKey, parsed.data.secretKey);
+      res.json(validation);
+    } catch (error: any) {
+      log(`Error testing reCAPTCHA config: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to test configuration' });
+    }
   });
 
   // Check if registration is enabled (public)
@@ -2131,6 +3537,71 @@ export async function registerRoutes(
     }
   }
 
+  // ============================================
+  // Admin Rate Limit Management
+  // ============================================
+
+  // Get all blocked/rate-limited entries (admin)
+  app.get('/api/admin/security/rate-limits', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const entries = await getBlockedEntries();
+      res.json({ entries });
+    } catch (error: any) {
+      log(`Admin: Error fetching rate limits: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch rate limits' });
+    }
+  });
+
+  // Unblock a specific rate limit entry (admin)
+  app.delete('/api/admin/security/rate-limits/:type/:key', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { type, key } = req.params;
+
+      if (!['email', 'ip', 'email_ip_combo'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid rate limit type' });
+      }
+
+      const success = await adminUnblock(type as 'email' | 'ip' | 'email_ip_combo', decodeURIComponent(key));
+
+      if (success) {
+        await auditLog(req, 'unblock_rate_limit', 'rate_limit', key, `${type}:${key}`, { type, key }, 'success');
+        res.json({ success: true, message: `Unblocked ${type}: ${key}` });
+      } else {
+        res.status(500).json({ error: 'Failed to unblock entry' });
+      }
+    } catch (error: any) {
+      log(`Admin: Error unblocking rate limit: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to unblock entry' });
+    }
+  });
+
+  // Unblock all entries for an email (admin)
+  app.delete('/api/admin/security/rate-limits/email/:email', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { email } = req.params;
+      const result = await adminUnblockEmail(decodeURIComponent(email));
+
+      await auditLog(req, 'unblock_email', 'rate_limit', email, email, { email, cleared: result.cleared }, 'success');
+      res.json({ success: true, cleared: result.cleared, message: `Unblocked email: ${email}` });
+    } catch (error: any) {
+      log(`Admin: Error unblocking email: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to unblock email' });
+    }
+  });
+
+  // Clear all rate limits (admin - use with caution)
+  app.delete('/api/admin/security/rate-limits', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const result = await adminClearAllRateLimits();
+
+      await auditLog(req, 'clear_all_rate_limits', 'system', 'all', 'All rate limits', {}, 'success');
+      res.json({ success: true, message: 'All rate limits cleared' });
+    } catch (error: any) {
+      log(`Admin: Error clearing all rate limits: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to clear rate limits' });
+    }
+  });
+
   // Get all servers with owner info (admin)
   app.get('/api/admin/vf/servers', authMiddleware, requireAdmin, async (req, res) => {
     try {
@@ -2187,7 +3658,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Reason is required for suspend action' });
       }
       
-      const success = await virtfusionClient.suspendServer(parseInt(serverId));
+      const success = await virtfusionClient.suspendServer(serverId);
       if (!success) {
         throw new Error('Suspend operation failed');
       }
@@ -2206,7 +3677,7 @@ export async function registerRoutes(
       const { serverId } = req.params;
       const { reason } = req.body;
       
-      const success = await virtfusionClient.unsuspendServer(parseInt(serverId));
+      const success = await virtfusionClient.unsuspendServer(serverId);
       if (!success) {
         throw new Error('Unsuspend operation failed');
       }
@@ -2320,25 +3791,32 @@ export async function registerRoutes(
     try {
       // Get all wallets which represent our user accounts
       const allWallets = await dbStorage.getAllWallets();
-      
+
       // Build user list from wallets, enriching with Auth0 and VirtFusion data
       const users = await Promise.all(
         allWallets.map(async (wallet) => {
           let serverCount = 0;
           let email = 'Unknown';
           let name = 'Unknown User';
-          
+          let emailVerified = false;
+
+          // Check database override for email verification first
+          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(wallet.auth0UserId);
+
           // Fetch user info from Auth0 to get email and name
           try {
             const auth0User = await auth0Client.getUserById(wallet.auth0UserId);
             if (auth0User) {
               email = auth0User.email || 'Unknown';
               name = auth0User.name || auth0User.email || 'Unknown User';
+              // Email is verified if EITHER Auth0 says so OR we have a database override
+              emailVerified = auth0User.email_verified || emailVerifiedOverride;
             }
           } catch (e) {
-            // Auth0 user may have been deleted
+            // Auth0 user may have been deleted, but check override
+            emailVerified = emailVerifiedOverride;
           }
-          
+
           // If wallet has a linked VirtFusion user, fetch their server count
           if (wallet.virtFusionUserId) {
             try {
@@ -2348,12 +3826,13 @@ export async function registerRoutes(
               // VirtFusion user may have been deleted
             }
           }
-          
+
           return {
             virtfusionId: wallet.virtFusionUserId || null,
             auth0UserId: wallet.auth0UserId,
             name,
             email,
+            emailVerified,
             virtfusionLinked: !!wallet.virtFusionUserId,
             status: wallet.deletedAt ? 'deleted' : 'active',
             serverCount,
@@ -2428,6 +3907,101 @@ export async function registerRoutes(
     }
   });
 
+  // Sync plans from VirtFusion packages (admin)
+  app.post('/api/admin/plans/sync-from-virtfusion', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      // Fetch packages from VirtFusion
+      const vfPackages = await virtfusionClient.getPackages();
+      log(`Fetched ${vfPackages.length} packages from VirtFusion for sync`, 'admin');
+
+      // Fetch current plans from database
+      const currentPlans = await db.select().from(plans);
+      const plansMap = new Map(currentPlans.map(p => [p.virtfusionPackageId, p]));
+
+      let synced = 0;
+      let created = 0;
+      let updated = 0;
+      const errors: string[] = [];
+
+      // Sync each VirtFusion package
+      for (const vfPkg of vfPackages) {
+        try {
+          const existingPlan = plansMap.get(vfPkg.id);
+
+          if (existingPlan) {
+            // Update existing plan's active status from VirtFusion enabled status
+            const [updatedPlan] = await db
+              .update(plans)
+              .set({
+                active: vfPkg.enabled,
+                name: vfPkg.name, // Update name too
+              })
+              .where(eq(plans.virtfusionPackageId, vfPkg.id))
+              .returning();
+
+            log(`Updated plan ${existingPlan.code}: active=${vfPkg.enabled} (was ${existingPlan.active})`, 'admin');
+            updated++;
+            synced++;
+          } else {
+            // Create new plan from VirtFusion package
+            const monthlyPrice = vfPkg.prices?.find(p =>
+              p.billingPeriod?.toLowerCase().includes('month')
+            )?.price || 0;
+
+            const [newPlan] = await db.insert(plans).values({
+              code: vfPkg.code,
+              name: vfPkg.name,
+              vcpu: vfPkg.cpuCores,
+              ramMb: vfPkg.memory,
+              storageGb: vfPkg.primaryStorage,
+              transferGb: vfPkg.traffic,
+              priceMonthly: monthlyPrice,
+              virtfusionPackageId: vfPkg.id,
+              active: vfPkg.enabled,
+            }).returning();
+
+            log(`Created new plan ${newPlan.code} from VirtFusion package ${vfPkg.id}`, 'admin');
+            created++;
+            synced++;
+          }
+        } catch (error: any) {
+          const errorMsg = `Failed to sync package ${vfPkg.id}: ${error.message}`;
+          errors.push(errorMsg);
+          log(errorMsg, 'admin');
+        }
+      }
+
+      // Audit log
+      await dbStorage.createAdminAuditLog({
+        adminAuth0UserId: session.auth0UserId!,
+        adminEmail: session.email,
+        action: 'plans.sync_from_virtfusion',
+        targetType: 'plans',
+        targetId: 'all',
+        targetLabel: `Synced ${synced} plans`,
+        result: { synced, created, updated, errors },
+        status: errors.length > 0 ? 'partial' : 'success',
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'],
+      });
+
+      log(`Plans sync completed: ${synced} synced (${created} created, ${updated} updated), ${errors.length} errors`, 'admin');
+
+      res.json({
+        success: true,
+        synced,
+        created,
+        updated,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      log(`Admin: Error syncing plans from VirtFusion: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to sync plans from VirtFusion' });
+    }
+  });
+
   // Get OS templates for package (admin)
   app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, requireAdmin, async (req, res) => {
     try {
@@ -2497,6 +4071,127 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Admin: Error fetching stats: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
+  // ================== Admin Billing Routes ==================
+
+  // Admin: Get all billing records
+  app.get('/api/admin/billing/records', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const records = await db.select().from(serverBilling).orderBy(serverBilling.nextBillAt);
+
+      // Enrich records with server names and user emails
+      const enrichedRecords = await Promise.all(records.map(async (record) => {
+        let serverName: string | undefined;
+        let userEmail: string | undefined;
+
+        // Get server name from VirtFusion
+        try {
+          const server = await virtfusionClient.getServer(parseInt(record.virtfusionServerId));
+          serverName = server?.name || server?.hostname;
+        } catch (e) {
+          // Server might be deleted
+        }
+
+        // Get user email from Auth0
+        try {
+          const auth0User = await auth0Client.getUserById(record.auth0UserId);
+          userEmail = auth0User?.email;
+        } catch (e) {
+          // User lookup failed
+        }
+
+        return {
+          ...record,
+          serverName,
+          userEmail,
+        };
+      }));
+
+      res.json({ records: enrichedRecords });
+    } catch (error: any) {
+      log(`Admin: Error fetching billing records: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch billing records' });
+    }
+  });
+
+  // Admin: Manually trigger billing job
+  app.post('/api/admin/billing/run-job', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      log(`Admin ${req.userSession?.email} manually triggered billing job`, 'admin');
+
+      // Run the billing job
+      await runBillingJob();
+
+      // Fetch updated records to return
+      const records = await db.select().from(serverBilling).orderBy(serverBilling.nextBillAt);
+
+      res.json({
+        success: true,
+        message: 'Billing job completed',
+        records
+      });
+    } catch (error: any) {
+      log(`Admin: Error running billing job: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to run billing job' });
+    }
+  });
+
+  // Admin: Update billing record (for testing - adjust nextBillAt)
+  app.put('/api/admin/billing/records/:id', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const billingId = parseInt(req.params.id, 10);
+      if (isNaN(billingId)) {
+        return res.status(400).json({ error: 'Invalid billing record ID' });
+      }
+
+      const { nextBillAt, status, suspendAt } = req.body;
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+
+      if (nextBillAt !== undefined) {
+        updates.nextBillAt = new Date(nextBillAt);
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} nextBillAt to ${nextBillAt}`, 'admin');
+      }
+
+      if (status !== undefined) {
+        if (!['active', 'paid', 'unpaid', 'suspended'].includes(status)) {
+          return res.status(400).json({ error: 'Invalid status. Must be: active, paid, unpaid, or suspended' });
+        }
+        updates.status = status;
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} status to ${status}`, 'admin');
+      }
+
+      if (suspendAt !== undefined) {
+        updates.suspendAt = suspendAt ? new Date(suspendAt) : null;
+        log(`Admin ${req.userSession?.email} updated billing ${billingId} suspendAt to ${suspendAt}`, 'admin');
+      }
+
+      const [updated] = await db.update(serverBilling)
+        .set(updates)
+        .where(eq(serverBilling.id, billingId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Billing record not found' });
+      }
+
+      res.json({ success: true, record: updated });
+    } catch (error: any) {
+      log(`Admin: Error updating billing record: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to update billing record' });
+    }
+  });
+
+  // Admin: Get billing ledger (all charges)
+  app.get('/api/admin/billing/ledger', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const ledger = await db.select().from(billingLedger).orderBy(billingLedger.createdAt);
+      res.json({ ledger });
+    } catch (error: any) {
+      log(`Admin: Error fetching billing ledger: ${error.message}`, 'admin');
+      res.status(500).json({ error: 'Failed to fetch billing ledger' });
     }
   });
 
@@ -2586,12 +4281,28 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
       }
       const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+
+      // Check email verification - session value OR database override
+      let emailVerified = req.userSession!.emailVerified ?? false;
+      log(`[/api/me] User: ${req.userSession!.email}, auth0UserId: ${auth0UserId}`, 'api');
+      log(`[/api/me] Session emailVerified: ${req.userSession!.emailVerified}`, 'api');
+
+      if (!emailVerified) {
+        const override = await storage.getEmailVerifiedOverride(auth0UserId);
+        log(`[/api/me] Database override: ${override}`, 'api');
+        if (override) {
+          emailVerified = true;
+        }
+      }
+      log(`[/api/me] Final emailVerified: ${emailVerified}`, 'api');
+
       res.json({
         user: {
           id: req.userSession!.userId,
           email: req.userSession!.email,
           name: req.userSession!.name || req.userSession!.email,
         },
+        emailVerified,
         balance: wallet.balanceCents,
         balanceFormatted: `$${(wallet.balanceCents / 100).toFixed(2)}`,
       });
@@ -2604,8 +4315,8 @@ export async function registerRoutes(
   // Get available plans
   app.get('/api/plans', async (req, res) => {
     try {
-      const activePlans = await dbStorage.getActivePlans();
-      res.json({ plans: activePlans });
+      const allPlans = await dbStorage.getAllPlans();
+      res.json({ plans: allPlans });
     } catch (error: any) {
       log(`Error fetching plans: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch plans' });
@@ -2623,7 +4334,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get Stripe configuration status (check Replit connector)
+  // Get Stripe configuration status
   app.get('/api/billing/stripe/status', async (req, res) => {
     try {
       const publishableKey = await getStripePublishableKey();
@@ -2997,11 +4708,15 @@ export async function registerRoutes(
       if (enabled && paymentMethodId) {
         const stripe = await getUncachableStripeClient();
         const wallet = await dbStorage.getWallet(auth0UserId);
-        if (wallet?.stripeCustomerId) {
-          const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-          if (pm.customer !== wallet.stripeCustomerId) {
-            return res.status(403).json({ error: 'Payment method does not belong to this account' });
-          }
+
+        // SECURITY: Must have a Stripe customer to verify payment method ownership
+        if (!wallet?.stripeCustomerId) {
+          return res.status(400).json({ error: 'Please add a payment method first before enabling auto top-up' });
+        }
+
+        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+        if (pm.customer !== wallet.stripeCustomerId) {
+          return res.status(403).json({ error: 'Payment method does not belong to this account' });
         }
       }
 
@@ -3078,7 +4793,7 @@ export async function registerRoutes(
       }
 
       // Create portal session
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
         return_url: `${baseUrl}/account`,
@@ -3139,7 +4854,7 @@ export async function registerRoutes(
   });
 
   // SECURITY: Ensures Stripe customer exists before creating checkout session
-  app.post('/api/wallet/topup', authMiddleware, async (req, res) => {
+  app.post('/api/wallet/topup', authMiddleware, requireEmailVerified, walletTopupRateLimiter, async (req, res) => {
     try {
       const result = topupSchema.safeParse(req.body);
       if (!result.success) {
@@ -3147,7 +4862,7 @@ export async function registerRoutes(
       }
 
       const { amountCents } = result.data;
-      
+
       // Ensure Stripe customer exists
       const { stripeCustomerId } = await ensureStripeCustomer({
         auth0UserId: req.userSession!.auth0UserId,
@@ -3155,16 +4870,17 @@ export async function registerRoutes(
         name: req.userSession!.name,
         userId: req.userSession!.userId,
       });
-      
+
       const stripe = await getUncachableStripeClient();
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,
-        payment_method_types: ['card'],
+        // Let Stripe auto-detect available payment methods (card, Apple Pay, Google Pay, etc.)
+        // based on account settings and customer context
         line_items: [
           {
             price_data: {
@@ -3205,12 +4921,25 @@ export async function registerRoutes(
       res.json({ url: session.url });
     } catch (error: any) {
       if (error instanceof StripeCustomerError) {
-        return res.status(error.httpStatus).json({ 
-          error: error.message, 
-          code: error.code 
+        return res.status(error.httpStatus).json({
+          error: error.message,
+          code: error.code
         });
       }
-      log(`Error creating checkout session: ${error.message}`, 'api');
+      // Log full Stripe error details for debugging
+      const errorDetails = {
+        message: error.message,
+        type: error.type,
+        code: error.code,
+        param: error.param,
+        statusCode: error.statusCode,
+      };
+      log(`Error creating checkout session: ${JSON.stringify(errorDetails)}`, 'stripe');
+
+      // Report to Sentry for monitoring
+      const { captureException } = await import('./sentry');
+      captureException(error, { context: 'wallet_topup_checkout', userId: req.userSession?.auth0UserId });
+
       res.status(500).json({ error: 'Failed to create checkout session' });
     }
   });
@@ -3222,7 +4951,7 @@ export async function registerRoutes(
     paymentMethodId: z.string().min(1),
   });
 
-  app.post('/api/wallet/topup/direct', authMiddleware, async (req, res) => {
+  app.post('/api/wallet/topup/direct', authMiddleware, requireEmailVerified, walletTopupRateLimiter, async (req, res) => {
     try {
       log(`[Direct Topup] Request received from user ${req.userSession?.auth0UserId}`, 'api');
 
@@ -3245,7 +4974,7 @@ export async function registerRoutes(
       log(`[Direct Topup] Stripe customer: ${stripeCustomerId}`, 'api');
 
       const stripe = await getUncachableStripeClient();
-      const auth0UserId = req.userSession!.auth0UserId;
+      const auth0UserId = req.userSession!.auth0UserId!;
 
       // Verify the payment method belongs to this customer
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
@@ -3286,10 +5015,21 @@ export async function registerRoutes(
       if (paymentIntent.status === 'succeeded') {
         log(`[Direct Topup] Payment succeeded, crediting wallet`, 'api');
         // Add credits to wallet and record transaction in one call
+        // Include card info for display in transaction history
+        const cardBrand = paymentMethod.card?.brand ?
+          paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1) :
+          undefined;
+        const cardLast4 = paymentMethod.card?.last4;
+
         const updatedWallet = await dbStorage.creditWallet(auth0UserId, amountCents, {
           type: 'credit',
           stripePaymentIntentId: paymentIntent.id,
-          metadata: { source: 'direct_charge' },
+          metadata: {
+            source: 'direct_charge',
+            cardBrand,
+            cardLast4,
+            reason: 'Wallet top-up',
+          },
         });
 
         log(`[Direct Topup] Wallet credited. New balance: $${((updatedWallet?.balanceCents || 0) / 100).toFixed(2)}`, 'api');
@@ -3403,6 +5143,15 @@ export async function registerRoutes(
       }
 
       const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+
+      // DEBUG: Log template names to verify what VirtFusion returns
+      if (templates && Array.isArray(templates)) {
+        const templateNames = templates.flatMap((group: any) =>
+          group.templates ? group.templates.map((t: any) => t.name) : []
+        );
+        log(`[TEMPLATES DEBUG] VirtFusion returned ${templateNames.length} templates for package ${plan.virtfusionPackageId}: ${templateNames.join(', ')}`, 'api');
+      }
+
       res.json(templates || []);
     } catch (error: any) {
       log(`Error fetching templates for plan ${req.params.id}: ${error.message}`, 'api');
@@ -3412,14 +5161,18 @@ export async function registerRoutes(
 
   // Deploy a new VPS (authenticated)
   // osId is optional - if not provided, server is created without OS (awaiting setup)
+  // Hostname can be a single label (myserver) or full domain (test.example.com)
+  // Each label: 1-63 chars, starts/ends with alphanumeric, can contain hyphens
+  const hostnameRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+
   const deploySchema = z.object({
     planId: z.number(),
     osId: z.number().min(1).optional(),
-    hostname: z.string().min(1).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i).optional(),
+    hostname: z.string().min(1).max(253).regex(hostnameRegex).optional(),
     locationCode: z.string().optional(),
   });
 
-  app.post('/api/deploy', authMiddleware, async (req, res) => {
+  app.post('/api/deploy', authMiddleware, requireEmailVerified, deploymentRateLimiter, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       const virtFusionUserId = req.userSession!.virtFusionUserId;
@@ -3455,14 +5208,17 @@ export async function registerRoutes(
       }
 
       // Only verify OS template if osId is provided
+      let selectedTemplate: { id: number; name: string } | undefined;
       if (osId) {
         const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
         let templateAllowed = false;
         if (templates && Array.isArray(templates)) {
           for (const group of templates) {
             if (group.templates && Array.isArray(group.templates)) {
-              if (group.templates.some((t: any) => t.id === osId)) {
+              const found = group.templates.find((t: any) => t.id === osId);
+              if (found) {
                 templateAllowed = true;
+                selectedTemplate = { id: found.id, name: found.name };
                 break;
               }
             }
@@ -3481,7 +5237,8 @@ export async function registerRoutes(
         auth0UserId,
         planId,
         plan.priceMonthly,
-        serverHostname
+        serverHostname,
+        plan.name
       );
 
       if (!deployResult.success || !deployResult.order) {
@@ -3506,6 +5263,30 @@ export async function registerRoutes(
         });
 
         log(`Server ${serverResult.serverId} provisioned successfully for order ${order.id}`, 'api');
+
+        // Email credentials if password and IP were returned
+        if (serverResult.password && serverResult.primaryIp && req.userSession?.email) {
+          const emailServerName = serverResult.name || serverHostname || `Server #${serverResult.serverId}`;
+          log(`Sending credentials email to ${req.userSession.email} for server ${emailServerName}`, 'api');
+          sendServerCredentialsEmail(
+            req.userSession.email,
+            emailServerName,
+            serverResult.primaryIp,
+            'root',
+            serverResult.password,
+            selectedTemplate?.name || 'Linux'
+          ).then(result => {
+            if (result.success) {
+              log(`Credentials email sent successfully for server ${serverResult.serverId}`, 'api');
+            } else {
+              log(`Failed to send credentials email for server ${serverResult.serverId}: ${result.error}`, 'api');
+            }
+          }).catch(err => {
+            log(`Error sending credentials email for server ${serverResult.serverId}: ${err.message}`, 'api');
+          });
+        } else {
+          log(`Skipping credentials email - password: ${!!serverResult.password}, IP: ${!!serverResult.primaryIp}, email: ${!!req.userSession?.email}`, 'api');
+        }
       } catch (provisionError: any) {
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
 
@@ -3539,6 +5320,7 @@ export async function registerRoutes(
         await createServerBilling({
           auth0UserId,
           virtfusionServerId: serverResult.serverId.toString(),
+          virtfusionServerUuid: serverResult.uuid, // Immutable UUID for reliable lookups
           planId,
           monthlyPriceCents: plan.priceMonthly,
         });
@@ -3745,6 +5527,10 @@ export async function registerRoutes(
       res.json(counts);
     } catch (error: any) {
       log(`Error fetching ticket counts: ${error.message}`, 'api');
+      // Return zeros if tables don't exist yet (graceful fallback)
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        return res.json({ open: 0, waitingUser: 0, total: 0 });
+      }
       res.status(500).json({ error: 'Failed to fetch ticket counts' });
     }
   });
@@ -3765,12 +5551,16 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       log(`Error fetching user tickets: ${error.message}`, 'api');
+      // Return empty array if tables don't exist yet
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        return res.json({ tickets: [], total: 0 });
+      }
       res.status(500).json({ error: 'Failed to fetch tickets' });
     }
   });
 
   // Create a new ticket
-  app.post('/api/support/tickets', authMiddleware, async (req, res) => {
+  app.post('/api/support/tickets', authMiddleware, ticketRateLimiter, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
       if (!auth0UserId) {
@@ -3815,7 +5605,11 @@ export async function registerRoutes(
       res.status(201).json({ ticket });
     } catch (error: any) {
       log(`Error creating ticket: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to create ticket' });
+      // Return detailed error for debugging - check if it's a DB error
+      const errorMessage = error.message?.includes('relation') || error.message?.includes('does not exist')
+        ? 'Database tables not found. Please run: npm run db:push'
+        : error.message || 'Failed to create ticket';
+      res.status(500).json({ error: errorMessage });
     }
   });
 
@@ -3832,7 +5626,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid ticket ID' });
       }
 
-      const ticket = await dbStorage.getTicketById(ticketId);
+      let ticket = await dbStorage.getTicketById(ticketId);
       if (!ticket) {
         return res.status(404).json({ error: 'Ticket not found' });
       }
@@ -3840,6 +5634,17 @@ export async function registerRoutes(
       // Verify ownership
       if (ticket.auth0UserId !== auth0UserId) {
         return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Auto-close resolved tickets older than 7 days
+      if (ticket.status === 'resolved' && ticket.resolvedAt) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        if (new Date(ticket.resolvedAt) < sevenDaysAgo) {
+          ticket = await dbStorage.closeTicket(ticketId) || ticket;
+          log(`Ticket #${ticketId} auto-closed (resolved > 7 days ago)`, 'support');
+        }
       }
 
       const messages = await dbStorage.getTicketMessages(ticketId);
@@ -3944,6 +5749,59 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error closing ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to close ticket' });
+    }
+  });
+
+  // Reopen a resolved ticket (user)
+  app.post('/api/support/tickets/:id/reopen', authMiddleware, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      // Verify ownership
+      if (ticket.auth0UserId !== auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Only resolved tickets can be reopened by users
+      if (ticket.status !== 'resolved') {
+        return res.status(400).json({ error: 'Only resolved tickets can be reopened. Please create a new ticket.' });
+      }
+
+      // Check if ticket was resolved more than 7 days ago
+      if (ticket.resolvedAt) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        if (new Date(ticket.resolvedAt) < sevenDaysAgo) {
+          // Auto-close the ticket since it's been resolved for more than 7 days
+          await dbStorage.closeTicket(ticketId);
+          log(`Ticket #${ticketId} auto-closed (resolved > 7 days ago)`, 'support');
+          return res.status(400).json({
+            error: 'This ticket was resolved more than 7 days ago and has been closed. Please create a new ticket.',
+            autoClosedTicket: true
+          });
+        }
+      }
+
+      const updatedTicket = await dbStorage.reopenTicket(ticketId);
+      log(`Ticket #${ticketId} reopened by user ${req.userSession!.email}`, 'support');
+      res.json({ ticket: updatedTicket });
+    } catch (error: any) {
+      log(`Error reopening ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reopen ticket' });
     }
   });
 
@@ -4130,6 +5988,14 @@ export async function registerRoutes(
       if (parseResult.data.category !== undefined) updates.category = parseResult.data.category;
       if (parseResult.data.assignedAdminId !== undefined) updates.assignedAdminId = parseResult.data.assignedAdminId;
 
+      // Handle resolved status - set resolvedAt for 7-day auto-close tracking
+      if (updates.status === 'resolved' && ticket.status !== 'resolved') {
+        updates.resolvedAt = new Date();
+      } else if (updates.status && updates.status !== 'resolved' && ticket.status === 'resolved') {
+        // Clearing resolved status, clear resolvedAt
+        updates.resolvedAt = null;
+      }
+
       // Handle closed status
       if (updates.status === 'closed') {
         updates.closedAt = new Date();
@@ -4195,6 +6061,32 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error reopening ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to reopen ticket' });
+    }
+  });
+
+  // Delete a ticket (admin)
+  app.delete('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+    try {
+      if (!req.userSession?.isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: 'Invalid ticket ID' });
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      await dbStorage.deleteTicket(ticketId);
+      log(`Ticket #${ticketId} deleted by admin ${req.userSession!.email}`, 'support');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error deleting ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to delete ticket' });
     }
   });
 

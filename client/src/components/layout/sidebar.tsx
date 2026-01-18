@@ -184,7 +184,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
     <>
       <div className="p-6 flex items-center justify-center">
-        <img src={logo} alt="OzVPS" className="h-16 w-auto" data-testid="img-logo" />
+        <img src={logo} alt="OzVPS" className="h-20 w-auto dark:invert-0 invert" data-testid="img-logo" />
       </div>
 
       <BalanceDisplay />
@@ -238,7 +238,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         )}
       </div>
 
-      <div className="p-4 border-t border-border space-y-2">
+      <div className="p-4 border-t border-border">
         <button
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
@@ -248,7 +248,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           <LogOut className="h-4 w-4" />
           {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
         </button>
-        <VersionFooter />
       </div>
     </>
   );
@@ -286,7 +285,7 @@ export function MobileHeader() {
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border">
       <div className="flex items-center justify-between p-4">
-        <img src={logo} alt="OzVPS" className="h-10 w-auto" data-testid="img-logo-mobile" />
+        <img src={logo} alt="OzVPS" className="h-12 w-auto dark:invert-0 invert" data-testid="img-logo-mobile" />
         <div className="flex items-center gap-3">
           <MobileBalanceDisplay />
           <Sheet open={open} onOpenChange={setOpen}>

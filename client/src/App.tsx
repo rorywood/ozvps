@@ -3,6 +3,7 @@ import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient, setSessionErrorCallback, SessionError } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -20,39 +21,31 @@ import Deploy from "@/pages/deploy";
 import DeployConfigure from "@/pages/deploy-configure";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
-import SystemError from "@/pages/system-error";
-import Admin from "@/pages/admin";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
+import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
-import { api } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+// Admin pages
+import { AdminGuard } from "@/admin/components/AdminGuard";
+import AdminDashboard from "@/admin/pages/AdminDashboard";
+import AdminUsers from "@/admin/pages/AdminUsers";
+import AdminServers from "@/admin/pages/AdminServers";
+import AdminBilling from "@/admin/pages/AdminBilling";
+import AdminTickets from "@/admin/pages/AdminTickets";
+import { api, setApiSessionErrorCallback } from "@/lib/api";
+import { Loader2 } from "lucide-react"; // Still used in AuthGuard
+import { useSessionTimeout } from "@/hooks/use-session-timeout";
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
-  const { data: health, isLoading, refetch } = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.checkHealth(),
-    retry: 2,
-    retryDelay: 1000,
-    staleTime: 30000,
-  });
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (health?.status === 'error') {
-    return <SystemError errorCode={health.errorCode} onRetry={() => refetch()} />;
-  }
-
+  // No longer blocking access - just render children
+  // Errors will show inline when users try to use features that require VirtFusion
   return <>{children}</>;
 }
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function AuthGuard({ children, requireVerified = true }: { children: React.ReactNode; requireVerified?: boolean }) {
+  const [location] = useLocation();
   const { data: auth, isLoading } = useQuery({
     queryKey: ['auth'],
     queryFn: () => api.getAuthUser(),
@@ -70,6 +63,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!auth) {
     return <Redirect to="/login" />;
+  }
+
+  // Redirect unverified users to verify-email page (unless already there or verification not required)
+  if (requireVerified && auth.emailVerified === false && location !== '/verify-email') {
+    return <Redirect to="/verify-email" />;
   }
 
   return <>{children}</>;
@@ -90,6 +88,17 @@ function Router() {
       </Route>
       <Route path="/register">
         {auth ? <Redirect to="/dashboard" /> : <Register />}
+      </Route>
+      <Route path="/forgot-password">
+        {auth ? <Redirect to="/dashboard" /> : <ForgotPassword />}
+      </Route>
+      <Route path="/reset-password">
+        {auth ? <Redirect to="/dashboard" /> : <ResetPassword />}
+      </Route>
+      <Route path="/verify-email">
+        <AuthGuard requireVerified={false}>
+          <VerifyEmail />
+        </AuthGuard>
       </Route>
       <Route path="/pricing">
         <Pricing />
@@ -133,15 +142,31 @@ function Router() {
           <Billing />
         </AuthGuard>
       </Route>
-      <Route path="/admin">
-        <AuthGuard>
-          <Admin />
-        </AuthGuard>
+      {/* Admin Routes - more specific routes first */}
+      <Route path="/admin/users">
+        <AdminGuard>
+          <AdminUsers />
+        </AdminGuard>
       </Route>
-      <Route path="/support">
-        <AuthGuard>
-          <Support />
-        </AuthGuard>
+      <Route path="/admin/servers">
+        <AdminGuard>
+          <AdminServers />
+        </AdminGuard>
+      </Route>
+      <Route path="/admin/billing">
+        <AdminGuard>
+          <AdminBilling />
+        </AdminGuard>
+      </Route>
+      <Route path="/admin/tickets">
+        <AdminGuard>
+          <AdminTickets />
+        </AdminGuard>
+      </Route>
+      <Route path="/admin">
+        <AdminGuard>
+          <AdminDashboard />
+        </AdminGuard>
       </Route>
       <Route path="/support/:id">
         {(params) => (
@@ -149,6 +174,11 @@ function Router() {
             <SupportTicket />
           </AuthGuard>
         )}
+      </Route>
+      <Route path="/support">
+        <AuthGuard>
+          <Support />
+        </AuthGuard>
       </Route>
       <Route path="/order">
         <AuthGuard>
@@ -175,21 +205,42 @@ function Router() {
   );
 }
 
+function SessionTimeoutHandler() {
+  const { data: auth } = useQuery({
+    queryKey: ['auth'],
+    queryFn: () => api.getAuthUser(),
+    retry: false,
+    staleTime: 0,
+  });
+
+  // Only track activity for authenticated users
+  useSessionTimeout();
+
+  return null;
+}
+
 function SessionErrorHandler() {
   const [, setLocation] = useLocation();
-  
+
   useEffect(() => {
-    setSessionErrorCallback((error: SessionError) => {
-      if (error.code) {
-        sessionStorage.setItem('sessionError', JSON.stringify(error));
-        queryClient.clear();
-        setLocation('/login');
-      }
-    });
-    
-    return () => setSessionErrorCallback(() => {});
+    const handleSessionError = (error: SessionError) => {
+      // Always redirect to login on any 401 error (e.g., when PM2 restarts or session expires)
+      sessionStorage.setItem('sessionError', JSON.stringify(error));
+      queryClient.clear();
+      // Use window.location for clean redirect that resets all state
+      window.location.href = '/login';
+    };
+
+    // Set callback for both query client and API client
+    setSessionErrorCallback(handleSessionError);
+    setApiSessionErrorCallback(handleSessionError);
+
+    return () => {
+      setSessionErrorCallback(() => {});
+      setApiSessionErrorCallback(() => {});
+    };
   }, [setLocation]);
-  
+
   return null;
 }
 
@@ -201,6 +252,8 @@ function App() {
           <TooltipProvider>
             <DevBanner />
             <Toaster />
+            <SonnerToaster />
+            <SessionTimeoutHandler />
             <SessionErrorHandler />
             <SystemHealthCheck>
               <Router />

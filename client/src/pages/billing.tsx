@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,8 @@ import {
   AlertCircle,
   Server,
   Receipt,
-  Settings
+  Settings,
+  Shield
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,8 +46,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { loadStripe, Stripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { loadStripe, Stripe, PaymentRequest } from "@stripe/stripe-js";
+import { Elements, CardElement, PaymentRequestButtonElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { useTheme } from "@/components/theme-provider";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface Wallet {
   id: number;
@@ -73,15 +77,25 @@ interface Transaction {
   id: number;
   type: string;
   amountCents: number;
-  description: string | null;
-  metadata: any;
+  description?: string | null;
+  metadata?: Record<string, unknown>;
   createdAt: string;
+}
+
+interface Invoice {
+  id: number;
+  invoiceNumber: string;
+  amountCents: number;
+  description: string;
+  status: string;
+  createdAt: string;
+  pdfUrl?: string | null;
 }
 
 const TOPUP_AMOUNTS = [1000, 2000, 5000, 10000]; // In cents
 const ITEMS_PER_PAGE = 10;
-const MAX_TRANSACTION_PAGES = 20;
-const MAX_INVOICE_PAGES = 20;
+const MAX_TRANSACTION_PAGES = 5;
+const MAX_INVOICE_PAGES = 5;
 
 function formatCurrency(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -99,32 +113,118 @@ function formatCardBrand(brand: string): string {
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
-function getTransactionIcon(type: string, metadata?: any) {
+function getTransactionIcon(type: string, metadata?: any, amountCents?: number) {
+  if (type === 'admin_adjustment') {
+    return <Shield className="h-4 w-4" />;
+  }
   if (type === 'credit') {
     if (metadata?.source === 'auto_topup') return <Zap className="h-4 w-4" />;
+    return <ArrowDownLeft className="h-4 w-4" />;
+  }
+  if (type === 'refund') {
     return <ArrowDownLeft className="h-4 w-4" />;
   }
   return <ArrowUpRight className="h-4 w-4" />;
 }
 
-function getTransactionType(type: string, metadata?: any): string {
+function getTransactionType(type: string, metadata?: any, amountCents?: number): string {
+  if (type === 'admin_adjustment') {
+    return amountCents !== undefined && amountCents >= 0 ? 'Admin Credit' : 'Admin Debit';
+  }
   if (type === 'credit') {
     if (metadata?.auto_topup) return 'Auto Top-Up';
     if (metadata?.source === 'auto_topup') return 'Auto Top-Up';
     return 'Credit';
   }
   if (type === 'debit') return 'Debit';
+  if (type === 'refund') return 'Refund';
   if (type === 'auto_topup') return 'Auto Top-Up';
-  return type;
+  return type.replace(/_/g, ' ');
 }
 
-// Card Form Component
+function getTransactionColor(type: string, amountCents: number): { bg: string; text: string } {
+  // Use amount sign to determine color - positive is green, negative is red
+  if (amountCents >= 0) {
+    return { bg: 'bg-success/10', text: 'text-success' };
+  }
+  return { bg: 'bg-destructive/10', text: 'text-destructive' };
+}
+
+// Card Form Component with Apple Pay / Google Pay support
 function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
+  const [canMakePayment, setCanMakePayment] = useState<{ applePay?: boolean; googlePay?: boolean } | null>(null);
   const { toast } = useToast();
+  const { theme } = useTheme();
+
+  // Determine if we're in light mode (theme can be 'light', 'dark', or 'system')
+  const isLightMode = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+
+  // Initialize Payment Request for Apple Pay / Google Pay
+  useEffect(() => {
+    if (!stripe) return;
+
+    const pr = stripe.paymentRequest({
+      country: 'AU',
+      currency: 'aud',
+      total: {
+        label: 'Add Payment Method',
+        amount: 0, // No charge, just adding payment method
+      },
+      requestPayerName: true,
+      requestPayerEmail: true,
+    });
+
+    // Check if Apple Pay or Google Pay is available
+    pr.canMakePayment().then((result) => {
+      if (result) {
+        setPaymentRequest(pr);
+        setCanMakePayment(result);
+      }
+    });
+
+    // Handle payment method from Apple Pay / Google Pay
+    pr.on('paymentmethod', async (event) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Validate and attach the payment method
+        const validation = await api.validatePaymentMethod(event.paymentMethod.id);
+
+        if (!validation.valid) {
+          if (validation.duplicate) {
+            const cardInfo = validation.existingCard?.last4
+              ? ` (****${validation.existingCard.last4})`
+              : '';
+            throw new Error(`This card${cardInfo} is already saved to your account`);
+          }
+          throw new Error(validation.error || "Failed to add payment method");
+        }
+
+        event.complete('success');
+        toast({
+          title: "Success",
+          description: "Payment method added successfully",
+        });
+        onSuccess();
+      } catch (err: any) {
+        event.complete('fail');
+        setError(err.message || "Failed to add payment method");
+        toast({
+          title: "Error",
+          description: err.message || "Failed to add payment method",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    });
+  }, [stripe, toast, onSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,12 +262,13 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
       const validation = await api.validatePaymentMethod(paymentMethod.id);
 
       if (!validation.valid) {
-        if (validation.duplicate && validation.existingCard) {
-          throw new Error(
-            `This ${validation.existingCard.brand} card ending in ${validation.existingCard.last4} is already saved to your account`
-          );
+        if (validation.duplicate) {
+          const cardInfo = validation.existingCard?.last4
+            ? ` (****${validation.existingCard.last4})`
+            : '';
+          throw new Error(`This card${cardInfo} is already saved to your account`);
         }
-        throw new Error(validation.error || "Failed to validate payment method");
+        throw new Error(validation.error || "Failed to add payment method");
       }
 
       // If valid, the card is now attached to the customer
@@ -189,54 +290,97 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 rounded-lg bg-card/30 border border-border">
-        <CardElement
-          options={{
-            hidePostalCode: true,
-            style: {
-              base: {
-                fontSize: '16px',
-                color: '#ffffff',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                '::placeholder': {
-                  color: '#9ca3af',
+    <div className="space-y-4">
+      {/* Apple Pay / Google Pay Button */}
+      {paymentRequest && canMakePayment && (
+        <>
+          <div className="space-y-2">
+            {canMakePayment.applePay && (
+              <p className="text-xs text-muted-foreground text-center">Apple Pay available</p>
+            )}
+            {canMakePayment.googlePay && (
+              <p className="text-xs text-muted-foreground text-center">Google Pay available</p>
+            )}
+            <PaymentRequestButtonElement
+              options={{
+                paymentRequest,
+                style: {
+                  paymentRequestButton: {
+                    type: 'default',
+                    theme: isLightMode ? 'light' : 'dark',
+                    height: '48px',
+                  },
+                },
+              }}
+            />
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or enter card details</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Manual Card Entry Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="p-4 rounded-lg bg-card border border-border">
+          <CardElement
+            options={{
+              hidePostalCode: true,
+              style: {
+                base: {
+                  fontSize: '16px',
+                  color: isLightMode ? '#1a1f2e' : '#ffffff',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  '::placeholder': {
+                    color: isLightMode ? '#6b7280' : '#9ca3af',
+                  },
+                },
+                invalid: {
+                  color: '#ef4444',
+                },
+                complete: {
+                  color: '#10b981',
                 },
               },
-              invalid: {
-                color: '#ef4444',
-              },
-              complete: {
-                color: '#10b981',
-              },
-            },
-          }}
-        />
-      </div>
-      {error && (
-        <p className="text-sm text-red-500">{error}</p>
-      )}
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          className="border-border"
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!stripe || isLoading}>
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Adding...
-            </>
-          ) : (
-            'Add Card'
-          )}
-        </Button>
-      </DialogFooter>
-    </form>
+            }}
+          />
+        </div>
+        <div className="flex items-start gap-2 p-3 rounded-md bg-primary/5 border border-primary/20">
+          <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your card information is securely processed and stored by Stripe. We never store your full card details on our servers.
+          </p>
+        </div>
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="border-border"
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!stripe || isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Adding...
+              </>
+            ) : (
+              'Add Card'
+            )}
+          </Button>
+        </DialogFooter>
+      </form>
+    </div>
   );
 }
 
@@ -337,16 +481,11 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
   };
 
   return (
-    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-6">
+    <div className="border border-border rounded-lg p-6 bg-card">
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
-            <Zap className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-medium text-foreground">Auto Top-Up</h3>
-            <p className="text-sm text-muted-foreground">Automatically add funds when balance is low</p>
-          </div>
+        <div>
+          <h3 className="font-semibold text-foreground mb-1">Auto Top-Up</h3>
+          <p className="text-sm text-muted-foreground">Automatically add funds when balance is low</p>
         </div>
         <Switch
           checked={localEnabled}
@@ -359,7 +498,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
       {localEnabled && (
         <div className="space-y-4 mt-4 pt-4 border-t border-border">
           <div>
-            <Label htmlFor="threshold" className="text-foreground">
+            <Label htmlFor="threshold">
               Trigger when balance falls below
             </Label>
             <div className="relative mt-1.5">
@@ -374,14 +513,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                   setLocalThreshold(e.target.value);
                   setIsEditing(true);
                 }}
-                className="pl-8 bg-card/30 border-border"
+                className="pl-8 bg-card border-border"
                 data-testid="input-auto-topup-threshold"
               />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="amount" className="text-foreground">
+            <Label htmlFor="amount">
               Amount to add
             </Label>
             <div className="relative mt-1.5">
@@ -396,14 +535,14 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                   setLocalAmount(e.target.value);
                   setIsEditing(true);
                 }}
-                className="pl-8 bg-card/30 border-border"
+                className="pl-8 bg-card border-border"
                 data-testid="input-auto-topup-amount"
               />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="payment-method" className="text-foreground">
+            <Label htmlFor="payment-method">
               Payment method
             </Label>
             <Select
@@ -413,7 +552,7 @@ function AutoTopupSection({ paymentMethods }: { paymentMethods: PaymentMethod[] 
                 setIsEditing(true);
               }}
             >
-              <SelectTrigger className="mt-1.5 bg-card/30 border-border" data-testid="select-auto-topup-payment-method">
+              <SelectTrigger className="mt-1.5 bg-card border-border" data-testid="select-auto-topup-payment-method">
                 <SelectValue placeholder="Select a card" />
               </SelectTrigger>
               <SelectContent>
@@ -485,24 +624,80 @@ export default function BillingPage() {
   } | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Check for success callback
+  // Check for success/cancelled callback from Stripe checkout
   useEffect(() => {
-    if (searchParams.includes('success=true')) {
+    if (searchParams.includes('topup=success')) {
+      // Store initial balance to detect when credit arrives
+      let initialBalance: number | null = null;
+      let creditDetected = false;
+
       setPaymentFeedback({
         type: 'success',
-        message: 'Payment successful! Your wallet has been credited.',
+        message: 'Payment successful! Your wallet is being credited...',
+      });
+
+      // Aggressively refetch wallet data to show updated balance
+      // Poll every 500ms for up to 30 seconds to catch the webhook update
+      let pollCount = 0;
+      const maxPolls = 60; // 30 seconds total
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        const walletResult = await queryClient.fetchQuery({
+          queryKey: ['wallet'],
+          staleTime: 0,
+        }) as { wallet: { balanceCents: number } } | undefined;
+
+        const currentBalance = walletResult?.wallet?.balanceCents ?? 0;
+
+        // Capture initial balance on first poll
+        if (initialBalance === null) {
+          initialBalance = currentBalance;
+        }
+
+        // Check if balance increased (credit arrived)
+        if (currentBalance > initialBalance) {
+          creditDetected = true;
+          clearInterval(pollInterval);
+          await queryClient.refetchQueries({ queryKey: ['transactions'] });
+          setPaymentFeedback({
+            type: 'success',
+            message: 'Payment successful! Your wallet has been credited.',
+          });
+          setTimeout(() => navigate('/billing', { replace: true }), 2000);
+          return;
+        }
+
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          if (!creditDetected) {
+            // Balance never increased - something went wrong
+            setPaymentFeedback({
+              type: 'error',
+              message: 'Payment received but wallet credit is delayed. Please contact support if your balance doesn\'t update within a few minutes.',
+            });
+          }
+          setTimeout(() => navigate('/billing', { replace: true }), 3000);
+        }
+      }, 500);
+
+      return () => clearInterval(pollInterval);
+    } else if (searchParams.includes('topup=cancelled')) {
+      setPaymentFeedback({
+        type: 'error',
+        message: 'Payment was cancelled. No charges were made.',
       });
       setTimeout(() => {
         navigate('/billing', { replace: true });
-      }, 100);
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      }, 3000);
     }
   }, [searchParams, navigate, queryClient]);
 
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
+    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates for better UX
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: stripeStatus } = useQuery({
@@ -523,20 +718,18 @@ export default function BillingPage() {
     queryKey: ['transactions'],
     queryFn: () => api.getTransactions(),
     enabled: stripeConfigured,
+    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
-  const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Array<{
-    id: string;
-    invoiceNumber: string;
-    amountCents: number;
-    description: string;
-    status: string;
-    createdAt: string;
-    pdfUrl: string | null;
-  }> }>({
+  const { data: invoicesData, isLoading: loadingInvoices } = useQuery<{ invoices: Invoice[] }>({
     queryKey: ['invoices'],
     queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
+    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: upcomingChargesData, isLoading: loadingUpcomingCharges } = useQuery<{ upcoming: Array<{
@@ -549,6 +742,7 @@ export default function BillingPage() {
     suspendAt: string | null;
     autoRenew: boolean;
     serverName?: string;
+    serverUuid?: string;
   }> }>({
     queryKey: ['upcoming-charges'],
     queryFn: () => api.getUpcomingCharges(),
@@ -598,8 +792,7 @@ export default function BillingPage() {
   const directChargeMutation = useMutation({
     mutationFn: ({ amountCents, paymentMethodId }: { amountCents: number; paymentMethodId: string }) =>
       api.directTopup(amountCents, paymentMethodId),
-    onSuccess: (data, variables) => {
-      console.log('[Direct Topup] Success response:', data);
+    onSuccess: async (data) => {
       if (data.success) {
         const chargedAmount = (data.chargedAmountCents || 0) / 100;
         setPaymentFeedback({
@@ -607,8 +800,10 @@ export default function BillingPage() {
           message: `Payment Approved - $${chargedAmount.toFixed(2)} has been added to your wallet!`,
           amount: data.chargedAmountCents
         });
-        queryClient.invalidateQueries({ queryKey: ['wallet'] });
-        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        // Immediately refetch to show updated balance
+        await queryClient.refetchQueries({ queryKey: ['wallet'] });
+        await queryClient.refetchQueries({ queryKey: ['transactions'] });
+        await queryClient.refetchQueries({ queryKey: ['invoices'] });
         setTopupDialogOpen(false);
         setSelectedAmount(null);
         setCustomAmount("");
@@ -688,8 +883,12 @@ export default function BillingPage() {
     const amountCents = getValidAmount();
     if (amountCents === null) return;
 
-    if (paymentMethods.length > 0 && selectedPaymentMethodId) {
-      directChargeMutation.mutate({ amountCents, paymentMethodId: selectedPaymentMethodId });
+    // Use the same fallback logic as the Select component - if user hasn't explicitly
+    // selected a payment method, default to the first available one
+    const effectivePaymentMethodId = selectedPaymentMethodId || paymentMethods[0]?.id;
+
+    if (paymentMethods.length > 0 && effectivePaymentMethodId) {
+      directChargeMutation.mutate({ amountCents, paymentMethodId: effectivePaymentMethodId });
     } else {
       topupMutation.mutate(amountCents);
     }
@@ -717,9 +916,9 @@ export default function BillingPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-6xl">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-page-title">
+      <div className="max-w-6xl">
+        <div className="mb-10">
+          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-page-title">
             Billing
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -728,35 +927,35 @@ export default function BillingPage() {
         </div>
 
         {!stripeConfigured ? (
-          <div className="rounded-2xl bg-muted/10 ring-1 ring-border p-12 text-center">
-            <div className="h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center mx-auto mb-4">
-              <CreditCard className="h-8 w-8 text-yellow-400" />
+          <div className="border border-border rounded-lg p-12 text-center bg-card">
+            <div className="h-16 w-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+              <CreditCard className="h-8 w-8 text-warning" />
             </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">Payments Not Available</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Payments Not Available</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               The payment system is being configured. Please contact support if you need to add funds to your account.
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-10">
             {/* Payment Feedback Message */}
             {paymentFeedback && (
               <div
-                className={`rounded-xl p-4 flex items-center justify-between ${
+                className={`border rounded-lg p-4 flex items-center justify-between ${
                   paymentFeedback.type === 'success'
-                    ? 'bg-green-500/10 ring-1 ring-green-500/30'
-                    : 'bg-red-500/10 ring-1 ring-red-500/30'
+                    ? 'bg-success/5 border-success/20'
+                    : 'bg-destructive/5 border-destructive/20'
                 }`}
                 data-testid={`payment-feedback-${paymentFeedback.type}`}
               >
                 <div className="flex items-center gap-3">
                   {paymentFeedback.type === 'success' ? (
-                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />
+                    <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />
                   ) : (
-                    <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />
+                    <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
                   )}
-                  <span className={`font-medium ${
-                    paymentFeedback.type === 'success' ? 'text-green-500' : 'text-red-500'
+                  <span className={`text-sm font-medium ${
+                    paymentFeedback.type === 'success' ? 'text-success' : 'text-destructive'
                   }`}>
                     {paymentFeedback.message}
                   </span>
@@ -773,12 +972,12 @@ export default function BillingPage() {
               </div>
             )}
 
-            {/* Wallet Balance - Hero Card */}
-            <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-blue-500/10 ring-1 ring-white/10 p-6" data-testid="wallet-section">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
-                    <Wallet className="h-7 w-7" />
+            {/* Wallet Balance Card - Clean Modern Design */}
+            <div className="border border-border rounded-xl p-8 bg-gradient-to-br from-card to-card/80" data-testid="wallet-section">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+                <div className="flex items-center gap-5">
+                  <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Wallet className="h-7 w-7 text-primary" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
@@ -786,10 +985,10 @@ export default function BillingPage() {
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     ) : (
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-foreground font-display" data-testid="text-balance">
+                        <span className="text-4xl font-bold text-foreground tracking-tight" data-testid="text-balance">
                           {formatCurrency(wallet?.balanceCents || 0)}
                         </span>
-                        <span className="text-muted-foreground">AUD</span>
+                        <span className="text-base font-medium text-muted-foreground">AUD</span>
                       </div>
                     )}
                   </div>
@@ -797,7 +996,7 @@ export default function BillingPage() {
 
                 <Dialog open={topupDialogOpen} onOpenChange={setTopupDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button size="lg" className="gap-2 shadow-lg" data-testid="button-topup">
+                    <Button size="lg" className="gap-2" data-testid="button-topup">
                       <Plus className="h-5 w-5" />
                       Add Funds
                     </Button>
@@ -831,7 +1030,7 @@ export default function BillingPage() {
                           placeholder="Custom amount"
                           value={customAmount}
                           onChange={(e) => handleCustomAmountChange(e.target.value)}
-                          className="pl-8 bg-card/30 border-border"
+                          className="pl-8 bg-card border-border"
                           data-testid="input-custom-amount"
                         />
                       </div>
@@ -842,14 +1041,14 @@ export default function BillingPage() {
                       {/* Payment Method Selection */}
                       {paymentMethods.length > 0 && (
                         <div className="pt-4 border-t border-border">
-                          <label className="text-sm font-medium text-foreground mb-2 block">
+                          <Label className="mb-2 block">
                             Pay with saved card
-                          </label>
+                          </Label>
                           <Select
                             value={selectedPaymentMethodId || paymentMethods[0]?.id || ''}
                             onValueChange={(value) => setSelectedPaymentMethodId(value)}
                           >
-                            <SelectTrigger className="w-full bg-card/30 border-border" data-testid="select-payment-method">
+                            <SelectTrigger className="w-full bg-card border-border" data-testid="select-payment-method">
                               <SelectValue placeholder="Select a card" />
                             </SelectTrigger>
                             <SelectContent>
@@ -890,12 +1089,12 @@ export default function BillingPage() {
               </div>
 
               {wallet?.stripeCustomerId && (
-                <div className="pt-4 mt-4 border-t border-border">
+                <div className="pt-8 mt-8 border-t border-border">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Stripe Customer ID</span>
+                    <span className="text-xs uppercase text-muted-foreground tracking-wide">Stripe Customer ID</span>
                     <div className="flex items-center gap-2">
                       <code
-                        className="text-xs font-mono text-foreground/70 bg-card/30 px-2 py-1 rounded"
+                        className="text-xs font-mono text-muted-foreground bg-muted/30 px-2 py-1 rounded"
                         data-testid="text-stripe-customer-id"
                       >
                         {showStripeId
@@ -934,35 +1133,50 @@ export default function BillingPage() {
               )}
             </div>
 
-            {/* Tabbed Content */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-                <TabsTrigger value="overview" className="gap-2">
+            {/* Tabbed Content - DO Style Underlined Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
+              <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start w-full">
+                <TabsTrigger
+                  value="overview"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Wallet className="h-4 w-4" />
                   <span className="hidden sm:inline">Overview</span>
                 </TabsTrigger>
-                <TabsTrigger value="servers" className="gap-2">
+                <TabsTrigger
+                  value="servers"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Server className="h-4 w-4" />
                   <span className="hidden sm:inline">Servers</span>
                 </TabsTrigger>
-                <TabsTrigger value="transactions" className="gap-2">
+                <TabsTrigger
+                  value="transactions"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <History className="h-4 w-4" />
                   <span className="hidden sm:inline">Transactions</span>
                 </TabsTrigger>
-                <TabsTrigger value="invoices" className="gap-2">
+                <TabsTrigger
+                  value="invoices"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Receipt className="h-4 w-4" />
                   <span className="hidden sm:inline">Invoices</span>
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-2">
+                <TabsTrigger
+                  value="settings"
+                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none pb-3 gap-2 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:font-medium"
+                >
                   <Settings className="h-4 w-4" />
                   <span className="hidden sm:inline">Settings</span>
                 </TabsTrigger>
               </TabsList>
 
               {/* Overview Tab */}
-              <TabsContent value="overview" className="space-y-6 mt-6">
+              <TabsContent value="overview" className="space-y-6 mt-8">
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Payment Methods</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Payment Methods</h2>
 
                   <div data-testid="payment-methods-section">
                     {loadingPaymentMethods ? (
@@ -970,9 +1184,9 @@ export default function BillingPage() {
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : paymentMethods.length === 0 ? (
-                      <div className="rounded-xl bg-muted/10 ring-1 ring-border p-8 text-center">
+                      <div className="border border-border rounded-lg p-8 text-center bg-card">
                         <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground mb-4">No payment methods saved</p>
+                        <p className="text-sm text-muted-foreground mb-4">No payment methods saved</p>
                         <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
                           <DialogTrigger asChild>
                             <Button variant="outline" className="gap-2 border-border">
@@ -980,7 +1194,7 @@ export default function BillingPage() {
                               Add Payment Method
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-md bg-zinc-900 border-border">
+                          <DialogContent className="max-w-md bg-card border-border">
                             <DialogHeader>
                               <DialogTitle className="text-foreground">Add Payment Method</DialogTitle>
                               <DialogDescription className="text-muted-foreground">
@@ -1034,7 +1248,7 @@ export default function BillingPage() {
                                 Add Card
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-md bg-zinc-900 border-border">
+                            <DialogContent className="max-w-md bg-card border-border">
                               <DialogHeader>
                                 <DialogTitle className="text-foreground">Add Payment Method</DialogTitle>
                                 <DialogDescription className="text-muted-foreground">
@@ -1043,8 +1257,8 @@ export default function BillingPage() {
                               </DialogHeader>
                               {stripeLoadError ? (
                                 <div className="py-8 text-center">
-                                  <AlertCircle className="h-8 w-8 mx-auto text-red-500 mb-3" />
-                                  <p className="text-red-400 mb-4">{stripeLoadError}</p>
+                                  <AlertCircle className="h-8 w-8 mx-auto text-destructive mb-3" />
+                                  <p className="text-destructive mb-4">{stripeLoadError}</p>
                                   <Button
                                     variant="outline"
                                     onClick={() => {
@@ -1078,22 +1292,24 @@ export default function BillingPage() {
                             </DialogContent>
                           </Dialog>
                         </div>
-                        <div className="grid gap-3">
-                          {paymentMethods.map((pm) => (
+                        {/* Horizontal payment method rows like server list */}
+                        <div className="border border-border rounded-lg overflow-hidden bg-card">
+                          {paymentMethods.map((pm, index) => (
                             <div
                               key={pm.id}
-                              className="flex items-center justify-between p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                              className={cn(
+                                "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                                index !== 0 && "border-t border-border"
+                              )}
                               data-testid={`card-${pm.id}`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                                  <CreditCard className="h-5 w-5 text-blue-500" />
-                                </div>
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
                                 <div>
-                                  <div className="font-medium text-foreground">
+                                  <div className="font-medium text-foreground text-sm">
                                     {formatCardBrand(pm.brand)} •••• {pm.last4}
                                   </div>
-                                  <div className="text-sm text-muted-foreground">
+                                  <div className="text-xs text-muted-foreground">
                                     Expires {pm.expMonth}/{pm.expYear}
                                   </div>
                                 </div>
@@ -1102,7 +1318,7 @@ export default function BillingPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
-                                className="text-muted-foreground hover:text-red-500"
+                                className="text-muted-foreground hover:text-destructive h-8"
                                 data-testid={`button-delete-card-${pm.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1117,21 +1333,21 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Server Charges Tab */}
-              <TabsContent value="servers" className="space-y-6 mt-6">
-                {upcomingChargesData && upcomingChargesData.upcoming.length > 0 ? (
+              <TabsContent value="servers" className="space-y-6 mt-8">
+                {loadingUpcomingCharges ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : upcomingChargesData && upcomingChargesData.upcoming.length > 0 ? (
                   <div data-testid="upcoming-charges-section">
-                    <h2 className="text-xl font-semibold text-foreground mb-4">Upcoming Server Charges</h2>
+                    <h2 className="text-lg font-semibold text-foreground mb-2">Upcoming Server Charges</h2>
                     <p className="text-sm text-muted-foreground mb-4">
                       Monthly billing for your servers. Charges are automatically deducted from your wallet balance.
                     </p>
 
-                    {loadingUpcomingCharges ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {upcomingChargesData.upcoming.map((charge) => {
+                    {/* Horizontal server charge rows */}
+                    <div className="border border-border rounded-lg overflow-hidden bg-card">
+                      {upcomingChargesData.upcoming.map((charge, index) => {
                           const nextBillDate = new Date(charge.nextBillAt);
                           const now = new Date();
                           const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -1139,87 +1355,77 @@ export default function BillingPage() {
                           const daysUntilSuspension = suspendDate ? Math.ceil((suspendDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
                           return (
-                            <div
+                            <Link
                               key={charge.id}
-                              className={`p-5 rounded-xl ring-1 transition-all hover:shadow-md ${
-                                charge.status === 'suspended'
-                                  ? 'bg-red-500/5 ring-red-500/20 hover:bg-red-500/10'
-                                  : charge.status === 'unpaid'
-                                  ? 'bg-yellow-500/5 ring-yellow-500/20 hover:bg-yellow-500/10'
-                                  : 'bg-muted/5 ring-border hover:bg-muted/10 hover:ring-muted-foreground/20'
-                              }`}
+                              href={`/servers/${charge.virtfusionServerId}`}
+                              className={cn(
+                                "flex items-center justify-between px-4 py-4 hover:bg-muted/30 transition-colors cursor-pointer",
+                                index !== 0 && "border-t border-border"
+                              )}
                               data-testid={`upcoming-charge-${charge.id}`}
                             >
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-start gap-4 flex-1">
-                                  <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${
-                                    charge.status === 'suspended'
-                                      ? 'bg-red-500/10 text-red-500'
-                                      : charge.status === 'unpaid'
-                                      ? 'bg-yellow-500/10 text-yellow-500'
-                                      : 'bg-blue-500/10 text-blue-500'
-                                  }`}>
-                                    <Server className="h-6 w-6" />
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="font-semibold text-foreground text-sm truncate">
+                                      {charge.serverName || `Server #${charge.virtfusionServerId}`}
+                                    </span>
+                                    {charge.status === 'suspended' && (
+                                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                        SUSPENDED
+                                      </Badge>
+                                    )}
+                                    {charge.status === 'unpaid' && (
+                                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                                        UNPAID
+                                      </Badge>
+                                    )}
+                                    {charge.status === 'active' && (
+                                      <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                                        ACTIVE
+                                      </Badge>
+                                    )}
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-base font-semibold text-foreground">
-                                        {charge.serverName || `Server #${charge.virtfusionServerId}`}
+                                  <div className="text-xs text-muted-foreground">
+                                    {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
+                                      <span className="text-warning">
+                                        Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''}
                                       </span>
-                                      {charge.status === 'suspended' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 tracking-wide">
-                                          SUSPENDED
-                                        </span>
-                                      )}
-                                      {charge.status === 'unpaid' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 tracking-wide">
-                                          UNPAID
-                                        </span>
-                                      )}
-                                      {charge.status === 'active' && (
-                                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 tracking-wide">
-                                          ACTIVE
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                      {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
-                                        <span className="text-yellow-400 font-medium">
-                                          ⚠ Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - Add funds to prevent suspension
-                                        </span>
-                                      ) : charge.status === 'suspended' ? (
-                                        <span className="text-red-400 font-medium">
-                                          ⛔ Suspended - Add funds to reactivate
-                                        </span>
-                                      ) : (
-                                        <>
-                                          <span>Next billing:</span>
-                                          <span className="font-medium text-foreground">{formatDate(charge.nextBillAt)}</span>
-                                          <span className="text-muted-foreground/60">•</span>
-                                          <span>{daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''}</span>
-                                        </>
-                                      )}
-                                    </div>
+                                    ) : charge.status === 'suspended' ? (
+                                      <span className="text-destructive">
+                                        Suspended - Add funds to reactivate
+                                      </span>
+                                    ) : (
+                                      <>
+                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})
+                                      </>
+                                    )}
                                   </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <div className="font-mono text-xl font-bold text-foreground">
-                                    {formatCurrency(charge.monthlyPriceCents)}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">per month</div>
+                                  {charge.serverUuid && (
+                                    <div className="text-[10px] text-muted-foreground/70 font-mono mt-0.5 truncate" title={charge.serverUuid}>
+                                      UUID: {charge.serverUuid}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            </div>
+                              <div className="text-right flex-shrink-0 ml-4">
+                                <div className="font-mono text-base font-bold text-foreground">
+                                  {formatCurrency(charge.monthlyPriceCents)}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">per month</div>
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                            </Link>
                           );
                         })}
-                      </div>
-                    )}
+                    </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                  <div className="border border-border rounded-lg p-12 text-center bg-card">
                     <Server className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">No Active Servers</h3>
-                    <p className="text-muted-foreground">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">No Active Servers</h3>
+                    <p className="text-sm text-muted-foreground">
                       You don't have any active servers with recurring charges.
                     </p>
                   </div>
@@ -1227,64 +1433,91 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Transactions Tab */}
-              <TabsContent value="transactions" className="space-y-6 mt-6">
+              <TabsContent value="transactions" className="space-y-6 mt-8">
                 <div data-testid="transactions-section">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Transaction History</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Transaction History</h2>
 
                   {loadingTransactions ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : transactions.length === 0 ? (
-                    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                    <div className="border border-border rounded-lg p-12 text-center bg-card">
                       <History className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-muted-foreground">No transactions yet</p>
+                      <p className="text-sm text-muted-foreground">No transactions yet</p>
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2">
-                        {paginatedTransactions.map((tx) => (
-                          <div
-                            key={tx.id}
-                            className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
-                            data-testid={`transaction-${tx.id}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                                  tx.type === 'credit' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
-                                }`}>
-                                  {getTransactionIcon(tx.type, tx.metadata)}
+                      {/* Horizontal transaction rows */}
+                      <div className="border border-border rounded-lg overflow-hidden bg-card">
+                        {paginatedTransactions.map((tx, index) => {
+                          const colors = getTransactionColor(tx.type, tx.amountCents);
+                          return (
+                            <div
+                              key={tx.id}
+                              className={cn(
+                                "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                                index !== 0 && "border-t border-border"
+                              )}
+                              data-testid={`transaction-${tx.id}`}
+                            >
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${colors.bg}`}>
+                                  <div className={colors.text}>
+                                    {getTransactionIcon(tx.type, tx.metadata, tx.amountCents)}
+                                  </div>
                                 </div>
-                                <div>
-                                  <div className="font-medium text-foreground">
-                                    {getTransactionType(tx.type, tx.metadata)}
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-foreground text-base">
+                                    {getTransactionType(tx.type, tx.metadata, tx.amountCents)}
+                                    {/* Show server name for debits */}
+                                    {tx.type === 'debit' && tx.metadata && (tx.metadata as Record<string, string>).serverName && (
+                                      <span className="text-muted-foreground font-normal"> · {(tx.metadata as Record<string, string>).serverName}</span>
+                                    )}
                                   </div>
                                   <div className="text-sm text-muted-foreground">
                                     {formatDate(tx.createdAt)}
                                     {tx.description && <> · {tx.description}</>}
+                                    {/* Show reason for debits if available */}
+                                    {tx.type === 'debit' && tx.metadata && (tx.metadata as Record<string, string>).reason && (
+                                      <> · {(tx.metadata as Record<string, string>).reason}</>
+                                    )}
+                                    {/* Show details for credits - card info or reason */}
+                                    {tx.type === 'credit' && tx.metadata && (
+                                      <>
+                                        {(tx.metadata as Record<string, string>).cardBrand && (tx.metadata as Record<string, string>).cardLast4 && (
+                                          <> · {(tx.metadata as Record<string, string>).cardBrand} ****{(tx.metadata as Record<string, string>).cardLast4}</>
+                                        )}
+                                        {(tx.metadata as Record<string, string>).reason && (
+                                          <> · {(tx.metadata as Record<string, string>).reason}</>
+                                        )}
+                                      </>
+                                    )}
+                                    {/* Show details for refunds */}
+                                    {tx.type === 'refund' && tx.metadata && (tx.metadata as Record<string, string>).reason && (
+                                      <> · {(tx.metadata as Record<string, string>).reason}</>
+                                    )}
                                   </div>
+                                  {/* Show admin reason for admin adjustments */}
+                                  {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
+                                    <div className="text-sm text-muted-foreground mt-0.5">
+                                      <span className="text-primary">Reason:</span> {(tx.metadata as Record<string, string>).reason}
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
-                              <span className={`font-mono text-lg font-medium ${
-                                tx.type === 'credit' ? 'text-green-500' : 'text-red-500'
-                              }`}>
-                                {tx.type === 'credit' ? '+' : '-'}{formatCurrency(Math.abs(tx.amountCents))}
+                              <span className={`font-mono text-base font-semibold flex-shrink-0 ml-4 ${colors.text}`}>
+                                {tx.amountCents >= 0 ? '+' : ''}{formatCurrency(tx.amountCents)}
                               </span>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {transactionsTotalPages > 1 && (
                         <div className="flex items-center justify-between pt-4">
                           <p className="text-sm text-muted-foreground">
                             Page {transactionsPage} of {transactionsTotalPages}
-                            {transactions.length > MAX_TRANSACTION_PAGES * ITEMS_PER_PAGE && (
-                              <span className="text-yellow-400 ml-2">
-                                (Showing first {MAX_TRANSACTION_PAGES} pages)
-                              </span>
-                            )}
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -1308,63 +1541,69 @@ export default function BillingPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Show support message when there's more data than displayed */}
+                      {transactions.length > MAX_TRANSACTION_PAGES * ITEMS_PER_PAGE && (
+                        <p className="text-xs text-muted-foreground text-center pt-4">
+                          Showing recent transactions only. Contact <Link href="/support" className="text-primary hover:underline">support</Link> for older records.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
               </TabsContent>
 
               {/* Invoices Tab */}
-              <TabsContent value="invoices" className="space-y-6 mt-6">
+              <TabsContent value="invoices" className="space-y-6 mt-8">
                 <div data-testid="invoices-section">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">Invoices</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Invoices</h2>
 
                   {loadingInvoices ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : invoices.length === 0 ? (
-                    <div className="rounded-xl bg-muted/10 ring-1 ring-border p-12 text-center">
+                    <div className="border border-border rounded-lg p-12 text-center bg-card">
                       <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-muted-foreground">No invoices yet</p>
+                      <p className="text-sm text-muted-foreground">No invoices yet</p>
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2">
-                        {paginatedInvoices.map((invoice) => (
+                      {/* Horizontal invoice rows */}
+                      <div className="border border-border rounded-lg overflow-hidden bg-card">
+                        {paginatedInvoices.map((invoice, index) => (
                           <div
                             key={invoice.id}
-                            className="p-4 rounded-xl bg-muted/10 ring-1 ring-border hover:bg-muted/20 transition-colors"
+                            className={cn(
+                              "flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
+                              index !== 0 && "border-t border-border"
+                            )}
                             data-testid={`invoice-${invoice.id}`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500">
-                                  <FileText className="h-5 w-5" />
-                                </div>
-                                <div>
-                                  <div className="font-medium text-foreground">{invoice.invoiceNumber}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {formatDate(invoice.createdAt)} · {invoice.description}
-                                  </div>
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground text-sm">{invoice.invoiceNumber}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {formatDate(invoice.createdAt)} · {invoice.description}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-mono text-lg font-medium text-green-500">
-                                  ${(invoice.amountCents / 100).toFixed(2)}
-                                </span>
-                                {invoice.pdfUrl && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="gap-2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => window.open(invoice.pdfUrl!, '_blank')}
-                                    data-testid={`button-download-invoice-${invoice.id}`}
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    <span className="hidden sm:inline">PDF</span>
-                                  </Button>
-                                )}
-                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                              <span className="font-mono text-base font-semibold text-success">
+                                ${(invoice.amountCents / 100).toFixed(2)}
+                              </span>
+                              {invoice.pdfUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => window.open(invoice.pdfUrl!, '_blank')}
+                                  data-testid={`button-download-invoice-${invoice.id}`}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1374,11 +1613,6 @@ export default function BillingPage() {
                         <div className="flex items-center justify-between pt-4">
                           <p className="text-sm text-muted-foreground">
                             Page {invoicesPage} of {invoicesTotalPages}
-                            {invoices.length > MAX_INVOICE_PAGES * ITEMS_PER_PAGE && (
-                              <span className="text-yellow-400 ml-2">
-                                (Showing first {MAX_INVOICE_PAGES} pages)
-                              </span>
-                            )}
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -1402,13 +1636,20 @@ export default function BillingPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Show support message when there's more data than displayed */}
+                      {invoices.length > MAX_INVOICE_PAGES * ITEMS_PER_PAGE && (
+                        <p className="text-xs text-muted-foreground text-center pt-4">
+                          Showing recent invoices only. Contact <Link href="/support" className="text-primary hover:underline">support</Link> for older records.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
               </TabsContent>
 
               {/* Settings Tab */}
-              <TabsContent value="settings" className="space-y-6 mt-6">
+              <TabsContent value="settings" className="space-y-6 mt-8">
                 <div>
                   <h2 className="text-xl font-semibold text-foreground mb-4">Billing Settings</h2>
                   <AutoTopupSection paymentMethods={paymentMethods} />
@@ -1417,25 +1658,23 @@ export default function BillingPage() {
             </Tabs>
 
             {/* Support Banner */}
-            <div className="rounded-xl bg-muted/10 ring-1 ring-border p-6">
+            <div className="border border-border rounded-lg p-6 bg-card mt-4">
               <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-primary" />
-                </div>
+                <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <h3 className="font-medium text-foreground mb-1">Need help with billing?</h3>
+                  <h3 className="font-semibold text-foreground mb-1">Need help with billing?</h3>
                   <p className="text-sm text-muted-foreground mb-3">
                     If you have any questions about your wallet, transactions, or need assistance, our support team is here to help.
                   </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1 border-border text-primary hover:text-primary/80"
-                    onClick={() => window.open('mailto:support@ozvps.au', '_blank')}
+                    className="gap-1 border-border"
+                    onClick={() => navigate('/support')}
                     data-testid="button-contact-support"
                   >
                     Contact Support
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>

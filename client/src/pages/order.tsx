@@ -1,4 +1,4 @@
-import { GlassCard } from "@/components/ui/glass-card";
+import { Card } from "@/components/ui/card";
 import { AppShell } from "@/components/layout/app-shell";
 import { ShoppingCart, Clock } from "lucide-react";
 
@@ -15,7 +15,7 @@ export default function OrderPage() {
         </p>
       </div>
 
-      <GlassCard className="p-12">
+      <Card className="p-12">
         <div className="flex flex-col items-center justify-center text-center space-y-6">
           <div className="relative">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl" />
@@ -34,7 +34,7 @@ export default function OrderPage() {
             </p>
           </div>
         </div>
-      </GlassCard>
+      </Card>
     </div>
     </AppShell>
   );

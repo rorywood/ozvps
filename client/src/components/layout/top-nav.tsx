@@ -18,7 +18,7 @@ import logo from "@/assets/logo.png";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getGravatarUrl } from "@/lib/gravatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -205,6 +206,16 @@ function ProfileDropdown() {
 
 function DesktopNav() {
   const [location] = useLocation();
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -233,18 +244,34 @@ function DesktopNav() {
   const hasUnreadSupport = (supportCounts?.waitingUser || 0) > 0;
 
   // Check if dev banner is showing
-  const isDev = window.location.hostname.includes("dev");
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBannerDismissed = () => {
+      setBannerDismissed(true);
+    };
+    window.addEventListener("dev-banner-dismissed", handleBannerDismissed);
+    return () => window.removeEventListener("dev-banner-dismissed", handleBannerDismissed);
+  }, []);
+
+  const isDev = window.location.hostname.includes("dev") && !bannerDismissed;
 
   return (
     <header className={cn(
-      "hidden lg:block fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      "hidden lg:block fixed left-0 right-0 z-50 border-b border-border/50 transition-colors duration-200",
+      isScrolled ? "bg-background" : "glass-panel",
       isDev ? "top-14" : "top-0"
     )}>
       <div className="container mx-auto max-w-7xl px-6">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-24">
           <div className="flex items-center gap-8">
             <Link href="/dashboard">
-              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer" data-testid="img-logo" />
+              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo" />
             </Link>
             
             <nav className="flex items-center gap-1">
@@ -304,17 +331,18 @@ function DesktopNav() {
           <div className="flex items-center gap-4">
             {balance !== undefined && (
               <Link href="/billing">
-                <div 
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                <div
+                  className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   data-testid="nav-balance"
                 >
-                  <Wallet className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-semibold text-emerald-400">
+                  <Wallet className="h-4 w-4" />
+                  <span className="text-sm font-medium">
                     {formatBalance(balance)}
                   </span>
                 </div>
               </Link>
             )}
+            <ThemeToggle />
             <div className="w-px h-6 bg-border" />
             <ProfileDropdown />
           </div>
@@ -327,7 +355,17 @@ function DesktopNav() {
 function MobileNav() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const { data: userData } = useQuery<UserMeResponse>({
     queryKey: ['auth', 'me'],
@@ -373,16 +411,32 @@ function MobileNav() {
   ];
 
   // Check if dev banner is showing
-  const isDev = window.location.hostname.includes("dev");
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev-banner-dismissed") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBannerDismissed = () => {
+      setBannerDismissed(true);
+    };
+    window.addEventListener("dev-banner-dismissed", handleBannerDismissed);
+    return () => window.removeEventListener("dev-banner-dismissed", handleBannerDismissed);
+  }, []);
+
+  const isDev = window.location.hostname.includes("dev") && !bannerDismissed;
 
   return (
     <header className={cn(
-      "lg:hidden fixed left-0 right-0 z-50 glass-panel border-b border-border/50",
+      "lg:hidden fixed left-0 right-0 z-50 border-b border-border/50 transition-colors duration-200",
+      isScrolled ? "bg-background" : "glass-panel",
       isDev ? "top-14" : "top-0"
     )}>
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
-          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer" data-testid="img-logo-mobile" />
+          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo-mobile" />
         </Link>
         
         <div className="flex items-center gap-3">
@@ -475,6 +529,10 @@ function MobileNav() {
                 </div>
 
                 <div className="p-4 border-t border-border space-y-3">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm font-medium text-muted-foreground">Theme</span>
+                    <ThemeToggle />
+                  </div>
                   <button
                     onClick={() => logoutMutation.mutate()}
                     disabled={logoutMutation.isPending}
