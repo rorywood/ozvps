@@ -837,7 +837,10 @@ EOF
     npm install --silent 2>&1 | grep -v "^npm " || true
     success "Dependencies installed"
 
-    # Step 5: Build
+    # Step 5: Build (clear all caches first)
+    info "Clearing build caches..."
+    rm -rf dist node_modules/.vite node_modules/.cache client/node_modules/.vite 2>/dev/null || true
+
     info "Building application..."
     npm run build
     if [[ ! -f "dist/index.cjs" ]]; then
