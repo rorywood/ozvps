@@ -51,21 +51,24 @@ self_update() {
         [[ -z "$BRANCH" ]] && BRANCH="main"
     fi
 
-    local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps"
     local TEMP_SCRIPT=$(mktemp)
 
-    if curl -fsSL -H 'Cache-Control: no-cache' "$SCRIPT_URL?t=$(date +%s)" -o "$TEMP_SCRIPT" 2>/dev/null; then
-        if head -1 "$TEMP_SCRIPT" | grep -q "^#!/"; then
-            local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
-            local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
+    # Use GitHub API to bypass CDN caching (API is not cached like raw.githubusercontent.com)
+    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${BRANCH}"
+    local API_RESPONSE=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' "$API_URL" 2>/dev/null)
 
-            if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
-                echo -e "  ${GREEN}✓${NC} Control panel updated, restarting..."
-                cp "$TEMP_SCRIPT" "$SELF_PATH"
-                chmod +x "$SELF_PATH"
-                rm -f "$TEMP_SCRIPT"
-                exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
-            fi
+    if [[ -n "$API_RESPONSE" ]] && echo "$API_RESPONSE" | head -1 | grep -q "^#!/"; then
+        echo "$API_RESPONSE" > "$TEMP_SCRIPT"
+
+        local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
+        local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
+
+        if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
+            echo -e "  ${GREEN}✓${NC} Control panel updated, restarting..."
+            cp "$TEMP_SCRIPT" "$SELF_PATH"
+            chmod +x "$SELF_PATH"
+            rm -f "$TEMP_SCRIPT"
+            exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
         fi
     fi
 
@@ -730,26 +733,28 @@ EOF
 
     # Step 0: Check for script updates first
     info "Checking for control panel script updates..."
-    local script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps"
     local temp_script=$(mktemp)
     local self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
 
-    if curl -fsSL -H 'Cache-Control: no-cache' "$script_url?t=$(date +%s)" -o "$temp_script" 2>/dev/null; then
-        if head -1 "$temp_script" | grep -q "^#!/"; then
-            local current_md5=$(md5sum "$self_path" 2>/dev/null | cut -d' ' -f1)
-            local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
+    # Use GitHub API to bypass CDN caching
+    local api_url="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${branch}"
+    local api_response=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' "$api_url" 2>/dev/null)
 
-            if [[ "$current_md5" != "$new_md5" ]]; then
-                success "New control panel version found, updating script..."
-                cp "$temp_script" "$self_path"
-                chmod +x "$self_path"
-                rm -f "$temp_script"
-                success "Script updated! Restarting update process..."
-                echo ""
-                exec "$self_path" --no-self-update --update
-            else
-                success "Control panel script is up to date"
-            fi
+    if [[ -n "$api_response" ]] && echo "$api_response" | head -1 | grep -q "^#!/"; then
+        echo "$api_response" > "$temp_script"
+        local current_md5=$(md5sum "$self_path" 2>/dev/null | cut -d' ' -f1)
+        local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
+
+        if [[ "$current_md5" != "$new_md5" ]]; then
+            success "New control panel version found, updating script..."
+            cp "$temp_script" "$self_path"
+            chmod +x "$self_path"
+            rm -f "$temp_script"
+            success "Script updated! Restarting update process..."
+            echo ""
+            exec "$self_path" --no-self-update --update
+        else
+            success "Control panel script is up to date"
         fi
     else
         warning "Could not check for script updates (continuing anyway)"
