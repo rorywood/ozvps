@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, CheckCircle2, Server, Shield, Zap } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -218,8 +218,14 @@ export default function LoginPage() {
     },
     onError: (err: any) => {
       setIsSubmitting(false);
-      setError(err.message || "Invalid email or password");
-      setShowUserNotFound(false);
+      const errorMessage = err.message || "Invalid email or password";
+      setError(errorMessage);
+      // Show "create account" suggestion on credential errors
+      if (errorMessage.includes("Invalid email or password") || err.code === "INVALID_CREDENTIALS") {
+        setShowUserNotFound(true);
+      } else {
+        setShowUserNotFound(false);
+      }
       setRecaptchaToken(null);
       setTwoFAToken("");
       if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
@@ -434,22 +440,19 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* User Not Found */}
+                {/* Create Account Suggestion */}
                 {showUserNotFound && (
-                  <div className="flex flex-col gap-3 text-sm bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                    <div className="flex items-start gap-3 text-blue-400">
-                      <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                      <span className="font-medium">No account found with this email</span>
-                    </div>
+                  <div className="flex items-center justify-between gap-3 text-sm bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                    <span className="text-slate-400">Don't have an account?</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       asChild
-                      className="w-full mt-1 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                      className="border-primary/30 text-primary hover:bg-primary/10"
                     >
                       <Link href="/register">
-                        Create your account
+                        Sign up
                       </Link>
                     </Button>
                   </div>
