@@ -882,36 +882,61 @@ EOF
     fi
 
     # Step 7: Update NGINX error pages
+    info "Updating NGINX error pages..."
+    local error_pages_dir="/var/www/ozvps-errors"
+    mkdir -p "$error_pages_dir"
+
+    # Copy error pages from deploy directory if they exist
     if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
-        info "Updating NGINX error pages..."
-        local error_pages_dir="/var/www/ozvps-errors"
-        mkdir -p "$error_pages_dir"
         cp "$INSTALL_DIR/deploy/nginx-error-pages/"*.html "$error_pages_dir/" 2>/dev/null || true
         chmod 644 "$error_pages_dir/"*.html 2>/dev/null || true
+        success "Error page files copied to $error_pages_dir"
+    else
+        warning "Error pages source not found at $INSTALL_DIR/deploy/nginx-error-pages"
+    fi
 
-        # Update NGINX config to include error page directives
-        local nginx_conf="/etc/nginx/sites-available/ozvps"
-        if [[ -f "$nginx_conf" ]] && ! grep -q "error_page 404" "$nginx_conf"; then
+    # Update NGINX config to include error page directives
+    local nginx_conf="/etc/nginx/sites-available/ozvps"
+    if [[ -f "$nginx_conf" ]]; then
+        if ! grep -q "error_page 404" "$nginx_conf"; then
             info "Adding error page directives to NGINX config..."
-            # Insert error page config after the first server_name line
-            sed -i '/server_name/a\
-\
-    # Custom error pages\
-    error_page 404 /404.html;\
-    error_page 500 /500.html;\
-    error_page 502 /502.html;\
-    error_page 503 /503.html;\
-\
-    # Error page locations\
-    location ~ ^/(404|500|502|503)\\.html$ {\
-        root /var/www/ozvps-errors;\
-        internal;\
-    }' "$nginx_conf"
-            # Reload NGINX to apply changes
-            nginx -t && systemctl reload nginx
-            success "NGINX config updated with error pages"
+
+            # Create a temporary file with the error page config block
+            local error_block="
+    # Custom error pages
+    error_page 404 /404.html;
+    error_page 500 /500.html;
+    error_page 502 /502.html;
+    error_page 503 /503.html;
+
+    location = /404.html { root /var/www/ozvps-errors; internal; }
+    location = /500.html { root /var/www/ozvps-errors; internal; }
+    location = /502.html { root /var/www/ozvps-errors; internal; }
+    location = /503.html { root /var/www/ozvps-errors; internal; }
+"
+            # Insert after server_name line using awk (more reliable than sed)
+            awk -v block="$error_block" '
+                /server_name/ && !inserted {
+                    print
+                    print block
+                    inserted=1
+                    next
+                }
+                {print}
+            ' "$nginx_conf" > "${nginx_conf}.tmp" && mv "${nginx_conf}.tmp" "$nginx_conf"
+
+            # Test and reload NGINX
+            if nginx -t 2>/dev/null; then
+                systemctl reload nginx
+                success "NGINX config updated with error pages"
+            else
+                warning "NGINX config test failed - check $nginx_conf"
+            fi
+        else
+            info "Error page directives already present in NGINX config"
         fi
-        success "Error pages updated"
+    else
+        warning "NGINX config not found at $nginx_conf"
     fi
 
     # Step 8: Restart

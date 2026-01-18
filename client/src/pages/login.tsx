@@ -498,15 +498,6 @@ export default function LoginPage() {
                       data-testid="input-password"
                     />
                   </div>
-                  <div className="text-right">
-                    <Link
-                      href="/forgot-password"
-                      className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-                      data-testid="link-forgot-password"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
                 </div>
 
                 {/* reCAPTCHA v2 Widget */}
@@ -538,7 +529,7 @@ export default function LoginPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
+                  className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
                   disabled={isSubmitting || loginMutation.isPending}
                   data-testid="button-submit"
                 >
@@ -551,6 +542,17 @@ export default function LoginPage() {
                     "Sign in"
                   )}
                 </Button>
+
+                {/* Forgot Password */}
+                <div className="text-center">
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-slate-400 hover:text-primary transition-colors"
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
 
                 {/* reCAPTCHA Notice */}
                 {recaptchaEnabled && (
