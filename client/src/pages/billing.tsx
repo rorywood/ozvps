@@ -627,27 +627,56 @@ export default function BillingPage() {
   // Check for success/cancelled callback from Stripe checkout
   useEffect(() => {
     if (searchParams.includes('topup=success')) {
+      // Store initial balance to detect when credit arrives
+      let initialBalance: number | null = null;
+      let creditDetected = false;
+
       setPaymentFeedback({
         type: 'success',
         message: 'Payment successful! Your wallet is being credited...',
       });
 
       // Aggressively refetch wallet data to show updated balance
-      // Poll every 500ms for up to 10 seconds to catch the webhook update
+      // Poll every 500ms for up to 30 seconds to catch the webhook update
       let pollCount = 0;
-      const maxPolls = 20; // 10 seconds total
+      const maxPolls = 60; // 30 seconds total
       const pollInterval = setInterval(async () => {
         pollCount++;
-        await queryClient.refetchQueries({ queryKey: ['wallet'] });
-        await queryClient.refetchQueries({ queryKey: ['transactions'] });
+        const walletResult = await queryClient.fetchQuery({
+          queryKey: ['wallet'],
+          staleTime: 0,
+        }) as { wallet: { balanceCents: number } } | undefined;
 
-        if (pollCount >= maxPolls) {
+        const currentBalance = walletResult?.wallet?.balanceCents ?? 0;
+
+        // Capture initial balance on first poll
+        if (initialBalance === null) {
+          initialBalance = currentBalance;
+        }
+
+        // Check if balance increased (credit arrived)
+        if (currentBalance > initialBalance) {
+          creditDetected = true;
           clearInterval(pollInterval);
+          await queryClient.refetchQueries({ queryKey: ['transactions'] });
           setPaymentFeedback({
             type: 'success',
             message: 'Payment successful! Your wallet has been credited.',
           });
           setTimeout(() => navigate('/billing', { replace: true }), 2000);
+          return;
+        }
+
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          if (!creditDetected) {
+            // Balance never increased - something went wrong
+            setPaymentFeedback({
+              type: 'error',
+              message: 'Payment received but wallet credit is delayed. Please contact support if your balance doesn\'t update within a few minutes.',
+            });
+          }
+          setTimeout(() => navigate('/billing', { replace: true }), 3000);
         }
       }, 500);
 
