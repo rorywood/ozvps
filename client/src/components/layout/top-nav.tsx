@@ -332,11 +332,11 @@ function DesktopNav() {
             {balance !== undefined && (
               <Link href="/billing">
                 <div
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-foreground/5 transition-colors cursor-pointer"
                   data-testid="nav-balance"
                 >
-                  <Wallet className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-semibold text-emerald-400">
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">
                     {formatBalance(balance)}
                   </span>
                 </div>
