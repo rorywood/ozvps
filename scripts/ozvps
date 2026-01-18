@@ -3,7 +3,7 @@ set -e
 
 # ============================================================================
 #  OzVPS Control Panel
-#  Version: 4.0.0
+#  Version: 4.0.1
 #
 #  Usage:
 #    ozvps              # Opens kiosk menu
@@ -53,25 +53,34 @@ self_update() {
 
     local TEMP_SCRIPT=$(mktemp)
 
-    # Get latest commit SHA first - this bypasses all caching
-    local LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+    # Get latest commit SHA using refs API (more reliable)
+    local LATEST_SHA=""
+    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${BRANCH}" 2>/dev/null || true)
+    if [[ -n "$REF_RESPONSE" ]]; then
+        LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    fi
 
-    # Use commit SHA in API request to guarantee fresh content
-    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${LATEST_SHA:-$BRANCH}"
-    local API_RESPONSE=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$API_URL" 2>/dev/null)
+    # Download using raw.githubusercontent with commit SHA (bypasses CDN)
+    local DOWNLOAD_URL=""
+    if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
+        DOWNLOAD_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${LATEST_SHA}/scripts/ozvps"
+    else
+        # Fallback to branch with cache-busting
+        DOWNLOAD_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps?$(date +%s)"
+    fi
 
-    if [[ -n "$API_RESPONSE" ]] && echo "$API_RESPONSE" | head -1 | grep -q "^#!/"; then
-        echo "$API_RESPONSE" > "$TEMP_SCRIPT"
+    if curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_SCRIPT" 2>/dev/null; then
+        if head -1 "$TEMP_SCRIPT" | grep -q "^#!/"; then
+            local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
+            local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
 
-        local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
-        local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
-
-        if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
-            echo -e "  ${GREEN}✓${NC} Control panel updated, restarting..."
-            cp "$TEMP_SCRIPT" "$SELF_PATH"
-            chmod +x "$SELF_PATH"
-            rm -f "$TEMP_SCRIPT"
-            exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
+            if [ "$CURRENT_MD5" != "$NEW_MD5" ]; then
+                echo -e "  ${GREEN}✓${NC} Control panel updated, restarting..."
+                cp "$TEMP_SCRIPT" "$SELF_PATH"
+                chmod +x "$SELF_PATH"
+                rm -f "$TEMP_SCRIPT"
+                exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
+            fi
         fi
     fi
 
@@ -734,21 +743,28 @@ EOF
         warning "Create it with: echo 'claude/dev-l5488' | sudo tee $INSTALL_DIR/.ozvps-branch"
     fi
 
-    # Check for new commits first (we'll use this SHA for everything)
+    # Check for new commits first using refs API (more reliable)
     info "Checking for updates on $branch..."
-    local latest_commit=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${branch}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
+    local latest_commit=""
+    local ref_response=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${branch}" 2>/dev/null || true)
+    if [[ -n "$ref_response" ]]; then
+        latest_commit=$(echo "$ref_response" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    fi
 
     # Step 0: Check for script updates using commit SHA
     info "Checking for control panel script updates..."
     local temp_script=$(mktemp)
     local self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
 
-    # Use commit SHA in API request to guarantee fresh content
-    local api_url="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${latest_commit:-$branch}"
-    local api_response=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$api_url" 2>/dev/null)
+    # Download using raw.githubusercontent with commit SHA (bypasses CDN)
+    local script_url=""
+    if [[ -n "$latest_commit" && ${#latest_commit} -eq 40 ]]; then
+        script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${latest_commit}/scripts/ozvps"
+    else
+        script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps?$(date +%s)"
+    fi
 
-    if [[ -n "$api_response" ]] && echo "$api_response" | head -1 | grep -q "^#!/"; then
-        echo "$api_response" > "$temp_script"
+    if curl -fsSL "$script_url" -o "$temp_script" 2>/dev/null && head -1 "$temp_script" | grep -q "^#!/"; then
         local current_md5=$(md5sum "$self_path" 2>/dev/null | cut -d' ' -f1)
         local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
 
@@ -805,18 +821,17 @@ EOF
     local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
     local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
 
-    # Use GitHub API with commit SHA to bypass CDN caching
-    # API endpoint returns fresh content for specific commits
+    # Use codeload.github.com with commit SHA to bypass CDN caching
     local download_url=""
-    if [[ -n "$latest_commit" ]]; then
-        # Use commit-specific URL - not cached
-        download_url="https://api.github.com/repos/${GITHUB_REPO}/zipball/${latest_commit}"
+    if [[ -n "$latest_commit" && ${#latest_commit} -eq 40 ]]; then
+        # Use commit-specific URL via codeload (not cached)
+        download_url="https://codeload.github.com/${GITHUB_REPO}/zip/${latest_commit}"
     else
         # Fallback to branch with cache-busting
-        download_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)"
+        download_url="https://codeload.github.com/${GITHUB_REPO}/zip/refs/heads/${branch}?$(date +%s)"
     fi
 
-    if ! curl -fsSL -H 'Cache-Control: no-cache' -H 'Accept: application/vnd.github+json' -L "$download_url" -o "$temp_zip"; then
+    if ! curl -fsSL "$download_url" -o "$temp_zip"; then
         error "Failed to download"
         return
     fi

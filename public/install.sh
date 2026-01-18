@@ -48,13 +48,22 @@ echo -e "Downloading installer from ${BOLD}$BRANCH${NC} branch..."
 
 TEMP_INSTALLER=$(mktemp)
 
-# Get latest commit SHA to bypass CDN cache
-LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+# Get latest commit SHA using refs API (more reliable)
+LATEST_SHA=""
+REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${BRANCH}" 2>/dev/null || true)
+if [[ -n "$REF_RESPONSE" ]]; then
+    LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+fi
 
-# Use GitHub API with commit SHA - guaranteed fresh content
-INSTALLER_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps-install.sh?ref=${LATEST_SHA:-$BRANCH}"
+# Download using raw.githubusercontent with commit SHA (bypasses CDN)
+if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
+    INSTALLER_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${LATEST_SHA}/scripts/ozvps-install.sh"
+else
+    # Fallback to branch with cache-busting timestamp
+    INSTALLER_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps-install.sh?$(date +%s)"
+fi
 
-if curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$INSTALLER_URL" -o "$TEMP_INSTALLER"; then
+if curl -fsSL "$INSTALLER_URL" -o "$TEMP_INSTALLER"; then
     # Verify it's a valid script
     if head -1 "$TEMP_INSTALLER" | grep -q "^#!/"; then
         chmod +x "$TEMP_INSTALLER"
