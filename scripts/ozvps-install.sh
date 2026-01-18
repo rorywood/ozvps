@@ -192,6 +192,26 @@ FORCE_REINSTALL=false
 SENTRY_DSN=""
 RESEND_API_KEY=""
 
+# Variables that must be provided in config file for unattended mode
+# Initialize with empty defaults so set -u doesn't fail before config is loaded
+PANEL_DOMAIN=""
+SETUP_SSL=""
+SSL_EMAIL=""
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME=""
+DB_USER=""
+DB_PASS=""
+VIRTFUSION_PANEL_URL=""
+VIRTFUSION_API_TOKEN=""
+STRIPE_SECRET_KEY=""
+STRIPE_PUBLISHABLE_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+AUTH0_DOMAIN=""
+AUTH0_CLIENT_ID=""
+AUTH0_CLIENT_SECRET=""
+AUTH0_WEBHOOK_SECRET=""
+
 for arg in "$@"; do
     case $arg in
         --dev)
@@ -377,6 +397,30 @@ main() {
         else
             error_exit "Config file not found: $CONFIG_FILE"
         fi
+    fi
+
+    # Validate required variables for unattended mode
+    if [[ "$UNATTENDED" == "true" ]]; then
+        MISSING_VARS=""
+        [[ -z "$PANEL_DOMAIN" ]] && MISSING_VARS="$MISSING_VARS PANEL_DOMAIN"
+        [[ -z "$SETUP_SSL" ]] && MISSING_VARS="$MISSING_VARS SETUP_SSL"
+        [[ -z "$DB_NAME" ]] && MISSING_VARS="$MISSING_VARS DB_NAME"
+        [[ -z "$DB_USER" ]] && MISSING_VARS="$MISSING_VARS DB_USER"
+        [[ -z "$DB_PASS" ]] && MISSING_VARS="$MISSING_VARS DB_PASS"
+        [[ -z "$VIRTFUSION_PANEL_URL" ]] && MISSING_VARS="$MISSING_VARS VIRTFUSION_PANEL_URL"
+        [[ -z "$VIRTFUSION_API_TOKEN" ]] && MISSING_VARS="$MISSING_VARS VIRTFUSION_API_TOKEN"
+        [[ -z "$STRIPE_SECRET_KEY" ]] && MISSING_VARS="$MISSING_VARS STRIPE_SECRET_KEY"
+        [[ -z "$STRIPE_PUBLISHABLE_KEY" ]] && MISSING_VARS="$MISSING_VARS STRIPE_PUBLISHABLE_KEY"
+        [[ -z "$AUTH0_DOMAIN" ]] && MISSING_VARS="$MISSING_VARS AUTH0_DOMAIN"
+        [[ -z "$AUTH0_CLIENT_ID" ]] && MISSING_VARS="$MISSING_VARS AUTH0_CLIENT_ID"
+        [[ -z "$AUTH0_CLIENT_SECRET" ]] && MISSING_VARS="$MISSING_VARS AUTH0_CLIENT_SECRET"
+
+        if [[ -n "$MISSING_VARS" ]]; then
+            error_exit "Missing required variables for unattended mode:$MISSING_VARS"
+        fi
+
+        # Auto-generate optional secrets if not provided
+        [[ -z "$AUTH0_WEBHOOK_SECRET" ]] && AUTH0_WEBHOOK_SECRET=$(openssl rand -hex 32)
     fi
 
     # ========================================================================

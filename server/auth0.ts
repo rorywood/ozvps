@@ -207,7 +207,9 @@ class Auth0Client {
 
       if (!response.ok) {
         log(`Failed to get Auth0 user by email: ${response.status}`, 'auth0');
-        return null;
+        // IMPORTANT: Throw error on API failure to prevent false "user not found"
+        // This ensures registration doesn't proceed when we can't verify email uniqueness
+        throw new Error(`Auth0 API error: ${response.status}`);
       }
 
       const users = await response.json() as any[];
@@ -225,7 +227,8 @@ class Auth0Client {
       };
     } catch (error: any) {
       log(`Auth0 get user error: ${error.message}`, 'auth0');
-      return null;
+      // Re-throw the error so callers know this is an API failure, not "user not found"
+      throw error;
     }
   }
 

@@ -864,10 +864,17 @@ export async function registerRoutes(
       }
 
       // Check if user already exists in Auth0 (defense-in-depth)
-      const existingUser = await auth0Client.getUserByEmail(email);
-      if (existingUser) {
-        log(`Registration blocked: email ${email} already exists in Auth0`, 'auth');
-        return res.status(400).json({ error: 'An account with this email already exists. Please sign in instead.' });
+      try {
+        const existingUser = await auth0Client.getUserByEmail(email);
+        if (existingUser) {
+          log(`Registration blocked: email ${email} already exists in Auth0`, 'auth');
+          return res.status(400).json({ error: 'An account with this email already exists. Please sign in instead.' });
+        }
+      } catch (emailCheckError: any) {
+        // SECURITY: If we can't verify email uniqueness, don't allow registration
+        // This prevents duplicate accounts when Auth0 API is having issues
+        log(`Registration blocked: Auth0 email check failed for ${email}: ${emailCheckError.message}`, 'auth');
+        return res.status(503).json({ error: 'Unable to verify email. Please try again in a moment.' });
       }
 
       // Create user in Auth0
