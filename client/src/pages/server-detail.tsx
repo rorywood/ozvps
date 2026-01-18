@@ -205,10 +205,12 @@ export default function ServerDetail() {
   // This prevents the flash of server overview before showing checklist
   const isCheckingSetupMode = isInitialSetup || (reinstallTask.isActive && reinstallTask.status !== 'complete');
 
-  const { data: server, isLoading, isError } = useQuery({
+  const { data: server, isLoading } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
+    retry: 2, // Retry failed requests twice before giving up
+    retryDelay: 1000, // 1 second between retries
     refetchInterval: (data) => {
       // During provisioning/setup, poll aggressively (1 second)
       // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
@@ -945,9 +947,11 @@ export default function ServerDetail() {
     );
   }
 
-  if (isError || !server) {
+  // Only show error if there's genuinely no server data
+  // Don't trigger error just because a background refetch failed (isError) - keep showing cached data
+  if (!server) {
     // Don't show error if we're in active setup/reinstall mode - server might not be fully ready
-    const serverNeedsSetup = server?.needsSetup === true;
+    const serverNeedsSetup = false; // server is undefined here
     // Show loading state if reinstall task is active (any status except failed)
     // This prevents "Server not found" flashing during reinstall
     const taskIsActive = reinstallTask.isActive && reinstallTask.status !== 'failed';
