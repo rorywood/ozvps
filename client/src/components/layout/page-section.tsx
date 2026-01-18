@@ -18,7 +18,7 @@ export function PageSection({
   contentClassName,
 }: PageSectionProps) {
   return (
-    <section className={cn("space-y-4", className)}>
+    <section className={cn("space-y-6", className)}>
       {(title || description) && (
         <div className={cn("space-y-1", headerClassName)}>
           {title && (

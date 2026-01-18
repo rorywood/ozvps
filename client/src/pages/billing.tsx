@@ -197,12 +197,13 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
         const validation = await api.validatePaymentMethod(event.paymentMethod.id);
 
         if (!validation.valid) {
-          if (validation.duplicate && validation.existingCard) {
-            throw new Error(
-              `This ${validation.existingCard.brand} card ending in ${validation.existingCard.last4} is already saved to your account`
-            );
+          if (validation.duplicate) {
+            const cardInfo = validation.existingCard?.last4
+              ? ` (****${validation.existingCard.last4})`
+              : '';
+            throw new Error(`This card${cardInfo} is already saved to your account`);
           }
-          throw new Error(validation.error || "Failed to validate payment method");
+          throw new Error(validation.error || "Failed to add payment method");
         }
 
         event.complete('success');
@@ -261,12 +262,13 @@ function CardForm({ onSuccess, onCancel }: { onSuccess: () => void, onCancel: ()
       const validation = await api.validatePaymentMethod(paymentMethod.id);
 
       if (!validation.valid) {
-        if (validation.duplicate && validation.existingCard) {
-          throw new Error(
-            `This ${validation.existingCard.brand} card ending in ${validation.existingCard.last4} is already saved to your account`
-          );
+        if (validation.duplicate) {
+          const cardInfo = validation.existingCard?.last4
+            ? ` (****${validation.existingCard.last4})`
+            : '';
+          throw new Error(`This card${cardInfo} is already saved to your account`);
         }
-        throw new Error(validation.error || "Failed to validate payment method");
+        throw new Error(validation.error || "Failed to add payment method");
       }
 
       // If valid, the card is now attached to the customer
