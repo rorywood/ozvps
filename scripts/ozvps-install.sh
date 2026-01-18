@@ -5,7 +5,7 @@ set -o pipefail
 
 # ============================================================================
 #  OzVPS Unified Installer
-#  Version: 4.0.0
+#  Version: 4.0.1
 #
 #  Usage:
 #    sudo bash ozvps-install.sh [--dev|--prod]
@@ -48,13 +48,23 @@ self_update() {
 
     echo -e "  ${DIM}Checking for installer updates...${NC}"
 
-    # Get latest commit SHA to bypass CDN cache
-    local LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${UPDATE_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+    # Get latest commit SHA using refs API (more reliable)
+    local LATEST_SHA=""
+    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${UPDATE_BRANCH}" 2>/dev/null || true)
+    if [[ -n "$REF_RESPONSE" ]]; then
+        LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    fi
 
-    # Use API with commit SHA - guaranteed fresh content
-    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps-install.sh?ref=${LATEST_SHA:-$UPDATE_BRANCH}"
+    # Download using raw.githubusercontent with commit SHA (bypasses CDN)
+    local DOWNLOAD_URL=""
+    if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
+        DOWNLOAD_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${LATEST_SHA}/scripts/ozvps-install.sh"
+    else
+        # Fallback to branch with cache-busting
+        DOWNLOAD_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${UPDATE_BRANCH}/scripts/ozvps-install.sh?$(date +%s)"
+    fi
 
-    if curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$API_URL" -o "$TEMP_SCRIPT" 2>/dev/null; then
+    if curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_SCRIPT" 2>/dev/null; then
         if head -1 "$TEMP_SCRIPT" | grep -q "^#!/"; then
             local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
             local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
@@ -239,6 +249,22 @@ main() {
     echo -e "  ${DIM}Version:${NC}  Installer v${VERSION}"
     echo ""
 
+    # ========================================================================
+    # Early package update and essential tools (before self-update needs curl)
+    # ========================================================================
+    echo -e "  ${DIM}Preparing system...${NC}"
+    case "$OS" in
+        ubuntu|debian)
+            apt-get update -qq >/dev/null 2>&1 || true
+            apt-get install -y -qq curl ca-certificates gnupg >/dev/null 2>&1 || true
+            ;;
+        centos|rhel|rocky|almalinux)
+            yum install -y -q curl ca-certificates >/dev/null 2>&1 || true
+            ;;
+    esac
+    echo -e "  ${GREEN}✓${NC} System ready"
+    echo ""
+
     # Self-update check (unless skipped)
     if [[ "$SKIP_SELF_UPDATE" == "false" && -f "$SELF_PATH" ]]; then
         self_update "$SELF_PATH" "$@"
@@ -336,13 +362,23 @@ main() {
     echo -e "  ${DIM}Branch: $GITHUB_BRANCH${NC}"
 
     # ========================================================================
+    # Load config file for unattended mode (before any steps)
+    # ========================================================================
+    if [[ "$UNATTENDED" == "true" && -n "$CONFIG_FILE" ]]; then
+        if [[ -f "$CONFIG_FILE" ]]; then
+            source "$CONFIG_FILE"
+            success "Loaded configuration from $CONFIG_FILE"
+        else
+            error_exit "Config file not found: $CONFIG_FILE"
+        fi
+    fi
+
+    # ========================================================================
     # Step 2: Domain Configuration
     # ========================================================================
     step_header 2 7 "Domain Configuration"
 
-    if [[ "$UNATTENDED" == "true" && -n "$CONFIG_FILE" ]]; then
-        source "$CONFIG_FILE"
-    else
+    if [[ "$UNATTENDED" != "true" ]]; then
         echo -e "  ${CYAN}Panel Domain${NC} ${DIM}(where your panel will be accessible)${NC}"
         input_field "Domain" PANEL_DOMAIN "$DEFAULT_DOMAIN"
         echo ""
@@ -568,11 +604,11 @@ main() {
         case "$OS" in
             ubuntu|debian)
                 apt-get update
-                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib redis-server unzip rsync curl
+                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib postgresql-client redis-server redis-tools unzip rsync curl openssl
                 ;;
             centos|rhel|rocky|almalinux)
                 yum install -y epel-release
-                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib redis unzip rsync curl
+                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib redis unzip rsync curl openssl
                 postgresql-setup --initdb 2>/dev/null || true
                 ;;
         esac
@@ -604,6 +640,10 @@ main() {
                 sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';"
             sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || true
             sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
+
+            # PostgreSQL 15+ requires explicit schema permissions
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO $DB_USER;" 2>/dev/null || true
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT CREATE ON SCHEMA public TO $DB_USER;" 2>/dev/null || true
 
             # Configure pg_hba.conf for md5 auth
             PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" 2>/dev/null | tr -d ' ')
@@ -641,23 +681,49 @@ main() {
         set -e
         mkdir -p "$INSTALL_DIR"
 
-        # Get latest commit SHA to bypass CDN cache
-        LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
-
         SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
         TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
         TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
+        rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
-        # Use API zipball with commit SHA - not cached
-        if [[ -n "$LATEST_SHA" ]]; then
-            curl -fsSL -H 'Accept: application/vnd.github+json' -L \
-                "https://api.github.com/repos/${GITHUB_REPO}/zipball/${LATEST_SHA}" -o "$TEMP_ZIP"
-        else
-            # Fallback to branch archive with cache-busting
-            curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip?t=$(date +%s)" -o "$TEMP_ZIP"
+        # Method 1: Get commit SHA from refs API (more reliable)
+        LATEST_SHA=""
+        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_BRANCH}" 2>/dev/null || true)
+        if [[ -n "$REF_RESPONSE" ]]; then
+            LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         fi
 
-        rm -rf "$TEMP_EXTRACT"
+        # Method 2: If refs API fails, try commits API
+        if [[ -z "$LATEST_SHA" ]]; then
+            COMMIT_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null || true)
+            if [[ -n "$COMMIT_RESPONSE" ]]; then
+                LATEST_SHA=$(echo "$COMMIT_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{40\}"' | head -1 | cut -d'"' -f4)
+            fi
+        fi
+
+        echo "Commit SHA: ${LATEST_SHA:-unknown}" >> "$LOG_FILE"
+
+        # Download using commit SHA (bypasses all caching)
+        DOWNLOAD_SUCCESS=false
+        if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
+            # Use codeload which doesn't have CDN caching issues
+            if curl -fsSL "https://codeload.github.com/${GITHUB_REPO}/zip/${LATEST_SHA}" -o "$TEMP_ZIP" 2>/dev/null; then
+                DOWNLOAD_SUCCESS=true
+            fi
+        fi
+
+        # Fallback: Direct branch download with cache-busting timestamp
+        if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
+            echo "Falling back to branch download..." >> "$LOG_FILE"
+            curl -fsSL "https://codeload.github.com/${GITHUB_REPO}/zip/refs/heads/${GITHUB_BRANCH}?$(date +%s)" -o "$TEMP_ZIP"
+        fi
+
+        # Verify ZIP file
+        if [[ ! -f "$TEMP_ZIP" ]] || ! unzip -t "$TEMP_ZIP" >/dev/null 2>&1; then
+            echo "Downloaded file is not a valid ZIP" >> "$LOG_FILE"
+            exit 1
+        fi
+
         mkdir -p "$TEMP_EXTRACT"
         unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
@@ -758,8 +824,8 @@ EOF
     info "Installing npm packages..."
     (
         cd "$INSTALL_DIR"
-        npm install
-    )
+        npm install 2>&1 | tee -a "$LOG_FILE"
+    ) || error_exit "npm install failed. Check $LOG_FILE for details."
     success "npm packages installed"
 
     # Build application
@@ -767,9 +833,40 @@ EOF
     info "Building application..."
     (
         cd "$INSTALL_DIR"
-        npm run build
-    )
+        npm run build 2>&1 | tee -a "$LOG_FILE"
+    ) || error_exit "Build failed. Check $LOG_FILE for details."
     success "Application built"
+
+    # Verify PostgreSQL is accessible
+    echo ""
+    info "Verifying database connection..."
+    (
+        # DB_PASS, DB_HOST, DB_USER, DB_NAME are inherited from parent shell
+        # Wait for PostgreSQL to be ready (up to 30 seconds)
+        for i in {1..30}; do
+            if PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" >/dev/null 2>&1; then
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "PostgreSQL connection failed after 30 seconds" >&2
+        exit 1
+    ) || error_exit "Cannot connect to PostgreSQL. Check database credentials and ensure PostgreSQL is running."
+    success "Database connection verified"
+
+    # Verify Redis is accessible
+    info "Verifying Redis connection..."
+    (
+        for i in {1..10}; do
+            if redis-cli ping >/dev/null 2>&1; then
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "Redis connection failed" >&2
+        exit 1
+    ) || error_exit "Cannot connect to Redis. Ensure Redis is running: systemctl status redis-server"
+    success "Redis connection verified"
 
     # Run database migrations
     echo ""
@@ -777,8 +874,8 @@ EOF
     (
         cd "$INSTALL_DIR"
         set -a && source .env && set +a
-        npx drizzle-kit push --force
-    )
+        npx drizzle-kit push --force 2>&1 | tee -a "$LOG_FILE"
+    ) || error_exit "Database migrations failed. Check $LOG_FILE for details."
     success "Database migrations applied"
 
     # Prune dev dependencies
@@ -916,13 +1013,20 @@ EOF
     # Install ozvps control command (using commit SHA to bypass cache)
     (
         set -e
-        # Get latest commit SHA
-        CTRL_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+        # Get latest commit SHA using refs API
+        CTRL_SHA=""
+        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_BRANCH}" 2>/dev/null || true)
+        if [[ -n "$REF_RESPONSE" ]]; then
+            CTRL_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        fi
 
-        # Use API with commit SHA - guaranteed fresh content
-        curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' \
-            "https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${CTRL_SHA:-$GITHUB_BRANCH}" \
-            -o /usr/local/bin/ozvps
+        # Download using raw.githubusercontent with commit SHA
+        if [[ -n "$CTRL_SHA" && ${#CTRL_SHA} -eq 40 ]]; then
+            curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${CTRL_SHA}/scripts/ozvps" -o /usr/local/bin/ozvps
+        else
+            # Fallback with cache-busting
+            curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/scripts/ozvps?$(date +%s)" -o /usr/local/bin/ozvps
+        fi
         chmod +x /usr/local/bin/ozvps
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Installing ozvps control command"
