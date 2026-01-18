@@ -5,23 +5,7 @@ import { Server, HardDrive, Network, Users, RefreshCw, Loader2, UserPlus, Webhoo
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-
-function getCsrfToken(): string {
-  return localStorage.getItem('csrfToken') ||
-    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
-}
-
-async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(url, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': getCsrfToken(),
-      ...options.headers,
-    },
-  });
-}
+import { secureFetch } from "@/lib/api";
 
 interface StatsResponse {
   servers: { total: number; running: number; stopped: number };

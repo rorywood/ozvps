@@ -11,23 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-
-function getCsrfToken(): string {
-  return localStorage.getItem('csrfToken') ||
-    document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
-}
-
-async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(url, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': getCsrfToken(),
-      ...options.headers,
-    },
-  });
-}
+import { secureFetch } from "@/lib/api";
 
 interface VFUser {
   virtfusionId: number | null;

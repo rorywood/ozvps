@@ -35,7 +35,7 @@ export function clearCsrfToken(): void {
 }
 
 // Enhanced fetch that includes CSRF token for mutating requests
-async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
 
   // Add CSRF token for mutating requests
