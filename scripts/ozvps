@@ -54,8 +54,8 @@ self_update() {
     local TEMP_SCRIPT=$(mktemp)
 
     # Use GitHub API to bypass CDN caching (API is not cached like raw.githubusercontent.com)
-    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${BRANCH}"
-    local API_RESPONSE=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' "$API_URL" 2>/dev/null)
+    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${BRANCH}&t=$(date +%s)"
+    local API_RESPONSE=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$API_URL" 2>/dev/null)
 
     if [[ -n "$API_RESPONSE" ]] && echo "$API_RESPONSE" | head -1 | grep -q "^#!/"; then
         echo "$API_RESPONSE" > "$TEMP_SCRIPT"
@@ -803,7 +803,7 @@ EOF
     local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
 
     # Add cache-busting timestamp to avoid GitHub CDN serving stale ZIP
-    if ! curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)" -o "$temp_zip"; then
+    if ! curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)" -o "$temp_zip"; then
         error "Failed to download"
         return
     fi
