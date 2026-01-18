@@ -794,10 +794,11 @@ PMEOF
         ERROR_PAGES_DIR="/var/www/ozvps-errors"
         mkdir -p "$ERROR_PAGES_DIR"
 
-        # Copy error pages if they exist
+        # Copy error pages and logo if they exist
         if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
             cp "$INSTALL_DIR/deploy/nginx-error-pages"/*.html "$ERROR_PAGES_DIR/" 2>/dev/null || true
-            chmod 644 "$ERROR_PAGES_DIR"/*.html 2>/dev/null || true
+            cp "$INSTALL_DIR/deploy/nginx-error-pages"/*.png "$ERROR_PAGES_DIR/" 2>/dev/null || true
+            chmod 644 "$ERROR_PAGES_DIR"/* 2>/dev/null || true
         fi
 
         cat > "/etc/nginx/sites-available/$NGINX_CONF_NAME" << EOF
@@ -813,6 +814,10 @@ server {
     location ~ ^/(404|500|502|503)\.html\$ {
         root $ERROR_PAGES_DIR;
         internal;
+    }
+
+    location = /logo.png {
+        root $ERROR_PAGES_DIR;
     }
 
     location / {
