@@ -161,8 +161,8 @@ export default function ResetPasswordPage() {
           </div>
 
           {/* Main Content */}
-          <div className="space-y-14">
-            <div>
+          <div>
+            <div className="mb-16">
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
                 Reset Your<br />
                 <span className="text-primary">Password</span>
@@ -377,7 +377,7 @@ export default function ResetPasswordPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-2"
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
                     disabled={resetPasswordMutation.isPending || !passwordValid || !passwordsMatch}
                   >
                     {resetPasswordMutation.isPending ? (

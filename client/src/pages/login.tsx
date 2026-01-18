@@ -340,8 +340,8 @@ export default function LoginPage() {
           </div>
 
           {/* Main Content */}
-          <div className="space-y-14">
-            <div>
+          <div>
+            <div className="mb-16">
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
                 High Performance<br />
                 <span className="text-primary">Cloud Servers</span>
@@ -425,7 +425,7 @@ export default function LoginPage() {
             </div>
 
             {!requires2FA ? (
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Session Message */}
                 {sessionMessage && (
                   <div className="flex items-start gap-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
@@ -538,7 +538,7 @@ export default function LoginPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-2"
+                  className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
                   disabled={isSubmitting || loginMutation.isPending}
                   data-testid="button-submit"
                 >
