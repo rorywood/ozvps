@@ -4,7 +4,7 @@ import { AlertTriangle } from "lucide-react";
 const RATE_LIMIT_KEY = "ozvps_rate_limited_until";
 
 // Persist rate limit across page reloads using localStorage
-export function triggerRateLimit(seconds: number = 10) {
+export function triggerRateLimit(seconds: number = 5) {
   const until = Date.now() + seconds * 1000;
   try {
     localStorage.setItem(RATE_LIMIT_KEY, String(until));
