@@ -67,7 +67,14 @@
       "Bash(ssh -o ConnectTimeout=30 root@198.251.87.100 'cd /opt/ozvps-panel && git fetch origin && git reset --hard origin/claude/dev-l5488 && npm run build && pm2 restart ozvps-panel')",
       "Bash(cmd /c \"cd /d D:\\\\Claude\\\\ozvps\\\\client && npm run build\")",
       "Bash(cmd /c \"cd /d D:\\\\Claude\\\\ozvps && npm run build:client\")",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(curl:*)",
+      "Bash(git stash:*)",
+      "Bash(git merge:*)",
+      "Bash(for file in deploy/nginx-error-pages/*.html)",
+      "Bash(do sed -i 's|src=\"\"data:image/png;base64,[^\"\"]*\"\"|src=\"\"https://ozvps.com.au/assets/OZVPS_white_transparent_1762604608884-CgCbI-Jm.png\"\"|g' \"$file\")",
+      "Bash(do sed -i 's/filter: brightness\\(0\\) invert\\(1\\);//' \"$file\")",
+      "Bash(do sed -i 's/\\\\.logo img { height: 40px;/.logo img { height: 80px;/' \"$file\")"
     ]
   }
 }
