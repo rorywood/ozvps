@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
+import { useSystemHealth } from "@/hooks/use-system-health";
 
 declare global {
   interface Window {
@@ -25,6 +26,10 @@ export default function LoginPage() {
   useDocumentTitle('Sign In');
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  // Check system health (database connectivity)
+  const { isDatabaseDown, isLoading: healthLoading, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -410,8 +415,27 @@ export default function LoginPage() {
             </Link>
           </div>
 
+          {/* Database Unavailable Banner */}
+          {isDatabaseDown && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
+              <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
+              <p className="text-slate-400 mb-4">
+                {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => refetchHealth()}
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Check Again
+              </Button>
+            </div>
+          )}
+
           {/* Form Card */}
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+          <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-2xl font-bold text-white mb-2">
@@ -422,7 +446,9 @@ export default function LoginPage() {
                   ? useBackupCode
                     ? "Enter your backup code to continue"
                     : "Enter your authentication code"
-                  : "Sign in to access your dashboard"
+                  : isDatabaseDown
+                    ? "Sign in is temporarily unavailable"
+                    : "Sign in to access your dashboard"
                 }
               </p>
             </div>
@@ -531,7 +557,7 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
-                    disabled={isSubmitting || loginMutation.isPending}
+                    disabled={isSubmitting || loginMutation.isPending || isDatabaseDown}
                     data-testid="button-submit"
                   >
                     {(isSubmitting || loginMutation.isPending) ? (

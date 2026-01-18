@@ -1,15 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle, Shield, Zap, Server } from "lucide-react";
+import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle, Shield, Zap, Server, RefreshCw, DatabaseIcon } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useSystemHealth } from "@/hooks/use-system-health";
 
 export default function ForgotPasswordPage() {
   useDocumentTitle("Forgot Password - OzVPS");
+
+  // Check system health (database connectivity)
+  const { isDatabaseDown, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
 
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -135,9 +139,33 @@ export default function ForgotPasswordPage() {
             </Link>
           </div>
 
+          {/* Database Unavailable Banner */}
+          {isDatabaseDown && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
+              <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
+              <p className="text-slate-400 mb-4">
+                {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => refetchHealth()}
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Check Again
+              </Button>
+            </div>
+          )}
+
           {/* Form Card */}
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
-            {submitted ? (
+          <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+            {isDatabaseDown ? (
+              <div className="text-center py-8">
+                <h1 className="text-2xl font-bold text-white mb-2">Password Reset Unavailable</h1>
+                <p className="text-slate-500">Please wait while we restore the service...</p>
+              </div>
+            ) : submitted ? (
               <div className="text-center py-4">
                 <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 className="h-10 w-10 text-emerald-500" />
@@ -223,7 +251,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           {/* Footer Links */}
-          {!submitted && (
+          {!isDatabaseDown && !submitted && (
             <div className="mt-8 text-center space-y-4">
               <p className="text-slate-400">
                 Remember your password?{' '}

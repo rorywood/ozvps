@@ -5,7 +5,7 @@ import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
-import { db } from "./db";
+import { db, checkDatabaseHealth } from "./db";
 import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
@@ -754,28 +754,56 @@ export async function registerRoutes(
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
-  // System health check (public)
+  // System health check (public) - checks database and VirtFusion connectivity
   app.get('/api/health', async (req, res) => {
     try {
+      // Check database connectivity first - this is critical
+      const dbHealth = await checkDatabaseHealth();
+      if (!dbHealth.connected) {
+        log(`Health check failed: Database unavailable - ${dbHealth.error}`, 'api');
+        return res.status(503).json({
+          status: 'error',
+          errorCode: 'DB_UNAVAILABLE',
+          message: 'System is temporarily unavailable. Please try again later.',
+          services: {
+            database: false,
+            virtfusion: null // unknown when DB is down
+          }
+        });
+      }
+
+      // Check VirtFusion connectivity
       const connectionStatus = await virtfusionClient.getConnectionStatus();
       if (!connectionStatus.connected) {
-        // Log the actual error type for admins
         log(`Health check failed: VirtFusion ${connectionStatus.errorType || 'unknown error'}`, 'api');
-
-        // Return generic error to users (don't expose license/config details)
         return res.status(503).json({
           status: 'error',
           errorCode: 'VF_API_UNAVAILABLE',
-          message: 'Server management system is temporarily unavailable. Please try again later.'
+          message: 'Server management system is temporarily unavailable. Please try again later.',
+          services: {
+            database: true,
+            virtfusion: false
+          }
         });
       }
-      res.json({ status: 'ok' });
+
+      res.json({
+        status: 'ok',
+        services: {
+          database: true,
+          virtfusion: true
+        }
+      });
     } catch (error: any) {
       log(`Health check error: ${error.message}`, 'api');
       res.status(503).json({
         status: 'error',
         errorCode: 'SYSTEM_ERROR',
-        message: 'System health check failed'
+        message: 'System health check failed',
+        services: {
+          database: null,
+          virtfusion: null
+        }
       });
     }
   });

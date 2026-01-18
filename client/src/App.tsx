@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DevBanner } from "@/components/dev-banner";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -35,12 +36,62 @@ import AdminServers from "@/admin/pages/AdminServers";
 import AdminBilling from "@/admin/pages/AdminBilling";
 import AdminTickets from "@/admin/pages/AdminTickets";
 import { api, setApiSessionErrorCallback } from "@/lib/api";
-import { Loader2 } from "lucide-react"; // Still used in AuthGuard
+import { Loader2, DatabaseIcon, RefreshCw } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
+import { useSystemHealth } from "@/hooks/use-system-health";
+import logo from "@/assets/logo.png";
+
+// Public routes that handle their own DB error UI
+const PUBLIC_AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing'];
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
-  // No longer blocking access - just render children
-  // Errors will show inline when users try to use features that require VirtFusion
+  const [location] = useLocation();
+  const { isDatabaseDown, refetch: refetchHealth, errorMessage } = useSystemHealth();
+
+  // Check if we're on a public auth route (they have their own error handling)
+  const isPublicAuthRoute = PUBLIC_AUTH_ROUTES.some(route => location.startsWith(route));
+
+  // If DB is down and we're NOT on a public auth route, show full-page error
+  if (isDatabaseDown && !isPublicAuthRoute) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+        <div className="max-w-md w-full text-center">
+          <img
+            src={logo}
+            alt="OzVPS"
+            className="h-16 w-auto mx-auto mb-8 brightness-0 invert"
+          />
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-red-500/30 rounded-2xl p-8 shadow-2xl">
+            <DatabaseIcon className="h-16 w-16 text-red-400 mx-auto mb-6" />
+            <h1 className="text-2xl font-bold text-white mb-3">System Temporarily Unavailable</h1>
+            <p className="text-slate-400 mb-6">
+              {errorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
+            </p>
+            <div className="space-y-3">
+              <Button
+                onClick={() => refetchHealth()}
+                className="w-full h-12 bg-primary hover:bg-primary/90"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Check Again
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = '/login'}
+                className="w-full h-12 border-slate-700"
+              >
+                Go to Login
+              </Button>
+            </div>
+          </div>
+          <p className="text-slate-600 text-sm mt-6">
+            If this issue persists, please contact support.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }
 

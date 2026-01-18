@@ -12,6 +12,21 @@ const pool = new pg.Pool({
 
 export const db = drizzle(pool, { schema });
 
+// Check if database is connected and responsive
+export async function checkDatabaseHealth(): Promise<{ connected: boolean; error?: string }> {
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('SELECT 1');
+      return { connected: true };
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    return { connected: false, error: error.message };
+  }
+}
+
 // Run automatic schema migrations on startup
 export async function runAutoMigrations(): Promise<void> {
   const client = await pool.connect();

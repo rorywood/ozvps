@@ -2,13 +2,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Shield, Zap, Server, XCircle, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Shield, Zap, Server, XCircle, ArrowLeft, RefreshCw, DatabaseIcon } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useSystemHealth } from "@/hooks/use-system-health";
 
 declare global {
   interface Window {
@@ -156,6 +157,10 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
 export default function RegisterPage() {
   useDocumentTitle('Create Account');
   const [, setLocation] = useLocation();
+
+  // Check system health (database connectivity)
+  const { isDatabaseDown, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -533,19 +538,42 @@ export default function RegisterPage() {
                 </Link>
               </div>
 
+              {/* Database Unavailable Banner */}
+              {isDatabaseDown && (
+                <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
+                  <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
+                  <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
+                  <p className="text-slate-400 mb-4">
+                    {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => refetchHealth()}
+                    className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Check Again
+                  </Button>
+                </div>
+              )}
+
               {/* Form Card */}
-              <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+              <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold text-white mb-2">
                     Create your account
                   </h1>
                   <p className="text-slate-400">
-                    Get started with OzVPS cloud servers
+                    {isDatabaseDown ? "Registration is temporarily unavailable" : "Get started with OzVPS cloud servers"}
                   </p>
                 </div>
 
-                {registrationEnabled === false ? (
+                {isDatabaseDown ? (
+                  <div className="text-center py-8 text-slate-500">
+                    Please wait while we restore the service...
+                  </div>
+                ) : registrationEnabled === false ? (
                   <div className="space-y-6">
                     <div className="flex flex-col items-center justify-center text-center p-6 rounded-xl bg-amber-500/10 border border-amber-500/20">
                       <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
@@ -760,7 +788,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Footer Links */}
-              {registrationEnabled !== false && (
+              {!isDatabaseDown && registrationEnabled !== false && (
                 <div className="mt-8 text-center space-y-4">
                   <p className="text-slate-400">
                     Already have an account?{' '}
