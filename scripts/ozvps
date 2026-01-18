@@ -12,7 +12,7 @@ set -e
 #    ozvps --help       # Show help
 # ============================================================================
 
-VERSION="4.0.0"
+VERSION="4.0.1"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 GITHUB_REPO="rorywood/ozvps"
@@ -53,8 +53,11 @@ self_update() {
 
     local TEMP_SCRIPT=$(mktemp)
 
-    # Use GitHub API to bypass CDN caching (API is not cached like raw.githubusercontent.com)
-    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${BRANCH}&t=$(date +%s)"
+    # Get latest commit SHA first - this bypasses all caching
+    local LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+
+    # Use commit SHA in API request to guarantee fresh content
+    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${LATEST_SHA:-$BRANCH}"
     local API_RESPONSE=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$API_URL" 2>/dev/null)
 
     if [[ -n "$API_RESPONSE" ]] && echo "$API_RESPONSE" | head -1 | grep -q "^#!/"; then
@@ -731,14 +734,18 @@ EOF
         warning "Create it with: echo 'claude/dev-l5488' | sudo tee $INSTALL_DIR/.ozvps-branch"
     fi
 
-    # Step 0: Check for script updates first
+    # Check for new commits first (we'll use this SHA for everything)
+    info "Checking for updates on $branch..."
+    local latest_commit=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${branch}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
+
+    # Step 0: Check for script updates using commit SHA
     info "Checking for control panel script updates..."
     local temp_script=$(mktemp)
     local self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
 
-    # Use GitHub API to bypass CDN caching
-    local api_url="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${branch}"
-    local api_response=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' "$api_url" 2>/dev/null)
+    # Use commit SHA in API request to guarantee fresh content
+    local api_url="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${latest_commit:-$branch}"
+    local api_response=$(curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$api_url" 2>/dev/null)
 
     if [[ -n "$api_response" ]] && echo "$api_response" | head -1 | grep -q "^#!/"; then
         echo "$api_response" > "$temp_script"
@@ -761,15 +768,11 @@ EOF
     fi
     rm -f "$temp_script" 2>/dev/null
 
-    # Check for new commits
-    info "Checking for application updates on $branch..."
-
+    # Check application version
     local current_commit=""
     if [[ -f "$INSTALL_DIR/.commit" ]]; then
         current_commit=$(cat "$INSTALL_DIR/.commit" 2>/dev/null || echo "")
     fi
-
-    local latest_commit=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${branch}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4 || echo "")
 
     if [[ -n "$latest_commit" && -n "$current_commit" && "$current_commit" == "$latest_commit" ]]; then
         success "Already on latest version (${latest_commit:0:7}) - will rebuild anyway"
