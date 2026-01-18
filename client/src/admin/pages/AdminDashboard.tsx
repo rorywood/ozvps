@@ -47,6 +47,7 @@ export default function AdminDashboard() {
     mutationFn: async (enabled: boolean) => {
       const response = await secureFetch('/api/admin/settings/registration', {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled }),
       });
       if (!response.ok) throw new Error('Failed to update registration setting');
