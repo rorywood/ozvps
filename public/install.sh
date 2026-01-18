@@ -50,7 +50,9 @@ TEMP_INSTALLER=$(mktemp)
 
 # Get latest commit SHA using refs API (more reliable)
 LATEST_SHA=""
-REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${BRANCH}" 2>/dev/null || true)
+# URL-encode slashes in branch name for API compatibility
+ENCODED_BRANCH=$(echo "${BRANCH}" | sed 's|/|%2F|g')
+REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
 if [[ -n "$REF_RESPONSE" ]]; then
     LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
 fi

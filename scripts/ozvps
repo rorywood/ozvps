@@ -54,8 +54,10 @@ self_update() {
     local TEMP_SCRIPT=$(mktemp)
 
     # Get latest commit SHA using refs API (more reliable)
+    # URL-encode slashes in branch name for API compatibility
+    local ENCODED_BRANCH=$(echo "$BRANCH" | sed 's|/|%2F|g')
     local LATEST_SHA=""
-    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${BRANCH}" 2>/dev/null || true)
+    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
     if [[ -n "$REF_RESPONSE" ]]; then
         LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
     fi
@@ -744,9 +746,11 @@ EOF
     fi
 
     # Check for new commits first using refs API (more reliable)
+    # URL-encode slashes in branch name for API compatibility
+    local encoded_branch=$(echo "$branch" | sed 's|/|%2F|g')
     info "Checking for updates on $branch..."
     local latest_commit=""
-    local ref_response=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${branch}" 2>/dev/null || true)
+    local ref_response=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${encoded_branch}" 2>/dev/null || true)
     if [[ -n "$ref_response" ]]; then
         latest_commit=$(echo "$ref_response" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
     fi

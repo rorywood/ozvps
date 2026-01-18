@@ -49,8 +49,10 @@ self_update() {
     echo -e "  ${DIM}Checking for installer updates...${NC}"
 
     # Get latest commit SHA using refs API (more reliable)
+    # URL-encode slashes in branch name for API compatibility
+    local ENCODED_BRANCH=$(echo "$UPDATE_BRANCH" | sed 's|/|%2F|g')
     local LATEST_SHA=""
-    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${UPDATE_BRANCH}" 2>/dev/null || true)
+    local REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
     if [[ -n "$REF_RESPONSE" ]]; then
         LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
     fi
@@ -185,6 +187,10 @@ UNATTENDED=false
 CONFIG_FILE=""
 SKIP_SELF_UPDATE=false
 FORCE_REINSTALL=false
+
+# Optional service variables (empty by default for set -u compatibility)
+SENTRY_DSN=""
+RESEND_API_KEY=""
 
 for arg in "$@"; do
     case $arg in
@@ -687,15 +693,17 @@ main() {
         rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
 
         # Method 1: Get commit SHA from refs API (more reliable)
+        # URL-encode slashes in branch name for API compatibility
+        ENCODED_BRANCH=$(echo "${GITHUB_BRANCH}" | sed 's|/|%2F|g')
         LATEST_SHA=""
-        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_BRANCH}" 2>/dev/null || true)
+        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
         if [[ -n "$REF_RESPONSE" ]]; then
             LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         fi
 
-        # Method 2: If refs API fails, try commits API
+        # Method 2: If refs API fails, try commits API (also needs encoding)
         if [[ -z "$LATEST_SHA" ]]; then
-            COMMIT_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null || true)
+            COMMIT_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${ENCODED_BRANCH}" 2>/dev/null || true)
             if [[ -n "$COMMIT_RESPONSE" ]]; then
                 LATEST_SHA=$(echo "$COMMIT_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{40\}"' | head -1 | cut -d'"' -f4)
             fi
@@ -1015,7 +1023,9 @@ EOF
         set -e
         # Get latest commit SHA using refs API
         CTRL_SHA=""
-        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_BRANCH}" 2>/dev/null || true)
+        # URL-encode slashes in branch name for API compatibility
+        ENCODED_BRANCH=$(echo "${GITHUB_BRANCH}" | sed 's|/|%2F|g')
+        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
         if [[ -n "$REF_RESPONSE" ]]; then
             CTRL_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         fi
@@ -1036,13 +1046,26 @@ EOF
     info "Waiting for application to start..."
     sleep 3
 
+    APP_STARTED=false
     for i in {1..30}; do
         if curl -s http://127.0.0.1:3000/api/health &>/dev/null; then
             success "Application is running"
+            APP_STARTED=true
             break
         fi
         sleep 1
     done
+
+    if [[ "$APP_STARTED" != "true" ]]; then
+        warn "Application did not respond to health check within 30 seconds"
+        warn "Check logs with: pm2 logs ozvps"
+        echo ""
+        info "The application may still be starting. Common issues:"
+        echo "  - Database connection problems"
+        echo "  - Missing environment variables"
+        echo "  - Port already in use"
+        echo ""
+    fi
 
     # ========================================================================
     # Installation Complete
