@@ -131,7 +131,7 @@ export default function Dashboard() {
         </div>
 
         {/* DO-Style Horizontal Server Rows */}
-        <PageSection title="Your Servers">
+        <PageSection title="Your Servers" className="mt-4">
           {isLoading ? (
             <div className="border border-border rounded-lg p-8 flex items-center justify-center">
               <div className="text-center text-muted-foreground">
