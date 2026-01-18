@@ -63,13 +63,13 @@ export default function ForgotPasswordPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto cursor-pointer brightness-0 invert"
+                className="h-16 w-auto cursor-pointer brightness-0 invert"
               />
             </Link>
           </div>
 
           {/* Main Content */}
-          <div className="space-y-12">
+          <div className="space-y-14">
             <div>
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
                 Secure Account<br />
@@ -81,7 +81,7 @@ export default function ForgotPasswordPage() {
             </div>
 
             {/* Features */}
-            <div className="grid gap-8">
+            <div className="grid gap-7">
               <div className="flex items-center gap-4 group">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 transition-colors">
                   <Zap className="h-6 w-6 text-primary" />
