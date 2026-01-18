@@ -293,46 +293,29 @@ class Auth0Client {
   }
 
   async updateUser(auth0UserId: string, data: { email_verified?: boolean; name?: string }): Promise<boolean> {
-    log(`========== AUTH0 UPDATE USER START ==========`, 'auth0');
-    log(`User ID: "${auth0UserId}"`, 'auth0');
-    log(`Data to update: ${JSON.stringify(data)}`, 'auth0');
-
     try {
-      log(`Getting management token...`, 'auth0');
       const managementToken = await this.getManagementToken();
-      log(`Management token obtained (length: ${managementToken.length})`, 'auth0');
 
-      const url = `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`;
-      log(`Making PATCH request to: ${url}`, 'auth0');
-
-      const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${managementToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      log(`Response status: ${response.status} ${response.statusText}`, 'auth0');
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        }
+      );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        log(`ERROR: Auth0 API returned error`, 'auth0');
-        log(`Error response body: ${errorText}`, 'auth0');
-        log(`========== AUTH0 UPDATE USER END (FAILED) ==========`, 'auth0');
-        throw new Error(`Auth0 API error: ${response.status} - ${errorText}`);
+        log(`Failed to update Auth0 user: ${response.status}`, 'auth0');
+        return false;
       }
 
-      const responseBody = await response.text();
-      log(`SUCCESS: Auth0 user updated`, 'auth0');
-      log(`Response body: ${responseBody}`, 'auth0');
-      log(`========== AUTH0 UPDATE USER END ==========`, 'auth0');
       return true;
     } catch (error: any) {
-      log(`EXCEPTION in updateUser: ${error.message}`, 'auth0');
-      log(`Stack trace: ${error.stack}`, 'auth0');
-      log(`========== AUTH0 UPDATE USER END (EXCEPTION) ==========`, 'auth0');
+      log(`Auth0 update user error: ${error.message}`, 'auth0');
       throw error;
     }
   }

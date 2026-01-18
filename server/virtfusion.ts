@@ -518,13 +518,7 @@ export class VirtFusionClient {
 
     // Fetch with remoteState=true to get live power status from hypervisor
     const response = await this.request<{ data: VirtFusionServerResponse & { remoteState?: { running?: boolean; state?: string } } }>(`/servers/${serverId}?remoteState=true`);
-
-    // DEBUG: Log what VirtFusion returns for the server endpoint
-    log(`[DEBUG] getServer raw data for ${serverId}: commissionStatus=${response.data.commissionStatus}, state=${response.data.state}, status=${response.data.status}`, 'virtfusion');
-
     const server = this.transformServer(response.data);
-
-    log(`[DEBUG] After transformServer for ${serverId}: needsSetup=${server.needsSetup}, status=${server.status}`, 'virtfusion');
 
     // Cache the result
     apiCache.set(cacheKey, server);
@@ -840,15 +834,6 @@ export class VirtFusionClient {
     try {
       const response = await this.request<{ data: any }>(`/servers/${serverId}`);
       const server = response.data;
-
-      // DEBUG: Log raw server response to see what VirtFusion actually returns
-      log(`[DEBUG] Raw VirtFusion server data for ${serverId}: ${JSON.stringify({
-        state: server.state,
-        buildFailed: server.buildFailed,
-        commissioned: server.commissioned,
-        commissionStatus: server.commissionStatus,
-        status: server.status,
-      })}`, 'virtfusion');
 
       // Extract the raw build state information
       const state = server.state || '';
@@ -1834,9 +1819,6 @@ export class VirtFusionClient {
     try {
       log(`Fetching OS templates for package ${packageId}`, 'virtfusion');
       const data = await this.request<{ data: any }>(`/media/templates/fromServerPackageSpec/${packageId}`);
-
-      // DEBUG: Log the full response structure
-      log(`[VIRTFUSION TEMPLATES] Raw response for package ${packageId}: ${JSON.stringify(data.data)}`, 'virtfusion');
 
       return data.data;
     } catch (error) {
