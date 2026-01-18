@@ -802,8 +802,18 @@ EOF
     local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
     local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
 
-    # Add cache-busting timestamp to avoid GitHub CDN serving stale ZIP
-    if ! curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)" -o "$temp_zip"; then
+    # Use GitHub API with commit SHA to bypass CDN caching
+    # API endpoint returns fresh content for specific commits
+    local download_url=""
+    if [[ -n "$latest_commit" ]]; then
+        # Use commit-specific URL - not cached
+        download_url="https://api.github.com/repos/${GITHUB_REPO}/zipball/${latest_commit}"
+    else
+        # Fallback to branch with cache-busting
+        download_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip?t=$(date +%s)"
+    fi
+
+    if ! curl -fsSL -H 'Cache-Control: no-cache' -H 'Accept: application/vnd.github+json' -L "$download_url" -o "$temp_zip"; then
         error "Failed to download"
         return
     fi
@@ -815,7 +825,8 @@ EOF
 
     rm -rf "$temp_extract" && mkdir -p "$temp_extract"
     unzip -q "$temp_zip" -d "$temp_extract"
-    local extracted_dir=$(find "$temp_extract" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
+    # Find extracted directory - handles both branch archives (ozvps-branch) and API zipball (owner-repo-sha)
+    local extracted_dir=$(find "$temp_extract" -mindepth 1 -maxdepth 1 -type d | head -1)
 
     cp -r "${extracted_dir}"/* "$INSTALL_DIR/"
     cp -r "${extracted_dir}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
