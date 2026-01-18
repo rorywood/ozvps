@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+# IMPORTANT: Start in a known good directory to avoid getcwd errors
+# This fixes issues when running from a deleted directory
+cd /tmp 2>/dev/null || cd /
+
 # ============================================================================
 #  OzVPS Control Panel
-#  Version: 4.0.1
+#  Version: 4.1.0
 #
 #  Usage:
 #    ozvps              # Opens kiosk menu

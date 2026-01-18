@@ -4,6 +4,9 @@
 
 set -e
 
+# IMPORTANT: Start in a known good directory to avoid getcwd errors
+cd /tmp 2>/dev/null || cd /
+
 INSTALL_DIR="/opt/ozvps-panel"
 REPO_URL="https://github.com/rorywood/ozvps.git"
 
