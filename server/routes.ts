@@ -3145,12 +3145,8 @@ export async function registerRoutes(
   });
 
   // Admin: Search users by email
-  app.get('/api/admin/users/search', authMiddleware, async (req, res) => {
+  app.get('/api/admin/users/search', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const email = (req.query.email as string || '').trim().toLowerCase();
       if (!email || email.length < 3) {
         return res.status(400).json({ error: 'Email search query required (min 3 characters)' });
@@ -3196,12 +3192,8 @@ export async function registerRoutes(
   });
 
   // Admin: Get user transactions
-  app.get('/api/admin/users/:auth0UserId/transactions', authMiddleware, async (req, res) => {
+  app.get('/api/admin/users/:auth0UserId/transactions', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const { auth0UserId } = req.params;
       const transactions = await dbStorage.getWalletTransactions(auth0UserId, 100);
       res.json({ transactions });
@@ -3218,12 +3210,8 @@ export async function registerRoutes(
     oldExtRelationId: z.string().min(1, 'Old extRelationId is required'),
   });
 
-  app.post('/api/admin/link-virtfusion', authMiddleware, async (req, res) => {
+  app.post('/api/admin/link-virtfusion', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const result = linkVirtfusionSchema.safeParse(req.body);
       if (!result.success) {
         const errorMessages = result.error.errors.map(e => e.message).join(', ');
@@ -3284,11 +3272,8 @@ export async function registerRoutes(
   });
 
   // Admin: Get VirtFusion hypervisor groups (for debugging)
-  app.get('/api/admin/hypervisor-groups', authMiddleware, async (req, res) => {
+  app.get('/api/admin/hypervisor-groups', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
       const groups = await virtfusionClient.getHypervisorGroups();
       log(`Admin fetched hypervisor groups: ${JSON.stringify(groups)}`, 'admin');
       res.json({ groups });
@@ -3303,17 +3288,12 @@ export async function registerRoutes(
     auth0UserId: z.string().min(1, 'Auth0 user ID is required'),
   });
 
-  app.post('/api/admin/verify-email', authMiddleware, async (req, res) => {
+  app.post('/api/admin/verify-email', authMiddleware, requireAdmin, async (req, res) => {
     log(`========== ADMIN VERIFY EMAIL START ==========`, 'admin');
     log(`Request body: ${JSON.stringify(req.body)}`, 'admin');
     log(`User session: ${JSON.stringify({ email: req.userSession?.email, isAdmin: req.userSession?.isAdmin })}`, 'admin');
 
     try {
-      if (!req.userSession?.isAdmin) {
-        log(`REJECTED: User ${req.userSession?.email} is not admin`, 'admin');
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const result = verifyEmailSchema.safeParse(req.body);
       if (!result.success) {
         const errorMessages = result.error.errors.map(e => e.message).join(', ');
@@ -3412,12 +3392,8 @@ export async function registerRoutes(
   });
 
   // Admin: Get full reCAPTCHA settings (includes secret key status)
-  app.get('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+  app.get('/api/admin/security/recaptcha', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const settings = await dbStorage.getRecaptchaSettingsAsync();
       res.json({
         enabled: settings.enabled,
@@ -3433,12 +3409,8 @@ export async function registerRoutes(
   });
 
   // Admin: Update reCAPTCHA settings
-  app.post('/api/admin/security/recaptcha', authMiddleware, async (req, res) => {
+  app.post('/api/admin/security/recaptcha', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const schema = z.object({
         siteKey: z.string().min(1, 'Site key is required'),
         secretKey: z.string().optional(), // Optional - keep existing if not provided
@@ -3488,12 +3460,8 @@ export async function registerRoutes(
   });
 
   // Admin: Test reCAPTCHA configuration
-  app.post('/api/admin/security/recaptcha/test', authMiddleware, async (req, res) => {
+  app.post('/api/admin/security/recaptcha/test', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const schema = z.object({
         siteKey: z.string().min(1),
         secretKey: z.string().min(1),
@@ -5861,12 +5829,8 @@ export async function registerRoutes(
   // ==========================================
 
   // Get admin ticket counts (for notification badge)
-  app.get('/api/admin/tickets/counts', authMiddleware, async (req, res) => {
+  app.get('/api/admin/tickets/counts', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const counts = await dbStorage.getAdminTicketCounts();
       res.json(counts);
     } catch (error: any) {
@@ -5876,12 +5840,8 @@ export async function registerRoutes(
   });
 
   // List all tickets (admin)
-  app.get('/api/admin/tickets', authMiddleware, async (req, res) => {
+  app.get('/api/admin/tickets', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       // Parse query params
       let status: TicketStatus | TicketStatus[] | undefined;
       const statusParam = req.query.status as string | undefined;
@@ -5924,12 +5884,8 @@ export async function registerRoutes(
   });
 
   // Get a specific ticket with messages (admin)
-  app.get('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+  app.get('/api/admin/tickets/:id', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const ticketId = parseInt(req.params.id, 10);
       if (isNaN(ticketId)) {
         return res.status(400).json({ error: 'Invalid ticket ID' });
@@ -5963,12 +5919,8 @@ export async function registerRoutes(
   });
 
   // Reply to a ticket (admin) with optional status change
-  app.post('/api/admin/tickets/:id/messages', authMiddleware, async (req, res) => {
+  app.post('/api/admin/tickets/:id/messages', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const auth0UserId = req.userSession!.auth0UserId;
       if (!auth0UserId) {
         return res.status(400).json({ error: 'No Auth0 user ID in session' });
@@ -6012,12 +5964,8 @@ export async function registerRoutes(
   });
 
   // Update ticket metadata (admin)
-  app.patch('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+  app.patch('/api/admin/tickets/:id', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const ticketId = parseInt(req.params.id, 10);
       if (isNaN(ticketId)) {
         return res.status(400).json({ error: 'Invalid ticket ID' });
@@ -6064,12 +6012,8 @@ export async function registerRoutes(
   });
 
   // Close a ticket (admin)
-  app.post('/api/admin/tickets/:id/close', authMiddleware, async (req, res) => {
+  app.post('/api/admin/tickets/:id/close', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const ticketId = parseInt(req.params.id, 10);
       if (isNaN(ticketId)) {
         return res.status(400).json({ error: 'Invalid ticket ID' });
@@ -6090,12 +6034,8 @@ export async function registerRoutes(
   });
 
   // Reopen a ticket (admin)
-  app.post('/api/admin/tickets/:id/reopen', authMiddleware, async (req, res) => {
+  app.post('/api/admin/tickets/:id/reopen', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const ticketId = parseInt(req.params.id, 10);
       if (isNaN(ticketId)) {
         return res.status(400).json({ error: 'Invalid ticket ID' });
@@ -6116,12 +6056,8 @@ export async function registerRoutes(
   });
 
   // Delete a ticket (admin)
-  app.delete('/api/admin/tickets/:id', authMiddleware, async (req, res) => {
+  app.delete('/api/admin/tickets/:id', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const ticketId = parseInt(req.params.id, 10);
       if (isNaN(ticketId)) {
         return res.status(400).json({ error: 'Invalid ticket ID' });
