@@ -432,7 +432,7 @@ export default function LoginPage() {
             </div>
 
             {!requires2FA ? (
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Session Message */}
                 {sessionMessage && (
                   <div className="flex items-start gap-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
@@ -531,7 +531,7 @@ export default function LoginPage() {
                 </div>
 
                 {/* Submit Button & Forgot Password */}
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3">
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
