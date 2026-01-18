@@ -908,7 +908,7 @@ export default function BillingPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-10">
             {/* Payment Feedback Message */}
             {paymentFeedback && (
               <div
@@ -944,22 +944,22 @@ export default function BillingPage() {
             )}
 
             {/* Wallet Balance Card - Clean Modern Design */}
-            <div className="border border-border rounded-xl p-6 bg-gradient-to-br from-card to-card/80" data-testid="wallet-section">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Wallet className="h-6 w-6 text-primary" />
+            <div className="border border-border rounded-xl p-8 bg-gradient-to-br from-card to-card/80" data-testid="wallet-section">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+                <div className="flex items-center gap-5">
+                  <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Wallet className="h-7 w-7 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-0.5">Available Balance</p>
+                    <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
                     {loadingWallet ? (
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     ) : (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-bold text-foreground tracking-tight" data-testid="text-balance">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold text-foreground tracking-tight" data-testid="text-balance">
                           {formatCurrency(wallet?.balanceCents || 0)}
                         </span>
-                        <span className="text-sm font-medium text-muted-foreground">AUD</span>
+                        <span className="text-base font-medium text-muted-foreground">AUD</span>
                       </div>
                     )}
                   </div>
@@ -1060,7 +1060,7 @@ export default function BillingPage() {
               </div>
 
               {wallet?.stripeCustomerId && (
-                <div className="pt-6 mt-6 border-t border-border">
+                <div className="pt-8 mt-8 border-t border-border">
                   <div className="flex items-center justify-between">
                     <span className="text-xs uppercase text-muted-foreground tracking-wide">Stripe Customer ID</span>
                     <div className="flex items-center gap-2">
@@ -1105,7 +1105,7 @@ export default function BillingPage() {
             </div>
 
             {/* Tabbed Content - DO Style Underlined Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
               <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start w-full">
                 <TabsTrigger
                   value="overview"
@@ -1145,7 +1145,7 @@ export default function BillingPage() {
               </TabsList>
 
               {/* Overview Tab */}
-              <TabsContent value="overview" className="space-y-6 mt-6">
+              <TabsContent value="overview" className="space-y-6 mt-8">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground mb-4">Payment Methods</h2>
 
@@ -1304,7 +1304,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Server Charges Tab */}
-              <TabsContent value="servers" className="space-y-6 mt-6">
+              <TabsContent value="servers" className="space-y-6 mt-8"
                 {loadingUpcomingCharges ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1404,7 +1404,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Transactions Tab */}
-              <TabsContent value="transactions" className="space-y-6 mt-6">
+              <TabsContent value="transactions" className="space-y-6 mt-8"
                 <div data-testid="transactions-section">
                   <h2 className="text-lg font-semibold text-foreground mb-4">Transaction History</h2>
 
@@ -1525,7 +1525,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Invoices Tab */}
-              <TabsContent value="invoices" className="space-y-6 mt-6">
+              <TabsContent value="invoices" className="space-y-6 mt-8"
                 <div data-testid="invoices-section">
                   <h2 className="text-lg font-semibold text-foreground mb-4">Invoices</h2>
 
@@ -1620,7 +1620,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Settings Tab */}
-              <TabsContent value="settings" className="space-y-6 mt-6">
+              <TabsContent value="settings" className="space-y-6 mt-8"
                 <div>
                   <h2 className="text-xl font-semibold text-foreground mb-4">Billing Settings</h2>
                   <AutoTopupSection paymentMethods={paymentMethods} />
