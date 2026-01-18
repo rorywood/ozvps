@@ -3003,7 +3003,7 @@ export async function registerRoutes(
       const health = WebhookHandlers.getHealth();
 
       // Also get the configured webhook URL from environment
-      const domains = process.env.REPLIT_DOMAINS?.split(',');
+      const domains = process.env.APP_DOMAIN?.split(',');
       const configuredUrl = domains?.[0] ? `https://${domains[0]}/api/stripe/webhook` : 'Not configured';
 
       res.json({
@@ -4334,7 +4334,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get Stripe configuration status (check Replit connector)
+  // Get Stripe configuration status
   app.get('/api/billing/stripe/status', async (req, res) => {
     try {
       const publishableKey = await getStripePublishableKey();
@@ -4793,7 +4793,7 @@ export async function registerRoutes(
       }
 
       // Create portal session
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN?.split(',')[0] || req.headers.host}`;
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
         return_url: `${baseUrl}/account`,
@@ -4875,7 +4875,7 @@ export async function registerRoutes(
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN?.split(',')[0] || req.headers.host}`;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,

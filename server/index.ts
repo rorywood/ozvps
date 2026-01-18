@@ -328,7 +328,7 @@ app.use((req, res, next) => {
       const stripeSync = await getStripeSync();
 
       log('Setting up managed webhook...', 'stripe');
-      const domains = process.env.REPLIT_DOMAINS?.split(',');
+      const domains = process.env.APP_DOMAIN?.split(',');
       if (domains && domains[0]) {
         const webhookBaseUrl = `https://${domains[0]}`;
         const result = await stripeSync.findOrCreateManagedWebhook(
@@ -336,7 +336,7 @@ app.use((req, res, next) => {
         );
         log(`Webhook configured: ${result?.webhook?.url || 'managed'}`, 'stripe');
       } else {
-        log('No REPLIT_DOMAINS set, skipping webhook setup', 'stripe');
+        log('No APP_DOMAIN set, skipping webhook setup', 'stripe');
       }
 
       // Sync Stripe data in background

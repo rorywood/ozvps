@@ -863,7 +863,7 @@ EOF
     npx drizzle-kit push --force 2>/dev/null || true
     success "Migrations applied"
 
-    # Step 6.5: Auto-configure REPLIT_DOMAINS for Stripe webhooks
+    # Step 6.5: Auto-configure APP_DOMAIN for Stripe webhooks
     info "Configuring domain for webhooks..."
     local domain=""
 
@@ -878,18 +878,18 @@ EOF
     fi
 
     if [[ -n "$domain" && "$domain" != "localhost" ]]; then
-        # Check if REPLIT_DOMAINS already exists in .env
-        if grep -q "^REPLIT_DOMAINS=" "$INSTALL_DIR/.env" 2>/dev/null; then
+        # Check if APP_DOMAIN already exists in .env
+        if grep -q "^APP_DOMAIN=" "$INSTALL_DIR/.env" 2>/dev/null; then
             # Update existing
-            sed -i "s|^REPLIT_DOMAINS=.*|REPLIT_DOMAINS=$domain|" "$INSTALL_DIR/.env"
+            sed -i "s|^APP_DOMAIN=.*|APP_DOMAIN=$domain|" "$INSTALL_DIR/.env"
         else
             # Add new
-            echo "REPLIT_DOMAINS=$domain" >> "$INSTALL_DIR/.env"
+            echo "APP_DOMAIN=$domain" >> "$INSTALL_DIR/.env"
         fi
         success "Webhook domain set to: $domain"
     else
         warning "Could not auto-detect domain for webhooks"
-        warning "Manually add REPLIT_DOMAINS=yourdomain.com to .env"
+        warning "Manually add APP_DOMAIN=yourdomain.com to .env"
     fi
 
     # Step 7: Update NGINX error pages

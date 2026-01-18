@@ -89,17 +89,15 @@ export function registerInstallAssets(app: Express) {
       const scriptPath = path.join(process.cwd(), 'public', 'install.sh');
       let script = await fs.readFile(scriptPath, 'utf8');
 
-      const replitUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : process.env.REPL_SLUG && process.env.REPL_OWNER
-          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-          : `https://${req.get('host')}`;
+      const baseUrl = process.env.APP_DOMAIN
+        ? `https://${process.env.APP_DOMAIN}`
+        : `https://${req.get('host')}`;
 
       const virtfusionUrl = process.env.VIRTFUSION_PANEL_URL || '';
 
       script = script.replace(
         'DOWNLOAD_URL="${OZVPS_DOWNLOAD_URL:-}"',
-        `DOWNLOAD_URL="${replitUrl}/download.tar.gz"`
+        `DOWNLOAD_URL="${baseUrl}/download.tar.gz"`
       );
       script = script.replace(
         'PRECONFIGURED_VIRTFUSION_URL=""',
