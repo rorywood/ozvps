@@ -347,7 +347,7 @@ export default function LoginPage() {
                 <span className="text-primary">Cloud Servers</span>
               </h1>
               <p className="text-xl text-slate-400 leading-relaxed max-w-md">
-                Deploy high-performance virtual servers with Australian data centers and round-the-clock expert support.
+                Deploy powerful virtual servers with Australian data centers and 24/7 expert support.
               </p>
             </div>
 
