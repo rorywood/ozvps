@@ -825,17 +825,17 @@ EOF
     local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
     local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
 
-    # Use codeload.github.com with commit SHA to bypass CDN caching
+    # Use github.com/archive with commit SHA to bypass CDN caching
     local download_url=""
     if [[ -n "$latest_commit" && ${#latest_commit} -eq 40 ]]; then
-        # Use commit-specific URL via codeload (not cached)
-        download_url="https://codeload.github.com/${GITHUB_REPO}/zip/${latest_commit}"
+        # Use github.com/archive which properly redirects with SHA (bypasses CDN)
+        download_url="https://github.com/${GITHUB_REPO}/archive/${latest_commit}.zip"
     else
-        # Fallback to branch with cache-busting
-        download_url="https://codeload.github.com/${GITHUB_REPO}/zip/refs/heads/${branch}?$(date +%s)"
+        # Fallback to branch
+        download_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip"
     fi
 
-    if ! curl -fsSL "$download_url" -o "$temp_zip"; then
+    if ! curl -fsSL -L "$download_url" -o "$temp_zip"; then
         error "Failed to download"
         return
     fi

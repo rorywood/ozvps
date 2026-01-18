@@ -764,16 +764,18 @@ main() {
         # Download using commit SHA (bypasses all caching)
         DOWNLOAD_SUCCESS=false
         if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
-            # Use codeload which doesn't have CDN caching issues
-            if curl -fsSL "https://codeload.github.com/${GITHUB_REPO}/zip/${LATEST_SHA}" -o "$TEMP_ZIP" 2>/dev/null; then
+            # Use github.com/archive which properly redirects to codeload with SHA
+            # This is the ONLY reliable way to bypass GitHub CDN caching
+            echo "Downloading commit ${LATEST_SHA}..." >> "$LOG_FILE"
+            if curl -fsSL -L "https://github.com/${GITHUB_REPO}/archive/${LATEST_SHA}.zip" -o "$TEMP_ZIP" 2>/dev/null; then
                 DOWNLOAD_SUCCESS=true
             fi
         fi
 
-        # Fallback: Direct branch download with cache-busting timestamp
+        # Fallback: Direct branch download (may be cached)
         if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
-            echo "Falling back to branch download..." >> "$LOG_FILE"
-            curl -fsSL "https://codeload.github.com/${GITHUB_REPO}/zip/refs/heads/${GITHUB_BRANCH}?$(date +%s)" -o "$TEMP_ZIP"
+            echo "SHA download failed, falling back to branch download..." >> "$LOG_FILE"
+            curl -fsSL -L "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
         fi
 
         # Verify ZIP file
