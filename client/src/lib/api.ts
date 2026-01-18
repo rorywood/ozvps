@@ -49,6 +49,14 @@ export async function secureFetch(url: string, options: RequestInit = {}): Promi
     }
   }
 
+  // Auto-add Content-Type: application/json when body is a string (JSON.stringify result)
+  if (options.body && typeof options.body === 'string') {
+    options.headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+  }
+
   const response = await fetch(url, options);
 
   // Handle 401 errors - trigger session error callback to redirect to login

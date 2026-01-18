@@ -54,6 +54,7 @@ export default function AdminUsers() {
     mutationFn: async (data: { auth0UserId: string; amountCents: number; reason: string }) => {
       const response = await secureFetch('/api/admin/wallet/adjust', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (!response.ok) {

@@ -88,6 +88,7 @@ export default function AdminBilling() {
     mutationFn: async ({ id, updates }: { id: number; updates: { nextBillAt?: string; status?: string; suspendAt?: string | null } }) => {
       const response = await secureFetch(`/api/admin/billing/records/${id}`, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
       if (!response.ok) throw new Error('Failed to update billing record');

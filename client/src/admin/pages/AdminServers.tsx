@@ -72,6 +72,7 @@ export default function AdminServers() {
 
       const res = await secureFetch(url, {
         method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
