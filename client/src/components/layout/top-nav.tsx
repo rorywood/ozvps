@@ -271,7 +271,7 @@ function DesktopNav() {
         <div className="flex items-center justify-between h-24">
           <div className="flex items-center gap-8">
             <Link href="/dashboard">
-              <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo" />
+              <img src={logo} alt="OzVPS" className="h-16 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo" />
             </Link>
             
             <nav className="flex items-center gap-1">
@@ -436,7 +436,7 @@ function MobileNav() {
     )}>
       <div className="flex items-center justify-between p-4">
         <Link href="/dashboard">
-          <img src={logo} alt="OzVPS" className="h-12 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo-mobile" />
+          <img src={logo} alt="OzVPS" className="h-14 w-auto cursor-pointer dark:invert-0 invert" data-testid="img-logo-mobile" />
         </Link>
         
         <div className="flex items-center gap-3">

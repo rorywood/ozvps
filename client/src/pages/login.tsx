@@ -224,10 +224,17 @@ export default function LoginPage() {
     onError: (err: any) => {
       setIsSubmitting(false);
       const errorMessage = err.message || "Invalid email or password";
-      // Always show the error message - don't suggest "create account" on login failure
-      // (server returns same error for wrong password AND email not found for security)
-      setShowUserNotFound(false);
-      setError(errorMessage);
+      const errorCode = err.code;
+
+      // Only show "create account" suggestion if email doesn't exist (not for wrong password)
+      if (errorCode === 'EMAIL_NOT_FOUND') {
+        setShowUserNotFound(true);
+        setError(""); // Don't show error message when showing signup suggestion
+      } else {
+        setShowUserNotFound(false);
+        setError(errorMessage);
+      }
+
       setRecaptchaToken(null);
       setTwoFAToken("");
       if (widgetIdRef.current !== null && window.grecaptcha?.reset) {

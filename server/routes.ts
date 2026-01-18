@@ -1242,7 +1242,6 @@ export async function registerRoutes(
       }
 
       // Authenticate with Auth0
-      // SECURITY: Do NOT check if user exists separately - this enables email enumeration attacks
       const auth0Result = await auth0Client.authenticateUser(email, password);
       if (!auth0Result.success || !auth0Result.user) {
         // Only record failed login if it's an authentication failure, not a connection error
@@ -1257,10 +1256,27 @@ export async function registerRoutes(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        // SECURITY: Return generic error message to prevent email enumeration
-        // Do NOT reveal whether the email exists or if the password was wrong
+        // Check if email exists in Auth0 to provide better UX
+        // Only check if auth failed (not connection error) to avoid extra API calls
+        if (!auth0Result.isConnectionError) {
+          try {
+            const existingUser = await auth0Client.getUserByEmail(email);
+            if (!existingUser) {
+              // Email doesn't exist - suggest creating account
+              return res.status(401).json({
+                error: 'No account found with this email address',
+                code: 'EMAIL_NOT_FOUND'
+              });
+            }
+          } catch (lookupError) {
+            // If lookup fails, fall through to generic error
+            log(`Email lookup failed during login: ${(lookupError as Error).message}`, 'auth0');
+          }
+        }
+
+        // Email exists but password is wrong (or lookup failed) - generic error
         return res.status(401).json({
-          error: 'Invalid email or password',
+          error: auth0Result.error || 'Invalid email or password',
           code: 'INVALID_CREDENTIALS'
         });
       }

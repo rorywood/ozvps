@@ -424,7 +424,7 @@ export default function DeployPage() {
                         Service Plans Unavailable
                       </h3>
                       <p className="text-muted-foreground mb-4 leading-relaxed">
-                        All service plans are currently unavailable due to capacity constraints. New deployments are temporarily suspended while infrastructure expansion is underway. Existing services remain fully operational. Availability will resume once additional resources are provisioned.
+                        New service plans are temporarily unavailable as we expand capacity to meet demand. Existing deployments remain fully operational and unaffected. We appreciate your patience and will update this page when availability resumes.
                       </p>
                       <Link href="/support">
                         <Button variant="outline" className="border-warning/50 text-warning hover:bg-warning/20">

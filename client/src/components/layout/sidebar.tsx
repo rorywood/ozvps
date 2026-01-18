@@ -285,7 +285,7 @@ export function MobileHeader() {
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-panel border-b border-border">
       <div className="flex items-center justify-between p-4">
-        <img src={logo} alt="OzVPS" className="h-12 w-auto dark:invert-0 invert" data-testid="img-logo-mobile" />
+        <img src={logo} alt="OzVPS" className="h-14 w-auto dark:invert-0 invert" data-testid="img-logo-mobile" />
         <div className="flex items-center gap-3">
           <MobileBalanceDisplay />
           <Sheet open={open} onOpenChange={setOpen}>
