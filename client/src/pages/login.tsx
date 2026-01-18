@@ -432,7 +432,7 @@ export default function LoginPage() {
             </div>
 
             {!requires2FA ? (
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Session Message */}
                 {sessionMessage && (
                   <div className="flex items-start gap-3 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
@@ -531,7 +531,7 @@ export default function LoginPage() {
                 </div>
 
                 {/* Submit Button & Forgot Password */}
-                <div className="space-y-3">
+                <div className="space-y-3 pt-2">
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
@@ -574,7 +574,7 @@ export default function LoginPage() {
               </form>
             ) : (
               /* 2FA Form */
-              <form onSubmit={handle2FASubmit} className="space-y-5">
+              <form onSubmit={handle2FASubmit} className="space-y-6">
                 {/* 2FA Info */}
                 <div className="flex items-start gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                   <Smartphone className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
