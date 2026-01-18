@@ -16,12 +16,15 @@ export function DevBanner() {
   const version = import.meta.env.VITE_APP_VERSION || "1.0.0-dev";
   const buildDate = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
 
-  // Show banner if:
-  // 1. Version contains "-dev"
-  // 2. OR hostname contains "dev"
-  // 3. OR running in dev mode
-  const isDev = version.includes("-dev") ||
-                (typeof window !== "undefined" && window.location.hostname.includes("dev")) ||
+  // Show banner ONLY if:
+  // 1. Hostname contains "dev" (dev.ozvps.com.au)
+  // 2. OR running on localhost (local development)
+  // 3. OR Vite is in development mode
+  // NOTE: Do NOT check version string - prod/main branch may have -dev suffix in package.json
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isDev = hostname.includes("dev") ||
+                hostname === "localhost" ||
+                hostname === "127.0.0.1" ||
                 import.meta.env.MODE === "development" ||
                 import.meta.env.DEV;
 
