@@ -186,21 +186,10 @@ const publicEndpointLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-// Rate limiting for session check endpoints (prevents rapid refresh abuse)
-const sessionCheckLimiter = rateLimit({
-  windowMs: 10 * 1000, // 10 seconds
-  max: 30, // 30 requests per 10 seconds - very lenient, only catches aggressive refresh spam
-  message: { error: 'Slow down! You are refreshing too fast. Please wait a moment.', code: 'RATE_LIMITED', blockSeconds: 5 },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
-});
 
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api/auth/session', sessionCheckLimiter);
-app.use('/api/auth/me', sessionCheckLimiter);
 app.use('/api/wallet/topup', walletLimiter);
 // Public endpoints that don't require auth still need rate limiting
 app.use('/api/plans', publicEndpointLimiter);
