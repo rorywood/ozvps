@@ -138,6 +138,11 @@ else
     fi
 fi
 
+# IMPORTANT: Re-enter the install directory with a fresh reference
+# This fixes "getcwd: cannot access parent directories" error after rm/clone
+cd /opt
+cd "$INSTALL_DIR" || { echo -e "${RED}Failed to enter $INSTALL_DIR${NC}"; exit 1; }
+
 # Save environment marker
 echo "$ENV" > .ozvps-env
 echo "$BRANCH" > .ozvps-branch
