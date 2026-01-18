@@ -328,9 +328,9 @@ app.use((req, res, next) => {
       const stripeSync = await getStripeSync();
 
       log('Setting up managed webhook...', 'stripe');
-      const domains = process.env.APP_DOMAIN?.split(',');
-      if (domains && domains[0]) {
-        const webhookBaseUrl = `https://${domains[0]}`;
+      const appDomain = process.env.APP_DOMAIN;
+      if (appDomain) {
+        const webhookBaseUrl = `https://${appDomain}`;
         const result = await stripeSync.findOrCreateManagedWebhook(
           `${webhookBaseUrl}/api/stripe/webhook`
         );

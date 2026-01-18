@@ -51,6 +51,8 @@ self_update() {
         [[ -z "$BRANCH" ]] && BRANCH="main"
     fi
 
+    echo -e "  ${DIM}Checking for script updates (${BRANCH})...${NC}"
+
     local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/ozvps"
     local TEMP_SCRIPT=$(mktemp)
 
@@ -65,8 +67,14 @@ self_update() {
                 chmod +x "$SELF_PATH"
                 rm -f "$TEMP_SCRIPT"
                 exec "$SELF_PATH" --no-self-update "${SCRIPT_ARGS[@]}"
+            else
+                echo -e "  ${GREEN}✓${NC} Script is up to date"
             fi
+        else
+            echo -e "  ${YELLOW}⚠${NC} Could not verify downloaded script"
         fi
+    else
+        echo -e "  ${YELLOW}⚠${NC} Could not check for script updates"
     fi
 
     rm -f "$TEMP_SCRIPT" 2>/dev/null

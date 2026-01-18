@@ -3003,8 +3003,8 @@ export async function registerRoutes(
       const health = WebhookHandlers.getHealth();
 
       // Also get the configured webhook URL from environment
-      const domains = process.env.APP_DOMAIN?.split(',');
-      const configuredUrl = domains?.[0] ? `https://${domains[0]}/api/stripe/webhook` : 'Not configured';
+      const appDomain = process.env.APP_DOMAIN;
+      const configuredUrl = appDomain ? `https://${appDomain}/api/stripe/webhook` : 'Not configured';
 
       res.json({
         ...health,
@@ -4793,7 +4793,7 @@ export async function registerRoutes(
       }
 
       // Create portal session
-      const baseUrl = `https://${process.env.APP_DOMAIN?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
         return_url: `${baseUrl}/account`,
@@ -4875,7 +4875,7 @@ export async function registerRoutes(
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
-      const baseUrl = `https://${process.env.APP_DOMAIN?.split(',')[0] || req.headers.host}`;
+      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,
