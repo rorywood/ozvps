@@ -12,7 +12,7 @@ set -o pipefail
 #    sudo bash ozvps-install.sh --unattended --config=/path/to/config.env
 # ============================================================================
 
-VERSION="4.0.0"
+VERSION="4.0.1"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 NODE_VERSION="20"
@@ -44,12 +44,17 @@ self_update() {
 
     # Determine branch for self-update (default to main for safety)
     local UPDATE_BRANCH="${GITHUB_BRANCH:-main}"
-    local SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${UPDATE_BRANCH}/scripts/ozvps-install.sh"
     local TEMP_SCRIPT=$(mktemp)
 
     echo -e "  ${DIM}Checking for installer updates...${NC}"
 
-    if curl -fsSL -H 'Cache-Control: no-cache' "$SCRIPT_URL?t=$(date +%s)" -o "$TEMP_SCRIPT" 2>/dev/null; then
+    # Get latest commit SHA to bypass CDN cache
+    local LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${UPDATE_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+
+    # Use API with commit SHA - guaranteed fresh content
+    local API_URL="https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps-install.sh?ref=${LATEST_SHA:-$UPDATE_BRANCH}"
+
+    if curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' "$API_URL" -o "$TEMP_SCRIPT" 2>/dev/null; then
         if head -1 "$TEMP_SCRIPT" | grep -q "^#!/"; then
             local CURRENT_MD5=$(md5sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)
             local NEW_MD5=$(md5sum "$TEMP_SCRIPT" 2>/dev/null | cut -d' ' -f1)
@@ -563,18 +568,20 @@ main() {
         case "$OS" in
             ubuntu|debian)
                 apt-get update
-                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib unzip rsync curl
+                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib redis-server unzip rsync curl
                 ;;
             centos|rhel|rocky|almalinux)
                 yum install -y epel-release
-                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib unzip rsync curl
+                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib redis unzip rsync curl
                 postgresql-setup --initdb 2>/dev/null || true
                 ;;
         esac
         systemctl start nginx 2>/dev/null || true
         systemctl enable nginx 2>/dev/null || true
+        systemctl start redis-server 2>/dev/null || systemctl start redis 2>/dev/null || true
+        systemctl enable redis-server 2>/dev/null || systemctl enable redis 2>/dev/null || true
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Installing system dependencies"
+    spinner $! "Installing system dependencies (nginx, postgres, redis)"
 
     # Configure PostgreSQL
     if [[ "$DB_HOST" == "localhost" ]]; then
@@ -629,26 +636,40 @@ main() {
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Configuring firewall"
 
-    # Download from GitHub
+    # Download from GitHub (using commit SHA to bypass CDN caching)
     (
         set -e
         mkdir -p "$INSTALL_DIR"
+
+        # Get latest commit SHA to bypass CDN cache
+        LATEST_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
 
         SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
         TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
         TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
 
-        curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
+        # Use API zipball with commit SHA - not cached
+        if [[ -n "$LATEST_SHA" ]]; then
+            curl -fsSL -H 'Accept: application/vnd.github+json' -L \
+                "https://api.github.com/repos/${GITHUB_REPO}/zipball/${LATEST_SHA}" -o "$TEMP_ZIP"
+        else
+            # Fallback to branch archive with cache-busting
+            curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip?t=$(date +%s)" -o "$TEMP_ZIP"
+        fi
 
         rm -rf "$TEMP_EXTRACT"
         mkdir -p "$TEMP_EXTRACT"
         unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
-        EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d -name "ozvps-*" | head -1)
+        # Handle both API zipball (owner-repo-sha) and branch archive (ozvps-branch) naming
+        EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -1)
         [[ -z "$EXTRACTED_DIR" ]] && exit 1
 
         cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
         cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
+
+        # Save commit SHA for version tracking
+        [[ -n "$LATEST_SHA" ]] && echo "$LATEST_SHA" > "$INSTALL_DIR/.commit"
 
         rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
     ) >>"$LOG_FILE" 2>&1 &
@@ -663,13 +684,37 @@ main() {
     (
         DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME"
 
+        # Generate secure keys
+        SESSION_SECRET=$(openssl rand -hex 32)
+        TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)
+
+        # Determine APP_URL based on SSL setting
+        if [[ "$SETUP_SSL" == "yes" ]]; then
+            APP_URL="https://${PANEL_DOMAIN}"
+        else
+            APP_URL="http://${PANEL_DOMAIN}"
+        fi
+
         cat > "$INSTALL_DIR/.env" << EOF
 # OzVPS Configuration
 # Generated by installer v${VERSION}
 # Environment: ${ENVIRONMENT}
 
+# Application
+NODE_ENV=${NODE_ENV}
+PORT=3000
+APP_URL=${APP_URL}
+APP_DOMAIN=${PANEL_DOMAIN}
+
+# Security (auto-generated - DO NOT SHARE)
+SESSION_SECRET=${SESSION_SECRET}
+TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}
+
 # Database
 DATABASE_URL=${DATABASE_URL}
+
+# Redis (session storage)
+REDIS_URL=redis://localhost:6379
 
 # VirtFusion API
 VIRTFUSION_PANEL_URL=${VIRTFUSION_PANEL_URL}
@@ -685,10 +730,6 @@ AUTH0_DOMAIN=${AUTH0_DOMAIN}
 AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
 AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
 AUTH0_WEBHOOK_SECRET=${AUTH0_WEBHOOK_SECRET}
-
-# Application
-NODE_ENV=${NODE_ENV}
-PORT=3000
 EOF
 
         # Add optional services
@@ -872,11 +913,15 @@ EOF
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Starting application"
 
-    # Install ozvps control command
+    # Install ozvps control command (using commit SHA to bypass cache)
     (
         set -e
-        curl -fsSL -H 'Cache-Control: no-cache' \
-            "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/scripts/ozvps?t=$(date +%s)" \
+        # Get latest commit SHA
+        CTRL_SHA=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | grep '"sha":' | head -1 | cut -d'"' -f4)
+
+        # Use API with commit SHA - guaranteed fresh content
+        curl -fsSL -H 'Accept: application/vnd.github.v3.raw' -H 'Cache-Control: no-cache' \
+            "https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/ozvps?ref=${CTRL_SHA:-$GITHUB_BRANCH}" \
             -o /usr/local/bin/ozvps
         chmod +x /usr/local/bin/ozvps
     ) >>"$LOG_FILE" 2>&1 &

@@ -2234,17 +2234,13 @@ export async function registerRoutes(
 
       const result = await virtfusionClient.resetServerPassword(req.params.id);
 
-      log(`[DEBUG] Password reset result for ${req.params.id}: ${JSON.stringify({ success: result.success, hasPassword: !!result.password, username: result.username })}`, 'api');
-
       if (!result.password) {
         log(`[ERROR] Password reset for ${req.params.id} succeeded but no password returned`, 'api');
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
 
       log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
-      const response = { success: true, password: result.password, username: result.username };
-      log(`[DEBUG] Sending response: ${JSON.stringify({ success: true, hasPassword: !!result.password, username: result.username })}`, 'api');
-      res.json(response);
+      res.json({ success: true, password: result.password, username: result.username });
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: error.message || 'Failed to reset server password' });
@@ -4994,6 +4990,11 @@ export async function registerRoutes(
       }
 
       log(`[Direct Topup] Creating payment intent for $${(amountCents / 100).toFixed(2)}`, 'api');
+      // Create idempotency key to prevent duplicate charges from rapid clicks
+      // Uses 5-second time window to allow retry if payment genuinely fails
+      const timeWindow = Math.floor(Date.now() / 5000);
+      const idempotencyKey = `topup_${auth0UserId}_${paymentMethodId}_${amountCents}_${timeWindow}`;
+
       // Create a payment intent and confirm it immediately
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountCents,
@@ -5008,6 +5009,8 @@ export async function registerRoutes(
           type: 'wallet_topup',
           source: 'direct_charge',
         },
+      }, {
+        idempotencyKey,
       });
 
       log(`[Direct Topup] Payment intent created: ${paymentIntent.id}, status: ${paymentIntent.status}`, 'api');
@@ -5143,15 +5146,6 @@ export async function registerRoutes(
       }
 
       const templates = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
-
-      // DEBUG: Log template names to verify what VirtFusion returns
-      if (templates && Array.isArray(templates)) {
-        const templateNames = templates.flatMap((group: any) =>
-          group.templates ? group.templates.map((t: any) => t.name) : []
-        );
-        log(`[TEMPLATES DEBUG] VirtFusion returned ${templateNames.length} templates for package ${plan.virtfusionPackageId}: ${templateNames.join(', ')}`, 'api');
-      }
-
       res.json(templates || []);
     } catch (error: any) {
       log(`Error fetching templates for plan ${req.params.id}: ${error.message}`, 'api');
