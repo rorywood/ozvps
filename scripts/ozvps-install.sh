@@ -12,7 +12,7 @@ set -o pipefail
 #    sudo bash ozvps-install.sh --unattended --config=/path/to/config.env
 # ============================================================================
 
-VERSION="4.0.1"
+VERSION="4.1.0"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 NODE_VERSION="20"
@@ -660,11 +660,11 @@ main() {
         case "$OS" in
             ubuntu|debian)
                 apt-get update
-                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib postgresql-client redis-server redis-tools unzip rsync curl openssl
+                apt-get install -y nginx certbot python3-certbot-nginx postgresql postgresql-contrib postgresql-client redis-server redis-tools unzip rsync curl openssl git
                 ;;
             centos|rhel|rocky|almalinux)
                 yum install -y epel-release
-                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib redis unzip rsync curl openssl
+                yum install -y nginx certbot python3-certbot-nginx postgresql-server postgresql-contrib redis unzip rsync curl openssl git
                 postgresql-setup --initdb 2>/dev/null || true
                 ;;
         esac
@@ -732,74 +732,24 @@ main() {
     ) >>"$LOG_FILE" 2>&1 &
     spinner $! "Configuring firewall"
 
-    # Download from GitHub (using commit SHA to bypass CDN caching)
+    # Clone from GitHub using git (reliable, no cache issues, enables easy updates)
     (
         set -e
-        mkdir -p "$INSTALL_DIR"
 
-        SAFE_BRANCH=$(echo "${GITHUB_BRANCH}" | tr '/' '-')
-        TEMP_ZIP="/tmp/ozvps-${SAFE_BRANCH}.zip"
-        TEMP_EXTRACT="/tmp/ozvps-${SAFE_BRANCH}-extract"
-        rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
+        # Remove existing directory if present (fresh install)
+        rm -rf "$INSTALL_DIR"
 
-        # Method 1: Get commit SHA from refs API (more reliable)
-        # URL-encode slashes in branch name for API compatibility
-        ENCODED_BRANCH=$(echo "${GITHUB_BRANCH}" | sed 's|/|%2F|g')
-        LATEST_SHA=""
-        REF_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${ENCODED_BRANCH}" 2>/dev/null || true)
-        if [[ -n "$REF_RESPONSE" ]]; then
-            LATEST_SHA=$(echo "$REF_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        fi
+        # Clone repository
+        git clone -b "${GITHUB_BRANCH}" "https://github.com/${GITHUB_REPO}.git" "$INSTALL_DIR"
 
-        # Method 2: If refs API fails, try commits API (also needs encoding)
-        if [[ -z "$LATEST_SHA" ]]; then
-            COMMIT_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/commits/${ENCODED_BRANCH}" 2>/dev/null || true)
-            if [[ -n "$COMMIT_RESPONSE" ]]; then
-                LATEST_SHA=$(echo "$COMMIT_RESPONSE" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[a-f0-9]\{40\}"' | head -1 | cut -d'"' -f4)
-            fi
-        fi
+        cd "$INSTALL_DIR"
 
-        echo "Commit SHA: ${LATEST_SHA:-unknown}" >> "$LOG_FILE"
+        # Save branch/environment markers for update script
+        echo "${GITHUB_BRANCH}" > .ozvps-branch
+        echo "${ENVIRONMENT}" > .ozvps-env
 
-        # Download using commit SHA (bypasses all caching)
-        DOWNLOAD_SUCCESS=false
-        if [[ -n "$LATEST_SHA" && ${#LATEST_SHA} -eq 40 ]]; then
-            # Use github.com/archive which properly redirects to codeload with SHA
-            # This is the ONLY reliable way to bypass GitHub CDN caching
-            echo "Downloading commit ${LATEST_SHA}..." >> "$LOG_FILE"
-            if curl -fsSL -L "https://github.com/${GITHUB_REPO}/archive/${LATEST_SHA}.zip" -o "$TEMP_ZIP" 2>/dev/null; then
-                DOWNLOAD_SUCCESS=true
-            fi
-        fi
-
-        # Fallback: Direct branch download (may be cached)
-        if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
-            echo "SHA download failed, falling back to branch download..." >> "$LOG_FILE"
-            curl -fsSL -L "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$TEMP_ZIP"
-        fi
-
-        # Verify ZIP file
-        if [[ ! -f "$TEMP_ZIP" ]] || ! unzip -t "$TEMP_ZIP" >/dev/null 2>&1; then
-            echo "Downloaded file is not a valid ZIP" >> "$LOG_FILE"
-            exit 1
-        fi
-
-        mkdir -p "$TEMP_EXTRACT"
-        unzip -q "$TEMP_ZIP" -d "$TEMP_EXTRACT"
-
-        # Handle both API zipball (owner-repo-sha) and branch archive (ozvps-branch) naming
-        EXTRACTED_DIR=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -1)
-        [[ -z "$EXTRACTED_DIR" ]] && exit 1
-
-        cp -r "${EXTRACTED_DIR}"/* "$INSTALL_DIR/"
-        cp -r "${EXTRACTED_DIR}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
-
-        # Save commit SHA for version tracking
-        [[ -n "$LATEST_SHA" ]] && echo "$LATEST_SHA" > "$INSTALL_DIR/.commit"
-
-        rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
     ) >>"$LOG_FILE" 2>&1 &
-    spinner $! "Downloading from GitHub ($GITHUB_BRANCH)"
+    spinner $! "Cloning from GitHub ($GITHUB_BRANCH)"
 
     # Verify download
     if [ ! -f "$INSTALL_DIR/package.json" ]; then

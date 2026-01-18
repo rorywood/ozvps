@@ -12,7 +12,7 @@ set -e
 #    ozvps --help       # Show help
 # ============================================================================
 
-VERSION="4.0.1"
+VERSION="4.1.0"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 GITHUB_REPO="rorywood/ozvps"
@@ -723,154 +723,118 @@ action_test_email() {
 }
 
 # ============================================================================
-# Update Function (full update flow)
+# Update Function (Git-based - no more cache issues!)
 # ============================================================================
 do_update() {
     local branch=$(get_branch)
+    local REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
     echo -e "${CYAN}${BOLD}"
     cat << "EOF"
     ╔═══════════════════════════════════════════════════════════╗
-    ║                   Updating Application                    ║
+    ║              Updating Application (Git-based)             ║
     ╚═══════════════════════════════════════════════════════════╝
 EOF
     echo -e "${NC}"
     echo -e "    Branch: ${BOLD}$branch${NC}"
-    echo -e "    ${DIM}(from $INSTALL_DIR/.ozvps-branch)${NC}"
     echo ""
 
-    # Verify branch file exists and show content for debugging
-    if [[ ! -f "$INSTALL_DIR/.ozvps-branch" ]]; then
-        warning "Branch file not found! Defaulting to 'main'"
-        warning "Create it with: echo 'claude/dev-l5488' | sudo tee $INSTALL_DIR/.ozvps-branch"
-    fi
-
-    # Check for new commits first using refs API (more reliable)
-    # URL-encode slashes in branch name for API compatibility
-    local encoded_branch=$(echo "$branch" | sed 's|/|%2F|g')
-    info "Checking for updates on $branch..."
-    local latest_commit=""
-    local ref_response=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/git/ref/heads/${encoded_branch}" 2>/dev/null || true)
-    if [[ -n "$ref_response" ]]; then
-        latest_commit=$(echo "$ref_response" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    fi
-
-    # Step 0: Check for script updates using commit SHA
-    info "Checking for control panel script updates..."
-    local temp_script=$(mktemp)
-    local self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
-
-    # Download using raw.githubusercontent with commit SHA (bypasses CDN)
-    local script_url=""
-    if [[ -n "$latest_commit" && ${#latest_commit} -eq 40 ]]; then
-        script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${latest_commit}/scripts/ozvps"
-    else
-        script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/scripts/ozvps?$(date +%s)"
-    fi
-
-    if curl -fsSL "$script_url" -o "$temp_script" 2>/dev/null && head -1 "$temp_script" | grep -q "^#!/"; then
-        local current_md5=$(md5sum "$self_path" 2>/dev/null | cut -d' ' -f1)
-        local new_md5=$(md5sum "$temp_script" 2>/dev/null | cut -d' ' -f1)
-
-        if [[ "$current_md5" != "$new_md5" ]]; then
-            success "New control panel version found, updating script..."
-            cp "$temp_script" "$self_path"
-            chmod +x "$self_path"
-            rm -f "$temp_script"
-            success "Script updated! Restarting update process..."
-            echo ""
-            exec "$self_path" --no-self-update --update
-        else
-            success "Control panel script is up to date"
-        fi
-    else
-        warning "Could not check for script updates (continuing anyway)"
-    fi
-    rm -f "$temp_script" 2>/dev/null
-
-    # Check application version
-    local current_commit=""
-    if [[ -f "$INSTALL_DIR/.commit" ]]; then
-        current_commit=$(cat "$INSTALL_DIR/.commit" 2>/dev/null || echo "")
-    fi
-
-    if [[ -n "$latest_commit" && -n "$current_commit" && "$current_commit" == "$latest_commit" ]]; then
-        success "Already on latest version (${latest_commit:0:7}) - will rebuild anyway"
-    else
-        if [[ -n "$current_commit" && -n "$latest_commit" ]]; then
-            success "New version available!"
-            echo -e "    Current: ${DIM}${current_commit:0:7}${NC}"
-            echo -e "    Latest:  ${DIM}${latest_commit:0:7}${NC}"
-        fi
-    fi
-
-    echo ""
-
-    # Step 1: Backup
-    info "Creating backup..."
-    mkdir -p "$BACKUP_DIR"
-    local backup_file="${BACKUP_DIR}/pre-update_$(date +%Y%m%d_%H%M%S).tar.gz"
-    tar -czf "$backup_file" -C "$INSTALL_DIR" . 2>/dev/null || true
-    success "Backup created"
-
-    # Step 2: Download
-    info "Downloading latest code..."
-    local temp_dir=$(mktemp -d)
-    cp "$INSTALL_DIR/.env" "$temp_dir/.env" 2>/dev/null || true
-    cp "$INSTALL_DIR/ecosystem.config.cjs" "$temp_dir/ecosystem.config.cjs" 2>/dev/null || true
-    cp "$INSTALL_DIR/.ozvps-branch" "$temp_dir/.ozvps-branch" 2>/dev/null || true
-    cp "$INSTALL_DIR/.ozvps-env" "$temp_dir/.ozvps-env" 2>/dev/null || true
-
-    local safe_branch=$(echo "$branch" | tr '/' '-')
-    local temp_zip="/tmp/ozvps-update-${safe_branch}.zip"
-    local temp_extract="/tmp/ozvps-update-${safe_branch}-extract"
-
-    # Use github.com/archive with commit SHA to bypass CDN caching
-    local download_url=""
-    if [[ -n "$latest_commit" && ${#latest_commit} -eq 40 ]]; then
-        # Use github.com/archive which properly redirects with SHA (bypasses CDN)
-        download_url="https://github.com/${GITHUB_REPO}/archive/${latest_commit}.zip"
-    else
-        # Fallback to branch
-        download_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${branch}.zip"
-    fi
-
-    if ! curl -fsSL -L "$download_url" -o "$temp_zip"; then
-        error "Failed to download"
-        return
-    fi
-    success "Downloaded"
-
-    # Step 3: Extract
-    info "Extracting..."
-    find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 ! -name 'node_modules' ! -name '.env' ! -name 'ecosystem.config.cjs' -exec rm -rf {} + 2>/dev/null || true
-
-    rm -rf "$temp_extract" && mkdir -p "$temp_extract"
-    unzip -q "$temp_zip" -d "$temp_extract"
-    # Find extracted directory - handles both branch archives (ozvps-branch) and API zipball (owner-repo-sha)
-    local extracted_dir=$(find "$temp_extract" -mindepth 1 -maxdepth 1 -type d | head -1)
-
-    cp -r "${extracted_dir}"/* "$INSTALL_DIR/"
-    cp -r "${extracted_dir}"/.[^.]* "$INSTALL_DIR/" 2>/dev/null || true
-
-    cp "$temp_dir/.env" "$INSTALL_DIR/.env" 2>/dev/null || true
-    cp "$temp_dir/ecosystem.config.cjs" "$INSTALL_DIR/ecosystem.config.cjs" 2>/dev/null || true
-    cp "$temp_dir/.ozvps-branch" "$INSTALL_DIR/.ozvps-branch" 2>/dev/null || true
-    cp "$temp_dir/.ozvps-env" "$INSTALL_DIR/.ozvps-env" 2>/dev/null || true
-    rm -rf "$temp_dir" "$temp_extract" "$temp_zip"
-
-    if [[ -n "$latest_commit" ]]; then
-        echo "$latest_commit" > "$INSTALL_DIR/.commit"
-    fi
-    success "Code updated"
-
-    # Step 4: Install dependencies
-    info "Installing dependencies..."
     cd "$INSTALL_DIR"
+
+    # Check if it's already a git repo
+    if [[ -d ".git" ]]; then
+        success "Git repository detected"
+
+        # Fetch and check for updates
+        info "Fetching latest changes..."
+        git fetch origin "$branch" 2>/dev/null || {
+            error "Failed to fetch from origin"
+            return 1
+        }
+
+        local LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "none")
+        local REMOTE=$(git rev-parse "origin/$branch" 2>/dev/null || echo "none")
+
+        if [[ "$LOCAL" == "$REMOTE" ]]; then
+            success "Already up to date!"
+            echo -e "    Current commit: ${DIM}${LOCAL:0:7}${NC}"
+            echo ""
+            info "Rebuilding anyway to ensure consistency..."
+        else
+            echo -e "    Current: ${DIM}${LOCAL:0:7}${NC}"
+            echo -e "    Latest:  ${DIM}${REMOTE:0:7}${NC}"
+            echo ""
+
+            # Show recent commits
+            info "New commits:"
+            git log --oneline HEAD..origin/$branch 2>/dev/null | head -10
+            echo ""
+
+            # Stop app before pulling
+            info "Stopping application..."
+            pm2 stop "$SERVICE_NAME" 2>/dev/null || true
+
+            # Pull changes (hard reset to handle any local modifications)
+            info "Pulling changes..."
+            git reset --hard "origin/$branch"
+            success "Code updated to ${REMOTE:0:7}"
+        fi
+
+    else
+        # Not a git repo - convert from zip-based to git-based
+        warning "Not a git repo - converting to git-based installation"
+        echo ""
+
+        # Backup critical files
+        local temp_backup=$(mktemp -d)
+        info "Backing up configuration..."
+        cp .env "$temp_backup/.env" 2>/dev/null || true
+        cp ecosystem.config.cjs "$temp_backup/ecosystem.config.cjs" 2>/dev/null || true
+        cp .ozvps-branch "$temp_backup/.ozvps-branch" 2>/dev/null || true
+        cp .ozvps-env "$temp_backup/.ozvps-env" 2>/dev/null || true
+        success "Configuration backed up"
+
+        # Stop app
+        info "Stopping application..."
+        pm2 stop "$SERVICE_NAME" 2>/dev/null || true
+
+        # Remove old installation and clone fresh
+        cd /opt
+        rm -rf ozvps-panel
+
+        info "Cloning repository..."
+        if ! git clone -b "$branch" "$REPO_URL" ozvps-panel 2>/dev/null; then
+            error "Failed to clone repository"
+            # Try to restore from backup
+            mkdir -p ozvps-panel
+            cp "$temp_backup"/* ozvps-panel/ 2>/dev/null || true
+            rm -rf "$temp_backup"
+            return 1
+        fi
+        cd ozvps-panel
+        success "Repository cloned"
+
+        # Restore configuration
+        info "Restoring configuration..."
+        cp "$temp_backup/.env" .env 2>/dev/null || warning "No .env backup found"
+        cp "$temp_backup/ecosystem.config.cjs" ecosystem.config.cjs 2>/dev/null || true
+        cp "$temp_backup/.ozvps-branch" .ozvps-branch 2>/dev/null || true
+        cp "$temp_backup/.ozvps-env" .ozvps-env 2>/dev/null || true
+        rm -rf "$temp_backup"
+        success "Configuration restored"
+    fi
+
+    # Save environment markers
+    echo "$(get_environment)" > .ozvps-env 2>/dev/null || true
+    echo "$branch" > .ozvps-branch
+
+    # Install dependencies
+    echo ""
+    info "Installing dependencies..."
     npm install --silent 2>&1 | grep -v "^npm " || true
     success "Dependencies installed"
 
-    # Step 5: Build (clear all caches first)
+    # Build (clear all caches first)
     info "Clearing build caches..."
     rm -rf dist node_modules/.vite node_modules/.cache client/node_modules/.vite 2>/dev/null || true
 
@@ -878,21 +842,21 @@ EOF
     npm run build
     if [[ ! -f "dist/index.cjs" ]]; then
         error "Build failed - dist/index.cjs not found"
-        return
+        return 1
     fi
     success "Build complete"
 
-    # Step 6: Migrations
+    # Migrations
     info "Running migrations..."
     set -a && source .env && set +a
     npx drizzle-kit push --force 2>/dev/null || true
     success "Migrations applied"
 
-    # Step 6.5: Auto-configure APP_DOMAIN for Stripe webhooks
+    # Auto-configure APP_DOMAIN for Stripe webhooks
     info "Configuring domain for webhooks..."
     local domain=""
 
-    # Try to detect domain from NGINX config (check multiple possible names)
+    # Try to detect domain from NGINX config
     local nginx_conf_for_domain=""
     for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod; do
         if [[ -f "$conf" ]]; then
@@ -910,36 +874,29 @@ EOF
     fi
 
     if [[ -n "$domain" && "$domain" != "localhost" ]]; then
-        # Check if APP_DOMAIN already exists in .env
         if grep -q "^APP_DOMAIN=" "$INSTALL_DIR/.env" 2>/dev/null; then
-            # Update existing
             sed -i "s|^APP_DOMAIN=.*|APP_DOMAIN=$domain|" "$INSTALL_DIR/.env"
         else
-            # Add new
             echo "APP_DOMAIN=$domain" >> "$INSTALL_DIR/.env"
         fi
         success "Webhook domain set to: $domain"
     else
         warning "Could not auto-detect domain for webhooks"
-        warning "Manually add APP_DOMAIN=yourdomain.com to .env"
     fi
 
-    # Step 7: Update NGINX error pages
+    # Update NGINX error pages
     info "Updating NGINX error pages..."
     local error_pages_dir="/var/www/ozvps-errors"
     mkdir -p "$error_pages_dir"
 
-    # Copy error pages and logo from deploy directory if they exist
     if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
         cp "$INSTALL_DIR/deploy/nginx-error-pages/"*.html "$error_pages_dir/" 2>/dev/null || true
         cp "$INSTALL_DIR/deploy/nginx-error-pages/"*.png "$error_pages_dir/" 2>/dev/null || true
         chmod 644 "$error_pages_dir/"* 2>/dev/null || true
-        success "Error pages and logo copied to $error_pages_dir"
-    else
-        warning "Error pages source not found at $INSTALL_DIR/deploy/nginx-error-pages"
+        success "Error pages updated"
     fi
 
-    # Create NGINX snippet for error pages (works with both HTTP and HTTPS)
+    # Create/update NGINX snippet for error pages
     local snippets_dir="/etc/nginx/snippets"
     local snippet_file="$snippets_dir/ozvps-errors.conf"
     mkdir -p "$snippets_dir"
@@ -957,52 +914,35 @@ location = /502.html { root /var/www/ozvps-errors; internal; }
 location = /503.html { root /var/www/ozvps-errors; internal; }
 location = /logo.png { root /var/www/ozvps-errors; }
 ERRORCONF
-    success "Error pages snippet created at $snippet_file"
 
-    # Update NGINX config to include the snippet in ALL server blocks
-    # Find the correct config file
+    # Add snippet to NGINX config if not already present
     local nginx_conf=""
-    if [[ -f "/etc/nginx/sites-available/ozvps" ]]; then
-        nginx_conf="/etc/nginx/sites-available/ozvps"
-    elif [[ -f "/etc/nginx/sites-available/ozvps-dev" ]]; then
-        nginx_conf="/etc/nginx/sites-available/ozvps-dev"
-    elif [[ -f "/etc/nginx/sites-available/ozvps-prod" ]]; then
-        nginx_conf="/etc/nginx/sites-available/ozvps-prod"
-    else
-        nginx_conf=$(ls /etc/nginx/sites-available/ozvps* 2>/dev/null | head -1)
-    fi
+    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod; do
+        if [[ -f "$conf" ]]; then
+            nginx_conf="$conf"
+            break
+        fi
+    done
 
     if [[ -n "$nginx_conf" && -f "$nginx_conf" ]]; then
-        # Check if snippet is already included
         if ! grep -q "include snippets/ozvps-errors.conf" "$nginx_conf"; then
-            info "Adding error pages snippet to NGINX config..."
-
-            # Insert include directive after EVERY server_name line (for both HTTP and HTTPS blocks)
             sed -i '/server_name/a\    include snippets/ozvps-errors.conf;' "$nginx_conf"
-
-            # Test and reload NGINX
             if nginx -t 2>/dev/null; then
                 systemctl reload nginx
                 success "NGINX config updated with error pages"
             else
-                warning "NGINX config test failed, reverting..."
-                # Remove the include lines we just added
                 sed -i '/include snippets\/ozvps-errors.conf/d' "$nginx_conf"
-                warning "Reverted changes - check NGINX config manually"
+                warning "NGINX config test failed, reverted"
             fi
-        else
-            info "Error pages snippet already included in NGINX config"
         fi
-    else
-        warning "NGINX config not found at $nginx_conf"
     fi
 
-    # Step 8: Restart
-    info "Restarting application..."
+    # Restart application
+    info "Starting application..."
     pm2 delete "$SERVICE_NAME" 2>/dev/null || true
     pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
     pm2 save --force
-    success "Application restarted"
+    success "Application started"
 
     # Wait for health
     info "Waiting for application..."
@@ -1013,12 +953,19 @@ ERRORCONF
         fi
         sleep 1
         if [[ $i -eq 30 ]]; then
-            warning "Health check timeout - check logs"
+            warning "Health check timeout - check logs with: pm2 logs ozvps-panel"
         fi
     done
 
     echo ""
     echo -e "${GREEN}${BOLD}Update Complete!${NC}"
+    echo ""
+    echo -e "    Branch: ${BOLD}$branch${NC}"
+    echo -e "    Commit: ${BOLD}$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')${NC}"
+    echo ""
+    echo "Commands:"
+    echo "  pm2 logs ozvps-panel  - View logs"
+    echo "  pm2 status            - Check status"
     echo ""
 }
 

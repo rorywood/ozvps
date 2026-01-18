@@ -26,31 +26,47 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Detect environment from existing installation or ask
-if [[ -f "$INSTALL_DIR/.ozvps-env" ]]; then
-    ENV=$(cat "$INSTALL_DIR/.ozvps-env")
-    echo -e "${GREEN}Detected environment: ${ENV}${NC}"
-elif [[ "$1" == "--dev" ]]; then
-    ENV="development"
-elif [[ "$1" == "--prod" ]]; then
-    ENV="production"
-else
-    echo "Which environment?"
-    echo "  1) Production  (app.ozvps.com.au - main branch)"
-    echo "  2) Development (dev.ozvps.com.au - dev branch)"
-    read -p "Choose [1-2]: " choice
-    if [[ "$choice" == "1" ]]; then
+# Detect branch from existing installation first
+if [[ -f "$INSTALL_DIR/.ozvps-branch" ]]; then
+    BRANCH=$(cat "$INSTALL_DIR/.ozvps-branch" | tr -d '[:space:]')
+    echo -e "${GREEN}Detected branch: ${BRANCH}${NC}"
+    # Determine environment from branch
+    if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
         ENV="production"
     else
         ENV="development"
     fi
-fi
-
-# Set branch based on environment
-if [[ "$ENV" == "production" ]]; then
+elif [[ -f "$INSTALL_DIR/.ozvps-env" ]]; then
+    ENV=$(cat "$INSTALL_DIR/.ozvps-env" | tr -d '[:space:]')
+    echo -e "${GREEN}Detected environment: ${ENV}${NC}"
+    # Set branch based on environment
+    if [[ "$ENV" == "production" ]]; then
+        BRANCH="main"
+    else
+        echo -e "${YELLOW}Warning: No branch file found for dev environment${NC}"
+        echo "Please specify branch manually or run: ozvps --branch"
+        exit 1
+    fi
+elif [[ "$1" == "--dev" ]]; then
+    ENV="development"
+    echo -e "${YELLOW}Warning: Dev mode requires a branch file${NC}"
+    echo "Please run: ozvps --branch to select a branch"
+    exit 1
+elif [[ "$1" == "--prod" ]]; then
+    ENV="production"
     BRANCH="main"
 else
-    BRANCH="claude/dev-l5488"
+    echo "Which environment?"
+    echo "  1) Production  (app.ozvps.com.au - main branch)"
+    echo "  2) Development (requires branch selection via ozvps --branch)"
+    read -p "Choose [1-2]: " choice
+    if [[ "$choice" == "1" ]]; then
+        ENV="production"
+        BRANCH="main"
+    else
+        echo -e "${YELLOW}For development, please use: ozvps --branch${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${CYAN}Branch: ${BRANCH}${NC}"
