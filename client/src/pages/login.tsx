@@ -219,12 +219,13 @@ export default function LoginPage() {
     onError: (err: any) => {
       setIsSubmitting(false);
       const errorMessage = err.message || "Invalid email or password";
-      setError(errorMessage);
-      // Show "create account" suggestion on credential errors
+      // Show "create account" suggestion on credential errors (hide the error message)
       if (errorMessage.includes("Invalid email or password") || err.code === "INVALID_CREDENTIALS") {
         setShowUserNotFound(true);
+        setError(""); // Don't show error, show signup suggestion instead
       } else {
         setShowUserNotFound(false);
+        setError(errorMessage);
       }
       setRecaptchaToken(null);
       setTwoFAToken("");
@@ -339,7 +340,7 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-16 w-auto cursor-pointer brightness-0 invert"
+                className="h-20 w-auto cursor-pointer brightness-0 invert"
                 data-testid="img-logo"
               />
             </Link>
@@ -407,7 +408,7 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="OzVPS"
-                className="h-12 w-auto mx-auto cursor-pointer brightness-0 invert"
+                className="h-16 w-auto mx-auto cursor-pointer brightness-0 invert"
                 data-testid="img-logo-mobile"
               />
             </Link>
@@ -442,17 +443,17 @@ export default function LoginPage() {
 
                 {/* Create Account Suggestion */}
                 {showUserNotFound && (
-                  <div className="flex items-center justify-between gap-3 text-sm bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                    <span className="text-slate-400">Don't have an account?</span>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+                    <p className="text-emerald-400 text-sm mb-3">
+                      It looks like you don't have an account yet. Create one to get started!
+                    </p>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
                       asChild
-                      className="border-primary/30 text-primary hover:bg-primary/10"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                     >
                       <Link href="/register">
-                        Sign up
+                        Create Account
                       </Link>
                     </Button>
                   </div>

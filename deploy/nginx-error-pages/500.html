@@ -28,24 +28,8 @@
             width: 100%;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-        .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2rem; color: hsl(210, 40%, 98%); }
-        .logo span { color: hsl(217, 91%, 60%); }
-        .status-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.375rem 0.875rem;
-            background: hsla(0, 84%, 60%, 0.1);
-            border: 1px solid hsla(0, 84%, 60%, 0.2);
-            border-radius: 2rem;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: hsl(0, 84%, 70%);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1.5rem;
-        }
-        .status-dot { width: 6px; height: 6px; background: hsl(0, 84%, 60%); border-radius: 50%; }
+        .logo { display: flex; justify-content: center; margin-bottom: 2.5rem; }
+        .logo img { height: 40px; width: auto; filter: brightness(0) invert(1); }
         .error-code {
             font-size: 4rem;
             font-weight: 800;
@@ -114,10 +98,8 @@
 </head>
 <body>
     <div class="card">
-        <div class="logo">Oz<span>VPS</span></div>
-        <div class="status-indicator">
-            <span class="status-dot"></span>
-            <span>Error Detected</span>
+        <div class="logo">
+            <img src="/logo.png" alt="OzVPS" onerror="this.style.display='none'">
         </div>
         <div class="error-code">500</div>
         <h1>Internal Server Error</h1>

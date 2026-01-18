@@ -1032,11 +1032,12 @@ EOF
     local error_pages_dir="/var/www/ozvps-errors"
     mkdir -p "$error_pages_dir"
 
-    # Copy error pages from deploy directory if they exist
+    # Copy error pages and logo from deploy directory if they exist
     if [[ -d "$INSTALL_DIR/deploy/nginx-error-pages" ]]; then
         cp "$INSTALL_DIR/deploy/nginx-error-pages/"*.html "$error_pages_dir/" 2>/dev/null || true
-        chmod 644 "$error_pages_dir/"*.html 2>/dev/null || true
-        success "Error page files copied to $error_pages_dir"
+        cp "$INSTALL_DIR/deploy/nginx-error-pages/"*.png "$error_pages_dir/" 2>/dev/null || true
+        chmod 644 "$error_pages_dir/"* 2>/dev/null || true
+        success "Error pages and logo copied to $error_pages_dir"
     else
         warning "Error pages source not found at $INSTALL_DIR/deploy/nginx-error-pages"
     fi
@@ -1057,6 +1058,7 @@ location = /404.html { root /var/www/ozvps-errors; internal; }
 location = /500.html { root /var/www/ozvps-errors; internal; }
 location = /502.html { root /var/www/ozvps-errors; internal; }
 location = /503.html { root /var/www/ozvps-errors; internal; }
+location = /logo.png { root /var/www/ozvps-errors; }
 ERRORCONF
     success "Error pages snippet created at $snippet_file"
 
