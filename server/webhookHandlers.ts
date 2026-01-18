@@ -55,6 +55,13 @@ export class WebhookHandlers {
 
     log(`Webhook received: ${event.type} (${event.id}) livemode=${event.livemode}`, 'stripe');
 
+    // SECURITY: Reject test mode events in production
+    // This prevents test webhooks from affecting production data
+    if (process.env.NODE_ENV === 'production' && event.livemode === false) {
+      log(`SECURITY: Rejected test mode webhook in production: ${event.id}`, 'stripe');
+      return;
+    }
+
     // Track webhook health
     lastWebhookReceived = new Date();
     lastWebhookEvent = event.type;

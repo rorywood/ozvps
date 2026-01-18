@@ -526,6 +526,15 @@ async function requireEmailVerified(req: Request, res: Response, next: NextFunct
   next();
 }
 
+// Middleware to require admin access - chains with authMiddleware
+const requireAdmin: RequestHandler = (req, res, next) => {
+  if (!req.userSession?.isAdmin) {
+    log(`Unauthorized admin access attempt by ${req.userSession?.email || 'unknown'}`, 'security');
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
 async function verifyServerOwnership(serverId: string, userVirtFusionId: number | null): Promise<boolean> {
   if (!userVirtFusionId) return false;
   
@@ -2219,7 +2228,7 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: error.message || 'Failed to reinstall server' });
+      res.status(500).json({ error: 'Failed to reinstall server. Please try again or contact support.' });
     }
   });
 
@@ -2277,7 +2286,7 @@ export async function registerRoutes(
       res.json({ success: true, password: result.password, username: result.username });
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
-      res.status(500).json({ error: error.message || 'Failed to reset server password' });
+      res.status(500).json({ error: 'Failed to reset server password. Please try again or contact support.' });
     }
   });
 
@@ -2995,12 +3004,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/admin/block-user', authMiddleware, async (req, res) => {
+  app.post('/api/admin/block-user', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-      
       const { auth0UserId, blocked, reason } = req.body;
       
       if (!auth0UserId) {
@@ -3024,12 +3029,8 @@ export async function registerRoutes(
   });
 
   // Admin: Get webhook health status
-  app.get('/api/admin/webhook-health', authMiddleware, async (req, res) => {
+  app.get('/api/admin/webhook-health', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const health = WebhookHandlers.getHealth();
 
       // Also get the configured webhook URL from environment
@@ -3052,12 +3053,8 @@ export async function registerRoutes(
   });
 
   // Admin: Get all wallets
-  app.get('/api/admin/wallets', authMiddleware, async (req, res) => {
+  app.get('/api/admin/wallets', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const allWallets = await dbStorage.getAllWallets();
       res.json({ wallets: allWallets });
     } catch (error: any) {
@@ -3068,26 +3065,34 @@ export async function registerRoutes(
 
   // Admin: Adjust wallet balance
   const MAX_ADJUSTMENT_CENTS = 1000000; // $10,000 max per adjustment
+  const LARGE_ADJUSTMENT_THRESHOLD_CENTS = 10000; // $100 - require confirmation above this
   const walletAdjustSchema = z.object({
     auth0UserId: z.string().min(1, 'User ID is required'),
     amountCents: z.number().int()
       .refine(val => val !== 0, 'Amount cannot be zero')
       .refine(val => Math.abs(val) <= MAX_ADJUSTMENT_CENTS, `Adjustment cannot exceed $${(MAX_ADJUSTMENT_CENTS / 100).toLocaleString()}`),
     reason: z.string().min(3, 'Reason must be at least 3 characters').max(500, 'Reason too long'),
+    confirmAction: z.boolean().optional(),
   });
 
-  app.post('/api/admin/wallet/adjust', authMiddleware, async (req, res) => {
+  app.post('/api/admin/wallet/adjust', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      if (!req.userSession?.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-
       const parsed = walletAdjustSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
       }
 
-      const { auth0UserId, amountCents, reason } = parsed.data;
+      const { auth0UserId, amountCents, reason, confirmAction } = parsed.data;
+
+      // SECURITY: Require explicit confirmation for large adjustments (over $100)
+      if (Math.abs(amountCents) > LARGE_ADJUSTMENT_THRESHOLD_CENTS && confirmAction !== true) {
+        const formattedAmount = (Math.abs(amountCents) / 100).toFixed(2);
+        return res.status(400).json({
+          error: 'Large adjustment requires confirmation',
+          code: 'CONFIRMATION_REQUIRED',
+          message: `Adjustments over $100 require confirmAction: true. This adjustment is $${formattedAmount}.`
+        });
+      }
 
       // Verify the user exists in Auth0 before adjusting
       const userExists = await auth0Client.userExists(auth0UserId);
@@ -3524,16 +3529,7 @@ export async function registerRoutes(
   });
 
   // ================== Admin VirtFusion Management Routes ==================
-  
-  // Middleware to require admin access - chains with authMiddleware
-  const requireAdmin: RequestHandler = (req, res, next) => {
-    if (!req.userSession?.isAdmin) {
-      log(`Unauthorized admin access attempt by ${req.userSession?.email || 'unknown'}`, 'security');
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-    next();
-  };
-  
+
   // Helper to create audit log entries
   async function auditLog(
     req: any,
@@ -3724,13 +3720,22 @@ export async function registerRoutes(
   app.delete('/api/admin/vf/servers/:serverId', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { serverId } = req.params;
-      const { reason } = req.body;
-      
+      const { reason, confirmAction } = req.body;
+
       if (!reason) {
         return res.status(400).json({ error: 'Reason is required for delete action' });
       }
-      
-      const success = await virtfusionClient.deleteServer(parseInt(serverId));
+
+      // SECURITY: Require explicit confirmation for destructive actions
+      if (confirmAction !== true) {
+        return res.status(400).json({
+          error: 'Destructive action requires confirmation',
+          code: 'CONFIRMATION_REQUIRED',
+          message: 'Set confirmAction: true to proceed with server deletion'
+        });
+      }
+
+      const success = await virtfusionClient.deleteServer(parseInt(serverId, 10));
       if (!success) {
         throw new Error('Delete operation failed');
       }
@@ -3747,16 +3752,25 @@ export async function registerRoutes(
   app.post('/api/admin/vf/servers/:serverId/transfer', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { serverId } = req.params;
-      const { newOwnerId, reason } = req.body;
-      
+      const { newOwnerId, reason, confirmAction } = req.body;
+
       if (!newOwnerId) {
         return res.status(400).json({ error: 'New owner ID is required' });
       }
       if (!reason) {
         return res.status(400).json({ error: 'Reason is required for transfer action' });
       }
-      
-      const success = await virtfusionClient.transferServerOwnership(parseInt(serverId), newOwnerId);
+
+      // SECURITY: Require explicit confirmation for destructive actions
+      if (confirmAction !== true) {
+        return res.status(400).json({
+          error: 'Destructive action requires confirmation',
+          code: 'CONFIRMATION_REQUIRED',
+          message: 'Set confirmAction: true to proceed with server transfer'
+        });
+      }
+
+      const success = await virtfusionClient.transferServerOwnership(parseInt(serverId, 10), newOwnerId);
       if (!success) {
         throw new Error('Transfer operation failed');
       }
@@ -3784,7 +3798,7 @@ export async function registerRoutes(
   app.get('/api/admin/vf/hypervisors/:hypervisorId', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { hypervisorId } = req.params;
-      const hypervisor = await virtfusionClient.getHypervisor(parseInt(hypervisorId));
+      const hypervisor = await virtfusionClient.getHypervisor(parseInt(hypervisorId, 10));
       if (!hypervisor) {
         return res.status(404).json({ error: 'Hypervisor not found' });
       }
@@ -3890,11 +3904,11 @@ export async function registerRoutes(
   app.get('/api/admin/vf/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { userId } = req.params;
-      const user = await virtfusionClient.getUserById(parseInt(userId));
+      const user = await virtfusionClient.getUserById(parseInt(userId, 10));
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      const servers = await virtfusionClient.listServersByUserId(parseInt(userId));
+      const servers = await virtfusionClient.listServersByUserId(parseInt(userId, 10));
       res.json({ user, servers });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to fetch user' });
@@ -3905,18 +3919,27 @@ export async function registerRoutes(
   app.delete('/api/admin/vf/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { userId } = req.params;
-      const { reason, deleteServers } = req.body;
-      
+      const { reason, deleteServers, confirmAction } = req.body;
+
       if (!reason) {
         return res.status(400).json({ error: 'Reason is required for delete action' });
       }
-      
+
+      // SECURITY: Require explicit confirmation for destructive actions
+      if (confirmAction !== true) {
+        return res.status(400).json({
+          error: 'Destructive action requires confirmation',
+          code: 'CONFIRMATION_REQUIRED',
+          message: 'Set confirmAction: true to proceed with user deletion'
+        });
+      }
+
       if (deleteServers) {
-        const result = await virtfusionClient.cleanupUserAndServers(parseInt(userId));
+        const result = await virtfusionClient.cleanupUserAndServers(parseInt(userId, 10));
         await auditLog(req, 'user.delete_with_servers', 'user', userId, null, { deleteServers: true, serversDeleted: result.serversDeleted }, result.success ? 'success' : 'failure', result.errors.join(', '), reason);
         res.json({ success: result.success, serversDeleted: result.serversDeleted, errors: result.errors });
       } else {
-        const success = await virtfusionClient.deleteUserById(parseInt(userId));
+        const success = await virtfusionClient.deleteUserById(parseInt(userId, 10));
         await auditLog(req, 'user.delete', 'user', userId, null, {}, success ? 'success' : 'failure', undefined, reason);
         res.json({ success });
       }
@@ -4036,7 +4059,7 @@ export async function registerRoutes(
   app.get('/api/admin/vf/packages/:packageId/templates', authMiddleware, requireAdmin, async (req, res) => {
     try {
       const { packageId } = req.params;
-      const templates = await virtfusionClient.getOsTemplatesForPackage(parseInt(packageId));
+      const templates = await virtfusionClient.getOsTemplatesForPackage(parseInt(packageId, 10));
       res.json({ templates });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to fetch templates' });
@@ -4046,8 +4069,8 @@ export async function registerRoutes(
   // Get admin audit logs
   app.get('/api/admin/audit-logs', authMiddleware, requireAdmin, async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const offset = parseInt(req.query.offset as string) || 0;
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const offset = parseInt(req.query.offset as string, 10) || 0;
       const action = req.query.action as string | undefined;
       const targetType = req.query.targetType as string | undefined;
       const status = req.query.status as string | undefined;
@@ -4118,7 +4141,7 @@ export async function registerRoutes(
 
         // Get server name from VirtFusion
         try {
-          const server = await virtfusionClient.getServer(parseInt(record.virtfusionServerId));
+          const server = await virtfusionClient.getServer(parseInt(record.virtfusionServerId, 10));
           serverName = server?.name || server?.hostname;
         } catch (e) {
           // Server might be deleted
@@ -5572,8 +5595,8 @@ export async function registerRoutes(
       }
 
       const status = req.query.status as 'open' | 'closed' | 'all' | undefined;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const offset = parseInt(req.query.offset as string) || 0;
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const offset = parseInt(req.query.offset as string, 10) || 0;
 
       const result = await dbStorage.getUserTickets(auth0UserId, { status, limit, offset });
       res.json(result);
@@ -5633,11 +5656,11 @@ export async function registerRoutes(
       res.status(201).json({ ticket });
     } catch (error: any) {
       log(`Error creating ticket: ${error.message}`, 'api');
-      // Return detailed error for debugging - check if it's a DB error
-      const errorMessage = error.message?.includes('relation') || error.message?.includes('does not exist')
-        ? 'Database tables not found. Please run: npm run db:push'
-        : error.message || 'Failed to create ticket';
-      res.status(500).json({ error: errorMessage });
+      // Log detailed error but return generic message to user
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        log('Database tables not found - run: npm run db:push', 'api');
+      }
+      res.status(500).json({ error: 'Failed to create ticket. Please try again or contact support.' });
     }
   });
 
@@ -5875,8 +5898,8 @@ export async function registerRoutes(
       const auth0UserId = req.query.user as string | undefined;
       const virtfusionServerId = req.query.server as string | undefined;
       const assignedAdminId = req.query.assigned === 'null' ? null : req.query.assigned as string | undefined;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const offset = parseInt(req.query.offset as string) || 0;
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const offset = parseInt(req.query.offset as string, 10) || 0;
       const sortBy = (req.query.sortBy as 'lastMessageAt' | 'priority' | 'createdAt') || 'lastMessageAt';
       const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'desc';
 

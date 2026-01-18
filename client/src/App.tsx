@@ -8,7 +8,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DevBanner } from "@/components/dev-banner";
-import { RateLimitOverlay, isRateLimited } from "@/components/rate-limit-overlay";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -47,17 +46,14 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
 
 function AuthGuard({ children, requireVerified = true }: { children: React.ReactNode; requireVerified?: boolean }) {
   const [location] = useLocation();
-  const rateLimited = isRateLimited();
   const { data: auth, isLoading } = useQuery({
     queryKey: ['auth'],
     queryFn: () => api.getAuthUser(),
     retry: false,
     staleTime: 0, // Always refetch on navigation for security
-    enabled: !rateLimited, // Don't fetch while rate limited
   });
 
-  // If rate limited, show loading spinner - the overlay will block the screen
-  if (rateLimited || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 text-primary animate-spin" />
@@ -78,13 +74,11 @@ function AuthGuard({ children, requireVerified = true }: { children: React.React
 }
 
 function Router() {
-  const rateLimited = isRateLimited();
   const { data: auth } = useQuery({
     queryKey: ['auth'],
     queryFn: () => api.getAuthUser(),
     retry: false,
     staleTime: 0,
-    enabled: !rateLimited, // Don't fetch while rate limited
   });
 
   return (
@@ -256,7 +250,6 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <PowerActionProvider>
           <TooltipProvider>
-            <RateLimitOverlay />
             <DevBanner />
             <Toaster />
             <SonnerToaster />

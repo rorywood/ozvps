@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { triggerRateLimit, isRateLimited } from "@/components/rate-limit-overlay";
 
 interface AuthSession {
   authenticated: boolean;
@@ -23,31 +22,15 @@ interface AuthMeResponse {
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const rateLimited = isRateLimited();
 
   const { data: session, isLoading: sessionLoading } = useQuery<AuthSession>({
     queryKey: ["auth", "session"],
     queryFn: async () => {
       const response = await fetch("/api/auth/session");
-      // If rate limited, show overlay and preserve previous state
-      if (response.status === 429) {
-        try {
-          const data = await response.clone().json();
-          triggerRateLimit(data.blockSeconds || 10);
-        } catch {
-          triggerRateLimit(10);
-        }
-        throw new Error("Rate limited - slow down");
-      }
       return response.json();
     },
     staleTime: 1000 * 60 * 5,
-    enabled: !rateLimited, // Don't fetch while rate limited
-    retry: (failureCount, error) => {
-      // Don't retry if rate limited
-      if (error?.message?.includes("Rate limited")) return false;
-      return failureCount < 2;
-    },
+    retry: 2,
   });
 
   // Fetch full user data including emailVerified
@@ -55,20 +38,10 @@ export function useAuth() {
     queryKey: ["auth", "me"],
     queryFn: async () => {
       const response = await fetch("/api/auth/me");
-      // If rate limited, show overlay and preserve previous state
-      if (response.status === 429) {
-        try {
-          const data = await response.clone().json();
-          triggerRateLimit(data.blockSeconds || 10);
-        } catch {
-          triggerRateLimit(10);
-        }
-        throw new Error("Rate limited - slow down");
-      }
       if (!response.ok) return null;
       return response.json();
     },
-    enabled: !rateLimited && (session?.authenticated ?? false),
+    enabled: session?.authenticated ?? false,
     staleTime: 1000 * 30, // 30 seconds
   });
 

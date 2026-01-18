@@ -651,14 +651,14 @@ export class VirtFusionClient {
       // Calculate RAM usage from memory stats
       let ramUsage = 0;
       if (memory.memtotal && memory.memavailable) {
-        const memTotal = parseInt(memory.memtotal) || 0;
-        const memAvailable = parseInt(memory.memavailable) || 0;
+        const memTotal = parseInt(memory.memtotal, 10) || 0;
+        const memAvailable = parseInt(memory.memavailable, 10) || 0;
         if (memTotal > 0) {
           ramUsage = ((memTotal - memAvailable) / memTotal) * 100;
         }
       } else if (memory.memtotal && memory.memfree) {
-        const memTotal = parseInt(memory.memtotal) || 0;
-        const memFree = parseInt(memory.memfree) || 0;
+        const memTotal = parseInt(memory.memtotal, 10) || 0;
+        const memFree = parseInt(memory.memfree, 10) || 0;
         if (memTotal > 0) {
           ramUsage = ((memTotal - memFree) / memTotal) * 100;
         }
@@ -688,8 +688,8 @@ export class VirtFusionClient {
       for (const key of diskKeys) {
         const diskData = disk[key];
         if (diskData && diskData.capacity && diskData.physical) {
-          const capacity = parseInt(diskData.capacity) || 0;
-          const physical = parseInt(diskData.physical) || 0;
+          const capacity = parseInt(diskData.capacity, 10) || 0;
+          const physical = parseInt(diskData.physical, 10) || 0;
           diskTotalBytes += capacity;
           diskUsedBytes += physical;
         }
@@ -700,9 +700,9 @@ export class VirtFusionClient {
       }
       
       // Memory details for display
-      const memTotalMB = Math.round((parseInt(memory.memtotal) || 0) / 1024);
-      const memUsedMB = Math.round(((parseInt(memory.memtotal) || 0) - (parseInt(memory.memavailable) || parseInt(memory.memfree) || 0)) / 1024);
-      const memFreeMB = Math.round((parseInt(memory.memavailable) || parseInt(memory.memfree) || 0) / 1024);
+      const memTotalMB = Math.round((parseInt(memory.memtotal, 10) || 0) / 1024);
+      const memUsedMB = Math.round(((parseInt(memory.memtotal, 10) || 0) - (parseInt(memory.memavailable, 10) || parseInt(memory.memfree, 10) || 0)) / 1024);
+      const memFreeMB = Math.round((parseInt(memory.memavailable, 10) || parseInt(memory.memfree, 10) || 0) / 1024);
       
       return {
         cpu_usage: Math.min(100, Math.max(0, cpuUsage)),
@@ -1271,8 +1271,8 @@ export class VirtFusionClient {
       // RAM usage from memory stats
       const memory = remoteState.memory || {};
       if (memory.memtotal && (memory.memavailable || memory.memfree)) {
-        const memTotal = parseInt(memory.memtotal) || 0;
-        const memAvailable = parseInt(memory.memavailable) || parseInt(memory.memfree) || 0;
+        const memTotal = parseInt(memory.memtotal, 10) || 0;
+        const memAvailable = parseInt(memory.memavailable, 10) || parseInt(memory.memfree, 10) || 0;
         if (memTotal > 0) {
           ramUsage = Math.min(100, Math.max(0, ((memTotal - memAvailable) / memTotal) * 100));
         }
@@ -1285,8 +1285,8 @@ export class VirtFusionClient {
       for (const key of Object.keys(diskData)) {
         const d = diskData[key];
         if (d && d.capacity && d.physical) {
-          diskTotalBytes += parseInt(d.capacity) || 0;
-          diskUsedBytes += parseInt(d.physical) || 0;
+          diskTotalBytes += parseInt(d.capacity, 10) || 0;
+          diskUsedBytes += parseInt(d.physical, 10) || 0;
         }
       }
       if (diskTotalBytes > 0) {
