@@ -136,6 +136,7 @@ error_exit() {
 
 success() { echo -e "  ${GREEN}✓${NC}  $1"; }
 info() { echo -e "  ${CYAN}→${NC}  $1"; }
+warn() { echo -e "  ${YELLOW}⚠${NC}  $1"; }
 warning() { echo -e "  ${YELLOW}⚠${NC}  $1"; }
 
 input_field() {
@@ -417,6 +418,11 @@ main() {
 
         if [[ -n "$MISSING_VARS" ]]; then
             error_exit "Missing required variables for unattended mode:$MISSING_VARS"
+        fi
+
+        # SSL_EMAIL is required if SETUP_SSL is yes
+        if [[ "$SETUP_SSL" == "yes" && -z "$SSL_EMAIL" ]]; then
+            error_exit "SSL_EMAIL is required when SETUP_SSL=yes"
         fi
 
         # Auto-generate optional secrets if not provided
@@ -1028,6 +1034,10 @@ server {
 EOF
 
         mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+        # Remove default site to prevent conflicts
+        rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
         ln -sf "/etc/nginx/sites-available/$NGINX_CONF_NAME" /etc/nginx/sites-enabled/
 
         # Include sites-enabled for RHEL-based systems
