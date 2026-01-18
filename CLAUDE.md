@@ -19,19 +19,39 @@
 ## Key Files
 - `scripts/ozvps` - Control panel CLI (v4.1.0, git-based updates)
 - `scripts/ozvps-install.sh` - Fresh install script (git clone based)
-- `scripts/update.sh` - Simple update script
-- `server/routes.ts` - All API endpoints
+- `server/routes.ts` - All API endpoints (49 admin routes with `requireAdmin` middleware)
 - `server/index.ts` - Express setup, rate limiters, middleware
+- `server/virtfusion.ts` - VirtFusion API client with stale cache fallback
+- `server/cancellation-processor.ts` - Server cancellation with orphan cleanup
+- `server/webhookHandlers.ts` - Stripe webhook processing
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
+- `client/src/pages/server-detail.tsx` - Server detail page with React Query
 - `shared/version.ts` - Version number and changelog
 
 ## Recent Session Work (2026-01-18)
-1. **Converted to git-based updates** - No more zip downloads, no CDN cache issues
-2. **Added environment badge** - Footer shows DEV (yellow) or PROD (green) + version
-3. **Fixed Content-Type headers** - `secureFetch` now auto-adds `application/json`
-4. **Added `/api/auth/session` endpoint** - Was missing, caused hard refresh logout bug
-5. **Added rate limiting for refresh** - 15 req/10sec with "Slow down" message
-6. **Fixed registration toggle** - Was failing due to missing Content-Type
+
+### Security Hardening (Production Ready)
+1. **Admin middleware consistency** - All 49 admin endpoints now use `requireAdmin` middleware
+2. **CSRF security** - Removed localStorage fallback, tokens stored in cookies only
+3. **parseInt radix** - Added radix parameter to all parseInt() calls
+4. **Destructive action confirmations** - Admin delete/transfer actions require `confirmAction: true`
+5. **Large wallet adjustments** - Adjustments over $100 require confirmation
+6. **Stripe webhook validation** - Rejects test mode webhooks in production (throws 400)
+7. **Auth0 cache TTL** - Reduced from 30s to 10s for faster user state updates
+
+### Bug Fixes
+1. **"Server not found" flash** - Fixed React Query showing error on background refetch failures
+   - Changed condition from `isError || !server` to just `!server`
+   - Added retry: 2 and retryDelay: 1000ms for resilience
+2. **Stale cache fallback** - Server detail API returns stale cached data if VirtFusion times out
+3. **Orphaned cancellations** - Auto-completes cancellations when server already deleted from VirtFusion
+
+### Previous Work
+- Converted to git-based updates (no more zip/CDN cache issues)
+- Added environment badge (DEV yellow / PROD green)
+- Fixed Content-Type headers in `secureFetch`
+- Added `/api/auth/session` endpoint
+- Fixed registration toggle
 
 ## Current Version
 - **App Version**: 1.10.0
@@ -42,6 +62,8 @@
 2. **Hard refresh logs out user** - Fixed with `/api/auth/session` endpoint
 3. **Admin API calls fail** - `secureFetch` auto-adds Content-Type now
 4. **Updates get old cached code** - Now uses git, not zip downloads
+5. **"Server not found" flash** - Fixed: don't show error if cached data exists
+6. **Stuck cancellations** - Auto-cleaned if server already deleted from VirtFusion
 
 ## Update Commands
 ```bash
