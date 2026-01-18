@@ -1304,7 +1304,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Server Charges Tab */}
-              <TabsContent value="servers" className="space-y-6 mt-8"
+              <TabsContent value="servers" className="space-y-6 mt-8">
                 {loadingUpcomingCharges ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1404,7 +1404,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Transactions Tab */}
-              <TabsContent value="transactions" className="space-y-6 mt-8"
+              <TabsContent value="transactions" className="space-y-6 mt-8">
                 <div data-testid="transactions-section">
                   <h2 className="text-lg font-semibold text-foreground mb-4">Transaction History</h2>
 
@@ -1525,7 +1525,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Invoices Tab */}
-              <TabsContent value="invoices" className="space-y-6 mt-8"
+              <TabsContent value="invoices" className="space-y-6 mt-8">
                 <div data-testid="invoices-section">
                   <h2 className="text-lg font-semibold text-foreground mb-4">Invoices</h2>
 
@@ -1620,7 +1620,7 @@ export default function BillingPage() {
               </TabsContent>
 
               {/* Settings Tab */}
-              <TabsContent value="settings" className="space-y-6 mt-8"
+              <TabsContent value="settings" className="space-y-6 mt-8">
                 <div>
                   <h2 className="text-xl font-semibold text-foreground mb-4">Billing Settings</h2>
                   <AutoTopupSection paymentMethods={paymentMethods} />
