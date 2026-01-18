@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PowerActionProvider } from "@/hooks/use-power-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DevBanner } from "@/components/dev-banner";
+import { RateLimitOverlay } from "@/components/rate-limit-overlay";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
 import Dashboard from "@/pages/dashboard";
@@ -250,6 +251,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <PowerActionProvider>
           <TooltipProvider>
+            <RateLimitOverlay />
             <DevBanner />
             <Toaster />
             <SonnerToaster />

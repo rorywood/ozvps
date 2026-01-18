@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { triggerRateLimit } from "@/components/rate-limit-overlay";
 
 interface AuthSession {
   authenticated: boolean;
@@ -27,8 +28,14 @@ export function useAuth() {
     queryKey: ["auth", "session"],
     queryFn: async () => {
       const response = await fetch("/api/auth/session");
-      // If rate limited, throw to preserve previous state (don't log out)
+      // If rate limited, show overlay and preserve previous state
       if (response.status === 429) {
+        try {
+          const data = await response.clone().json();
+          triggerRateLimit(data.blockSeconds || 10);
+        } catch {
+          triggerRateLimit(10);
+        }
         throw new Error("Rate limited - slow down");
       }
       return response.json();
@@ -46,8 +53,14 @@ export function useAuth() {
     queryKey: ["auth", "me"],
     queryFn: async () => {
       const response = await fetch("/api/auth/me");
-      // If rate limited, throw to preserve previous state
+      // If rate limited, show overlay and preserve previous state
       if (response.status === 429) {
+        try {
+          const data = await response.clone().json();
+          triggerRateLimit(data.blockSeconds || 10);
+        } catch {
+          triggerRateLimit(10);
+        }
         throw new Error("Rate limited - slow down");
       }
       if (!response.ok) return null;

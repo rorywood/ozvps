@@ -189,8 +189,8 @@ const publicEndpointLimiter = rateLimit({
 // Rate limiting for session check endpoints (prevents rapid refresh abuse)
 const sessionCheckLimiter = rateLimit({
   windowMs: 10 * 1000, // 10 seconds
-  max: 15, // 15 requests per 10 seconds (allows normal page load)
-  message: { error: 'Slow down! Too many requests. Please wait a moment.', code: 'RATE_LIMITED' },
+  max: 10, // 10 requests per 10 seconds - then block
+  message: { error: 'Slow down! You are refreshing too fast. Please wait 10 seconds.', code: 'RATE_LIMITED', blockSeconds: 10 },
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },

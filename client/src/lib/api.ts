@@ -1,5 +1,6 @@
 import { Server, SupportTicket, TicketMessage } from "./types";
 import { SessionError } from "./queryClient";
+import { triggerRateLimit } from "@/components/rate-limit-overlay";
 
 // CSRF token management
 const CSRF_COOKIE = 'ozvps_csrf';
@@ -59,10 +60,15 @@ export async function secureFetch(url: string, options: RequestInit = {}): Promi
 
   const response = await fetch(url, options);
 
-  // Handle 429 (rate limited) - show slow down message, don't logout
+  // Handle 429 (rate limited) - show blocking overlay, don't logout
   if (response.status === 429) {
-    // Show a toast notification if available, otherwise the caller handles it
-    // Don't trigger logout - just let the error propagate
+    try {
+      const data = await response.clone().json();
+      const blockSeconds = data.blockSeconds || 10;
+      triggerRateLimit(blockSeconds);
+    } catch {
+      triggerRateLimit(10);
+    }
     return response;
   }
 
