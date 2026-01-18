@@ -129,7 +129,20 @@ function VersionDialog() {
 
 function Footer() {
   const currentYear = new Date().getFullYear();
-  
+
+  // Determine environment from hostname
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isDev = hostname.includes("dev") ||
+                hostname === "localhost" ||
+                hostname === "127.0.0.1" ||
+                import.meta.env.MODE === "development" ||
+                import.meta.env.DEV;
+
+  const envLabel = isDev ? "DEV" : "PROD";
+  const envColor = isDev
+    ? "bg-yellow-500/20 text-yellow-600 border-yellow-500/50"
+    : "bg-green-500/20 text-green-600 border-green-500/50";
+
   return (
     <footer className="border-t border-border/50 bg-card/30 backdrop-blur-sm">
       <div className="container mx-auto max-w-7xl px-6 py-8">
@@ -139,7 +152,7 @@ function Footer() {
               © {currentYear} <span className="font-semibold text-foreground">OzVPS</span>. All rights reserved.
             </span>
           </div>
-          
+
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <Link href="/dashboard" className="hover:text-foreground transition-colors">
               Dashboard
@@ -153,11 +166,22 @@ function Footer() {
             </span>
           </div>
         </div>
-        
-        <div className="mt-6 pt-6 border-t border-border/50 flex items-center justify-center">
+
+        <div className="mt-6 pt-6 border-t border-border/50 flex items-center justify-between">
           <p className="text-xs text-muted-foreground/60">
             Powered by Australian infrastructure. Built with ❤️ in Queensland.
           </p>
+          <div className="flex items-center gap-3">
+            <span className={cn(
+              "px-2 py-0.5 text-[10px] font-bold rounded border",
+              envColor
+            )}>
+              {envLabel}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground/50">
+              v{VERSION}
+            </span>
+          </div>
         </div>
       </div>
     </footer>
