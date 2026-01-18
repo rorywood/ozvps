@@ -9,6 +9,53 @@ const PROCESSING_INTERVAL_MS = 30 * 1000; // Check every 30 seconds for faster c
 
 let isRunning = false;
 
+// Phase 0: Clean up cancellations for servers that no longer exist in VirtFusion
+// This handles cases where servers are deleted manually outside the panel
+async function cleanupOrphanedCancellations(): Promise<number> {
+  let cleaned = 0;
+
+  const pendingCancellations = await dbStorage.getPendingCancellations();
+
+  for (const cancellation of pendingCancellations) {
+    try {
+      const serverIdNum = parseInt(cancellation.virtfusionServerId, 10);
+
+      if (isNaN(serverIdNum)) {
+        // Invalid server ID, complete the cancellation
+        await dbStorage.completeCancellation(cancellation.id);
+        log(`Cleaned up cancellation ${cancellation.id}: invalid server ID`, 'cancellation');
+        cleaned++;
+        continue;
+      }
+
+      // Check if server still exists in VirtFusion
+      const serverExists = await virtfusionClient.checkServerExists(serverIdNum);
+
+      if (!serverExists) {
+        // Server already deleted from VirtFusion, complete the cancellation
+        await dbStorage.completeCancellation(cancellation.id);
+        log(`Auto-completed cancellation for server ${cancellation.virtfusionServerId}: server no longer exists in VirtFusion`, 'cancellation');
+
+        // Clean up billing record
+        try {
+          await db.delete(serverBilling)
+            .where(eq(serverBilling.virtfusionServerId, cancellation.virtfusionServerId));
+          log(`Removed billing record for deleted server ${cancellation.virtfusionServerId}`, 'billing');
+        } catch (billingError: any) {
+          log(`Warning: Could not remove billing record for server ${cancellation.virtfusionServerId}: ${billingError.message}`, 'billing');
+        }
+
+        cleaned++;
+      }
+    } catch (error: any) {
+      // If we can't check, skip this one - don't want to accidentally complete valid cancellations
+      log(`Warning: Could not check server ${cancellation.virtfusionServerId} existence: ${error.message}`, 'cancellation');
+    }
+  }
+
+  return cleaned;
+}
+
 // Phase 1: Process pending cancellations - submit deletion to VirtFusion
 async function processPendingCancellations(): Promise<{ submitted: number; errors: number }> {
   const now = new Date();
@@ -138,17 +185,21 @@ async function checkProcessingCancellations(): Promise<{ completed: number; stil
 export async function processExpiredCancellations(): Promise<{ processed: number; errors: number }> {
   let processed = 0;
   let errors = 0;
-  
+
   try {
-    // Phase 1: Submit pending deletions to VirtFusion
+    // Phase 0: Clean up orphaned cancellations (servers already deleted from VirtFusion)
+    const cleaned = await cleanupOrphanedCancellations();
+    processed += cleaned;
+
+    // Phase 1: Submit pending deletions to VirtFusion (for servers past their scheduled time)
     const { submitted, errors: submitErrors } = await processPendingCancellations();
     processed += submitted;
     errors += submitErrors;
-    
+
     // Phase 2: Check if processing deletions are complete
     const { completed, stillProcessing } = await checkProcessingCancellations();
     processed += completed;
-    
+
     if (stillProcessing > 0) {
       log(`${stillProcessing} servers still being deleted by VirtFusion`, 'cancellation');
     }
@@ -156,7 +207,7 @@ export async function processExpiredCancellations(): Promise<{ processed: number
     log(`Error in cancellation processor: ${error.message}`, 'cancellation');
     errors++;
   }
-  
+
   return { processed, errors };
 }
 
