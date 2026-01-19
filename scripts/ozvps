@@ -885,7 +885,7 @@ EOF
 
     # Try to detect domain from NGINX config
     local nginx_conf_for_domain=""
-    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod; do
+    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod /etc/nginx/sites-available/ozvps-production; do
         if [[ -f "$conf" ]]; then
             nginx_conf_for_domain="$conf"
             break
@@ -944,7 +944,7 @@ ERRORCONF
 
     # Add snippet to NGINX config if not already present
     local nginx_conf=""
-    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod; do
+    for conf in /etc/nginx/sites-available/ozvps /etc/nginx/sites-available/ozvps-dev /etc/nginx/sites-available/ozvps-prod /etc/nginx/sites-available/ozvps-production; do
         if [[ -f "$conf" ]]; then
             nginx_conf="$conf"
             break

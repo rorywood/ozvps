@@ -79,7 +79,8 @@
       "Bash(chmod:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(DATABASE_URL=\"postgres://localhost/ozvps\" npx drizzle-kit:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(git rm:*)"
     ]
   }
 }
