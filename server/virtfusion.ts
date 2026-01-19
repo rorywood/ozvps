@@ -650,15 +650,15 @@ export class VirtFusionClient {
       });
       log(`Server ${serverId} unsuspended in VirtFusion`, 'virtfusion');
 
-      // Then start the server so the user doesn't have to manually power it on
+      // Then boot the server so the user doesn't have to manually power it on
       try {
-        await this.request(`/servers/${serverId}/power/start`, {
+        await this.request(`/servers/${serverId}/power/boot`, {
           method: 'POST',
         });
-        log(`Server ${serverId} started after unsuspension`, 'virtfusion');
-      } catch (startError: any) {
+        log(`Server ${serverId} booted after unsuspension`, 'virtfusion');
+      } catch (bootError: any) {
         // Server might already be running or have issues - log but don't fail
-        log(`Could not start server ${serverId} after unsuspension: ${startError.message}`, 'virtfusion');
+        log(`Could not boot server ${serverId} after unsuspension: ${bootError.message}`, 'virtfusion');
       }
 
       // Invalidate cache since server state has changed
