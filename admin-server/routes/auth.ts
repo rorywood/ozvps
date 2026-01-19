@@ -2,7 +2,8 @@ import { Express, Request, Response } from "express";
 import { db } from "../../server/db";
 import { twoFactorAuth } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
-import { authenticator } from "otplib";
+import * as otplib from "otplib";
+const authenticator = otplib.authenticator;
 import argon2 from "argon2";
 import {
   isUserAdmin,
@@ -154,111 +155,124 @@ export function registerAuthRoutes(app: Express) {
 
   // Step 2: Verify 2FA code and create session
   app.post("/api/auth/verify-2fa", async (req: Request, res: Response) => {
-    const { pendingLoginToken, code } = req.body;
-
-    if (!pendingLoginToken || !code) {
-      return res.status(400).json({ error: "Token and 2FA code required" });
-    }
-
-    // Decode and validate the pending login token
-    let tokenData: { auth0UserId: string; email: string; name: string | null; exp: number };
     try {
-      tokenData = JSON.parse(Buffer.from(pendingLoginToken, "base64").toString());
-      if (Date.now() > tokenData.exp) {
-        return res.status(401).json({ error: "Login session expired. Please start over." });
+      const { pendingLoginToken, code } = req.body;
+
+      if (!pendingLoginToken || !code) {
+        return res.status(400).json({ error: "Token and 2FA code required" });
       }
-    } catch {
-      return res.status(400).json({ error: "Invalid token" });
-    }
 
-    // Get the user's 2FA secret
-    const [tfa] = await db
-      .select()
-      .from(twoFactorAuth)
-      .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
+      // Decode and validate the pending login token
+      let tokenData: { auth0UserId: string; email: string; name: string | null; exp: number };
+      try {
+        tokenData = JSON.parse(Buffer.from(pendingLoginToken, "base64").toString());
+        if (Date.now() > tokenData.exp) {
+          return res.status(401).json({ error: "Login session expired. Please start over." });
+        }
+      } catch {
+        return res.status(400).json({ error: "Invalid token" });
+      }
 
-    if (!tfa) {
-      return res.status(403).json({ error: "2FA not enabled" });
-    }
+      console.log(`[admin-auth] Verifying 2FA for ${tokenData.email} (${tokenData.auth0UserId})`);
 
-    // Verify the TOTP code
-    const isValid = authenticator.verify({ token: code, secret: tfa.secret });
+      // Get the user's 2FA secret
+      const [tfa] = await db
+        .select()
+        .from(twoFactorAuth)
+        .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
 
-    if (!isValid) {
-      // Check backup codes
-      if (tfa.backupCodes) {
-        try {
-          const backupCodes: string[] = JSON.parse(tfa.backupCodes);
-          let backupCodeUsed = false;
+      if (!tfa) {
+        console.log(`[admin-auth] No 2FA record found for ${tokenData.auth0UserId}`);
+        return res.status(403).json({ error: "2FA not enabled for this account" });
+      }
 
-          for (let i = 0; i < backupCodes.length; i++) {
-            // Backup codes are stored hashed
-            const isMatch = await argon2.verify(backupCodes[i], code);
-            if (isMatch) {
-              // Remove the used backup code
-              backupCodes.splice(i, 1);
-              await db
-                .update(twoFactorAuth)
-                .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
-                .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
-              backupCodeUsed = true;
-              console.log(`[admin-auth] Backup code used for ${tokenData.email}`);
-              break;
+      console.log(`[admin-auth] Found 2FA record, verifying code...`);
+
+      // Verify the TOTP code
+      const isValid = authenticator.verify({ token: code, secret: tfa.secret });
+
+      if (!isValid) {
+        // Check backup codes
+        if (tfa.backupCodes) {
+          try {
+            const backupCodes: string[] = JSON.parse(tfa.backupCodes);
+            let backupCodeUsed = false;
+
+            for (let i = 0; i < backupCodes.length; i++) {
+              // Backup codes are stored hashed
+              const isMatch = await argon2.verify(backupCodes[i], code);
+              if (isMatch) {
+                // Remove the used backup code
+                backupCodes.splice(i, 1);
+                await db
+                  .update(twoFactorAuth)
+                  .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
+                  .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
+                backupCodeUsed = true;
+                console.log(`[admin-auth] Backup code used for ${tokenData.email}`);
+                break;
+              }
             }
-          }
 
-          if (!backupCodeUsed) {
+            if (!backupCodeUsed) {
+              console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
+              return res.status(401).json({ error: "Invalid 2FA code" });
+            }
+          } catch (backupError: any) {
+            console.log(`[admin-auth] Backup code check error: ${backupError.message}`);
             console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
             return res.status(401).json({ error: "Invalid 2FA code" });
           }
-        } catch {
+        } else {
           console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
           return res.status(401).json({ error: "Invalid 2FA code" });
         }
       } else {
-        console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
-        return res.status(401).json({ error: "Invalid 2FA code" });
+        // Update last used timestamp
+        await db
+          .update(twoFactorAuth)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
       }
-    } else {
-      // Update last used timestamp
-      await db
-        .update(twoFactorAuth)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
+
+      console.log(`[admin-auth] 2FA verified for ${tokenData.email}`);
+
+      // 2FA verified - create admin session
+      const clientIp = getClientIp(req);
+      const userAgent = req.headers["user-agent"] || null;
+      const sessionId = await createAdminSession(
+        tokenData.auth0UserId,
+        tokenData.email,
+        tokenData.name,
+        clientIp,
+        userAgent
+      );
+
+      // Generate CSRF token
+      const csrfToken = generateCsrfToken(sessionId);
+
+      // Set session cookie
+      res.cookie("admin_session", sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: ADMIN_SESSION_EXPIRY,
+      });
+
+      console.log(`[admin-auth] Admin login successful: ${tokenData.email} from ${clientIp}`);
+
+      return res.json({
+        success: true,
+        user: {
+          email: tokenData.email,
+          name: tokenData.name,
+        },
+        csrfToken,
+      });
+    } catch (error: any) {
+      console.error(`[admin-auth] 2FA verification error:`, error);
+      return res.status(500).json({ error: "Internal server error" });
     }
-
-    // 2FA verified - create admin session
-    const clientIp = getClientIp(req);
-    const userAgent = req.headers["user-agent"] || null;
-    const sessionId = await createAdminSession(
-      tokenData.auth0UserId,
-      tokenData.email,
-      tokenData.name,
-      clientIp,
-      userAgent
-    );
-
-    // Generate CSRF token
-    const csrfToken = generateCsrfToken(sessionId);
-
-    // Set session cookie
-    res.cookie("admin_session", sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: ADMIN_SESSION_EXPIRY,
-    });
-
-    console.log(`[admin-auth] Admin login successful: ${tokenData.email} from ${clientIp}`);
-
-    return res.json({
-      success: true,
-      user: {
-        email: tokenData.email,
-        name: tokenData.name,
-      },
-      csrfToken,
-    });
   });
 
   // Logout
