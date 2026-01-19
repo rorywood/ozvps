@@ -170,7 +170,7 @@ export default function Dashboard() {
               Bandwidth
               {bandwidthData?.totalLimit && ` / ${
                 bandwidthData.totalLimit >= 1000
-                  ? `${(bandwidthData.totalLimit / 1024).toFixed(2)} TB`
+                  ? `${(bandwidthData.totalLimit / 1000).toFixed(0)} TB`
                   : `${bandwidthData.totalLimit} GB`
               }`}
             </div>
