@@ -82,7 +82,9 @@
       "Bash(gh run list:*)",
       "Bash(git rm:*)",
       "Bash(for file in server/auth0.ts server/billing.ts server/cancellation-processor.ts server/email.ts server/install-assets.ts server/orphan-cleanup-processor.ts server/routes.ts server/security.ts server/storage.ts server/virtfusion.ts server/webhookHandlers.ts)",
-      "Bash(do sed -i \"s|import { log } from [''\"\"]./index[''\"\"]|import { log } from ''./log''|g\" \"$file\")"
+      "Bash(do sed -i \"s|import { log } from [''\"\"]./index[''\"\"]|import { log } from ''./log''|g\" \"$file\")",
+      "Bash(git -C D:/Claude/ozvps add:*)",
+      "Bash(git -C D:/Claude/ozvps status:*)"
     ]
   }
 }

@@ -4,20 +4,18 @@ import { adminSessions, twoFactorAuth, userMappings } from "../../shared/schema"
 import { eq, and, isNull, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { getClientIp } from "./ip-whitelist";
+import { auth0Client } from "../../server/auth0";
 
 // Admin session settings
 export const ADMIN_SESSION_EXPIRY = 8 * 60 * 60 * 1000; // 8 hours
 export const ADMIN_IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes of inactivity
 
-// Hardcoded list of admin email addresses
-// This should match the list in server/routes.ts
-const ADMIN_EMAILS = [
-  "rory@rorydobson.com",
-  "rory@ozvps.com.au",
-];
-
-export function isAdminEmail(email: string): boolean {
-  return ADMIN_EMAILS.includes(email.toLowerCase());
+/**
+ * Check if a user is an admin via Auth0's app_metadata.is_admin
+ * This uses the Auth0 Management API to fetch the user and check their metadata
+ */
+export async function isUserAdmin(auth0UserId: string): Promise<boolean> {
+  return auth0Client.isUserAdmin(auth0UserId);
 }
 
 export interface AdminSessionData {
@@ -183,8 +181,9 @@ export async function adminAuthMiddleware(req: Request, res: Response, next: Nex
     return res.status(401).json({ error: "Session expired or invalid" });
   }
 
-  // Verify the user is still an admin
-  if (!isAdminEmail(session.email)) {
+  // Verify the user is still an admin via Auth0
+  const stillAdmin = await isUserAdmin(session.auth0UserId);
+  if (!stillAdmin) {
     await revokeAdminSession(sessionId, "NOT_ADMIN");
     res.clearCookie("admin_session", {
       httpOnly: true,

@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { authenticator } from "otplib";
 import argon2 from "argon2";
 import {
-  isAdminEmail,
+  isUserAdmin,
   createAdminSession,
   revokeAdminSession,
   ADMIN_SESSION_EXPIRY,
@@ -102,19 +102,20 @@ export function registerAuthRoutes(app: Express) {
       return res.status(400).json({ error: "Email and password required" });
     }
 
-    // Check if user is an admin
-    if (!isAdminEmail(email)) {
-      console.log(`[admin-auth] Non-admin login attempt: ${email}`);
-      return res.status(403).json({ error: "Access denied. Admin privileges required." });
-    }
-
-    // Verify credentials with Auth0
+    // Verify credentials with Auth0 FIRST
     const authResult = await verifyAuth0Password(email, password);
     if (!authResult.success || !authResult.auth0UserId) {
       return res.status(401).json({ error: authResult.error || "Invalid credentials" });
     }
 
     const auth0UserId = authResult.auth0UserId;
+
+    // Check if user is an admin via Auth0 app_metadata
+    const isAdmin = await isUserAdmin(auth0UserId);
+    if (!isAdmin) {
+      console.log(`[admin-auth] Non-admin login attempt: ${email} (${auth0UserId})`);
+      return res.status(403).json({ error: "Access denied. Admin privileges required." });
+    }
 
     // Check if user exists in our database
     const [mapping] = await db
