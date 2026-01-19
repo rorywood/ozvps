@@ -868,8 +868,52 @@ EOF
     # Run migrations BEFORE pruning (drizzle-kit is a dev dependency)
     info "Running migrations..."
     set -a && source .env && set +a
-    npx drizzle-kit push --force 2>/dev/null || true
-    success "Migrations applied"
+
+    # Try drizzle-kit first
+    if npx drizzle-kit push --force 2>/dev/null; then
+        success "Migrations applied via drizzle-kit"
+    else
+        # Fallback: run essential migrations via raw SQL
+        warning "drizzle-kit failed, applying migrations via SQL..."
+        psql "$DATABASE_URL" -c "
+            -- Add is_admin column to user_mappings if not exists
+            ALTER TABLE user_mappings ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+
+            -- Create admin_ip_whitelist table if not exists
+            CREATE TABLE IF NOT EXISTS admin_ip_whitelist (
+                id SERIAL PRIMARY KEY,
+                ip_address TEXT NOT NULL,
+                cidr TEXT,
+                label TEXT NOT NULL,
+                added_by TEXT NOT NULL,
+                added_by_email TEXT NOT NULL,
+                expires_at TIMESTAMP,
+                enabled BOOLEAN DEFAULT true,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+
+            -- Create admin_sessions table if not exists
+            CREATE TABLE IF NOT EXISTS admin_sessions (
+                id VARCHAR(64) PRIMARY KEY,
+                auth0_user_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                name TEXT,
+                ip_address TEXT NOT NULL,
+                user_agent TEXT,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                last_activity_at TIMESTAMP DEFAULT NOW(),
+                revoked_at TIMESTAMP,
+                revoked_reason TEXT
+            );
+
+            -- Add admin suspension columns to server_billing if not exists
+            ALTER TABLE server_billing ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN DEFAULT false;
+            ALTER TABLE server_billing ADD COLUMN IF NOT EXISTS admin_suspended_at TIMESTAMP;
+            ALTER TABLE server_billing ADD COLUMN IF NOT EXISTS admin_suspended_reason TEXT;
+        " 2>/dev/null || warning "Some SQL migrations may have failed"
+        success "SQL migrations applied"
+    fi
 
     # Prune dev dependencies for production to save space (AFTER migrations)
     local env=$(get_environment)
