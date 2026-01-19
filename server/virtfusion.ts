@@ -1259,7 +1259,15 @@ export class VirtFusionClient {
     } else {
       // Final fallback to state-based detection using other fields
       const stateValue = server.power_status || server.powerState || server.power || '';
-      status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+      if (stateValue) {
+        status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+      } else if (commissioned === 3) {
+        // If server is fully commissioned but no power state info available,
+        // assume running (VirtFusion list endpoint may not include remoteState)
+        status = 'running';
+      } else {
+        status = this.mapStatus(stateValue, server.suspended, server.buildFailed);
+      }
     }
     
     // Get primary IP from network interfaces

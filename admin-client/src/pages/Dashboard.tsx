@@ -201,21 +201,35 @@ export default function Dashboard() {
 
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">CPU Load</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">1 min avg</span>
-                <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["1min"]}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">5 min avg</span>
-                <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["5min"]}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">15 min avg</span>
-                <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["15min"]}</span>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{health.system.cpu.cores} cores</p>
-            </div>
+            {(() => {
+              const load1m = parseFloat(health.system.cpu.loadAvg["1min"]);
+              const cores = health.system.cpu.cores;
+              const cpuPercent = Math.min(Math.round((load1m / cores) * 100), 100);
+              return (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Load</span>
+                    <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["1min"]}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        cpuPercent > 90
+                          ? "bg-red-500"
+                          : cpuPercent > 70
+                          ? "bg-yellow-500"
+                          : "bg-blue-600"
+                      }`}
+                      style={{ width: `${cpuPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>{cpuPercent}% utilized</span>
+                    <span>{cores} cores</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">

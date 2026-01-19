@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { billingApi } from "../lib/api";
+import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, AlertTriangle } from "lucide-react";
+import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, AlertTriangle, Pause, X } from "lucide-react";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: records, isLoading } = useQuery({
@@ -30,6 +31,7 @@ export default function Billing() {
     onSuccess: () => {
       toast.success("Server unsuspended");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -38,6 +40,18 @@ export default function Billing() {
     mutationFn: ({ id, data }: { id: number; data: any }) => billingApi.updateRecord(id, data),
     onSuccess: () => {
       toast.success("Record updated");
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      setShowEditModal(false);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: ({ serverId, reason }: { serverId: number; reason: string }) =>
+      serversApi.adminSuspend(serverId, reason),
+    onSuccess: () => {
+      toast.success("Server suspended for billing");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       setSelectedRecord(null);
     },
@@ -56,6 +70,44 @@ export default function Billing() {
       cancelled: "bg-gray-500/20 text-gray-400 border border-gray-500/30",
     };
     return colors[status] || "bg-gray-500/20 text-gray-400 border border-gray-500/30";
+  };
+
+  const handleToggleFree = () => {
+    if (!selectedRecord) return;
+    updateRecordMutation.mutate({
+      id: selectedRecord.billing.id,
+      data: { freeServer: !selectedRecord.billing.freeServer },
+    });
+    // Update local state
+    setSelectedRecord({
+      ...selectedRecord,
+      billing: { ...selectedRecord.billing, freeServer: !selectedRecord.billing.freeServer },
+    });
+  };
+
+  const handleChangeDueDate = () => {
+    if (!selectedRecord) return;
+    const newDate = prompt(
+      "Enter new due date (YYYY-MM-DD):",
+      selectedRecord.billing.nextBillAt?.split("T")[0] || ""
+    );
+    if (newDate) {
+      updateRecordMutation.mutate({
+        id: selectedRecord.billing.id,
+        data: { nextBillAt: new Date(newDate).toISOString() },
+      });
+    }
+  };
+
+  const handleSuspendBilling = () => {
+    if (!selectedRecord) return;
+    const reason = prompt("Enter suspension reason:", "Non-payment of invoice");
+    if (reason) {
+      suspendMutation.mutate({
+        serverId: parseInt(selectedRecord.billing.virtfusionServerId, 10),
+        reason,
+      });
+    }
   };
 
   return (
@@ -101,23 +153,91 @@ export default function Billing() {
         </div>
       )}
 
-      {/* Filter */}
+      {/* Filter and Quick Actions */}
       <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by status:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
-          >
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-            <option value="suspended">Suspended</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by status:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+            >
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="suspended">Suspended</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
+
+        {/* Quick Actions when a record is selected */}
+        {selectedRecord && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 dark:text-gray-400">Selected:</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  Server {selectedRecord.billing.virtfusionServerId}
+                </span>
+                <span className={`px-2 py-0.5 text-xs rounded ${getStatusColor(selectedRecord.billing.status)}`}>
+                  {selectedRecord.billing.status}
+                </span>
+                {selectedRecord.billing.freeServer && (
+                  <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded">Free</span>
+                )}
+                <button
+                  onClick={() => setSelectedRecord(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleChangeDueDate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-500/20 transition-colors"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Change Due Date
+                </button>
+                <button
+                  onClick={handleToggleFree}
+                  disabled={updateRecordMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    selectedRecord.billing.freeServer
+                      ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
+                      : "bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20"
+                  }`}
+                >
+                  <Gift className="h-4 w-4" />
+                  {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
+                </button>
+                {selectedRecord.billing.status === "suspended" ? (
+                  <button
+                    onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
+                    disabled={unsuspendMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg text-sm hover:bg-green-500/20 transition-colors"
+                  >
+                    <Play className="h-4 w-4" />
+                    Unsuspend
+                  </button>
+                ) : selectedRecord.billing.status !== "cancelled" && (
+                  <button
+                    onClick={handleSuspendBilling}
+                    disabled={suspendMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
+                  >
+                    <Pause className="h-4 w-4" />
+                    Suspend (Billing)
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Records Table */}
@@ -137,12 +257,19 @@ export default function Billing() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Price</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Next Bill</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {records?.records?.map((record: any) => (
-                  <tr key={record.billing.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                  <tr
+                    key={record.billing.id}
+                    onClick={() => setSelectedRecord(record)}
+                    className={`cursor-pointer transition-colors ${
+                      selectedRecord?.billing.id === record.billing.id
+                        ? "bg-blue-500/10 dark:bg-blue-500/20"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-800/30"
+                    }`}
+                  >
                     <td className="px-4 py-3">
                       <span className="font-medium text-gray-900 dark:text-white">{record.billing.virtfusionServerId}</span>
                     </td>
@@ -173,31 +300,11 @@ export default function Billing() {
                         ? new Date(record.billing.nextBillAt).toLocaleDateString()
                         : "N/A"}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedRecord(record)}
-                          className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-sm hover:bg-blue-500/20 transition-colors"
-                        >
-                          Edit
-                        </button>
-                        {record.billing.status === "suspended" && (
-                          <button
-                            onClick={() => unsuspendMutation.mutate(record.billing.id)}
-                            disabled={unsuspendMutation.isPending}
-                            className="flex items-center gap-1 px-3 py-1 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-colors"
-                          >
-                            <Play className="h-3 w-3" />
-                            Unsuspend
-                          </button>
-                        )}
-                      </div>
-                    </td>
                   </tr>
                 ))}
                 {(!records?.records || records.records.length === 0) && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No billing records found
                     </td>
                   </tr>
@@ -209,7 +316,7 @@ export default function Billing() {
       </div>
 
       {/* Edit Modal */}
-      {selectedRecord && (
+      {showEditModal && selectedRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Edit Billing Record</h3>
@@ -238,7 +345,7 @@ export default function Billing() {
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setSelectedRecord(null)}
+                onClick={() => setShowEditModal(false)}
                 className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 Cancel

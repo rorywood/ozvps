@@ -96,7 +96,7 @@ export default function Login() {
       <div className="max-w-sm w-full">
         {/* Subtle logo */}
         <div className="flex justify-center mb-8">
-          <img src={logo} alt="" className="h-8 opacity-60" />
+          <img src={logo} alt="" className="h-12 opacity-70" />
         </div>
 
         <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
