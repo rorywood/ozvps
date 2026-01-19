@@ -613,23 +613,23 @@ export class VirtFusionClient {
 
   async suspendServer(serverId: string) {
     try {
-      // First, call VirtFusion suspend which flags the server as suspended
-      await this.request(`/servers/${serverId}/suspend`, {
-        method: 'POST',
-      });
-      log(`Server ${serverId} flagged as suspended in VirtFusion`, 'virtfusion');
-
-      // Then force poweroff to actually stop the VM
-      // This is separate because VirtFusion suspend doesn't stop the VM itself
+      // First, power off the server before suspending
+      // VirtFusion suspend alone doesn't stop the VM, and we may not be able to poweroff after suspend
       try {
         await this.request(`/servers/${serverId}/power/poweroff`, {
           method: 'POST',
         });
-        log(`Server ${serverId} powered off after suspension`, 'virtfusion');
+        log(`Server ${serverId} powered off before suspension`, 'virtfusion');
       } catch (powerError: any) {
         // Server might already be stopped - that's fine
         log(`Could not poweroff server ${serverId} (may already be stopped): ${powerError.message}`, 'virtfusion');
       }
+
+      // Then flag the server as suspended in VirtFusion
+      await this.request(`/servers/${serverId}/suspend`, {
+        method: 'POST',
+      });
+      log(`Server ${serverId} flagged as suspended in VirtFusion`, 'virtfusion');
 
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);

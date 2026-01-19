@@ -1,5 +1,5 @@
 import { db } from './db';
-import { serverBilling, billingLedger, wallets } from '../shared/schema';
+import { serverBilling, billingLedger, wallets, walletTransactions } from '../shared/schema';
 import { eq, and, lte, isNull, or, not, gte, lt } from 'drizzle-orm';
 import { log } from './index';
 import { virtfusionClient } from './virtfusion';
@@ -132,13 +132,24 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       })
       .where(eq(wallets.auth0UserId, billing.auth0UserId));
 
-    // Record in ledger
+    // Record in ledger (for idempotency)
     await tx.insert(billingLedger).values({
       auth0UserId: billing.auth0UserId,
       virtfusionServerId: billing.virtfusionServerId,
       amountCents: billing.monthlyPriceCents,
       description: `Monthly server billing for ${billing.virtfusionServerId}`,
       idempotencyKey,
+    });
+
+    // Record in wallet transactions (for user visibility)
+    await tx.insert(walletTransactions).values({
+      auth0UserId: billing.auth0UserId,
+      type: 'debit',
+      amountCents: -billing.monthlyPriceCents, // Negative for debits
+      metadata: {
+        serverId: billing.virtfusionServerId,
+        description: reactivation ? 'Server reactivation' : 'Monthly billing',
+      },
     });
 
     // Update billing record

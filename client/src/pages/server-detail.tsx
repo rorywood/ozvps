@@ -658,9 +658,11 @@ export default function ServerDetail() {
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
       toast({
-        title: "Server Reactivated",
+        title: "Payment Successful",
         description: "Your server has been reactivated and is starting up.",
+        variant: "success",
       });
     },
     onError: (error: any) => {
@@ -1458,6 +1460,21 @@ export default function ServerDetail() {
                     </div>
                     <p className="text-xs text-success/80 mt-1">
                       This server is free - you are not being charged
+                    </p>
+                  </div>
+                ) : server.billing?.status === 'suspended' ? (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Billing
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Ban className="h-4 w-4 text-destructive" />
+                      <p className="text-sm font-medium text-destructive">
+                        Server Suspended
+                      </p>
+                    </div>
+                    <p className="text-xs text-destructive/80 mt-1">
+                      Add funds to reactivate this server
                     </p>
                   </div>
                 ) : server.billing?.nextBillAt && (() => {

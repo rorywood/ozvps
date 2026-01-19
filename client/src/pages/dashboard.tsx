@@ -13,7 +13,8 @@ import {
   ChevronRight,
   AlertTriangle,
   Wallet,
-  Ban
+  Ban,
+  Gift
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
@@ -245,13 +246,19 @@ export default function Dashboard() {
                           <span className="font-semibold text-foreground truncate">
                             {server.name || 'New Server'}
                           </span>
+                          {billingStatuses[server.id]?.freeServer && (
+                            <Badge variant="info" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                              <Gift className="h-2.5 w-2.5 mr-0.5" />
+                              FREE
+                            </Badge>
+                          )}
                           {billingStatuses[server.id]?.status === 'suspended' && (
                             <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                               <Ban className="h-2.5 w-2.5 mr-0.5" />
                               SUSPENDED
                             </Badge>
                           )}
-                          {billingStatuses[server.id]?.status === 'unpaid' && (
+                          {billingStatuses[server.id]?.status === 'unpaid' && !billingStatuses[server.id]?.freeServer && (
                             <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                               UNPAID
                             </Badge>
