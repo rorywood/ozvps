@@ -519,7 +519,7 @@ export class VirtFusionClient {
     return servers;
   }
 
-  async getServer(serverId: string, useCache = true) {
+  async getServer(serverId: string, useCache = false) {
     const cacheKey = `server:${serverId}`;
 
     // Check cache first

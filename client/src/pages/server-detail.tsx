@@ -274,11 +274,15 @@ export default function ServerDetail() {
     refetchInterval: 1000, // Poll every 1 second for deletion progress
   });
 
+  // Power action pending state - declared here so liveStats can use it
+  const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
+
   // Live stats polling - fast updates for real-time monitoring
+  // Also poll during power actions to detect status changes faster (liveStats.running is uncached)
   const { data: liveStats } = useQuery({
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
-    enabled: !!serverId && server?.status === 'running',
+    enabled: !!serverId && (server?.status === 'running' || !!powerActionPending),
     refetchInterval: 1000, // Poll every 1 second for real-time stats
   });
 
@@ -368,16 +372,21 @@ export default function ServerDetail() {
     prevServerStatus.current = server?.status || null;
   }, [server?.status]);
 
-  const [powerActionPending, setPowerActionPending] = useState<string | null>(null);
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
-  
-  useSyncPowerActions(server ? [server] : []);
 
   // Get display status (reboot, starting, stopping, deleting, or actual)
+  // Use liveStats.running for faster status updates (it's polled every 1s without caching)
   const activeCancellation = cancellationData?.cancellation;
+  const effectiveStatus = (liveStats && typeof liveStats.running === 'boolean')
+    ? (liveStats.running ? 'running' : 'stopped')
+    : server?.status || 'unknown';
+
+  // Sync power actions using effective status for faster pending action clearance
+  useSyncPowerActions(server ? [{ ...server, status: effectiveStatus }] : []);
+
   const displayStatus = server ? getDisplayStatus(
     server.id,
-    server.status,
+    effectiveStatus,
     activeCancellation ? { mode: activeCancellation.mode || 'grace', status: activeCancellation.status } : undefined
   ) : 'unknown';
   const isTransitioning = ['rebooting', 'starting', 'stopping'].includes(displayStatus);
