@@ -28,30 +28,42 @@
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-18)
+## Recent Session Work (2026-01-19)
 
-### Security Hardening (Production Ready)
-1. **Admin middleware consistency** - All 49 admin endpoints now use `requireAdmin` middleware
-2. **CSRF security** - Removed localStorage fallback, tokens stored in cookies only
-3. **parseInt radix** - Added radix parameter to all parseInt() calls
-4. **Destructive action confirmations** - Admin delete/transfer actions require `confirmAction: true`
-5. **Large wallet adjustments** - Adjustments over $100 require confirmation
-6. **Stripe webhook validation** - Rejects test mode webhooks in production (throws 400)
-7. **Auth0 cache TTL** - Reduced from 30s to 10s for faster user state updates
+### TypeScript Cleanup & Bug Fixes
+1. **All TypeScript errors fixed** - Zero errors across entire codebase
+2. **Blank page bug** - Fixed `isError` not being destructured in server-detail.tsx
+3. **VirtFusion types** - Fixed `apiKey` → `apiToken`, `userId` → `ownerId`
+4. **Stripe API version** - Updated to `2025-12-15.clover`
+5. **Session types** - Added non-null assertions for `auth0UserId`
 
-### Bug Fixes
-1. **"Server not found" flash** - Fixed React Query showing error on background refetch failures
-   - Changed condition from `isError || !server` to just `!server`
-   - Added retry: 2 and retryDelay: 1000ms for resilience
-2. **Stale cache fallback** - Server detail API returns stale cached data if VirtFusion times out
-3. **Orphaned cancellations** - Auto-completes cancellations when server already deleted from VirtFusion
+### Rate Limiting (More Lenient)
+- API: 100 → 300 requests/min (dashboard polls frequently)
+- Auth: 10 → 20 attempts/15min
+- Public: 30 → 60 requests/min
+- Wallet: 5 → 10 attempts/min
 
-### Previous Work
-- Converted to git-based updates (no more zip/CDN cache issues)
-- Added environment badge (DEV yellow / PROD green)
-- Fixed Content-Type headers in `secureFetch`
-- Added `/api/auth/session` endpoint
-- Fixed registration toggle
+### Email Templates Redesigned
+- Changed from dark mode to white/light theme
+- Professional corporate styling
+- Better email client compatibility (no gradients)
+- Logo image restored to all templates
+- Removed emojis from subject lines
+
+### Server Status Caching
+- VirtFusion cache TTL: 30s → 5s (faster status updates)
+- React Query staleTime: 0 for server queries (always fresh)
+- Fixes status not updating after power actions
+
+### Update Script Fix
+- Added `npm install --include=dev` for esbuild (build dependency)
+- Prunes dev deps after build in production
+
+### Previous Session (2026-01-18)
+- Security hardening (admin middleware, CSRF, confirmations)
+- "Server not found" flash fix
+- Stale cache fallback
+- Git-based updates
 
 ## Current Version
 - **App Version**: 1.10.0
@@ -91,7 +103,7 @@ git checkout claude/dev-l5488
 
 ## Notes for Claude
 - User prefers direct, concise responses
-- Always push fixes to BOTH branches (dev first, then main)
-- Test on dev before deploying to prod
+- Push fixes to `main` branch only (user requested no dev branch for production)
 - User gets frustrated with repeated issues - triple-check fixes
 - The `.ozvps-branch` file on servers determines which branch to pull from
+- Email templates must be white/light themed (dark mode breaks emails)
