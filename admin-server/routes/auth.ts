@@ -3,6 +3,7 @@ import { db } from "../../server/db";
 import { twoFactorAuth } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
 import { verifySync as otplibVerifySync } from "otplib";
+import { isEncrypted, decryptSecret } from "../../server/crypto";
 import argon2 from "argon2";
 import {
   isUserAdmin,
@@ -187,8 +188,18 @@ export function registerAuthRoutes(app: Express) {
 
       console.log(`[admin-auth] Found 2FA record, verifying code...`);
 
+      // Decrypt the secret if encrypted
+      let plaintextSecret: string;
+      try {
+        plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+        console.log(`[admin-auth] Secret decrypted, length=${plaintextSecret.length}`);
+      } catch (decryptError: any) {
+        console.error(`[admin-auth] Failed to decrypt 2FA secret:`, decryptError.message);
+        return res.status(500).json({ error: "Authentication error" });
+      }
+
       // Verify the TOTP code
-      const isValid = otplibVerifySync({ token: code, secret: tfa.secret });
+      const isValid = otplibVerifySync({ token: code, secret: plaintextSecret });
 
       if (!isValid) {
         // Check backup codes

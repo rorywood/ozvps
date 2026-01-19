@@ -95,7 +95,8 @@
       "Bash(git -C D:/Claude/ozvps stash pop)",
       "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nRemove database dependency for admin login - use Auth0 only\n\nAdmin login no longer requires a user_mappings record. All user data\n\\(email, name, admin status\\) comes directly from Auth0. Only 2FA secrets\nstill come from the database \\(since TOTP is custom, not Auth0 MFA\\).\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nFix otplib import for esbuild compatibility\n\n- Use namespace import for otplib to fix bundler compatibility\n- Add proper try-catch wrapper around verify-2fa endpoint\n- Add better logging for debugging\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nUse otplib verifySync import that works with esbuild\n\nMatches the import pattern used in main server routes.ts\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nUse otplib verifySync import that works with esbuild\n\nMatches the import pattern used in main server routes.ts\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nDecrypt 2FA secret before verification in admin panel\n\nThe 2FA secrets are stored encrypted in the database. Added decryption\nusing the same crypto functions as the main server.\n\nAlso updated CLAUDE.md with current admin panel work progress.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

@@ -30,34 +30,47 @@
 
 ## Recent Session Work (2026-01-19)
 
-### TypeScript Cleanup & Bug Fixes
-1. **All TypeScript errors fixed** - Zero errors across entire codebase
-2. **Blank page bug** - Fixed `isError` not being destructured in server-detail.tsx
-3. **VirtFusion types** - Fixed `apiKey` → `apiToken`, `userId` → `ownerId`
-4. **Stripe API version** - Updated to `2025-12-15.clover`
-5. **Session types** - Added non-null assertions for `auth0UserId`
+### Admin Panel Implementation (IN PROGRESS)
+Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
-### Rate Limiting (More Lenient)
-- API: 100 → 300 requests/min (dashboard polls frequently)
-- Auth: 10 → 20 attempts/15min
-- Public: 30 → 60 requests/min
-- Wallet: 5 → 10 attempts/min
+**Architecture:**
+- `admin-server/` - Express backend on port 5001
+- `admin-client/` - Vite React frontend
+- NGINX proxies admin.ozvps.com.au → localhost:5001
+- Same database, separate sessions table (`admin_sessions`)
 
-### Email Templates Redesigned
-- Changed from dark mode to white/light theme
-- Professional corporate styling
-- Better email client compatibility (no gradients)
-- Logo image restored to all templates
-- Removed emojis from subject lines
+**Auth Flow:**
+1. Auth0 password verification (Resource Owner Password Grant)
+2. Check `app_metadata.is_admin = true` in Auth0
+3. Mandatory 2FA verification
+4. IP whitelist (bootstrap mode: allow all if whitelist empty)
 
-### Server Status Caching
-- VirtFusion cache TTL: 30s → 5s (faster status updates)
-- React Query staleTime: 0 for server queries (always fresh)
-- Fixes status not updating after power actions
+**Files Created:**
+- `admin-server/index.ts` - Express entry point
+- `admin-server/routes/auth.ts` - Login with 2FA
+- `admin-server/routes/users.ts`, `servers.ts`, `billing.ts`, `tickets.ts`
+- `admin-server/middleware/admin-auth.ts` - Session validation, uses Auth0 API
+- `admin-server/middleware/ip-whitelist.ts` - IP filtering
+- `admin-client/src/` - Full React frontend
 
-### Update Script Fix
-- Added `npm install --include=dev` for esbuild (build dependency)
-- Prunes dev deps after build in production
+**Current Issue (DEBUGGING):**
+2FA verification failing with: `Invalid Base32 string: Unknown letter: "9"`
+- The 2FA secret in database for `rorywood11@gmail.com` may not be Base32 encoded
+- Auth0 user ID: `auth0|695de54b76e4c65171b58b57`
+- otplib import fixed (use `verifySync` from 'otplib')
+- Need to check what format the 2FA secret is stored in
+
+**Key Changes Made:**
+- Removed hardcoded admin email list - now uses Auth0 `app_metadata.is_admin`
+- Removed database user_mappings requirement - all user data from Auth0
+- Only database dependency is 2FA secrets (stored in `two_factor_auth` table)
+
+### Previous Work (Earlier 2026-01-19)
+- TypeScript cleanup, all errors fixed
+- Rate limiting adjustments
+- Email templates redesigned (white/light theme)
+- Server status caching improvements
+- Update script fixes
 
 ### Previous Session (2026-01-18)
 - Security hardening (admin middleware, CSRF, confirmations)
