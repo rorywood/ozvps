@@ -4295,7 +4295,7 @@ export async function registerRoutes(
             log(`Admin ${req.userSession?.email} suspended server ${currentRecord.virtfusionServerId} via VirtFusion`, 'admin');
           } catch (vfError: any) {
             log(`Failed to suspend server ${currentRecord.virtfusionServerId} in VirtFusion: ${vfError.message}`, 'admin');
-            // Continue anyway - server might already be suspended
+            return res.status(500).json({ error: `Failed to suspend server in VirtFusion: ${vfError.message}` });
           }
         }
 
