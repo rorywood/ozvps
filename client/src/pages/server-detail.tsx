@@ -43,7 +43,8 @@ import {
   Server,
   Mail,
   Wallet,
-  Ban
+  Ban,
+  Gift
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -1443,7 +1444,23 @@ export default function ServerDetail() {
                   </div>
                 )}
 
-                {server.billing?.nextBillAt && (() => {
+                {/* Billing Status Section */}
+                {server.billing?.freeServer ? (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Billing
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Gift className="h-4 w-4 text-success" />
+                      <p className="text-sm font-medium text-success">
+                        Complimentary
+                      </p>
+                    </div>
+                    <p className="text-xs text-success/80 mt-1">
+                      This server is free - you are not being charged
+                    </p>
+                  </div>
+                ) : server.billing?.nextBillAt && (() => {
                   const nextBillDate = new Date(server.billing.nextBillAt);
                   const now = new Date();
                   const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));

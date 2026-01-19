@@ -1,7 +1,7 @@
 import { StatusBadge, type StatusType } from "./status-badge";
 import { Button } from "./button";
 import { Progress } from "./progress";
-import { ChevronRight, Ban, AlertTriangle } from "lucide-react";
+import { ChevronRight, Ban, AlertTriangle, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
@@ -12,6 +12,7 @@ interface BillingStatus {
   nextBillAt?: string;
   suspendAt?: string | null;
   monthlyPriceCents?: number;
+  freeServer?: boolean;
 }
 
 interface ServerCardProps {
@@ -88,13 +89,19 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
             <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors truncate">
               {server.name}
             </h3>
+            {billingStatus?.freeServer && (
+              <Badge variant="info" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <Gift className="h-2.5 w-2.5 mr-0.5" />
+                FREE
+              </Badge>
+            )}
             {billingStatus?.status === 'suspended' && (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <Ban className="h-2.5 w-2.5 mr-0.5" />
                 SUSPENDED
               </Badge>
             )}
-            {billingStatus?.status === 'unpaid' && (
+            {billingStatus?.status === 'unpaid' && !billingStatus?.freeServer && (
               <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
                 UNPAID

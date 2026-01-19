@@ -1709,6 +1709,7 @@ export async function registerRoutes(
                 suspendAt: billingStatus.suspendAt,
                 monthlyPriceCents: billingStatus.monthlyPriceCents,
                 autoRenew: billingStatus.autoRenew,
+                freeServer: billingStatus.freeServer,
               } : null,
             };
           } catch (error) {
@@ -1756,13 +1757,14 @@ export async function registerRoutes(
       }
 
       // Build billing map
-      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number }> = {};
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number; freeServer?: boolean }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
           nextBillAt: b.nextBillAt,
           suspendAt: b.suspendAt,
           monthlyPriceCents: b.monthlyPriceCents,
+          freeServer: b.freeServer,
         };
       }
 
@@ -1801,6 +1803,7 @@ export async function registerRoutes(
                 suspendAt: billingStatus.suspendAt,
                 monthlyPriceCents: billingStatus.monthlyPriceCents,
                 autoRenew: billingStatus.autoRenew,
+                freeServer: billingStatus.freeServer,
               } : null,
             };
           } catch (error) {
@@ -1906,6 +1909,7 @@ export async function registerRoutes(
           monthlyPriceCents: billingStatus.monthlyPriceCents,
           autoRenew: billingStatus.autoRenew,
           deployedAt: billingStatus.deployedAt,
+          freeServer: billingStatus.freeServer,
         } : null,
       });
     } catch (error: any) {
@@ -2357,6 +2361,7 @@ export async function registerRoutes(
         nextBillAt?: Date;
         suspendAt?: Date | null;
         monthlyPriceCents?: number;
+        freeServer?: boolean;
       }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
@@ -2364,6 +2369,7 @@ export async function registerRoutes(
           nextBillAt: b.nextBillAt,
           suspendAt: b.suspendAt,
           monthlyPriceCents: b.monthlyPriceCents,
+          freeServer: b.freeServer,
         };
       }
 
