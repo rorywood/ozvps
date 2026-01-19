@@ -50,6 +50,9 @@ export interface Server {
     monthlyPriceCents: number;
     autoRenew: boolean;
     deployedAt?: string;
+    freeServer?: boolean;
+    adminSuspended?: boolean;
+    adminSuspendedReason?: string | null;
   } | null;
   created_at: string;
 }
