@@ -77,7 +77,8 @@
       "Bash(do sed -i 's/\\\\.logo img { height: 40px;/.logo img { height: 80px;/' \"$file\")",
       "Bash(bash:*)",
       "Bash(chmod:*)",
-      "Bash(npx drizzle-kit:*)"
+      "Bash(npx drizzle-kit:*)",
+      "Bash(DATABASE_URL=\"postgres://localhost/ozvps\" npx drizzle-kit:*)"
     ]
   }
 }

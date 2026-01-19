@@ -525,13 +525,13 @@ async function requireEmailVerified(req: Request, res: Response, next: NextFunct
   next();
 }
 
-// Middleware to require admin access - chains with authMiddleware
+// Admin functionality has moved to separate admin panel at admin.ozvps.com.au
+// All admin routes now return 410 Gone
 const requireAdmin: RequestHandler = (req, res, next) => {
-  if (!req.userSession?.isAdmin) {
-    log(`Unauthorized admin access attempt by ${req.userSession?.email || 'unknown'}`, 'security');
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
+  return res.status(410).json({
+    error: 'Admin functionality has moved',
+    message: 'Please use the admin panel at admin.ozvps.com.au'
+  });
 };
 
 async function verifyServerOwnership(serverId: string, userVirtFusionId: number | null): Promise<boolean> {

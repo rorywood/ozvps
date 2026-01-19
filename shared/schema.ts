@@ -453,3 +453,55 @@ export const adminTicketUpdateSchema = z.object({
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 export type TicketMessageInput = z.infer<typeof ticketMessageSchema>;
 export type AdminTicketUpdateInput = z.infer<typeof adminTicketUpdateSchema>;
+
+// ============================================
+// ADMIN PANEL TABLES
+// ============================================
+
+// Admin IP Whitelist - controls access to admin panel
+export const adminIpWhitelist = pgTable("admin_ip_whitelist", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  ipAddress: text("ip_address").notNull(),
+  cidr: text("cidr"), // Optional CIDR notation (e.g., /24, /32)
+  label: text("label").notNull(), // "Office", "Home", etc.
+  addedBy: text("added_by").notNull(), // Auth0 user ID who added this entry
+  addedByEmail: text("added_by_email").notNull(),
+  expiresAt: timestamp("expires_at"), // Optional expiration
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Admin Sessions - separate from customer sessions for security
+export const adminSessions = pgTable("admin_sessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  ipAddress: text("ip_address").notNull(), // Session bound to IP
+  userAgent: text("user_agent"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+});
+
+// Insert schemas for admin tables
+export const insertAdminIpWhitelistSchema = createInsertSchema(adminIpWhitelist);
+export const insertAdminSessionSchema = createInsertSchema(adminSessions);
+
+// Types for admin tables
+export type AdminIpWhitelist = typeof adminIpWhitelist.$inferSelect;
+export type InsertAdminIpWhitelist = z.infer<typeof insertAdminIpWhitelistSchema>;
+export type AdminSession = typeof adminSessions.$inferSelect;
+export type InsertAdminSession = z.infer<typeof insertAdminSessionSchema>;
+
+// Validation schema for adding IP to whitelist
+export const addIpWhitelistSchema = z.object({
+  ipAddress: z.string().min(7, 'IP address is required'),
+  cidr: z.string().optional(),
+  label: z.string().min(1, 'Label is required').max(100, 'Label must be 100 characters or less'),
+  expiresAt: z.string().datetime().optional(),
+});
+
+export type AddIpWhitelistInput = z.infer<typeof addIpWhitelistSchema>;

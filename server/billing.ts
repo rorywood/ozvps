@@ -142,13 +142,23 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     });
 
     // Record in wallet transactions (for user visibility)
+    // For reactivation, include more details about the unpaid amount
+    const transactionDescription = reactivation
+      ? `Server reactivation - Unpaid balance $${(billing.monthlyPriceCents / 100).toFixed(2)} (Server ID: ${billing.virtfusionServerId})`
+      : 'Monthly billing';
+
     await tx.insert(walletTransactions).values({
       auth0UserId: billing.auth0UserId,
       type: 'debit',
       amountCents: -billing.monthlyPriceCents, // Negative for debits
       metadata: {
         serverId: billing.virtfusionServerId,
-        description: reactivation ? 'Server reactivation' : 'Monthly billing',
+        description: transactionDescription,
+        ...(reactivation && {
+          reactivation: true,
+          previousStatus: billing.status,
+          previousDueDate: billing.nextBillAt.toISOString(),
+        }),
       },
     });
 
@@ -358,18 +368,39 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
       const charged = await chargeServer(billing, true);
 
       if (charged && billing.status === 'suspended') {
-        // Unsuspend the server
-        await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+        // Unsuspend the server in VirtFusion with retry logic
+        let unsuspendSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+            log(`Reactivated server ${billing.virtfusionServerId} (attempt ${attempt})`, 'billing');
+            unsuspendSuccess = true;
+            break;
+          } catch (unsuspendError: any) {
+            log(`Unsuspend attempt ${attempt}/3 failed for server ${billing.virtfusionServerId}: ${unsuspendError.message}`, 'billing');
+            if (attempt < 3) {
+              // Wait 2 seconds before retry
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
 
-        await db.update(serverBilling)
-          .set({
-            status: 'paid',
-            suspendAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(serverBilling.id, billing.id));
+        if (!unsuspendSuccess) {
+          // All retries failed - revert billing status so it can be retried later
+          // Note: chargeServer already set status to 'paid', so we need to revert it
+          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Reverting billing status for retry.`, 'billing');
 
-        log(`Reactivated server ${billing.virtfusionServerId}`, 'billing');
+          await db.update(serverBilling)
+            .set({
+              status: 'suspended',
+              updatedAt: new Date(),
+            })
+            .where(eq(serverBilling.id, billing.id));
+
+          // Note: The charge has already been processed, but the server stays suspended.
+          // This allows the billing job to retry unsuspend on the next run.
+          // If unsuspend keeps failing, manual intervention will be needed.
+        }
       }
     } catch (error: any) {
       log(`Error reactivating server ${billing.virtfusionServerId}: ${error.message}`, 'billing');

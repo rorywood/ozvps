@@ -28,13 +28,6 @@ import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
-// Admin pages
-import { AdminGuard } from "@/admin/components/AdminGuard";
-import AdminDashboard from "@/admin/pages/AdminDashboard";
-import AdminUsers from "@/admin/pages/AdminUsers";
-import AdminServers from "@/admin/pages/AdminServers";
-import AdminBilling from "@/admin/pages/AdminBilling";
-import AdminTickets from "@/admin/pages/AdminTickets";
 import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2, DatabaseIcon, RefreshCw } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
@@ -192,32 +185,6 @@ function Router() {
         <AuthGuard>
           <Billing />
         </AuthGuard>
-      </Route>
-      {/* Admin Routes - more specific routes first */}
-      <Route path="/admin/users">
-        <AdminGuard>
-          <AdminUsers />
-        </AdminGuard>
-      </Route>
-      <Route path="/admin/servers">
-        <AdminGuard>
-          <AdminServers />
-        </AdminGuard>
-      </Route>
-      <Route path="/admin/billing">
-        <AdminGuard>
-          <AdminBilling />
-        </AdminGuard>
-      </Route>
-      <Route path="/admin/tickets">
-        <AdminGuard>
-          <AdminTickets />
-        </AdminGuard>
-      </Route>
-      <Route path="/admin">
-        <AdminGuard>
-          <AdminDashboard />
-        </AdminGuard>
       </Route>
       <Route path="/support/:id">
         {(params) => (

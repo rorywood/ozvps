@@ -1,0 +1,413 @@
+import { Router, Request, Response } from "express";
+import { db } from "../../server/db";
+import { userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth } from "../../shared/schema";
+import { eq, desc, like, or, sql } from "drizzle-orm";
+import { dbStorage } from "../../server/storage";
+import { auth0Client } from "../../server/auth0";
+import { virtfusionClient } from "../../server/virtfusion";
+
+export function registerUsersRoutes(router: Router) {
+  // Search users
+  router.get("/users/search", async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      if (!query || query.length < 2) {
+        return res.status(400).json({ error: "Search query must be at least 2 characters" });
+      }
+
+      const searchPattern = `%${query}%`;
+      const users = await db
+        .select({
+          id: userMappings.id,
+          auth0UserId: userMappings.auth0UserId,
+          email: userMappings.email,
+          name: userMappings.name,
+          virtFusionUserId: userMappings.virtFusionUserId,
+          createdAt: userMappings.createdAt,
+        })
+        .from(userMappings)
+        .where(
+          or(
+            like(userMappings.email, searchPattern),
+            like(userMappings.name, searchPattern)
+          )
+        )
+        .limit(50);
+
+      // Get wallet info for each user
+      const usersWithWallets = await Promise.all(
+        users.map(async (user) => {
+          const [wallet] = await db
+            .select()
+            .from(wallets)
+            .where(eq(wallets.auth0UserId, user.auth0UserId));
+
+          const [flags] = await db
+            .select()
+            .from(userFlags)
+            .where(eq(userFlags.auth0UserId, user.auth0UserId));
+
+          return {
+            ...user,
+            wallet: wallet || null,
+            blocked: flags?.blocked || false,
+            blockedReason: flags?.blockedReason || null,
+          };
+        })
+      );
+
+      res.json({ users: usersWithWallets });
+    } catch (error: any) {
+      console.log(`[admin-users] Search error: ${error.message}`);
+      res.status(500).json({ error: "Failed to search users" });
+    }
+  });
+
+  // Get user details
+  router.get("/users/:auth0UserId", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const [wallet] = await db
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      const [flags] = await db
+        .select()
+        .from(userFlags)
+        .where(eq(userFlags.auth0UserId, auth0UserId));
+
+      const [tfa] = await db
+        .select({ enabled: twoFactorAuth.enabled, verifiedAt: twoFactorAuth.verifiedAt })
+        .from(twoFactorAuth)
+        .where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+
+      // Get active sessions count
+      const activeSessions = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(sessions)
+        .where(eq(sessions.auth0UserId, auth0UserId));
+
+      res.json({
+        user: {
+          ...user,
+          wallet: wallet || null,
+          blocked: flags?.blocked || false,
+          blockedReason: flags?.blockedReason || null,
+          twoFactorEnabled: tfa?.enabled || false,
+          twoFactorVerifiedAt: tfa?.verifiedAt || null,
+          activeSessions: activeSessions[0]?.count || 0,
+        },
+      });
+    } catch (error: any) {
+      console.log(`[admin-users] Get user error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+
+  // Get user transactions
+  router.get("/users/:auth0UserId/transactions", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+
+      const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.auth0UserId, auth0UserId))
+        .orderBy(desc(walletTransactions.createdAt))
+        .limit(limit);
+
+      res.json({ transactions });
+    } catch (error: any) {
+      console.log(`[admin-users] Get transactions error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get transactions" });
+    }
+  });
+
+  // Block/unblock user
+  router.post("/users/:auth0UserId/block", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const { blocked, reason } = req.body;
+      const session = req.adminSession!;
+
+      if (typeof blocked !== "boolean") {
+        return res.status(400).json({ error: "blocked must be a boolean" });
+      }
+
+      // Check user exists
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update or create user flags
+      const [existing] = await db
+        .select()
+        .from(userFlags)
+        .where(eq(userFlags.auth0UserId, auth0UserId));
+
+      if (existing) {
+        await db
+          .update(userFlags)
+          .set({
+            blocked,
+            blockedReason: blocked ? (reason || null) : null,
+            blockedAt: blocked ? new Date() : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(userFlags.auth0UserId, auth0UserId));
+      } else {
+        await db.insert(userFlags).values({
+          auth0UserId,
+          blocked,
+          blockedReason: blocked ? (reason || null) : null,
+          blockedAt: blocked ? new Date() : null,
+        });
+      }
+
+      // Revoke all sessions if blocking
+      if (blocked) {
+        await db
+          .update(sessions)
+          .set({ revokedAt: new Date(), revokedReason: "USER_BLOCKED" })
+          .where(eq(sessions.auth0UserId, auth0UserId));
+      }
+
+      console.log(`[admin-users] User ${user.email} ${blocked ? "blocked" : "unblocked"} by ${session.email}`);
+
+      res.json({ success: true, blocked });
+    } catch (error: any) {
+      console.log(`[admin-users] Block user error: ${error.message}`);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Verify email manually
+  router.post("/users/:auth0UserId/verify-email", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const session = req.adminSession!;
+
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update or create user flags
+      const [existing] = await db
+        .select()
+        .from(userFlags)
+        .where(eq(userFlags.auth0UserId, auth0UserId));
+
+      if (existing) {
+        await db
+          .update(userFlags)
+          .set({
+            emailVerifiedOverride: true,
+            emailVerifiedOverrideAt: new Date(),
+            emailVerifiedOverrideBy: session.auth0UserId,
+            updatedAt: new Date(),
+          })
+          .where(eq(userFlags.auth0UserId, auth0UserId));
+      } else {
+        await db.insert(userFlags).values({
+          auth0UserId,
+          emailVerifiedOverride: true,
+          emailVerifiedOverrideAt: new Date(),
+          emailVerifiedOverrideBy: session.auth0UserId,
+        });
+      }
+
+      console.log(`[admin-users] Email verified for ${user.email} by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.log(`[admin-users] Verify email error: ${error.message}`);
+      res.status(500).json({ error: "Failed to verify email" });
+    }
+  });
+
+  // Adjust wallet balance
+  router.post("/users/:auth0UserId/wallet/adjust", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const { amountCents, description, reason } = req.body;
+      const session = req.adminSession!;
+
+      if (!amountCents || typeof amountCents !== "number") {
+        return res.status(400).json({ error: "amountCents must be a number" });
+      }
+
+      if (!description) {
+        return res.status(400).json({ error: "description is required" });
+      }
+
+      // Check user exists
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get or create wallet
+      let [wallet] = await db
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      if (!wallet) {
+        [wallet] = await db
+          .insert(wallets)
+          .values({ auth0UserId, balanceCents: 0 })
+          .returning();
+      }
+
+      // Create transaction
+      const type = amountCents > 0 ? "adjustment_credit" : "adjustment_debit";
+      await db.insert(walletTransactions).values({
+        auth0UserId,
+        type,
+        amountCents,
+        metadata: {
+          description,
+          reason,
+          adjustedBy: session.email,
+          adjustedByUserId: session.auth0UserId,
+        },
+      });
+
+      // Update wallet balance
+      const newBalance = wallet.balanceCents + amountCents;
+      await db
+        .update(wallets)
+        .set({ balanceCents: newBalance, updatedAt: new Date() })
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      console.log(`[admin-users] Wallet adjusted for ${user.email}: ${amountCents} cents by ${session.email}`);
+
+      res.json({ success: true, newBalance });
+    } catch (error: any) {
+      console.log(`[admin-users] Wallet adjust error: ${error.message}`);
+      res.status(500).json({ error: "Failed to adjust wallet" });
+    }
+  });
+
+  // Link user to VirtFusion
+  router.post("/users/:auth0UserId/link-virtfusion", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const { virtFusionUserId } = req.body;
+      const session = req.adminSession!;
+
+      if (!virtFusionUserId || typeof virtFusionUserId !== "number") {
+        return res.status(400).json({ error: "virtFusionUserId must be a number" });
+      }
+
+      // Check user exists
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify VirtFusion user exists
+      try {
+        await virtfusionClient.getUser(virtFusionUserId);
+      } catch {
+        return res.status(400).json({ error: "VirtFusion user not found" });
+      }
+
+      // Update mapping
+      await db
+        .update(userMappings)
+        .set({ virtFusionUserId })
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      // Also update wallet if it exists
+      await db
+        .update(wallets)
+        .set({ virtFusionUserId })
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      console.log(`[admin-users] User ${user.email} linked to VirtFusion user ${virtFusionUserId} by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.log(`[admin-users] Link VirtFusion error: ${error.message}`);
+      res.status(500).json({ error: "Failed to link VirtFusion user" });
+    }
+  });
+
+  // Revoke all user sessions
+  router.post("/users/:auth0UserId/revoke-sessions", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const session = req.adminSession!;
+
+      const result = await db
+        .update(sessions)
+        .set({ revokedAt: new Date(), revokedReason: "ADMIN_REVOKED" })
+        .where(eq(sessions.auth0UserId, auth0UserId));
+
+      console.log(`[admin-users] Sessions revoked for ${auth0UserId} by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.log(`[admin-users] Revoke sessions error: ${error.message}`);
+      res.status(500).json({ error: "Failed to revoke sessions" });
+    }
+  });
+
+  // List all wallets (with pagination)
+  router.get("/wallets", async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const walletsList = await db
+        .select({
+          wallet: wallets,
+          user: {
+            email: userMappings.email,
+            name: userMappings.name,
+          },
+        })
+        .from(wallets)
+        .leftJoin(userMappings, eq(wallets.auth0UserId, userMappings.auth0UserId))
+        .orderBy(desc(wallets.updatedAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json({ wallets: walletsList });
+    } catch (error: any) {
+      console.log(`[admin-users] List wallets error: ${error.message}`);
+      res.status(500).json({ error: "Failed to list wallets" });
+    }
+  });
+}

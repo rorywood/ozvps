@@ -1,0 +1,329 @@
+import { Router, Request, Response } from "express";
+import { db } from "../../server/db";
+import { tickets, ticketMessages, userMappings, adminTicketUpdateSchema, ticketMessageSchema } from "../../shared/schema";
+import { eq, desc, and, or, sql, isNull, ne } from "drizzle-orm";
+
+export function registerTicketsRoutes(router: Router) {
+  // Get ticket counts by status
+  router.get("/tickets/counts", async (req: Request, res: Response) => {
+    try {
+      const counts = await db
+        .select({
+          status: tickets.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(tickets)
+        .groupBy(tickets.status);
+
+      res.json({
+        counts: Object.fromEntries(counts.map((c) => [c.status, c.count])),
+      });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Get counts error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get ticket counts" });
+    }
+  });
+
+  // List tickets
+  router.get("/tickets", async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const status = req.query.status as string;
+      const category = req.query.category as string;
+      const priority = req.query.priority as string;
+      const assignedToMe = req.query.assignedToMe === "true";
+      const unassigned = req.query.unassigned === "true";
+
+      let whereConditions: any[] = [];
+
+      if (status && status !== "all") {
+        if (status === "open") {
+          // "open" means all except closed
+          whereConditions.push(ne(tickets.status, "closed"));
+        } else {
+          whereConditions.push(eq(tickets.status, status));
+        }
+      }
+
+      if (category) {
+        whereConditions.push(eq(tickets.category, category));
+      }
+
+      if (priority) {
+        whereConditions.push(eq(tickets.priority, priority));
+      }
+
+      if (assignedToMe && req.adminSession) {
+        whereConditions.push(eq(tickets.assignedAdminId, req.adminSession.auth0UserId));
+      }
+
+      if (unassigned) {
+        whereConditions.push(isNull(tickets.assignedAdminId));
+      }
+
+      const ticketList = await db
+        .select({
+          ticket: tickets,
+          user: {
+            email: userMappings.email,
+            name: userMappings.name,
+          },
+        })
+        .from(tickets)
+        .leftJoin(userMappings, eq(tickets.auth0UserId, userMappings.auth0UserId))
+        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+        .orderBy(desc(tickets.lastMessageAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json({ tickets: ticketList });
+    } catch (error: any) {
+      console.log(`[admin-tickets] List tickets error: ${error.message}`);
+      res.status(500).json({ error: "Failed to list tickets" });
+    }
+  });
+
+  // Get ticket details
+  router.get("/tickets/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const [ticket] = await db
+        .select({
+          ticket: tickets,
+          user: {
+            email: userMappings.email,
+            name: userMappings.name,
+            auth0UserId: userMappings.auth0UserId,
+          },
+        })
+        .from(tickets)
+        .leftJoin(userMappings, eq(tickets.auth0UserId, userMappings.auth0UserId))
+        .where(eq(tickets.id, id));
+
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      // Get messages
+      const messages = await db
+        .select()
+        .from(ticketMessages)
+        .where(eq(ticketMessages.ticketId, id))
+        .orderBy(ticketMessages.createdAt);
+
+      res.json({ ticket, messages });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Get ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get ticket" });
+    }
+  });
+
+  // Add message to ticket
+  router.post("/tickets/:id/messages", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const parsed = ticketMessageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const { message } = parsed.data;
+
+      // Check ticket exists
+      const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      // Add message
+      const [newMessage] = await db
+        .insert(ticketMessages)
+        .values({
+          ticketId: id,
+          authorType: "admin",
+          authorId: session.auth0UserId,
+          authorEmail: session.email,
+          authorName: session.name,
+          message,
+        })
+        .returning();
+
+      // Update ticket
+      await db
+        .update(tickets)
+        .set({
+          status: "waiting_user",
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(tickets.id, id));
+
+      console.log(`[admin-tickets] Message added to ticket ${id} by ${session.email}`);
+
+      res.json({ message: newMessage });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Add message error: ${error.message}`);
+      res.status(500).json({ error: "Failed to add message" });
+    }
+  });
+
+  // Update ticket (status, priority, category, assignment)
+  router.patch("/tickets/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const parsed = adminTicketUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+
+      if (parsed.data.status !== undefined) {
+        updateData.status = parsed.data.status;
+        if (parsed.data.status === "resolved") {
+          updateData.resolvedAt = new Date();
+        } else if (parsed.data.status === "closed") {
+          updateData.closedAt = new Date();
+        }
+      }
+      if (parsed.data.priority !== undefined) updateData.priority = parsed.data.priority;
+      if (parsed.data.category !== undefined) updateData.category = parsed.data.category;
+      if (parsed.data.assignedAdminId !== undefined) updateData.assignedAdminId = parsed.data.assignedAdminId;
+
+      const [updated] = await db
+        .update(tickets)
+        .set(updateData)
+        .where(eq(tickets.id, id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      console.log(`[admin-tickets] Ticket ${id} updated by ${session.email}: ${JSON.stringify(parsed.data)}`);
+
+      res.json({ ticket: updated });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Update ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to update ticket" });
+    }
+  });
+
+  // Close ticket
+  router.post("/tickets/:id/close", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const [updated] = await db
+        .update(tickets)
+        .set({
+          status: "closed",
+          closedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(tickets.id, id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      console.log(`[admin-tickets] Ticket ${id} closed by ${session.email}`);
+
+      res.json({ ticket: updated });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Close ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to close ticket" });
+    }
+  });
+
+  // Reopen ticket
+  router.post("/tickets/:id/reopen", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const [updated] = await db
+        .update(tickets)
+        .set({
+          status: "open",
+          closedAt: null,
+          resolvedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tickets.id, id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      console.log(`[admin-tickets] Ticket ${id} reopened by ${session.email}`);
+
+      res.json({ ticket: updated });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Reopen ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to reopen ticket" });
+    }
+  });
+
+  // Delete ticket
+  router.delete("/tickets/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { confirm } = req.body;
+      const session = req.adminSession!;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      if (confirm !== "DELETE") {
+        return res.status(400).json({ error: "Must confirm deletion" });
+      }
+
+      // Delete messages first
+      await db.delete(ticketMessages).where(eq(ticketMessages.ticketId, id));
+
+      // Delete ticket
+      const deleted = await db.delete(tickets).where(eq(tickets.id, id)).returning();
+
+      if (deleted.length === 0) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      console.log(`[admin-tickets] Ticket ${id} deleted by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.log(`[admin-tickets] Delete ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to delete ticket" });
+    }
+  });
+}

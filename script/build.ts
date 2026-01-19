@@ -1,6 +1,7 @@
 import { build as esbuild } from "esbuild";
-import { build as viteBuild } from "vite";
-import { rm, readFile } from "fs/promises";
+import { build as viteBuild, createServer } from "vite";
+import { rm, readFile, mkdir, cp } from "fs/promises";
+import path from "path";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -34,11 +35,12 @@ const allowlist = [
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
+  await rm("admin-dist", { recursive: true, force: true });
 
-  console.log("building client...");
+  console.log("building main client...");
   await viteBuild();
 
-  console.log("building server...");
+  console.log("building main server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
@@ -59,6 +61,35 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  // Build admin panel
+  console.log("building admin client...");
+  await mkdir("admin-dist", { recursive: true });
+
+  await viteBuild({
+    root: "admin-client",
+    build: {
+      outDir: "../admin-dist/client",
+      emptyOutDir: true,
+    },
+  });
+
+  console.log("building admin server...");
+  await esbuild({
+    entryPoints: ["admin-server/index.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "admin-dist/server.cjs",
+    define: {
+      "process.env.NODE_ENV": '"production"',
+    },
+    minify: true,
+    external: externals,
+    logLevel: "info",
+  });
+
+  console.log("build complete!");
 }
 
 buildAll().catch((err) => {

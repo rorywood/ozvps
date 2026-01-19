@@ -16,9 +16,10 @@ cd /tmp 2>/dev/null || cd /
 #    ozvps --help       # Show help
 # ============================================================================
 
-VERSION="4.1.1"
+VERSION="4.2.0"
 INSTALL_DIR="/opt/ozvps-panel"
-SERVICE_NAME="ozvps-panel"
+SERVICE_NAME="ozvps"
+ADMIN_SERVICE_NAME="ozvps-admin"
 GITHUB_REPO="rorywood/ozvps"
 BACKUP_DIR="/opt/ozvps-backups"
 
@@ -774,9 +775,10 @@ EOF
             git log --oneline HEAD..origin/$branch 2>/dev/null | head -10
             echo ""
 
-            # Stop app before pulling
-            info "Stopping application..."
+            # Stop apps before pulling
+            info "Stopping applications..."
             pm2 stop "$SERVICE_NAME" 2>/dev/null || true
+            pm2 stop "$ADMIN_SERVICE_NAME" 2>/dev/null || true
 
             # Pull changes (hard reset to handle any local modifications)
             info "Pulling changes..."
@@ -798,9 +800,10 @@ EOF
         cp .ozvps-env "$temp_backup/.ozvps-env" 2>/dev/null || true
         success "Configuration backed up"
 
-        # Stop app
-        info "Stopping application..."
+        # Stop apps
+        info "Stopping applications..."
         pm2 stop "$SERVICE_NAME" 2>/dev/null || true
+        pm2 stop "$ADMIN_SERVICE_NAME" 2>/dev/null || true
 
         # Remove old installation and clone fresh
         cd /opt
@@ -848,15 +851,19 @@ EOF
 
     # Build (clear all caches first)
     info "Clearing build caches..."
-    rm -rf dist node_modules/.vite node_modules/.cache client/node_modules/.vite 2>/dev/null || true
+    rm -rf dist admin-dist node_modules/.vite node_modules/.cache client/node_modules/.vite admin-client/node_modules/.vite 2>/dev/null || true
 
-    info "Building application..."
+    info "Building applications..."
     npm run build
     if [[ ! -f "dist/index.cjs" ]]; then
         error "Build failed - dist/index.cjs not found"
         return 1
     fi
-    success "Build complete"
+    if [[ ! -f "admin-dist/server.cjs" ]]; then
+        error "Build failed - admin-dist/server.cjs not found"
+        return 1
+    fi
+    success "Build complete (main + admin)"
 
     # Run migrations BEFORE pruning (drizzle-kit is a dev dependency)
     info "Running migrations..."
@@ -957,23 +964,36 @@ ERRORCONF
         fi
     fi
 
-    # Restart application
-    info "Starting application..."
-    pm2 delete "$SERVICE_NAME" 2>/dev/null || true
+    # Restart applications (both main and admin)
+    info "Starting applications..."
+    pm2 delete ozvps 2>/dev/null || true
+    pm2 delete ozvps-admin 2>/dev/null || true
     pm2 start "$INSTALL_DIR/ecosystem.config.cjs"
     pm2 save --force
-    success "Application started"
+    success "Applications started (main + admin)"
 
     # Wait for health
-    info "Waiting for application..."
+    info "Waiting for main app..."
     for i in {1..30}; do
-        if curl -s "http://127.0.0.1:3000/api/health" &>/dev/null; then
-            success "Application is healthy"
+        if curl -s "http://127.0.0.1:5000/api/health" &>/dev/null; then
+            success "Main app is healthy (port 5000)"
             break
         fi
         sleep 1
         if [[ $i -eq 30 ]]; then
-            warning "Health check timeout - check logs with: pm2 logs ozvps-panel"
+            warning "Main app health check timeout - check logs with: pm2 logs ozvps"
+        fi
+    done
+
+    info "Waiting for admin app..."
+    for i in {1..15}; do
+        if curl -s "http://127.0.0.1:5001/health" &>/dev/null; then
+            success "Admin app is healthy (port 5001)"
+            break
+        fi
+        sleep 1
+        if [[ $i -eq 15 ]]; then
+            warning "Admin app health check timeout - check logs with: pm2 logs ozvps-admin"
         fi
     done
 
@@ -983,8 +1003,13 @@ ERRORCONF
     echo -e "    Branch: ${BOLD}$branch${NC}"
     echo -e "    Commit: ${BOLD}$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')${NC}"
     echo ""
+    echo "Processes:"
+    echo "  ozvps        - Main panel (port 5000)"
+    echo "  ozvps-admin  - Admin panel (port 5001)"
+    echo ""
     echo "Commands:"
-    echo "  pm2 logs ozvps-panel  - View logs"
+    echo "  pm2 logs ozvps        - View main app logs"
+    echo "  pm2 logs ozvps-admin  - View admin app logs"
     echo "  pm2 status            - Check status"
     echo ""
 }
