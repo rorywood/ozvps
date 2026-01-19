@@ -2364,6 +2364,8 @@ export class VirtFusionClient {
     name: string;
     hostname?: string;
     status: string;
+    suspended?: boolean;
+    primaryIp?: string;
     ipAddress?: string;
     owner?: { id: number; name: string; email: string };
     resources?: { cpu: number; ram: number; storage: number };
@@ -2374,12 +2376,14 @@ export class VirtFusionClient {
       const response = await this.request<{ data: any[] }>('/servers?with=owner&remoteState=true&results=500');
       const servers = response.data || [];
       log(`Fetched ${servers.length} servers with owners`, 'virtfusion');
-      
+
       return servers.map(s => ({
         id: String(s.id),
         name: s.name || `Server ${s.id}`,
         hostname: s.hostname || undefined,
         status: this.mapStatus(s.remoteState?.state || s.state || 'unknown', s.suspended, s.buildFailed),
+        suspended: s.suspended === true || s.suspended === 1,
+        primaryIp: s.network?.interfaces?.[0]?.ipv4?.[0]?.address || undefined,
         ipAddress: s.network?.interfaces?.[0]?.ipv4?.[0]?.address || undefined,
         owner: s.owner ? {
           id: s.owner.id,
