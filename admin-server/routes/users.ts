@@ -7,6 +7,69 @@ import { auth0Client } from "../../server/auth0";
 import { virtfusionClient } from "../../server/virtfusion";
 
 export function registerUsersRoutes(router: Router) {
+  // List all users (paginated)
+  router.get("/users", async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const perPage = Math.min(parseInt(req.query.perPage as string) || 50, 100);
+      const offset = (page - 1) * perPage;
+
+      const users = await db
+        .select({
+          id: userMappings.id,
+          auth0UserId: userMappings.auth0UserId,
+          email: userMappings.email,
+          name: userMappings.name,
+          virtFusionUserId: userMappings.virtFusionUserId,
+          createdAt: userMappings.createdAt,
+        })
+        .from(userMappings)
+        .orderBy(desc(userMappings.createdAt))
+        .limit(perPage)
+        .offset(offset);
+
+      // Get total count
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(userMappings);
+
+      // Get wallet and flags for each user
+      const usersWithDetails = await Promise.all(
+        users.map(async (user) => {
+          const [wallet] = await db
+            .select()
+            .from(wallets)
+            .where(eq(wallets.auth0UserId, user.auth0UserId));
+
+          const [flags] = await db
+            .select()
+            .from(userFlags)
+            .where(eq(userFlags.auth0UserId, user.auth0UserId));
+
+          return {
+            ...user,
+            wallet: wallet || null,
+            blocked: flags?.blocked || false,
+            blockedReason: flags?.blockedReason || null,
+          };
+        })
+      );
+
+      res.json({
+        users: usersWithDetails,
+        pagination: {
+          currentPage: page,
+          perPage,
+          total: count,
+          totalPages: Math.ceil(count / perPage),
+        },
+      });
+    } catch (error: any) {
+      console.log(`[admin-users] List users error: ${error.message}`);
+      res.status(500).json({ error: "Failed to list users" });
+    }
+  });
+
   // Search users
   router.get("/users/search", async (req: Request, res: Response) => {
     try {

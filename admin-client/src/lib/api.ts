@@ -90,6 +90,9 @@ export const authApi = {
 
 // Users API
 export const usersApi = {
+  list: (page = 1, perPage = 50) =>
+    api.get<{ users: any[]; pagination: any }>(`/users?page=${page}&perPage=${perPage}`),
+
   search: (query: string) =>
     api.get<{ users: any[] }>(`/users/search?q=${encodeURIComponent(query)}`),
 

@@ -57,7 +57,7 @@ export default function Layout() {
         }`}
       >
         <div className="flex items-center justify-between h-16 px-4 bg-gray-800 dark:bg-gray-900">
-          <img src={logo} alt="OzVPS" className="h-8" />
+          <img src={logo} alt="OzVPS" className="h-10" />
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden text-gray-400 hover:text-white"
@@ -65,15 +65,6 @@ export default function Layout() {
             <X className="h-6 w-6" />
           </button>
         </div>
-
-        {bootstrapMode && (
-          <div className="mx-4 mt-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
-            <p className="text-yellow-300 text-sm font-medium">Bootstrap Mode</p>
-            <p className="text-yellow-200/80 text-xs mt-1">
-              No IP whitelist configured. Add your IP to enable whitelist protection.
-            </p>
-          </div>
-        )}
 
         <nav className="mt-6 px-4 space-y-1">
           {navItems.map((item) => {
@@ -123,7 +114,7 @@ export default function Layout() {
               <Menu className="h-6 w-6" />
             </button>
             <div className="flex-1 lg:hidden text-center">
-              <img src={logo} alt="OzVPS" className="h-6 inline-block" />
+              <img src={logo} alt="OzVPS" className="h-8 inline-block" />
             </div>
             <div className="flex items-center gap-4">
               <div className="hidden lg:block text-sm text-gray-600 dark:text-gray-400">
