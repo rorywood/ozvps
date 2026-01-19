@@ -48,7 +48,7 @@ export interface IStorage {
   deleteSession(id: string): Promise<void>;
   deleteUserSessions(userId: number): Promise<void>;
   deleteSessionsByAuth0UserId(auth0UserId: string): Promise<void>;
-  revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void>;
+  revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason, excludeSessionId?: string): Promise<void>;
   hasActiveSession(auth0UserId: string, idleTimeoutMs: number): Promise<boolean>;
   revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
   updateSessionActivity(sessionId: string): Promise<void>;
@@ -135,9 +135,9 @@ export class MemoryStorage implements IStorage {
     idsToDelete.forEach(id => this.sessions.delete(id));
   }
 
-  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void> {
-    this.sessions.forEach((session) => {
-      if (session.auth0UserId === auth0UserId && !session.revokedAt) {
+  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason, excludeSessionId?: string): Promise<void> {
+    this.sessions.forEach((session, sessionId) => {
+      if (session.auth0UserId === auth0UserId && !session.revokedAt && sessionId !== excludeSessionId) {
         session.revokedAt = new Date();
         session.revokedReason = reason;
       }
@@ -407,9 +407,9 @@ export class RedisStorage implements IStorage {
     }
   }
 
-  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason): Promise<void> {
+  async revokeSessionsByAuth0UserId(auth0UserId: string, reason: SessionRevokeReason, excludeSessionId?: string): Promise<void> {
     if (!this.isRedisAvailable()) {
-      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason, excludeSessionId);
     }
 
     try {
@@ -417,6 +417,9 @@ export class RedisStorage implements IStorage {
       const now = new Date();
 
       for (const id of sessionIds) {
+        // Skip the excluded session (e.g., current session during password change)
+        if (id === excludeSessionId) continue;
+
         const session = await this.getSession(id);
         if (session && !session.revokedAt) {
           session.revokedAt = now;
@@ -433,7 +436,7 @@ export class RedisStorage implements IStorage {
       }
     } catch (error: any) {
       log(`Redis error in revokeSessionsByAuth0UserId: ${error.message}`, 'storage');
-      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason);
+      return this.memoryFallback.revokeSessionsByAuth0UserId(auth0UserId, reason, excludeSessionId);
     }
   }
 

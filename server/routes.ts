@@ -2770,7 +2770,13 @@ export async function registerRoutes(
       if (!result.success) {
         return res.status(400).json({ error: result.error || 'Failed to change password' });
       }
-      
+
+      // SECURITY: Revoke all other sessions after password change
+      // Keep current session active so user doesn't get logged out
+      const currentSessionId = req.cookies?.[SESSION_COOKIE];
+      await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.PASSWORD_CHANGED, currentSessionId);
+      log(`All other sessions revoked after password change for: ${session.email}`, 'security');
+
       res.json({ success: true, message: 'Password changed successfully' });
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
