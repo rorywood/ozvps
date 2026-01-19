@@ -613,20 +613,23 @@ export class VirtFusionClient {
 
   async suspendServer(serverId: string) {
     try {
-      // Force stop the server before suspending to ensure it's not running
+      // First, call VirtFusion suspend which flags the server as suspended
+      await this.request(`/servers/${serverId}/suspend`, {
+        method: 'POST',
+      });
+      log(`Server ${serverId} flagged as suspended in VirtFusion`, 'virtfusion');
+
+      // Then force poweroff to actually stop the VM
+      // This is separate because VirtFusion suspend doesn't stop the VM itself
       try {
         await this.request(`/servers/${serverId}/power/poweroff`, {
           method: 'POST',
         });
-        log(`Server ${serverId} powered off before suspension`, 'virtfusion');
+        log(`Server ${serverId} powered off after suspension`, 'virtfusion');
       } catch (powerError: any) {
-        // Continue with suspension even if poweroff fails (server might already be stopped)
-        log(`Could not poweroff server ${serverId} before suspension (may already be stopped): ${powerError.message}`, 'virtfusion');
+        // Server might already be stopped - that's fine
+        log(`Could not poweroff server ${serverId} (may already be stopped): ${powerError.message}`, 'virtfusion');
       }
-
-      await this.request(`/servers/${serverId}/suspend`, {
-        method: 'POST',
-      });
 
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);
@@ -641,9 +644,22 @@ export class VirtFusionClient {
 
   async unsuspendServer(serverId: string) {
     try {
+      // First, unsuspend in VirtFusion to allow the server to be managed again
       await this.request(`/servers/${serverId}/unsuspend`, {
         method: 'POST',
       });
+      log(`Server ${serverId} unsuspended in VirtFusion`, 'virtfusion');
+
+      // Then start the server so the user doesn't have to manually power it on
+      try {
+        await this.request(`/servers/${serverId}/power/start`, {
+          method: 'POST',
+        });
+        log(`Server ${serverId} started after unsuspension`, 'virtfusion');
+      } catch (startError: any) {
+        // Server might already be running or have issues - log but don't fail
+        log(`Could not start server ${serverId} after unsuspension: ${startError.message}`, 'virtfusion');
+      }
 
       // Invalidate cache since server state has changed
       this.invalidateServerCache(serverId);
