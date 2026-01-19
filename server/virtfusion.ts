@@ -3,8 +3,8 @@ import { log } from "./index";
 // Request timeout in milliseconds (10 seconds)
 const REQUEST_TIMEOUT_MS = 10000;
 
-// Cache TTL in milliseconds (30 seconds)
-const CACHE_TTL_MS = 30000;
+// Cache TTL in milliseconds (5 seconds - short for real-time power status)
+const CACHE_TTL_MS = 5000;
 
 // Simple in-memory cache for server data
 interface CacheEntry<T> {

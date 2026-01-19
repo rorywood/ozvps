@@ -209,6 +209,7 @@ export default function ServerDetail() {
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
+    staleTime: 0, // Always consider data stale - ensures fresh fetch on navigation
     retry: 2, // Retry failed requests twice before giving up
     retryDelay: 1000, // 1 second between retries
     refetchInterval: (query) => {
