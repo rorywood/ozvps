@@ -840,10 +840,10 @@ EOF
     echo "$(get_environment)" > .ozvps-env 2>/dev/null || true
     echo "$branch" > .ozvps-branch
 
-    # Install dependencies
+    # Install dependencies (including dev deps needed for build)
     echo ""
     info "Installing dependencies..."
-    npm install --silent 2>&1 | grep -v "^npm " || true
+    npm install --include=dev --silent 2>&1 | grep -v "^npm " || true
     success "Dependencies installed"
 
     # Build (clear all caches first)
@@ -857,6 +857,14 @@ EOF
         return 1
     fi
     success "Build complete"
+
+    # Prune dev dependencies for production to save space
+    local env=$(get_environment)
+    if [[ "$env" == "production" ]]; then
+        info "Pruning dev dependencies..."
+        npm prune --production --silent 2>&1 | grep -v "^npm " || true
+        success "Dev dependencies pruned"
+    fi
 
     # Migrations
     info "Running migrations..."

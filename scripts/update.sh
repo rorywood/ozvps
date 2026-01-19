@@ -150,15 +150,22 @@ cd "$INSTALL_DIR" || { echo -e "${RED}Failed to enter $INSTALL_DIR${NC}"; exit 1
 echo "$ENV" > .ozvps-env
 echo "$BRANCH" > .ozvps-branch
 
-# Install dependencies
+# Install dependencies (including dev deps needed for build)
 echo ""
 echo "Installing dependencies..."
-npm install
+npm install --include=dev
 
 # Build
 echo ""
 echo "Building application..."
 npm run build
+
+# Prune dev dependencies for production
+if [[ "$ENV" == "production" ]]; then
+    echo ""
+    echo "Pruning dev dependencies..."
+    npm prune --production
+fi
 
 # Restart
 echo ""
