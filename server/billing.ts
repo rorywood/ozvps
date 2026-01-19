@@ -1,7 +1,7 @@
 import { db } from './db';
 import { serverBilling, billingLedger, wallets, walletTransactions } from '../shared/schema';
 import { eq, and, lte, isNull, or, not, gte, lt } from 'drizzle-orm';
-import { log } from './index';
+import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
 import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail } from './email';

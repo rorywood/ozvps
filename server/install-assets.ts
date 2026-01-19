@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import { spawn } from "child_process";
 import crypto from "crypto";
-import { log } from "./index";
+import { log } from './log';
 import { VERSION, VERSION_HISTORY } from "@shared/version";
 
 /**

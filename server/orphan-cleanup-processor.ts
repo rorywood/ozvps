@@ -2,7 +2,7 @@ import { dbStorage } from "./storage";
 import { auth0Client } from "./auth0";
 import { getUncachableStripeClient } from "./stripeClient";
 import { virtfusionClient } from "./virtfusion";
-import { log } from "./index";
+import { log } from './log';
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Run every hour
 

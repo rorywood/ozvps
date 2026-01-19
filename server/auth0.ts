@@ -1,4 +1,4 @@
-import { log } from "./index";
+import { log } from './log';
 
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
 const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID;

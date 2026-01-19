@@ -1,6 +1,6 @@
 import { getStripeSync } from './stripeClient';
 import { dbStorage } from './storage';
-import { log } from './index';
+import { log } from './log';
 import { retryUnpaidServers } from './billing';
 
 // Track webhook health for monitoring

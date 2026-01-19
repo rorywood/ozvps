@@ -1,6 +1,6 @@
 import { dbStorage } from "./storage";
 import { virtfusionClient } from "./virtfusion";
-import { log } from "./index";
+import { log } from './log';
 import { db } from "./db";
 import { serverBilling } from "../shared/schema";
 import { eq } from "drizzle-orm";

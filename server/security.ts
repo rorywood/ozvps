@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { db } from './db';
 import { rateLimits } from '@shared/schema';
 import { eq, and, lt, or, isNull } from 'drizzle-orm';
-import { log } from './index';
+import { log } from './log';
 
 // Configuration constants
 const FAILED_ATTEMPTS_WINDOW_MS = 15 * 60 * 1000; // 15 minutes

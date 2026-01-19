@@ -1,4 +1,4 @@
-import { log } from "./index";
+import { log } from './log';
 
 // Request timeout in milliseconds (10 seconds)
 const REQUEST_TIMEOUT_MS = 10000;

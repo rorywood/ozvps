@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { log } from './index';
+import { log } from './log';
 
 // Resend API key from environment - NEVER hardcode API keys!
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
