@@ -33,6 +33,12 @@ const emailStyles = {
   bgLight: '#f9fafb',
 };
 
+// Logo URL - uses APP_URL if set, otherwise falls back to production
+function getLogoUrl(): string {
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  return `${appUrl}/logo-email.png`;
+}
+
 /**
  * Send a password reset email
  */
@@ -50,6 +56,7 @@ export async function sendPasswordResetEmail(
   }
 
   const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
 
   try {
     const { data, error } = await resend.emails.send({
@@ -75,7 +82,7 @@ export async function sendPasswordResetEmail(
           <!-- Logo -->
           <tr>
             <td style="padding: 0 0 32px; text-align: center;">
-              <span style="font-size: 28px; font-weight: 700; color: ${emailStyles.primaryColor};">OzVPS</span>
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
@@ -188,6 +195,7 @@ export async function sendServerCredentialsEmail(
   }
 
   const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
 
   try {
     const { data, error } = await resend.emails.send({
@@ -213,7 +221,7 @@ export async function sendServerCredentialsEmail(
           <!-- Logo -->
           <tr>
             <td style="padding: 0 0 32px; text-align: center;">
-              <span style="font-size: 28px; font-weight: 700; color: ${emailStyles.primaryColor};">OzVPS</span>
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
@@ -423,6 +431,7 @@ export async function sendServerReinstallEmail(
   }
 
   const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
 
   try {
     const { data, error } = await resend.emails.send({
@@ -448,7 +457,7 @@ export async function sendServerReinstallEmail(
           <!-- Logo -->
           <tr>
             <td style="padding: 0 0 32px; text-align: center;">
-              <span style="font-size: 28px; font-weight: 700; color: ${emailStyles.primaryColor};">OzVPS</span>
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
@@ -650,6 +659,8 @@ export async function sendPasswordChangedEmail(to: string): Promise<EmailResult>
     };
   }
 
+  const logoUrl = getLogoUrl();
+
   try {
     const { data, error} = await resend.emails.send({
       from: EMAIL_FROM,
@@ -674,7 +685,7 @@ export async function sendPasswordChangedEmail(to: string): Promise<EmailResult>
           <!-- Logo -->
           <tr>
             <td style="padding: 0 0 32px; text-align: center;">
-              <span style="font-size: 28px; font-weight: 700; color: ${emailStyles.primaryColor};">OzVPS</span>
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
