@@ -84,7 +84,16 @@
       "Bash(for file in server/auth0.ts server/billing.ts server/cancellation-processor.ts server/email.ts server/install-assets.ts server/orphan-cleanup-processor.ts server/routes.ts server/security.ts server/storage.ts server/virtfusion.ts server/webhookHandlers.ts)",
       "Bash(do sed -i \"s|import { log } from [''\"\"]./index[''\"\"]|import { log } from ''./log''|g\" \"$file\")",
       "Bash(git -C D:/Claude/ozvps add:*)",
-      "Bash(git -C D:/Claude/ozvps status:*)"
+      "Bash(git -C D:/Claude/ozvps status:*)",
+      "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nFix admin auth to use Auth0 app_metadata instead of hardcoded email list\n\nAdmin status is now checked via Auth0''s app_metadata.is_admin field using\nthe Management API, instead of a hardcoded ADMIN_EMAILS array.\n\nThe login flow now:\n1. Verifies Auth0 credentials first \\(gets auth0UserId\\)\n2. Checks Auth0''s app_metadata.is_admin via API\n3. Validates 2FA\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C D:/Claude/ozvps push origin claude/dev-l5488)",
+      "Bash(git -C D:/Claude/ozvps checkout main)",
+      "Bash(git -C D:/Claude/ozvps merge claude/dev-l5488)",
+      "Bash(git -C D:/Claude/ozvps push origin main)",
+      "Bash(git -C D:/Claude/ozvps checkout claude/dev-l5488)",
+      "Bash(git -C D:/Claude/ozvps stash)",
+      "Bash(git -C D:/Claude/ozvps stash pop)",
+      "Bash(git -C D:/Claude/ozvps commit -m \"$\\(cat <<''EOF''\nRemove database dependency for admin login - use Auth0 only\n\nAdmin login no longer requires a user_mappings record. All user data\n\\(email, name, admin status\\) comes directly from Auth0. Only 2FA secrets\nstill come from the database \\(since TOTP is custom, not Auth0 MFA\\).\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

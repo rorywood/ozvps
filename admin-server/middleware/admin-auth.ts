@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "../../server/db";
-import { adminSessions, twoFactorAuth, userMappings } from "../../shared/schema";
+import { adminSessions, twoFactorAuth } from "../../shared/schema";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { getClientIp } from "./ip-whitelist";
@@ -133,22 +133,6 @@ export async function checkUserHas2FA(auth0UserId: string): Promise<boolean> {
     .where(and(eq(twoFactorAuth.auth0UserId, auth0UserId), eq(twoFactorAuth.enabled, true)));
 
   return !!tfa;
-}
-
-export async function getAdminUserInfo(auth0UserId: string): Promise<{ email: string; name: string | null } | null> {
-  const [mapping] = await db
-    .select()
-    .from(userMappings)
-    .where(eq(userMappings.auth0UserId, auth0UserId));
-
-  if (!mapping) {
-    return null;
-  }
-
-  return {
-    email: mapping.email,
-    name: mapping.name,
-  };
 }
 
 // Extend Express Request type

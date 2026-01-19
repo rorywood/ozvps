@@ -1,6 +1,6 @@
 import { Express, Request, Response } from "express";
 import { db } from "../../server/db";
-import { userMappings, twoFactorAuth } from "../../shared/schema";
+import { twoFactorAuth } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
 import { authenticator } from "otplib";
 import argon2 from "argon2";
@@ -15,7 +15,7 @@ import { getClientIp } from "../middleware/ip-whitelist";
 
 // Verify password using Auth0 Resource Owner Password Grant
 // This requires the Auth0 application to have "Password" grant type enabled
-async function verifyAuth0Password(email: string, password: string): Promise<{ success: boolean; auth0UserId?: string; error?: string }> {
+async function verifyAuth0Password(email: string, password: string): Promise<{ success: boolean; auth0UserId?: string; name?: string; error?: string }> {
   const auth0Domain = process.env.AUTH0_DOMAIN;
   const auth0ClientId = process.env.AUTH0_CLIENT_ID;
   const auth0ClientSecret = process.env.AUTH0_CLIENT_SECRET;
@@ -47,11 +47,14 @@ async function verifyAuth0Password(email: string, password: string): Promise<{ s
 
     const tokens = await response.json();
 
-    // Decode the ID token to get user info
+    // Decode the ID token to get user info (includes name from Auth0)
     const idToken = tokens.id_token;
     const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64').toString());
 
-    return { success: true, auth0UserId: payload.sub };
+    // Get name from Auth0 - prefer name, fall back to nickname or email prefix
+    const name = payload.name || payload.nickname || email.split('@')[0];
+
+    return { success: true, auth0UserId: payload.sub, name };
   } catch (error: any) {
     console.log(`[admin-auth] Auth0 error:`, error.message);
     return { success: false, error: "Authentication service error" };
@@ -117,18 +120,10 @@ export function registerAuthRoutes(app: Express) {
       return res.status(403).json({ error: "Access denied. Admin privileges required." });
     }
 
-    // Check if user exists in our database
-    const [mapping] = await db
-      .select()
-      .from(userMappings)
-      .where(eq(userMappings.auth0UserId, auth0UserId));
+    // Get name from Auth0 (already fetched during password verification)
+    const userName = authResult.name || email.split('@')[0];
 
-    if (!mapping) {
-      console.log(`[admin-auth] Admin ${email} has no user mapping`);
-      return res.status(403).json({ error: "Account not found in system" });
-    }
-
-    // Check if 2FA is enabled
+    // Check if 2FA is enabled (this is the only thing we need from the database)
     const [tfa] = await db
       .select()
       .from(twoFactorAuth)
@@ -147,7 +142,7 @@ export function registerAuthRoutes(app: Express) {
     const pendingLoginToken = Buffer.from(JSON.stringify({
       auth0UserId,
       email,
-      name: mapping.name,
+      name: userName,
       exp: Date.now() + 5 * 60 * 1000,
     })).toString("base64");
 
