@@ -172,9 +172,7 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { TOTP, generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI } from 'otplib';
-
-const totp = new TOTP({ window: 1 }); // Allow ±30 seconds for time drift
+import { generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI, verifySync as otplibVerifySync } from 'otplib';
 
 function totpGenerateSecret(): string {
   return otplibGenerateSecret();
@@ -182,8 +180,10 @@ function totpGenerateSecret(): string {
 
 function totpVerify(token: string, secret: string): boolean {
   try {
-    // SECURITY: window of 1 allows codes from ±30 seconds to handle time drift
-    return totp.verify({ token, secret });
+    // SECURITY: Verify TOTP token against secret
+    // Uses default window of 1 (±30 seconds) for time drift tolerance
+    const result = otplibVerifySync({ token, secret });
+    return result?.valid === true;
   } catch (error) {
     console.error('TOTP verification error:', error);
     return false;
@@ -515,7 +515,7 @@ async function requireEmailVerified(req: Request, res: Response, next: NextFunct
     return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
   }
 
-  if (!req.userSession.emailVerified) {
+  if (!req.userSession!.emailVerified) {
     return res.status(403).json({
       error: 'Email verification required. Please verify your email address before performing this action.',
       code: 'EMAIL_NOT_VERIFIED'
@@ -1698,7 +1698,7 @@ export async function registerRoutes(
 
             // Fetch billing status for the server (using UUID for reliable lookup)
             // Note: Billing records are created during server deployment, not auto-initialized
-            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId, server.uuid ?? undefined);
+            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId!, server.uuid ?? undefined);
 
             return {
               ...server,
@@ -1790,7 +1790,7 @@ export async function registerRoutes(
             }
 
             // Fetch billing status for the server (using UUID for reliable lookup)
-            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId, server.uuid ?? undefined);
+            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId!, server.uuid ?? undefined);
 
             return {
               ...server,
@@ -1850,7 +1850,7 @@ export async function registerRoutes(
       // Use UUID for reliable lookup - it never changes even if server ID format changes
       let billingStatus = null;
       try {
-        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
+        billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId!, server.uuid ?? undefined);
 
         // Auto-initialize billing for existing servers that don't have a record
         if (!billingStatus) {
@@ -1884,7 +1884,7 @@ export async function registerRoutes(
                   deployedAt,
                 });
                 // Fetch the newly created billing record
-                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId, server.uuid);
+                billingStatus = await getServerBillingStatus(req.params.id, req.userSession!.auth0UserId!, server.uuid ?? undefined);
                 log(`Auto-initialized billing for server ${req.params.id} (UUID: ${server.uuid}) with plan ${plan.code}`, 'billing');
               }
             }
@@ -2242,7 +2242,7 @@ export async function registerRoutes(
       // Email credentials if password was returned
       if (result.password && req.userSession?.email && server.primaryIp) {
         sendServerReinstallEmail(
-          req.userSession.email,
+          req.userSession!.email,
           hostname || server.name || `Server ${server.id}`,
           server.primaryIp,
           'root',
@@ -3145,7 +3145,7 @@ export async function registerRoutes(
         auth0UserId,
         amountCents,
         reason.trim(),
-        req.userSession.email
+        req.userSession!.email
       );
 
       if (!result.success) {
@@ -3165,7 +3165,7 @@ export async function registerRoutes(
             currency: 'aud',
             description: `Admin ${adjustmentType}: $${formattedAmount} - ${reason}`,
             metadata: {
-              admin_email: req.userSession.email,
+              admin_email: req.userSession!.email,
               reason: reason.trim(),
               type: 'admin_adjustment'
             }
@@ -3177,7 +3177,7 @@ export async function registerRoutes(
         }
       }
 
-      log(`Admin ${req.userSession.email} adjusted wallet for ${auth0UserId}: ${amountCents > 0 ? '+' : ''}${amountCents} cents (${reason})`, 'admin');
+      log(`Admin ${req.userSession!.email} adjusted wallet for ${auth0UserId}: ${amountCents > 0 ? '+' : ''}${amountCents} cents (${reason})`, 'admin');
       res.json({ success: true, wallet: result.wallet });
     } catch (error: any) {
       log(`Error adjusting wallet: ${error.message}`, 'admin');
@@ -3260,7 +3260,7 @@ export async function registerRoutes(
       }
 
       const { auth0UserId, oldExtRelationId } = result.data;
-      log(`Admin ${req.userSession.email} linking VirtFusion user (extRelationId: ${oldExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
+      log(`Admin ${req.userSession!.email} linking VirtFusion user (extRelationId: ${oldExtRelationId}) to Auth0 user ${auth0UserId}`, 'admin');
 
       // Verify Auth0 user exists
       const auth0User = await auth0Client.getUserById(auth0UserId);
@@ -3343,11 +3343,11 @@ export async function registerRoutes(
       }
 
       const { auth0UserId } = result.data;
-      log(`Admin ${req.userSession.email} manually verifying email for Auth0 user ${auth0UserId}`, 'admin');
+      log(`Admin ${req.userSession!.email} manually verifying email for Auth0 user ${auth0UserId}`, 'admin');
 
       // Set email verified override in our database (bypasses Auth0)
       log(`Setting email verified override in database...`, 'admin');
-      await storage.setEmailVerifiedOverride(auth0UserId, true, req.userSession.email);
+      await storage.setEmailVerifiedOverride(auth0UserId, true, req.userSession!.email);
       log(`Email verified override set successfully`, 'admin');
 
       // Also try to update Auth0 (but don't fail if it doesn't work)
@@ -3362,8 +3362,8 @@ export async function registerRoutes(
 
       // Audit log
       await dbStorage.createAuditLog({
-        adminAuth0UserId: req.userSession.auth0UserId!,
-        adminEmail: req.userSession.email,
+        adminAuth0UserId: req.userSession!.auth0UserId!,
+        adminEmail: req.userSession!.email,
         action: 'EMAIL_VERIFIED_MANUALLY',
         targetType: 'user',
         targetId: auth0UserId,
@@ -3371,7 +3371,7 @@ export async function registerRoutes(
         status: 'success',
       });
 
-      log(`SUCCESS: Admin ${req.userSession.email} verified email for user ${auth0UserId}`, 'admin');
+      log(`SUCCESS: Admin ${req.userSession!.email} verified email for user ${auth0UserId}`, 'admin');
       log(`========== ADMIN VERIFY EMAIL END ==========`, 'admin');
       res.json({ success: true, message: 'Email verified successfully' });
     } catch (error: any) {
@@ -3405,17 +3405,17 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      log(`User ${req.userSession.email} requesting verification email resend`, 'auth');
+      log(`User ${req.userSession!.email} requesting verification email resend`, 'auth');
 
       // Call Auth0 to resend verification email
       const result = await auth0Client.resendVerificationEmail(req.userSession.auth0UserId);
 
       if (!result.success) {
-        log(`Failed to resend verification email for ${req.userSession.email}: ${result.error}`, 'auth');
+        log(`Failed to resend verification email for ${req.userSession!.email}: ${result.error}`, 'auth');
         return res.status(400).json({ error: result.error || 'Failed to send verification email' });
       }
 
-      log(`Verification email resent successfully for ${req.userSession.email}`, 'auth');
+      log(`Verification email resent successfully for ${req.userSession!.email}`, 'auth');
       res.json({ success: true, message: 'Verification email sent successfully' });
     } catch (error: any) {
       log(`Resend verification email error: ${error.message}`, 'auth');
@@ -3493,7 +3493,7 @@ export async function registerRoutes(
         minScore: 0.5,
       });
 
-      log(`Admin ${req.userSession.email} updated reCAPTCHA settings: enabled=${enabled}, version=${version}`, 'admin');
+      log(`Admin ${req.userSession!.email} updated reCAPTCHA settings: enabled=${enabled}, version=${version}`, 'admin');
       res.json({ success: true });
     } catch (error: any) {
       log(`Error updating reCAPTCHA settings: ${error.message}`, 'admin');
@@ -4037,7 +4037,7 @@ export async function registerRoutes(
       }
 
       // Audit log
-      await dbStorage.createAdminAuditLog({
+      await dbStorage.createAuditLog({
         adminAuth0UserId: session.auth0UserId!,
         adminEmail: session.email,
         action: 'plans.sync_from_virtfusion',
@@ -4151,7 +4151,7 @@ export async function registerRoutes(
 
         // Get server name from VirtFusion
         try {
-          const server = await virtfusionClient.getServer(parseInt(record.virtfusionServerId, 10));
+          const server = await virtfusionClient.getServer(record.virtfusionServerId);
           serverName = server?.name || server?.hostname;
         } catch (e) {
           // Server might be deleted
@@ -5312,7 +5312,7 @@ export async function registerRoutes(
       await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
 
       // Provision server via VirtFusion
-      let serverResult;
+      let serverResult: { serverId: number; name: string; uuid?: string; password?: string; primaryIp?: string; osName?: string };
       try {
         serverResult = await virtfusionClient.provisionServer({
           userId: virtFusionUserId,
@@ -5328,9 +5328,9 @@ export async function registerRoutes(
         // Email credentials if password and IP were returned
         if (serverResult.password && serverResult.primaryIp && req.userSession?.email) {
           const emailServerName = serverResult.name || serverHostname || `Server #${serverResult.serverId}`;
-          log(`Sending credentials email to ${req.userSession.email} for server ${emailServerName}`, 'api');
+          log(`Sending credentials email to ${req.userSession!.email} for server ${emailServerName}`, 'api');
           sendServerCredentialsEmail(
-            req.userSession.email,
+            req.userSession!.email,
             emailServerName,
             serverResult.primaryIp,
             'root',

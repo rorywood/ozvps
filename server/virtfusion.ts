@@ -291,7 +291,7 @@ export class VirtFusionClient {
       const response = await fetch(`${this.baseUrl}/connect`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json',
         },
       });
@@ -2155,7 +2155,7 @@ export class VirtFusionClient {
                       type: 'ipv4',
                       serverId: server.id,
                       serverName: server.name || `Server ${server.id}`,
-                      userId: server.userId,
+                      userId: server.ownerId,
                       blockId: 0,
                       inUse: true,
                     });
@@ -2173,7 +2173,7 @@ export class VirtFusionClient {
                       type: 'ipv6',
                       serverId: server.id,
                       serverName: server.name || `Server ${server.id}`,
-                      userId: server.userId,
+                      userId: server.ownerId,
                       blockId: 0,
                       inUse: true,
                     });
@@ -2194,7 +2194,7 @@ export class VirtFusionClient {
                 type: serverData.primaryIp.includes(':') ? 'ipv6' : 'ipv4',
                 serverId: server.id,
                 serverName: server.name || `Server ${server.id}`,
-                userId: server.userId,
+                userId: server.ownerId,
                 blockId: 0,
                 inUse: true,
               });

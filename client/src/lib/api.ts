@@ -611,10 +611,20 @@ class ApiClient {
     clearCsrfToken();
   }
 
-  async getAuthUser(): Promise<{ user: { id: number; email: string; name: string; extRelationId: string; isAdmin?: boolean } } | null> {
+  async getAuthUser(): Promise<{
+    user: { id: number; email: string; name: string; extRelationId: string; isAdmin?: boolean };
+    email: string;
+    emailVerified?: boolean;
+  } | null> {
     const response = await secureFetch(`${this.baseUrl}/auth/me`);
     if (!response.ok) return null;
-    return response.json();
+    const data = await response.json();
+    // Flatten user data for easier access
+    return {
+      ...data,
+      email: data.user?.email,
+      emailVerified: data.emailVerified ?? data.user?.emailVerified,
+    };
   }
 
   async getCurrentUser(): Promise<{ user: { id: number | string; email: string; name?: string; isAdmin?: boolean } }> {

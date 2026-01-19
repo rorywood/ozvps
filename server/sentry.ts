@@ -42,7 +42,7 @@ export function initSentry(): void {
 
         // Remove sensitive cookies
         if (event.request?.cookies) {
-          event.request.cookies = '[Filtered]';
+          event.request.cookies = { filtered: 'true' };
         }
 
         return event;

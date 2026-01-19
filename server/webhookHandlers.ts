@@ -132,7 +132,7 @@ export class WebhookHandlers {
             stripeEventId: event.id,
             stripePaymentIntentId: session.payment_intent,
             stripeSessionId: session.id,
-            reason: 'Wallet top-up',
+            metadata: { reason: 'Wallet top-up' },
           });
 
           log(`Wallet credited: user=${auth0UserId}, new_balance=${updatedWallet.balanceCents} cents`, 'stripe');

@@ -166,7 +166,7 @@ if (process.env.NODE_ENV === 'production') {
 // Rate limiting for auth endpoints (stricter)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per window
+  max: 20, // 20 attempts per window (allows retries for typos)
   message: { error: 'Too many authentication attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -174,9 +174,10 @@ const authLimiter = rateLimit({
 });
 
 // General API rate limiting
+// Note: Dashboard polls every 500ms-2s, so needs generous limit
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  max: 300, // 300 requests per minute (allows aggressive polling + user actions)
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -186,7 +187,7 @@ const apiLimiter = rateLimit({
 // SECURITY: Stricter rate limiting for wallet/payment operations
 const walletLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 payment attempts per minute per IP
+  max: 10, // 10 payment attempts per minute per IP
   message: { error: 'Too many payment attempts. Please wait a moment before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -196,7 +197,7 @@ const walletLimiter = rateLimit({
 // SECURITY: Rate limiting for public/unauthenticated endpoints to prevent enumeration
 const publicEndpointLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute per IP
+  max: 60, // 60 requests per minute per IP
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
