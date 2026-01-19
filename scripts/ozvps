@@ -964,6 +964,123 @@ ERRORCONF
         fi
     fi
 
+    # =========================================================================
+    # Auto-configure NGINX for Admin Panel
+    # =========================================================================
+    info "Checking admin panel NGINX configuration..."
+
+    local admin_nginx_conf="/etc/nginx/sites-available/ozvps-admin"
+    local main_domain=""
+    local admin_domain=""
+
+    # Detect main domain from existing nginx config
+    if [[ -n "$nginx_conf" && -f "$nginx_conf" ]]; then
+        main_domain=$(grep -oP "server_name\s+\K[^;]+" "$nginx_conf" 2>/dev/null | head -1 | tr -d ' ')
+    fi
+
+    if [[ -n "$main_domain" && "$main_domain" != "localhost" && "$main_domain" != "_" ]]; then
+        # Derive admin domain: app.ozvps.com.au -> admin.ozvps.com.au
+        # Or: dev.ozvps.com.au -> admin.dev.ozvps.com.au
+        if [[ "$main_domain" == app.* ]]; then
+            admin_domain="admin.${main_domain#app.}"
+        elif [[ "$main_domain" == dev.* ]]; then
+            admin_domain="admin.${main_domain}"
+        else
+            # Generic: just prepend admin.
+            admin_domain="admin.${main_domain}"
+        fi
+
+        success "Detected domains: main=$main_domain, admin=$admin_domain"
+
+        # Check if admin nginx config exists
+        if [[ ! -f "$admin_nginx_conf" ]]; then
+            info "Creating NGINX config for admin panel..."
+
+            cat > "$admin_nginx_conf" << NGINXADMIN
+server {
+    listen 80;
+    server_name ${admin_domain};
+
+    include snippets/ozvps-errors.conf;
+
+    # WebSocket for log streaming
+    location /ws/ {
+        proxy_pass http://127.0.0.1:5001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:5001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINXADMIN
+
+            # Enable the site
+            ln -sf "$admin_nginx_conf" /etc/nginx/sites-enabled/ozvps-admin
+
+            # Test nginx config
+            if nginx -t 2>/dev/null; then
+                systemctl reload nginx
+                success "Admin NGINX config created and enabled"
+
+                # Try to get SSL certificate
+                if command -v certbot &>/dev/null; then
+                    info "Obtaining SSL certificate for $admin_domain..."
+
+                    # Check if DNS resolves to this server
+                    local server_ip=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null)
+                    local dns_ip=$(dig +short "$admin_domain" 2>/dev/null | head -1)
+
+                    if [[ "$server_ip" == "$dns_ip" ]]; then
+                        if certbot --nginx -d "$admin_domain" --non-interactive --agree-tos --redirect 2>/dev/null; then
+                            success "SSL certificate obtained for $admin_domain"
+                        else
+                            warning "Failed to get SSL cert - run manually: certbot --nginx -d $admin_domain"
+                        fi
+                    else
+                        warning "DNS not pointing to this server yet (server=$server_ip, dns=$dns_ip)"
+                        warning "Add DNS record: $admin_domain -> $server_ip"
+                        warning "Then run: certbot --nginx -d $admin_domain"
+                    fi
+                else
+                    warning "Certbot not installed - SSL not configured for admin panel"
+                fi
+            else
+                error "NGINX config test failed"
+                rm -f "$admin_nginx_conf" /etc/nginx/sites-enabled/ozvps-admin
+            fi
+        else
+            success "Admin NGINX config already exists"
+
+            # Make sure it's enabled
+            if [[ ! -f "/etc/nginx/sites-enabled/ozvps-admin" ]]; then
+                ln -sf "$admin_nginx_conf" /etc/nginx/sites-enabled/ozvps-admin
+                nginx -t 2>/dev/null && systemctl reload nginx
+            fi
+        fi
+    else
+        warning "Could not detect main domain - skipping admin NGINX setup"
+        warning "Run manually after update: cd /opt/ozvps-panel/deploy && ./setup-nginx.sh"
+    fi
+
     # Restart applications (both main and admin)
     info "Starting applications..."
     pm2 delete ozvps 2>/dev/null || true
@@ -1002,6 +1119,14 @@ ERRORCONF
     echo ""
     echo -e "    Branch: ${BOLD}$branch${NC}"
     echo -e "    Commit: ${BOLD}$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')${NC}"
+    echo ""
+    echo "URLs:"
+    if [[ -n "$main_domain" ]]; then
+        echo -e "  Main Panel:  ${CYAN}https://${main_domain}${NC}"
+    fi
+    if [[ -n "$admin_domain" ]]; then
+        echo -e "  Admin Panel: ${CYAN}https://${admin_domain}${NC}"
+    fi
     echo ""
     echo "Processes:"
     echo "  ozvps        - Main panel (port 5000)"
