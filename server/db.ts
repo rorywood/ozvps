@@ -6,8 +6,15 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is not set");
 }
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
+  // Production-optimized pool settings
+  max: isProduction ? 20 : 10, // Max connections in pool
+  idleTimeoutMillis: 30000, // Close idle connections after 30s
+  connectionTimeoutMillis: 5000, // Fail fast if can't connect in 5s
+  allowExitOnIdle: !isProduction, // Allow clean exit in dev
 });
 
 export const db = drizzle(pool, { schema });

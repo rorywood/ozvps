@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { runMigrations } from 'stripe-replit-sync';
@@ -145,6 +146,22 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Response compression for better performance (production only)
+if (process.env.NODE_ENV === 'production') {
+  app.use(compression({
+    level: 6, // Balanced compression level
+    threshold: 1024, // Only compress responses > 1KB
+    filter: (req, res) => {
+      // Don't compress if client doesn't accept it
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      // Use compression's default filter
+      return compression.filter(req, res);
+    },
+  }));
+}
 
 // Rate limiting for auth endpoints (stricter)
 const authLimiter = rateLimit({
