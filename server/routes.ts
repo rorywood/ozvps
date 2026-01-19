@@ -2473,6 +2473,11 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Access denied' });
       }
 
+      // Free servers don't need reactivation - they should never be suspended for billing
+      if (billingRecord.freeServer) {
+        return res.status(400).json({ error: 'This server has complimentary hosting and cannot be reactivated through billing. Please contact support.' });
+      }
+
       // Check if server is suspended or unpaid
       if (billingRecord.status !== 'suspended' && billingRecord.status !== 'unpaid') {
         return res.status(400).json({ error: 'Server is not suspended or unpaid' });
@@ -2494,6 +2499,7 @@ export async function registerRoutes(
 
       // Call retryUnpaidServers to handle the reactivation
       // This will charge the wallet, update billing status, and unsuspend if needed
+      // Note: This reactivates all unpaid servers for the user, not just this one
       await retryUnpaidServers(session.auth0UserId!);
 
       // Fetch the updated billing record

@@ -1319,7 +1319,7 @@ export default function ServerDetail() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {server.billing?.status === 'suspended' ? (
+                {server.billing?.status === 'suspended' && !server.billing?.freeServer ? (
                   <>
                     {canAffordReactivation ? (
                       <Button
