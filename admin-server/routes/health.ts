@@ -55,7 +55,7 @@ async function checkRedis(): Promise<ServiceHealth> {
 }
 
 async function checkVirtFusion(): Promise<ServiceHealth> {
-  const apiUrl = process.env.VIRTFUSION_API_URL;
+  const apiUrl = process.env.VIRTFUSION_PANEL_URL;
   const apiToken = process.env.VIRTFUSION_API_TOKEN;
 
   if (!apiUrl || !apiToken) {
