@@ -375,11 +375,17 @@ export default function ServerDetail() {
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();
 
   // Get display status (reboot, starting, stopping, deleting, or actual)
-  // Use liveStats.running for faster status updates (it's polled every 1s without caching)
+  // Use liveStats.running for faster shutdown detection only (not startup - can flicker during boot)
   const activeCancellation = cancellationData?.cancellation;
-  const effectiveStatus = (liveStats && typeof liveStats.running === 'boolean')
-    ? (liveStats.running ? 'running' : 'stopped')
-    : server?.status || 'unknown';
+  const effectiveStatus = (() => {
+    const serverStatus = server?.status || 'unknown';
+    // Only use liveStats to detect shutdown faster (running → stopped)
+    // Don't use it to detect startup (stopped → running) as VM can flicker during boot
+    if (serverStatus === 'running' && liveStats && liveStats.running === false) {
+      return 'stopped'; // Shutdown detected faster via liveStats
+    }
+    return serverStatus;
+  })();
 
   // Sync power actions using effective status for faster pending action clearance
   useSyncPowerActions(server ? [{ ...server, status: effectiveStatus }] : []);
@@ -1508,7 +1514,7 @@ export default function ServerDetail() {
             <Button
               className="h-10"
               onClick={handleOpenVnc}
-              disabled={!!powerActionPending || server.status !== 'running' || isSuspended || consoleLock.isLocked}
+              disabled={!!powerActionPending || displayStatus !== 'running' || isTransitioning || isSuspended || consoleLock.isLocked}
               data-testid="button-console"
             >
               <TerminalSquare className="h-4 w-4 mr-2" />
