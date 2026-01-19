@@ -768,3 +768,485 @@ If you did not make this change, please contact our support team immediately at 
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send billing reminder email (1 day before due)
+ */
+export async function sendBillingReminderEmail(
+  to: string,
+  serverName: string,
+  amountDollars: string,
+  dueDate: string,
+  walletBalance: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send billing reminder email', 'email');
+    return { success: false, error: 'Email service not configured.' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Payment due tomorrow for ${serverName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Payment Reminder</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding: 0 0 32px; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+                <tr>
+                  <td style="padding: 40px;">
+                    <h1 style="margin: 0 0 16px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Payment Reminder</h1>
+
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      Your server <strong style="color: ${emailStyles.textDark};">${serverName}</strong> is due for renewal tomorrow.
+                    </p>
+
+                    <!-- Payment Details Box -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${emailStyles.borderColor}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 0;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                                <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Amount Due</span>
+                              </td>
+                              <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor}; text-align: right;">
+                                <strong style="color: ${emailStyles.textDark}; font-size: 16px;">${amountDollars}</strong>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                                <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Due Date</span>
+                              </td>
+                              <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor}; text-align: right;">
+                                <span style="color: ${emailStyles.textDark}; font-size: 14px;">${dueDate}</span>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 14px 20px;">
+                                <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Wallet Balance</span>
+                              </td>
+                              <td style="padding: 14px 20px; text-align: right;">
+                                <span style="color: ${emailStyles.textDark}; font-size: 14px;">${walletBalance}</span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 14px; line-height: 1.6;">
+                      Please ensure your wallet has sufficient funds to avoid service interruption.
+                    </p>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 8px 0;">
+                          <a href="${appUrl}/billing" style="display: inline-block; padding: 14px 28px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                            Top Up Wallet
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 13px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+PAYMENT REMINDER
+
+Your server ${serverName} is due for renewal tomorrow.
+
+Amount Due: ${amountDollars}
+Due Date: ${dueDate}
+Wallet Balance: ${walletBalance}
+
+Please ensure your wallet has sufficient funds to avoid service interruption.
+
+Top up your wallet: ${appUrl}/billing
+
+---
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send billing reminder email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Billing reminder email sent to ${to} for server ${serverName}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending billing reminder email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send payment failed email with suspension warning
+ */
+export async function sendPaymentFailedEmail(
+  to: string,
+  serverName: string,
+  amountDollars: string,
+  suspendDate: string,
+  daysUntilSuspension: number
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send payment failed email', 'email');
+    return { success: false, error: 'Email service not configured.' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+  const dangerColor = '#dc2626';
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Action required: Payment failed for ${serverName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Payment Failed</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding: 0 0 32px; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+
+                <!-- Warning Header -->
+                <tr>
+                  <td style="padding: 24px 40px; background-color: ${dangerColor}; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Payment Failed</h1>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding: 32px 40px;">
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      We were unable to process payment for your server <strong style="color: ${emailStyles.textDark};">${serverName}</strong> due to insufficient wallet balance.
+                    </p>
+
+                    <!-- Suspension Warning -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-left: 4px solid ${dangerColor}; background-color: #fef2f2; border-radius: 0 6px 6px 0; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <p style="margin: 0 0 4px; color: ${dangerColor}; font-size: 14px; font-weight: 600;">Server will be suspended in ${daysUntilSuspension} days</p>
+                          <p style="margin: 0; color: ${emailStyles.textMuted}; font-size: 13px; line-height: 1.5;">
+                            Suspension date: <strong>${suspendDate}</strong>. Top up your wallet before this date to keep your server running.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Payment Details -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${emailStyles.borderColor}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Server</span>
+                        </td>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor}; text-align: right;">
+                          <span style="color: ${emailStyles.textDark}; font-size: 14px;">${serverName}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 14px 20px;">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Amount Due</span>
+                        </td>
+                        <td style="padding: 14px 20px; text-align: right;">
+                          <strong style="color: ${dangerColor}; font-size: 16px;">${amountDollars}</strong>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 8px 0;">
+                          <a href="${appUrl}/billing" style="display: inline-block; padding: 14px 28px; background-color: ${dangerColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                            Top Up Now
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textMuted}; font-size: 13px;">
+                Need help? <a href="mailto:support@ozvps.com.au" style="color: ${emailStyles.primaryColor}; text-decoration: none;">Contact Support</a>
+              </p>
+              <p style="margin: 0; color: ${emailStyles.textLight}; font-size: 13px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+PAYMENT FAILED
+
+We were unable to process payment for your server ${serverName} due to insufficient wallet balance.
+
+WARNING: Server will be suspended in ${daysUntilSuspension} days
+Suspension date: ${suspendDate}
+
+Amount Due: ${amountDollars}
+
+Top up your wallet before this date to keep your server running.
+
+Top up now: ${appUrl}/billing
+
+---
+Need help? Contact support@ozvps.com.au
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send payment failed email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Payment failed email sent to ${to} for server ${serverName}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending payment failed email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send server suspended email
+ */
+export async function sendServerSuspendedEmail(
+  to: string,
+  serverName: string,
+  amountDollars: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send server suspended email', 'email');
+    return { success: false, error: 'Email service not configured.' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+  const dangerColor = '#dc2626';
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Server suspended: ${serverName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Server Suspended</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding: 0 0 32px; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+
+                <!-- Suspended Header -->
+                <tr>
+                  <td style="padding: 24px 40px; background-color: #1f2937; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Server Suspended</h1>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding: 32px 40px;">
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      Your server <strong style="color: ${emailStyles.textDark};">${serverName}</strong> has been suspended due to non-payment.
+                    </p>
+
+                    <!-- Status Box -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px; color: ${emailStyles.textLight}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server Status</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 16px; font-weight: 600;">${serverName}</p>
+                              </td>
+                              <td align="right" valign="middle">
+                                <span style="display: inline-block; background-color: #fecaca; color: ${dangerColor}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500;">Suspended</span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Reactivation Notice -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-left: 4px solid ${emailStyles.successColor}; background-color: #f0fdf4; border-radius: 0 6px 6px 0; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <p style="margin: 0 0 4px; color: ${emailStyles.successColor}; font-size: 14px; font-weight: 600;">How to reactivate</p>
+                          <p style="margin: 0; color: ${emailStyles.textMuted}; font-size: 13px; line-height: 1.5;">
+                            Top up your wallet with at least <strong>${amountDollars}</strong> and your server will be automatically reactivated within 10 minutes.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 8px 0;">
+                          <a href="${appUrl}/billing" style="display: inline-block; padding: 14px 28px; background-color: ${emailStyles.successColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                            Reactivate Server
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textMuted}; font-size: 13px;">
+                Need help? <a href="mailto:support@ozvps.com.au" style="color: ${emailStyles.primaryColor}; text-decoration: none;">Contact Support</a>
+              </p>
+              <p style="margin: 0; color: ${emailStyles.textLight}; font-size: 13px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+SERVER SUSPENDED
+
+Your server ${serverName} has been suspended due to non-payment.
+
+HOW TO REACTIVATE
+Top up your wallet with at least ${amountDollars} and your server will be automatically reactivated within 10 minutes.
+
+Reactivate now: ${appUrl}/billing
+
+---
+Need help? Contact support@ozvps.com.au
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send server suspended email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Server suspended email sent to ${to} for server ${serverName}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending server suspended email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}

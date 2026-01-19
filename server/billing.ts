@@ -1,8 +1,46 @@
 import { db } from './db';
 import { serverBilling, billingLedger, wallets } from '../shared/schema';
-import { eq, and, lte, isNull, or, not } from 'drizzle-orm';
+import { eq, and, lte, isNull, or, not, gte, lt } from 'drizzle-orm';
 import { log } from './index';
 import { virtfusionClient } from './virtfusion';
+import { auth0Client } from './auth0';
+import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail } from './email';
+
+// Helper to get user email from Auth0
+async function getUserEmail(auth0UserId: string): Promise<string | null> {
+  try {
+    const user = await auth0Client.getUserById(auth0UserId);
+    return user?.email || null;
+  } catch (error) {
+    log(`Failed to get email for user ${auth0UserId}: ${error}`, 'billing');
+    return null;
+  }
+}
+
+// Helper to get server name from VirtFusion
+async function getServerName(serverId: string): Promise<string> {
+  try {
+    const server = await virtfusionClient.getServer(serverId);
+    return server?.name || `Server #${serverId}`;
+  } catch (error) {
+    return `Server #${serverId}`;
+  }
+}
+
+// Format date for email display
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('en-AU', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+// Format currency
+function formatCurrency(cents: number): string {
+  return `$${(cents / 100).toFixed(2)} AUD`;
+}
 
 // Add 1 calendar month to a date (handles month-end cases)
 function addMonth(date: Date): Date {
@@ -152,6 +190,23 @@ export async function runBillingJob(): Promise<void> {
             .where(eq(serverBilling.id, billing.id));
 
           log(`Server ${billing.virtfusionServerId} marked unpaid, will suspend at ${suspendAt.toISOString()}`, 'billing');
+
+          // Send payment failed email
+          try {
+            const email = await getUserEmail(billing.auth0UserId);
+            if (email) {
+              const serverName = await getServerName(billing.virtfusionServerId);
+              await sendPaymentFailedEmail(
+                email,
+                serverName,
+                formatCurrency(billing.monthlyPriceCents),
+                formatDate(suspendAt),
+                5 // days until suspension
+              );
+            }
+          } catch (emailError: any) {
+            log(`Failed to send payment failed email: ${emailError.message}`, 'billing');
+          }
         }
       }
     } catch (error: any) {
@@ -183,12 +238,79 @@ export async function runBillingJob(): Promise<void> {
         .where(eq(serverBilling.id, billing.id));
 
       log(`Suspended server ${billing.virtfusionServerId}`, 'billing');
+
+      // Send server suspended email
+      try {
+        const email = await getUserEmail(billing.auth0UserId);
+        if (email) {
+          const serverName = await getServerName(billing.virtfusionServerId);
+          await sendServerSuspendedEmail(
+            email,
+            serverName,
+            formatCurrency(billing.monthlyPriceCents)
+          );
+        }
+      } catch (emailError: any) {
+        log(`Failed to send server suspended email: ${emailError.message}`, 'billing');
+      }
     } catch (error: any) {
       log(`Error suspending server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
     }
   }
 
+  // Step C: Send reminders for servers due tomorrow
+  await sendBillingReminders();
+
   log('Billing job completed', 'billing');
+}
+
+// Send billing reminders for servers due in the next 24 hours
+export async function sendBillingReminders(): Promise<void> {
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  // Find servers due in the next 24 hours that haven't been reminded yet today
+  // We use a simple approach: only remind for servers that are 'active' or 'paid' status
+  const serversDueSoon = await db.select().from(serverBilling)
+    .where(
+      and(
+        or(
+          eq(serverBilling.status, 'active'),
+          eq(serverBilling.status, 'paid')
+        ),
+        eq(serverBilling.autoRenew, true),
+        gte(serverBilling.nextBillAt, now),
+        lt(serverBilling.nextBillAt, tomorrow)
+      )
+    );
+
+  log(`Found ${serversDueSoon.length} servers due in the next 24 hours for reminders`, 'billing');
+
+  for (const billing of serversDueSoon) {
+    try {
+      const email = await getUserEmail(billing.auth0UserId);
+      if (!email) continue;
+
+      // Get wallet balance
+      const walletRows = await db.select().from(wallets)
+        .where(eq(wallets.auth0UserId, billing.auth0UserId))
+        .limit(1);
+      const walletBalance = walletRows.length > 0 ? walletRows[0].balanceCents : 0;
+
+      const serverName = await getServerName(billing.virtfusionServerId);
+      await sendBillingReminderEmail(
+        email,
+        serverName,
+        formatCurrency(billing.monthlyPriceCents),
+        formatDate(billing.nextBillAt),
+        formatCurrency(walletBalance)
+      );
+
+      log(`Sent billing reminder for server ${billing.virtfusionServerId}`, 'billing');
+    } catch (error: any) {
+      log(`Failed to send billing reminder for server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
+    }
+  }
 }
 
 // Reactivation - retry billing for unpaid/suspended servers after top-up

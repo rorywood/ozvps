@@ -9,25 +9,61 @@ const log = (message: string, context = "billing") => {
   console.log(`${new Date().toLocaleTimeString()} [${context}] ${message}`);
 };
 
-const BILLING_CHECK_INTERVAL = 10 * 60 * 1000; // 10 minutes (for monthly billing system)
-const OVERDUE_GRACE_PERIOD_DAYS = 7;
+// Billing runs daily at 6pm AEST (8am UTC / 18:00 AEST)
+// AEST is UTC+10, so 6pm AEST = 8am UTC
+const BILLING_HOUR_UTC = 8; // 8am UTC = 6pm AEST
+
+// Calculate milliseconds until next 6pm AEST
+function getMillisecondsUntilBillingTime(): number {
+  const now = new Date();
+  const target = new Date(now);
+  target.setUTCHours(BILLING_HOUR_UTC, 0, 0, 0);
+
+  // If we've already passed 6pm AEST today, schedule for tomorrow
+  if (now >= target) {
+    target.setUTCDate(target.getUTCDate() + 1);
+  }
+
+  return target.getTime() - now.getTime();
+}
 
 export async function startBillingProcessor(stripe: Stripe | null) {
-  log("Starting monthly billing processor (checking every 10 minutes)");
+  const scheduleNextBillingRun = () => {
+    const msUntilNextRun = getMillisecondsUntilBillingTime();
+    const nextRunDate = new Date(Date.now() + msUntilNextRun);
+    log(`Next billing run scheduled for ${nextRunDate.toISOString()} (6pm AEST)`);
 
-  const runBillingCycle = async () => {
+    setTimeout(async () => {
+      try {
+        log("Starting daily billing run (6pm AEST)...");
+        await runBillingJob();
+        await processAutoTopups(stripe);
+        log("Daily billing run completed");
+      } catch (err: any) {
+        log(`Error in billing cycle: ${err.message}`, "billing-error");
+      }
+
+      // Schedule the next run
+      scheduleNextBillingRun();
+    }, msUntilNextRun);
+  };
+
+  // Also run a quick check every 30 minutes for urgent tasks (auto top-ups, reactivations)
+  // This ensures users who top up get their servers reactivated promptly
+  const runQuickCheck = async () => {
     try {
-      // Run new monthly billing system
-      await runBillingJob();
       await processAutoTopups(stripe);
     } catch (err: any) {
-      log(`Error in billing cycle: ${err.message}`, "billing-error");
+      log(`Error in quick billing check: ${err.message}`, "billing-error");
     }
   };
 
-  // Start after 5 minutes, then run every 10 minutes
-  setTimeout(runBillingCycle, 5 * 60 * 1000);
-  setInterval(runBillingCycle, BILLING_CHECK_INTERVAL);
+  log("Starting billing processor - daily run at 6pm AEST, quick checks every 30 minutes");
+  scheduleNextBillingRun();
+
+  // Run quick check on startup, then every 30 minutes
+  setTimeout(runQuickCheck, 2 * 60 * 1000); // 2 minutes after startup
+  setInterval(runQuickCheck, 30 * 60 * 1000); // Every 30 minutes
 }
 
 // Old daily billing function removed - now using monthly billing system via runBillingJob()
