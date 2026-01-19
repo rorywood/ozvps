@@ -1342,7 +1342,7 @@ export default function BillingPage() {
                   <div data-testid="upcoming-charges-section">
                     <h2 className="text-lg font-semibold text-foreground mb-2">Upcoming Server Charges</h2>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Monthly billing for your servers. Charges are automatically deducted from your wallet balance.
+                      Monthly billing for your servers. Charges are automatically deducted from your wallet at 6pm AEST on the due date.
                     </p>
 
                     {/* Horizontal server charge rows */}
@@ -1396,9 +1396,17 @@ export default function BillingPage() {
                                       <span className="text-destructive">
                                         Suspended - Add funds to reactivate
                                       </span>
+                                    ) : daysUntilBill <= 0 ? (
+                                      <span className="text-amber-500 font-medium">
+                                        Due today - Wallet charged at 6pm AEST
+                                      </span>
+                                    ) : daysUntilBill === 1 ? (
+                                      <span className="text-amber-500">
+                                        Due tomorrow ({formatDate(charge.nextBillAt)}) - Auto-charged at 6pm AEST
+                                      </span>
                                     ) : (
                                       <>
-                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})
+                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} days) - Auto-charged at 6pm AEST
                                       </>
                                     )}
                                   </div>

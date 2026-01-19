@@ -1356,30 +1356,46 @@ export default function ServerDetail() {
                   </div>
                 )}
 
-                {server.billing?.nextBillAt && (
-                  <div className="border-t border-border pt-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                      {server.billing.status === 'unpaid' ? 'Payment Due' : 'Next Due'}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      {server.billing.status === 'unpaid' && (
-                        <AlertCircle className="h-4 w-4 text-red-400" />
+                {server.billing?.nextBillAt && (() => {
+                  const nextBillDate = new Date(server.billing.nextBillAt);
+                  const now = new Date();
+                  const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const isDueToday = daysUntilBill <= 0;
+                  const isDueTomorrow = daysUntilBill === 1;
+
+                  return (
+                    <div className="border-t border-border pt-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                        {server.billing.status === 'unpaid' ? 'Payment Due' : 'Next Due'}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {(server.billing.status === 'unpaid' || isDueToday) && (
+                          <AlertCircle className={`h-4 w-4 ${server.billing.status === 'unpaid' ? 'text-red-400' : 'text-amber-500'}`} />
+                        )}
+                        <p className={`text-sm font-medium ${
+                          server.billing.status === 'unpaid' ? 'text-red-400' :
+                          isDueToday ? 'text-amber-500' : 'text-foreground'
+                        }`}>
+                          {isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : nextBillDate.toLocaleDateString('en-AU', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      {isDueToday && server.billing.status !== 'unpaid' && (
+                        <p className="text-xs text-amber-500/80 mt-1">
+                          Wallet charged at 6pm AEST
+                        </p>
                       )}
-                      <p className={`text-sm font-medium ${server.billing.status === 'unpaid' ? 'text-red-400' : 'text-foreground'}`}>
-                        {new Date(server.billing.nextBillAt).toLocaleDateString('en-AU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
-                      </p>
+                      {server.billing.status === 'unpaid' && server.billing.suspendAt && (
+                        <p className="text-xs text-red-400/80 mt-1">
+                          Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                        </p>
+                      )}
                     </div>
-                    {server.billing.status === 'unpaid' && server.billing.suspendAt && (
-                      <p className="text-xs text-red-400/80 mt-1">
-                        Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                      </p>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </Card>
           </div>
