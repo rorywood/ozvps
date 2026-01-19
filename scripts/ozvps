@@ -1043,25 +1043,61 @@ NGINXADMIN
 
                 # Try to get SSL certificate
                 if command -v certbot &>/dev/null; then
-                    info "Obtaining SSL certificate for $admin_domain..."
+                    info "Checking SSL certificate for $admin_domain..."
 
-                    # Check if DNS resolves to this server
-                    local server_ip=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null)
-                    local dns_ip=$(dig +short "$admin_domain" 2>/dev/null | head -1)
-
-                    if [[ "$server_ip" == "$dns_ip" ]]; then
-                        if certbot --nginx -d "$admin_domain" --non-interactive --agree-tos --redirect 2>/dev/null; then
-                            success "SSL certificate obtained for $admin_domain"
-                        else
-                            warning "Failed to get SSL cert - run manually: certbot --nginx -d $admin_domain"
-                        fi
+                    # Check if certificate already exists
+                    if certbot certificates 2>/dev/null | grep -q "$admin_domain"; then
+                        success "SSL certificate already exists for $admin_domain"
                     else
-                        warning "DNS not pointing to this server yet (server=$server_ip, dns=$dns_ip)"
-                        warning "Add DNS record: $admin_domain -> $server_ip"
-                        warning "Then run: certbot --nginx -d $admin_domain"
+                        # Check if DNS resolves to this server
+                        local server_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+                        local dns_ip=$(dig +short "$admin_domain" 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+
+                        if [[ -z "$server_ip" ]]; then
+                            warning "Could not detect server IP - skipping SSL"
+                        elif [[ -z "$dns_ip" ]]; then
+                            warning "DNS not configured for $admin_domain"
+                            warning "Add DNS A record: $admin_domain -> $server_ip"
+                            warning "Then run: certbot --nginx -d $admin_domain"
+                        elif [[ "$server_ip" == "$dns_ip" ]]; then
+                            info "DNS verified ($dns_ip), obtaining certificate..."
+
+                            # Get email from existing certificate or .env
+                            local cert_email=""
+                            cert_email=$(certbot certificates 2>/dev/null | grep -oP "Email:\s*\K\S+" | head -1)
+                            if [[ -z "$cert_email" && -f "$INSTALL_DIR/.env" ]]; then
+                                cert_email=$(grep -oP "ADMIN_EMAIL=\K.*" "$INSTALL_DIR/.env" 2>/dev/null | tr -d '"' | tr -d "'")
+                            fi
+                            if [[ -z "$cert_email" ]]; then
+                                cert_email="admin@${main_domain#*.}"
+                            fi
+
+                            # Run certbot with proper flags
+                            local certbot_output
+                            certbot_output=$(certbot --nginx -d "$admin_domain" \
+                                --non-interactive \
+                                --agree-tos \
+                                --email "$cert_email" \
+                                --redirect \
+                                --no-eff-email 2>&1)
+
+                            if [[ $? -eq 0 ]]; then
+                                success "SSL certificate obtained for $admin_domain"
+                            else
+                                warning "Certbot failed. Output:"
+                                echo "$certbot_output" | head -20
+                                echo ""
+                                warning "Run manually: certbot --nginx -d $admin_domain"
+                            fi
+                        else
+                            warning "DNS mismatch: $admin_domain -> $dns_ip (server is $server_ip)"
+                            warning "Update DNS to point to $server_ip"
+                            warning "Then run: certbot --nginx -d $admin_domain"
+                        fi
                     fi
                 else
                     warning "Certbot not installed - SSL not configured for admin panel"
+                    warning "Install with: apt install certbot python3-certbot-nginx"
                 fi
             else
                 error "NGINX config test failed"
