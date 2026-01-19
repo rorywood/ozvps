@@ -87,6 +87,12 @@ export async function createServerBilling(params: {
 // If reactivation=true, the next bill date is set to 1 month from now (for unsuspending)
 // If reactivation=false (default), the next bill date is set to 1 month from the previous due date
 async function chargeServer(billing: typeof serverBilling.$inferSelect, reactivation: boolean = false): Promise<boolean> {
+  // Skip complimentary servers - they don't get charged
+  if (billing.freeServer) {
+    log(`Skipping charge for complimentary server ${billing.virtfusionServerId}`, 'billing');
+    return true; // Return true so it doesn't get marked as failed
+  }
+
   const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
 
   return await db.transaction(async (tx) => {
@@ -220,11 +226,12 @@ export async function runBillingJob(): Promise<void> {
     }
   }
 
-  // Step B: Suspend overdue servers
+  // Step B: Suspend overdue servers (skip complimentary servers)
   const overdueServers = await db.select().from(serverBilling)
     .where(
       and(
         eq(serverBilling.status, 'unpaid'),
+        eq(serverBilling.freeServer, false), // Skip complimentary servers
         not(isNull(serverBilling.suspendAt)),
         lte(serverBilling.suspendAt, now)
       )
@@ -327,6 +334,7 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
     .where(
       and(
         eq(serverBilling.auth0UserId, auth0UserId),
+        eq(serverBilling.freeServer, false), // Skip complimentary servers
         or(eq(serverBilling.status, 'unpaid'), eq(serverBilling.status, 'suspended'))
       )
     );
