@@ -133,6 +133,11 @@ export const serverBilling = pgTable("server_billing", {
   // Complimentary server flag - admin can grant free hosting
   freeServer: boolean("free_server").default(false).notNull(),
 
+  // Admin suspension - separate from billing suspension
+  adminSuspended: boolean("admin_suspended").default(false).notNull(),
+  adminSuspendedAt: timestamp("admin_suspended_at"),
+  adminSuspendedReason: text("admin_suspended_reason"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

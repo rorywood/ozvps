@@ -1710,6 +1710,9 @@ export async function registerRoutes(
                 monthlyPriceCents: billingStatus.monthlyPriceCents,
                 autoRenew: billingStatus.autoRenew,
                 freeServer: billingStatus.freeServer,
+                adminSuspended: billingStatus.adminSuspended,
+                adminSuspendedAt: billingStatus.adminSuspendedAt,
+                adminSuspendedReason: billingStatus.adminSuspendedReason,
               } : null,
             };
           } catch (error) {
@@ -1804,6 +1807,9 @@ export async function registerRoutes(
                 monthlyPriceCents: billingStatus.monthlyPriceCents,
                 autoRenew: billingStatus.autoRenew,
                 freeServer: billingStatus.freeServer,
+                adminSuspended: billingStatus.adminSuspended,
+                adminSuspendedAt: billingStatus.adminSuspendedAt,
+                adminSuspendedReason: billingStatus.adminSuspendedReason,
               } : null,
             };
           } catch (error) {
@@ -1910,6 +1916,9 @@ export async function registerRoutes(
           autoRenew: billingStatus.autoRenew,
           deployedAt: billingStatus.deployedAt,
           freeServer: billingStatus.freeServer,
+          adminSuspended: billingStatus.adminSuspended,
+          adminSuspendedAt: billingStatus.adminSuspendedAt,
+          adminSuspendedReason: billingStatus.adminSuspendedReason,
         } : null,
       });
     } catch (error: any) {
@@ -4391,6 +4400,93 @@ export async function registerRoutes(
       res.json({ success: true, record: updated });
     } catch (error: any) {
       log(`Admin: Error force-unsuspending server: ${error.message}`, 'admin');
+      res.status(500).json({ error: `Failed to unsuspend server: ${error.message}` });
+    }
+  });
+
+  // Admin: Suspend a server (non-billing, e.g., TOS violation)
+  app.post('/api/admin/servers/:serverId/suspend', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { serverId } = req.params;
+      const { reason } = req.body;
+
+      if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+        return res.status(400).json({ error: 'Suspension reason is required' });
+      }
+
+      // Find the billing record for this server
+      const [record] = await db.select().from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, serverId))
+        .limit(1);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Server billing record not found' });
+      }
+
+      if (record.adminSuspended) {
+        return res.status(400).json({ error: 'Server is already admin-suspended' });
+      }
+
+      // Suspend in VirtFusion (power off first, then suspend)
+      await virtfusionClient.suspendServer(serverId);
+
+      // Update billing record with admin suspension
+      const [updated] = await db.update(serverBilling)
+        .set({
+          adminSuspended: true,
+          adminSuspendedAt: new Date(),
+          adminSuspendedReason: reason.trim(),
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.id, record.id))
+        .returning();
+
+      log(`Admin ${req.userSession?.email} suspended server ${serverId} (reason: ${reason})`, 'admin');
+
+      res.json({ success: true, record: updated });
+    } catch (error: any) {
+      log(`Admin: Error suspending server: ${error.message}`, 'admin');
+      res.status(500).json({ error: `Failed to suspend server: ${error.message}` });
+    }
+  });
+
+  // Admin: Unsuspend a server (remove admin suspension)
+  app.post('/api/admin/servers/:serverId/unsuspend', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const { serverId } = req.params;
+
+      // Find the billing record for this server
+      const [record] = await db.select().from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, serverId))
+        .limit(1);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Server billing record not found' });
+      }
+
+      if (!record.adminSuspended) {
+        return res.status(400).json({ error: 'Server is not admin-suspended' });
+      }
+
+      // Unsuspend in VirtFusion
+      await virtfusionClient.unsuspendServer(serverId);
+
+      // Clear admin suspension
+      const [updated] = await db.update(serverBilling)
+        .set({
+          adminSuspended: false,
+          adminSuspendedAt: null,
+          adminSuspendedReason: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.id, record.id))
+        .returning();
+
+      log(`Admin ${req.userSession?.email} unsuspended server ${serverId}`, 'admin');
+
+      res.json({ success: true, record: updated });
+    } catch (error: any) {
+      log(`Admin: Error unsuspending server: ${error.message}`, 'admin');
       res.status(500).json({ error: `Failed to unsuspend server: ${error.message}` });
     }
   });

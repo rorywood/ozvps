@@ -63,9 +63,11 @@ export default function AdminServers() {
         url = `/api/admin/vf/servers/${serverId}/transfer`;
         body.newOwnerId = newOwnerId;
       } else if (action === 'suspend') {
-        url = `/api/admin/vf/servers/${serverId}/suspend`;
+        // Use admin suspension endpoint (records reason + suspends in VirtFusion)
+        url = `/api/admin/servers/${serverId}/suspend`;
       } else if (action === 'unsuspend') {
-        url = `/api/admin/vf/servers/${serverId}/unsuspend`;
+        // Use admin unsuspend endpoint (clears reason + unsuspends in VirtFusion)
+        url = `/api/admin/servers/${serverId}/unsuspend`;
       } else {
         url = `/api/admin/vf/servers/${serverId}/power/${action}`;
       }

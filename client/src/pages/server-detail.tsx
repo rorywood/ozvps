@@ -1061,8 +1061,10 @@ export default function ServerDetail() {
     );
   }
 
-  // Server is suspended if VirtFusion says so OR if billing status is suspended
-  const isSuspended = server?.suspended === true || server?.billing?.status === 'suspended';
+  // Server is suspended if VirtFusion says so OR if billing status is suspended OR if admin-suspended
+  const isSuspended = server?.suspended === true || server?.billing?.status === 'suspended' || server?.billing?.adminSuspended === true;
+  const isAdminSuspended = server?.billing?.adminSuspended === true;
+  const isBillingSuspended = server?.billing?.status === 'suspended' && !isAdminSuspended;
   const needsSetup = server?.needsSetup === true;
 
   // Determine if server is still being provisioned/built
@@ -1301,27 +1303,45 @@ export default function ServerDetail() {
                 <Ban className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-semibold text-destructive">Server Suspended</h3>
-                  <p className="text-sm text-destructive/80 mt-1">
-                    {server.billing?.status === 'suspended'
-                      ? 'This server has been suspended due to non-payment.'
-                      : 'This server has been suspended. Please contact support for assistance.'}
-                  </p>
-                  {server.billing?.status === 'suspended' && server.billing?.monthlyPriceCents && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Amount due: <span className="font-medium text-foreground">${(server.billing.monthlyPriceCents / 100).toFixed(2)}</span>
-                      {walletData?.wallet && (
-                        <span className="ml-2">
-                          • Wallet: <span className={cn("font-medium", canAffordReactivation ? "text-success" : "text-destructive")}>
-                            ${(walletData.wallet.balanceCents / 100).toFixed(2)}
-                          </span>
-                        </span>
+                  {isAdminSuspended ? (
+                    <>
+                      <p className="text-sm text-destructive/80 mt-1">
+                        This server has been suspended by an administrator.
+                      </p>
+                      {server.billing?.adminSuspendedReason && (
+                        <div className="mt-2 p-2 bg-destructive/5 rounded border border-destructive/20">
+                          <p className="text-xs uppercase text-muted-foreground mb-1">Reason:</p>
+                          <p className="text-sm text-foreground">{server.billing.adminSuspendedReason}</p>
+                        </div>
                       )}
+                    </>
+                  ) : isBillingSuspended ? (
+                    <>
+                      <p className="text-sm text-destructive/80 mt-1">
+                        This server has been suspended due to non-payment.
+                      </p>
+                      {server.billing?.monthlyPriceCents && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Amount due: <span className="font-medium text-foreground">${(server.billing.monthlyPriceCents / 100).toFixed(2)}</span>
+                          {walletData?.wallet && (
+                            <span className="ml-2">
+                              • Wallet: <span className={cn("font-medium", canAffordReactivation ? "text-success" : "text-destructive")}>
+                                ${(walletData.wallet.balanceCents / 100).toFixed(2)}
+                              </span>
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-destructive/80 mt-1">
+                      This server has been suspended. Please contact support for assistance.
                     </p>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {server.billing?.status === 'suspended' && !server.billing?.freeServer ? (
+                {isBillingSuspended && !server.billing?.freeServer ? (
                   <>
                     {canAffordReactivation ? (
                       <Button
@@ -1460,6 +1480,21 @@ export default function ServerDetail() {
                     </div>
                     <p className="text-xs text-success/80 mt-1">
                       This server is free - you are not being charged
+                    </p>
+                  </div>
+                ) : server.billing?.adminSuspended ? (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Status
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Ban className="h-4 w-4 text-destructive" />
+                      <p className="text-sm font-medium text-destructive">
+                        Admin Suspended
+                      </p>
+                    </div>
+                    <p className="text-xs text-destructive/80 mt-1">
+                      Contact support for assistance
                     </p>
                   </div>
                 ) : server.billing?.status === 'suspended' ? (
