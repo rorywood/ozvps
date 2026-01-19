@@ -47,8 +47,7 @@ export default function ServerConsole() {
     const disableVncWithKeepalive = () => {
       // Use fetch with keepalive for reliable cleanup during page unload
       // This ensures the request completes even if the page is closing
-      const csrfToken = localStorage.getItem('csrfToken') ||
-        document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+      const csrfToken = document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
 
       fetch(`/api/servers/${serverId}/vnc/disable`, {
         method: 'POST',

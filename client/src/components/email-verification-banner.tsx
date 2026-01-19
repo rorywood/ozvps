@@ -16,9 +16,8 @@ export function EmailVerificationBanner() {
 
   const resendMutation = useMutation({
     mutationFn: async () => {
-      // Get CSRF token
-      const csrfToken = localStorage.getItem('csrfToken') ||
-        document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+      // Get CSRF token from cookie (never stored in localStorage for security)
+      const csrfToken = document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
 
       const response = await fetch('/api/auth/resend-verification', {
         method: 'POST',

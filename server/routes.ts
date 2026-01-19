@@ -3388,7 +3388,8 @@ export async function registerRoutes(
       } catch {}
 
       log(`========== ADMIN VERIFY EMAIL END (FAILED) ==========`, 'admin');
-      res.status(500).json({ error: `Failed to verify email: ${error.message}` });
+      // SECURITY: Don't expose internal error details - log them but return generic message
+      res.status(500).json({ error: 'Failed to verify email. Check server logs for details.' });
     }
   });
 

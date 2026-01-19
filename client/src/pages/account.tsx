@@ -406,6 +406,7 @@ export default function Account() {
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder="Enter your current password"
+                    autoComplete="current-password"
                     className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
                     data-testid="input-current-password"
                   />
@@ -420,6 +421,7 @@ export default function Account() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password"
+                      autoComplete="new-password"
                       className="bg-card/30 border-border text-foreground pr-10 placeholder:text-muted-foreground/50"
                       data-testid="input-new-password"
                     />
@@ -444,6 +446,7 @@ export default function Account() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
+                    autoComplete="new-password"
                     className="bg-card/30 border-border text-foreground placeholder:text-muted-foreground/50"
                     data-testid="input-confirm-password"
                   />
@@ -726,6 +729,7 @@ export default function Account() {
                       value={disablePassword}
                       onChange={(e) => setDisablePassword(e.target.value)}
                       placeholder="Enter your password"
+                      autoComplete="current-password"
                       className="bg-card/30 border-border text-foreground"
                       data-testid="input-disable-2fa-password"
                     />

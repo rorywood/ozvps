@@ -366,14 +366,17 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const internalMessage = err.message || "Internal Server Error";
 
     // Capture server errors (5xx) with Sentry
     if (status >= 500) {
-      captureException(err, { status, message });
+      captureException(err, { status, message: internalMessage });
     }
 
-    res.status(status).json({ message });
+    // SECURITY: Don't expose internal error details to clients for 5xx errors
+    // Only pass through error messages for client errors (4xx)
+    const clientMessage = status >= 500 ? "An unexpected error occurred. Please try again later." : internalMessage;
+    res.status(status).json({ message: clientMessage });
   });
 
   registerInstallAssets(app);

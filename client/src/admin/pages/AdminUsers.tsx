@@ -98,8 +98,7 @@ export default function AdminUsers() {
   };
 
   const handleVerifyEmail = async (user: VFUser) => {
-    const csrfToken = localStorage.getItem('csrfToken') ||
-      document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+    const csrfToken = document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
 
     try {
       const res = await fetch('/api/admin/verify-email', {

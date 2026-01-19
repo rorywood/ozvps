@@ -104,8 +104,7 @@ export default function DeployPage() {
   // Resend verification email mutation
   const resendMutation = useMutation({
     mutationFn: async () => {
-      const csrfToken = localStorage.getItem('csrfToken') ||
-        document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
+      const csrfToken = document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
 
       const response = await fetch('/api/auth/resend-verification', {
         method: 'POST',
