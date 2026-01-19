@@ -129,6 +129,8 @@ export default function ServerDetail() {
   const [cancellationReason, setCancellationReason] = useState<string>("");
   const [immediateConfirmText, setImmediateConfirmText] = useState("");
   const [immediatePassword, setImmediatePassword] = useState("");
+  const [showPasswordConfirmDialog, setShowPasswordConfirmDialog] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   
   // Password reset state
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
@@ -596,6 +598,8 @@ export default function ServerDetail() {
       setCancellationReason("");
       setImmediateConfirmText("");
       setImmediatePassword("");
+      setShowPasswordConfirmDialog(false);
+      setPasswordError("");
       refetchCancellation();
       toast({
         title: variables.mode === 'immediate' ? "Server Destruction Started" : "Scheduled for Deletion",
@@ -605,11 +609,16 @@ export default function ServerDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Failed",
-        description: error.message || "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      // Show password error in the dialog instead of toast
+      if (error.message?.toLowerCase().includes('password')) {
+        setPasswordError(error.message);
+      } else {
+        toast({
+          title: "Failed",
+          description: error.message || "Something went wrong. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   });
   
@@ -2286,50 +2295,24 @@ export default function ServerDetail() {
                       />
                     </div>
 
-                    {/* Password Confirmation */}
-                    <div className="space-y-3">
-                      <Label className="text-sm text-foreground block">
-                        Enter your account password to confirm:
-                      </Label>
-                      <Input
-                        type="password"
-                        value={immediatePassword}
-                        onChange={(e) => setImmediatePassword(e.target.value)}
-                        placeholder="Your account password"
-                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
-                        data-testid="input-confirm-password"
-                        autoComplete="current-password"
-                      />
-                    </div>
-
-                    {/* Destroy Button */}
+                    {/* Destroy Button - Opens password confirmation popup */}
                     <Button
                       className={cn(
                         "w-full h-12 text-base font-semibold",
-                        immediateConfirmText === server?.name && immediatePassword && !isSuspended
+                        immediateConfirmText === server?.name && !isSuspended
                           ? "bg-red-600 hover:bg-red-700 text-white"
                           : "bg-red-600/30 text-red-400/50 cursor-not-allowed"
                       )}
-                      disabled={immediateConfirmText !== server?.name || !immediatePassword || isSuspended || requestCancellationMutation.isPending}
-                      onClick={() => serverId && requestCancellationMutation.mutate({
-                        id: serverId,
-                        reason: cancellationReason || undefined,
-                        mode: 'immediate',
-                        password: immediatePassword
-                      })}
+                      disabled={immediateConfirmText !== server?.name || isSuspended}
+                      onClick={() => {
+                        setPasswordError("");
+                        setImmediatePassword("");
+                        setShowPasswordConfirmDialog(true);
+                      }}
                       data-testid="button-destroy-server"
                     >
-                      {requestCancellationMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          Destroying Server...
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="h-5 w-5 mr-2" />
-                          Destroy this Server
-                        </>
-                      )}
+                      <Trash2 className="h-5 w-5 mr-2" />
+                      Destroy this Server
                     </Button>
 
                     {isSuspended && (
@@ -2695,6 +2678,94 @@ export default function ServerDetail() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Confirmation Dialog for Immediate Deletion */}
+      <Dialog open={showPasswordConfirmDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowPasswordConfirmDialog(false);
+          setImmediatePassword("");
+          setPasswordError("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Confirm Destruction
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Enter your account password to permanently destroy <span className="font-semibold text-foreground">{server?.name}</span>. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="destroy-password" className="text-foreground">Account Password</Label>
+              <Input
+                id="destroy-password"
+                type="password"
+                value={immediatePassword}
+                onChange={(e) => {
+                  setImmediatePassword(e.target.value);
+                  setPasswordError("");
+                }}
+                placeholder="Enter your password"
+                className="bg-muted/50 border-border text-foreground"
+                autoComplete="current-password"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && immediatePassword && !requestCancellationMutation.isPending) {
+                    serverId && requestCancellationMutation.mutate({
+                      id: serverId,
+                      reason: cancellationReason || undefined,
+                      mode: 'immediate',
+                      password: immediatePassword
+                    });
+                  }
+                }}
+              />
+              {passwordError && (
+                <p className="text-sm text-red-500">{passwordError}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordConfirmDialog(false);
+                setImmediatePassword("");
+                setPasswordError("");
+              }}
+              className="border-border text-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!immediatePassword || requestCancellationMutation.isPending}
+              onClick={() => {
+                serverId && requestCancellationMutation.mutate({
+                  id: serverId,
+                  reason: cancellationReason || undefined,
+                  mode: 'immediate',
+                  password: immediatePassword
+                });
+              }}
+            >
+              {requestCancellationMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Destroying...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Destroy Server
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>

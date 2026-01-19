@@ -2489,9 +2489,10 @@ export async function registerRoutes(
         }
 
         // Verify password with Auth0
+        // Use 400 instead of 401 to avoid triggering session expiry handling in frontend
         const authResult = await auth0Client.authenticateUser(session.email, password);
         if (!authResult.success) {
-          return res.status(401).json({ error: 'Invalid password' });
+          return res.status(400).json({ error: 'Incorrect password. Please try again.' });
         }
       }
 
