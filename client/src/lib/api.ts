@@ -865,6 +865,17 @@ class ApiClient {
     return response.json();
   }
 
+  async reactivateServer(serverId: string): Promise<{ success: boolean; message: string; billingRecord?: any }> {
+    const response = await secureFetch(`${this.baseUrl}/billing/servers/${serverId}/reactivate`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to reactivate server');
+    }
+    return response.json();
+  }
+
   async downloadInvoice(invoiceId: number): Promise<Blob> {
     const response = await secureFetch(`${this.baseUrl}/billing/invoices/${invoiceId}/download`);
     if (!response.ok) throw new Error('Failed to download invoice');

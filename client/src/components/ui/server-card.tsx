@@ -1,18 +1,27 @@
 import { StatusBadge, type StatusType } from "./status-badge";
 import { Button } from "./button";
 import { Progress } from "./progress";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Ban, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
+import { Badge } from "./badge";
+
+interface BillingStatus {
+  status: string;
+  nextBillAt?: string;
+  suspendAt?: string | null;
+  monthlyPriceCents?: number;
+}
 
 interface ServerCardProps {
   server: Server;
   cancellation?: { scheduledDeletionAt: string; reason: string | null; mode: string; status: string };
+  billingStatus?: BillingStatus;
   onClick: () => void;
 }
 
-export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
+export function ServerCard({ server, cancellation, billingStatus, onClick }: ServerCardProps) {
   const { getDisplayStatus } = usePowerActions();
 
   // Get the display status (with deletion/power action states)
@@ -75,9 +84,23 @@ export function ServerCard({ server, cancellation, onClick }: ServerCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between mb-4 pl-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-            {server.name}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+              {server.name}
+            </h3>
+            {billingStatus?.status === 'suspended' && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <Ban className="h-2.5 w-2.5 mr-0.5" />
+                SUSPENDED
+              </Badge>
+            )}
+            {billingStatus?.status === 'unpaid' && (
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                UNPAID
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5 truncate">
             {server.plan?.name || "Unknown Plan"}
           </p>

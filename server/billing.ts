@@ -84,7 +84,9 @@ export async function createServerBilling(params: {
 }
 
 // Charge a server's monthly fee
-async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise<boolean> {
+// If reactivation=true, the next bill date is set to 1 month from now (for unsuspending)
+// If reactivation=false (default), the next bill date is set to 1 month from the previous due date
+async function chargeServer(billing: typeof serverBilling.$inferSelect, reactivation: boolean = false): Promise<boolean> {
   const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
 
   return await db.transaction(async (tx) => {
@@ -134,7 +136,9 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect): Promise
     });
 
     // Update billing record
-    const newNextBillAt = addMonth(billing.nextBillAt);
+    // For reactivation (unsuspending), set next bill to 1 month from now
+    // For regular billing, set next bill to 1 month from the previous due date
+    const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(billing.nextBillAt);
     await tx.update(serverBilling)
       .set({
         status: 'paid',
@@ -157,6 +161,7 @@ export async function runBillingJob(): Promise<void> {
 
   // Step A: Charge due servers
   // Include 'active' status - new servers start as 'active' and need to be billed
+  // Skip complimentary (free) servers - they don't get charged
   const dueServers = await db.select().from(serverBilling)
     .where(
       and(
@@ -166,6 +171,7 @@ export async function runBillingJob(): Promise<void> {
           eq(serverBilling.status, 'unpaid')
         ),
         eq(serverBilling.autoRenew, true),
+        eq(serverBilling.freeServer, false), // Skip complimentary servers
         lte(serverBilling.nextBillAt, now)
       )
     );
@@ -271,6 +277,7 @@ export async function sendBillingReminders(): Promise<void> {
 
   // Find servers due in the next 24 hours that haven't been reminded yet today
   // We use a simple approach: only remind for servers that are 'active' or 'paid' status
+  // Skip complimentary servers - they don't need payment reminders
   const serversDueSoon = await db.select().from(serverBilling)
     .where(
       and(
@@ -279,6 +286,7 @@ export async function sendBillingReminders(): Promise<void> {
           eq(serverBilling.status, 'paid')
         ),
         eq(serverBilling.autoRenew, true),
+        eq(serverBilling.freeServer, false), // Skip complimentary servers
         gte(serverBilling.nextBillAt, now),
         lt(serverBilling.nextBillAt, tomorrow)
       )
@@ -327,7 +335,8 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
 
   for (const billing of unpaidServers) {
     try {
-      const charged = await chargeServer(billing);
+      // For suspended/unpaid servers, use reactivation mode (next bill = 1 month from now)
+      const charged = await chargeServer(billing, true);
 
       if (charged && billing.status === 'suspended') {
         // Unsuspend the server

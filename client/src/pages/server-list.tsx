@@ -14,7 +14,9 @@ import {
   Filter,
   Loader2,
   AlertCircle,
-  Zap
+  Zap,
+  AlertTriangle,
+  Wallet
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useSyncPowerActions } from "@/hooks/use-power-actions";
@@ -34,6 +36,12 @@ export default function ServerList() {
 
   const servers = dashboardData?.servers || [];
   const cancellations = dashboardData?.cancellations || {};
+  const billingStatuses = dashboardData?.billingStatuses || {};
+
+  // Find servers with billing issues
+  const suspendedServers = servers.filter(s => billingStatuses[s.id]?.status === 'suspended');
+  const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
+  const hasOverdueServers = suspendedServers.length > 0 || unpaidServers.length > 0;
 
   useSyncPowerActions(servers);
 
@@ -53,6 +61,36 @@ export default function ServerList() {
     <AppShell>
       <div className="space-y-6">
         <EmailVerificationBanner />
+
+        {/* Overdue Servers Alert */}
+        {hasOverdueServers && (
+          <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-destructive mb-1">Payment Required</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {suspendedServers.length > 0 && (
+                    <span className="block">
+                      <span className="text-destructive font-medium">{suspendedServers.length} server{suspendedServers.length > 1 ? 's' : ''} suspended</span> due to non-payment.
+                    </span>
+                  )}
+                  {unpaidServers.length > 0 && (
+                    <span className="block mt-1">
+                      <span className="text-warning font-medium">{unpaidServers.length} server{unpaidServers.length > 1 ? 's' : ''} unpaid</span> and will be suspended soon.
+                    </span>
+                  )}
+                </p>
+                <Button size="sm" variant="destructive" asChild>
+                  <Link href="/billing">
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Add Funds
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <PageHeader
           title="Servers"
@@ -118,6 +156,7 @@ export default function ServerList() {
                 key={server.id}
                 server={server}
                 cancellation={cancellations[server.id]}
+                billingStatus={billingStatuses[server.id]}
                 onClick={() => setLocation(`/servers/${server.id}`)}
               />
             ))}

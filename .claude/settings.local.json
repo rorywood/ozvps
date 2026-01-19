@@ -76,7 +76,8 @@
       "Bash(do sed -i 's/filter: brightness\\(0\\) invert\\(1\\);//' \"$file\")",
       "Bash(do sed -i 's/\\\\.logo img { height: 40px;/.logo img { height: 80px;/' \"$file\")",
       "Bash(bash:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(npx drizzle-kit:*)"
     ]
   }
 }

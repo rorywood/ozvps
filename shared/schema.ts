@@ -130,6 +130,9 @@ export const serverBilling = pgTable("server_billing", {
   nextBillAt: timestamp("next_bill_at").notNull(),
   suspendAt: timestamp("suspend_at"), // Set when unpaid, null otherwise
 
+  // Complimentary server flag - admin can grant free hosting
+  freeServer: boolean("free_server").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

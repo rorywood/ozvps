@@ -2449,7 +2449,62 @@ export async function registerRoutes(
       res.status(500).json({ error: 'Failed to fetch billing ledger' });
     }
   });
-  
+
+  // Reactivate a suspended/unpaid server by paying the outstanding balance
+  app.post('/api/billing/servers/:serverId/reactivate', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const { serverId } = req.params;
+
+      // Get the billing record for this server
+      const billingRecord = await getServerBillingStatus(serverId, session.auth0UserId!);
+      if (!billingRecord) {
+        return res.status(404).json({ error: 'No billing record found for this server' });
+      }
+
+      // Verify ownership
+      if (billingRecord.auth0UserId !== session.auth0UserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Check if server is suspended or unpaid
+      if (billingRecord.status !== 'suspended' && billingRecord.status !== 'unpaid') {
+        return res.status(400).json({ error: 'Server is not suspended or unpaid' });
+      }
+
+      // Get wallet balance
+      const wallet = await dbStorage.getWallet(session.auth0UserId!);
+      if (!wallet) {
+        return res.status(400).json({ error: 'No wallet found. Please add funds first.' });
+      }
+
+      if (wallet.balanceCents < billingRecord.monthlyPriceCents) {
+        return res.status(400).json({
+          error: `Insufficient balance. You need $${(billingRecord.monthlyPriceCents / 100).toFixed(2)} but only have $${(wallet.balanceCents / 100).toFixed(2)}`,
+          required: billingRecord.monthlyPriceCents,
+          balance: wallet.balanceCents
+        });
+      }
+
+      // Call retryUnpaidServers to handle the reactivation
+      // This will charge the wallet, update billing status, and unsuspend if needed
+      await retryUnpaidServers(session.auth0UserId!);
+
+      // Fetch the updated billing record
+      const updatedRecord = await getServerBillingStatus(serverId, session.auth0UserId!);
+
+      log(`User ${session.email} reactivated server ${serverId}`, 'billing');
+      res.json({
+        success: true,
+        message: 'Server reactivated successfully',
+        billingRecord: updatedRecord
+      });
+    } catch (error: any) {
+      log(`Error reactivating server ${req.params.serverId}: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to reactivate server' });
+    }
+  });
+
   app.get('/api/servers/:id/cancellation', authMiddleware, async (req, res) => {
     try {
       const serverId = req.params.id;
@@ -4210,6 +4265,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid billing record ID' });
       }
 
+      // First get the current billing record to know the server ID
+      const [currentRecord] = await db.select().from(serverBilling)
+        .where(eq(serverBilling.id, billingId))
+        .limit(1);
+
+      if (!currentRecord) {
+        return res.status(404).json({ error: 'Billing record not found' });
+      }
+
       const { nextBillAt, status, suspendAt } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -4223,7 +4287,34 @@ export async function registerRoutes(
         if (!['active', 'paid', 'unpaid', 'suspended'].includes(status)) {
           return res.status(400).json({ error: 'Invalid status. Must be: active, paid, unpaid, or suspended' });
         }
+
+        // If changing TO suspended status, actually suspend the server in VirtFusion
+        if (status === 'suspended' && currentRecord.status !== 'suspended') {
+          try {
+            await virtfusionClient.suspendServer(currentRecord.virtfusionServerId);
+            log(`Admin ${req.userSession?.email} suspended server ${currentRecord.virtfusionServerId} via VirtFusion`, 'admin');
+          } catch (vfError: any) {
+            log(`Failed to suspend server ${currentRecord.virtfusionServerId} in VirtFusion: ${vfError.message}`, 'admin');
+            // Continue anyway - server might already be suspended
+          }
+        }
+
+        // If changing FROM suspended to another status, unsuspend the server in VirtFusion
+        if (currentRecord.status === 'suspended' && status !== 'suspended') {
+          try {
+            await virtfusionClient.unsuspendServer(currentRecord.virtfusionServerId);
+            log(`Admin ${req.userSession?.email} unsuspended server ${currentRecord.virtfusionServerId} via VirtFusion`, 'admin');
+          } catch (vfError: any) {
+            log(`Failed to unsuspend server ${currentRecord.virtfusionServerId} in VirtFusion: ${vfError.message}`, 'admin');
+            return res.status(500).json({ error: `Failed to unsuspend server in VirtFusion: ${vfError.message}` });
+          }
+        }
+
         updates.status = status;
+        // Clear suspendAt when unsuspending
+        if (status !== 'suspended' && status !== 'unpaid') {
+          updates.suspendAt = null;
+        }
         log(`Admin ${req.userSession?.email} updated billing ${billingId} status to ${status}`, 'admin');
       }
 
@@ -4232,19 +4323,63 @@ export async function registerRoutes(
         log(`Admin ${req.userSession?.email} updated billing ${billingId} suspendAt to ${suspendAt}`, 'admin');
       }
 
+      // Handle freeServer (complimentary hosting) toggle
+      const { freeServer } = req.body;
+      if (freeServer !== undefined) {
+        updates.freeServer = Boolean(freeServer);
+        log(`Admin ${req.userSession?.email} set billing ${billingId} freeServer to ${freeServer}`, 'admin');
+      }
+
       const [updated] = await db.update(serverBilling)
         .set(updates)
         .where(eq(serverBilling.id, billingId))
         .returning();
 
-      if (!updated) {
-        return res.status(404).json({ error: 'Billing record not found' });
-      }
-
       res.json({ success: true, record: updated });
     } catch (error: any) {
       log(`Admin: Error updating billing record: ${error.message}`, 'admin');
       res.status(500).json({ error: 'Failed to update billing record' });
+    }
+  });
+
+  // Admin: Force unsuspend a server
+  app.post('/api/admin/billing/records/:id/unsuspend', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const billingId = parseInt(req.params.id, 10);
+      if (isNaN(billingId)) {
+        return res.status(400).json({ error: 'Invalid billing record ID' });
+      }
+
+      const [record] = await db.select().from(serverBilling)
+        .where(eq(serverBilling.id, billingId))
+        .limit(1);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Billing record not found' });
+      }
+
+      if (record.status !== 'suspended') {
+        return res.status(400).json({ error: 'Server is not suspended' });
+      }
+
+      // Unsuspend in VirtFusion
+      await virtfusionClient.unsuspendServer(record.virtfusionServerId);
+      log(`Admin ${req.userSession?.email} force-unsuspended server ${record.virtfusionServerId}`, 'admin');
+
+      // Update billing status to active (not paid - they still owe money)
+      const [updated] = await db.update(serverBilling)
+        .set({
+          status: 'active',
+          suspendAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.id, billingId))
+        .returning();
+
+      res.json({ success: true, record: updated });
+    } catch (error: any) {
+      log(`Admin: Error force-unsuspending server: ${error.message}`, 'admin');
+      res.status(500).json({ error: `Failed to unsuspend server: ${error.message}` });
     }
   });
 

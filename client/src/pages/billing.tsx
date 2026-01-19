@@ -31,7 +31,9 @@ import {
   Server,
   Receipt,
   Settings,
-  Shield
+  Shield,
+  Gift,
+  Power
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -741,6 +743,7 @@ export default function BillingPage() {
     nextBillAt: string;
     suspendAt: string | null;
     autoRenew: boolean;
+    freeServer?: boolean;
     serverName?: string;
     serverUuid?: string;
   }> }>({
@@ -772,6 +775,30 @@ export default function BillingPage() {
       setInvoicesPage(invMaxPage);
     }
   }, [invoicesData?.invoices?.length, invoicesPage]);
+
+  // State for reactivating servers
+  const [reactivatingServerId, setReactivatingServerId] = useState<string | null>(null);
+
+  const reactivateMutation = useMutation({
+    mutationFn: (serverId: string) => api.reactivateServer(serverId),
+    onSuccess: async (data) => {
+      toast({
+        title: "Server Reactivated",
+        description: data.message || "Your server has been reactivated successfully!",
+      });
+      setReactivatingServerId(null);
+      await queryClient.refetchQueries({ queryKey: ['wallet'] });
+      await queryClient.refetchQueries({ queryKey: ['upcoming-charges'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reactivation Failed",
+        description: error.message || "Failed to reactivate server",
+        variant: "destructive",
+      });
+      setReactivatingServerId(null);
+    },
+  });
 
   const topupMutation = useMutation({
     mutationFn: (amountCents: number) => api.createTopup(amountCents),
@@ -1371,30 +1398,40 @@ export default function BillingPage() {
                                     <span className="font-semibold text-foreground text-sm truncate">
                                       {charge.serverName || `Server #${charge.virtfusionServerId}`}
                                     </span>
+                                    {charge.freeServer && (
+                                      <Badge className="text-[10px] px-1.5 py-0 bg-purple-500/20 text-purple-500 border-purple-500/30">
+                                        <Gift className="h-2.5 w-2.5 mr-1" />
+                                        COMPLIMENTARY
+                                      </Badge>
+                                    )}
                                     {charge.status === 'suspended' && (
                                       <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                                         SUSPENDED
                                       </Badge>
                                     )}
-                                    {charge.status === 'unpaid' && (
+                                    {charge.status === 'unpaid' && !charge.freeServer && (
                                       <Badge variant="warning" className="text-[10px] px-1.5 py-0">
                                         UNPAID
                                       </Badge>
                                     )}
-                                    {charge.status === 'active' && (
+                                    {charge.status === 'active' && !charge.freeServer && (
                                       <Badge variant="success" className="text-[10px] px-1.5 py-0">
                                         ACTIVE
                                       </Badge>
                                     )}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
-                                    {charge.status === 'unpaid' && daysUntilSuspension !== null ? (
+                                    {charge.freeServer ? (
+                                      <span className="text-purple-400">
+                                        Complimentary hosting - No payment required
+                                      </span>
+                                    ) : charge.status === 'unpaid' && daysUntilSuspension !== null ? (
                                       <span className="text-warning">
-                                        Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''}
+                                        Suspends in {daysUntilSuspension} day{daysUntilSuspension !== 1 ? 's' : ''} - {formatCurrency(charge.monthlyPriceCents)} required
                                       </span>
                                     ) : charge.status === 'suspended' ? (
                                       <span className="text-destructive">
-                                        Suspended - Add funds to reactivate
+                                        Suspended - {formatCurrency(charge.monthlyPriceCents)} required to reactivate
                                       </span>
                                     ) : daysUntilBill <= 0 ? (
                                       <span className="text-amber-500 font-medium">
@@ -1418,12 +1455,45 @@ export default function BillingPage() {
                                 </div>
                               </div>
                               <div className="text-right flex-shrink-0 ml-4">
-                                <div className="font-mono text-base font-bold text-foreground">
-                                  {formatCurrency(charge.monthlyPriceCents)}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">per month</div>
+                                {charge.freeServer ? (
+                                  <>
+                                    <div className="font-mono text-base font-bold text-purple-400">
+                                      Free
+                                    </div>
+                                    <div className="text-[10px] text-purple-400/70 uppercase tracking-wide">forever</div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="font-mono text-base font-bold text-foreground">
+                                      {formatCurrency(charge.monthlyPriceCents)}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide">per month</div>
+                                  </>
+                                )}
                               </div>
-                              <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                              {/* Show reactivate button for suspended/unpaid servers */}
+                              {(charge.status === 'suspended' || charge.status === 'unpaid') && !charge.freeServer ? (
+                                <Button
+                                  size="sm"
+                                  variant={charge.status === 'suspended' ? 'destructive' : 'outline'}
+                                  className={cn("ml-2 flex-shrink-0", charge.status === 'unpaid' && "border-warning text-warning hover:bg-warning/10")}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setReactivatingServerId(charge.virtfusionServerId);
+                                    reactivateMutation.mutate(charge.virtfusionServerId);
+                                  }}
+                                  disabled={reactivateMutation.isPending && reactivatingServerId === charge.virtfusionServerId}
+                                >
+                                  {reactivateMutation.isPending && reactivatingServerId === charge.virtfusionServerId ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                  ) : (
+                                    <Power className="h-4 w-4 mr-1" />
+                                  )}
+                                  {charge.status === 'suspended' ? 'Reactivate' : 'Pay Now'}
+                                </Button>
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                              )}
                             </Link>
                           );
                         })}

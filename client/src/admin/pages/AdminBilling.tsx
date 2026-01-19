@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "../layout/AdminLayout";
-import { RefreshCw, Loader2, Play, DollarSign } from "lucide-react";
+import { RefreshCw, Loader2, Play, DollarSign, Gift, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { secureFetch } from "@/lib/api";
@@ -21,6 +22,7 @@ interface BillingRecord {
   nextBillAt: string;
   suspendAt?: string | null;
   autoRenew: boolean;
+  freeServer: boolean;
   deployedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -43,7 +45,7 @@ export default function AdminBilling() {
 
   // State
   const [editingBillingRecord, setEditingBillingRecord] = useState<BillingRecord | null>(null);
-  const [billingEditForm, setBillingEditForm] = useState({ nextBillAt: '', status: '', suspendAt: '' });
+  const [billingEditForm, setBillingEditForm] = useState({ nextBillAt: '', status: '', suspendAt: '', freeServer: false });
 
   // Queries
   const { data: billingRecordsData, isLoading: billingLoading, refetch: refetchBilling } = useQuery<{ records: BillingRecord[] }>({
@@ -85,7 +87,7 @@ export default function AdminBilling() {
   });
 
   const updateBillingMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: number; updates: { nextBillAt?: string; status?: string; suspendAt?: string | null } }) => {
+    mutationFn: async ({ id, updates }: { id: number; updates: { nextBillAt?: string; status?: string; suspendAt?: string | null; freeServer?: boolean } }) => {
       const response = await secureFetch(`/api/admin/billing/records/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -98,6 +100,26 @@ export default function AdminBilling() {
       toast.success('Billing record updated');
       refetchBilling();
       setEditingBillingRecord(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const unsuspendMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await secureFetch(`/api/admin/billing/records/${id}/unsuspend`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to unsuspend server');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Server unsuspended');
+      refetchBilling();
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -177,17 +199,29 @@ export default function AdminBilling() {
                         </p>
                       </td>
                       <td className="p-4">
-                        <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
-                          record.status === 'suspended' ? 'bg-red-500/20 text-red-400' :
-                          record.status === 'unpaid' ? 'bg-yellow-500/20 text-yellow-400' :
-                          record.status === 'paid' ? 'bg-green-500/20 text-green-400' :
-                          'bg-blue-500/20 text-blue-400'
-                        }`}>
-                          {record.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded ${
+                            record.status === 'suspended' ? 'bg-red-500/20 text-red-400' :
+                            record.status === 'unpaid' ? 'bg-yellow-500/20 text-yellow-400' :
+                            record.status === 'paid' ? 'bg-green-500/20 text-green-400' :
+                            'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {record.status}
+                          </span>
+                          {record.freeServer && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                              <Gift className="h-3 w-3" />
+                              Complimentary
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4 text-white">
-                        ${(record.monthlyPriceCents / 100).toFixed(2)}/mo
+                        {record.freeServer ? (
+                          <span className="text-purple-400">Free</span>
+                        ) : (
+                          `$${(record.monthlyPriceCents / 100).toFixed(2)}/mo`
+                        )}
                       </td>
                       <td className="p-4 text-slate-400 text-xs">
                         {format(new Date(record.nextBillAt), 'MMM d, yyyy HH:mm')}
@@ -196,7 +230,19 @@ export default function AdminBilling() {
                         {record.suspendAt ? format(new Date(record.suspendAt), 'MMM d, yyyy HH:mm') : '-'}
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-end gap-2">
+                          {record.status === 'suspended' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                              onClick={() => unsuspendMutation.mutate(record.id)}
+                              disabled={unsuspendMutation.isPending}
+                            >
+                              <Unlock className="h-4 w-4 mr-1" />
+                              Unsuspend
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -207,6 +253,7 @@ export default function AdminBilling() {
                                 nextBillAt: record.nextBillAt.slice(0, 16),
                                 status: record.status,
                                 suspendAt: record.suspendAt ? record.suspendAt.slice(0, 16) : '',
+                                freeServer: record.freeServer || false,
                               });
                             }}
                           >
@@ -325,6 +372,25 @@ export default function AdminBilling() {
                 className="bg-white/5 border-white/10 text-white"
               />
             </div>
+
+            {/* Complimentary Server Toggle */}
+            <div className="flex items-center space-x-3 p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <Checkbox
+                id="freeServer"
+                checked={billingEditForm.freeServer}
+                onCheckedChange={(checked) => setBillingEditForm(prev => ({ ...prev, freeServer: checked === true }))}
+                className="border-purple-400 data-[state=checked]:bg-purple-500 data-[state=checked]:border-purple-500"
+              />
+              <div className="flex-1">
+                <Label htmlFor="freeServer" className="text-purple-300 font-medium cursor-pointer">
+                  <Gift className="h-4 w-4 inline mr-1.5" />
+                  Complimentary Hosting
+                </Label>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Server will never be charged or suspended for non-payment
+                </p>
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -345,6 +411,7 @@ export default function AdminBilling() {
                       nextBillAt: billingEditForm.nextBillAt ? new Date(billingEditForm.nextBillAt).toISOString() : undefined,
                       status: billingEditForm.status || undefined,
                       suspendAt: billingEditForm.suspendAt ? new Date(billingEditForm.suspendAt).toISOString() : null,
+                      freeServer: billingEditForm.freeServer,
                     },
                   });
                 }

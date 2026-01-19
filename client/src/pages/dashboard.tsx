@@ -10,7 +10,10 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import {
   Server as ServerIcon,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  Wallet,
+  Ban
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
@@ -44,6 +47,12 @@ export default function Dashboard() {
   const servers = dashboardData?.servers || [];
   const bandwidthData = dashboardData?.bandwidth;
   const cancellations = dashboardData?.cancellations || {};
+  const billingStatuses = dashboardData?.billingStatuses || {};
+
+  // Find servers with billing issues
+  const suspendedServers = servers.filter(s => billingStatuses[s.id]?.status === 'suspended');
+  const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
+  const hasOverdueServers = suspendedServers.length > 0 || unpaidServers.length > 0;
 
   useSyncPowerActions(servers);
 
@@ -73,6 +82,42 @@ export default function Dashboard() {
     <AppShell>
       <div className="space-y-8">
         <EmailVerificationBanner />
+
+        {/* Overdue Servers Alert */}
+        {hasOverdueServers && (
+          <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-destructive mb-1">Payment Required</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {suspendedServers.length > 0 && (
+                    <span className="block">
+                      <span className="text-destructive font-medium">{suspendedServers.length} server{suspendedServers.length > 1 ? 's' : ''} suspended</span> due to non-payment.
+                      {suspendedServers.map(s => (
+                        <span key={s.id} className="text-muted-foreground"> • {s.name || `Server #${s.id}`}</span>
+                      ))}
+                    </span>
+                  )}
+                  {unpaidServers.length > 0 && (
+                    <span className="block mt-1">
+                      <span className="text-warning font-medium">{unpaidServers.length} server{unpaidServers.length > 1 ? 's' : ''} unpaid</span> and will be suspended soon.
+                      {unpaidServers.map(s => (
+                        <span key={s.id} className="text-muted-foreground"> • {s.name || `Server #${s.id}`}</span>
+                      ))}
+                    </span>
+                  )}
+                </p>
+                <Button size="sm" variant="destructive" asChild>
+                  <Link href="/billing">
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Add Funds
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <PageHeader
           title="Dashboard"
@@ -196,8 +241,21 @@ export default function Dashboard() {
 
                       {/* Server name - bold */}
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-foreground truncate">
-                          {server.name || 'New Server'}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground truncate">
+                            {server.name || 'New Server'}
+                          </span>
+                          {billingStatuses[server.id]?.status === 'suspended' && (
+                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                              <Ban className="h-2.5 w-2.5 mr-0.5" />
+                              SUSPENDED
+                            </Badge>
+                          )}
+                          {billingStatuses[server.id]?.status === 'unpaid' && (
+                            <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                              UNPAID
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {server.primaryIp}
