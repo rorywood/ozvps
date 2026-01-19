@@ -28,10 +28,7 @@ export default function VerifyEmailPage() {
   // Polling to check if email has been verified
   const { data: meData } = useQuery({
     queryKey: ['auth', 'me'],
-    queryFn: async () => {
-      const res = await api.get('/api/auth/me');
-      return res.data;
-    },
+    queryFn: () => api.getMe(),
     refetchInterval: 5000, // Check every 5 seconds
     enabled: !!user && !user.emailVerified,
   });
@@ -59,10 +56,7 @@ export default function VerifyEmailPage() {
   }, [user, navigate]);
 
   const resendMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post('/api/auth/resend-verification');
-      return res.data;
-    },
+    mutationFn: () => api.resendVerificationEmail(),
     onSuccess: () => {
       setResendCooldown(60); // 60 second cooldown
     },

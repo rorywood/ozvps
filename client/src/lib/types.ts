@@ -11,6 +11,8 @@ export interface Server {
     id: string;
     name: string;
     flag: string;
+    city?: string;
+    country?: string;
   };
   plan: {
     id: string;
@@ -28,6 +30,11 @@ export interface Server {
     distro?: 'linux' | 'windows';
     version?: string;
     variant?: string;
+  };
+  os?: {
+    id: number;
+    name: string;
+    group?: string;
   };
   stats: {
     cpu_usage: number;

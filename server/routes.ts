@@ -172,7 +172,9 @@ function handleApiError(
 }
 
 // TOTP helper functions using otplib
-import { generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI, verifySync as otplibVerifySync } from 'otplib';
+import { TOTP, generateSecret as otplibGenerateSecret, generateURI as otplibGenerateURI } from 'otplib';
+
+const totp = new TOTP({ window: 1 }); // Allow ±30 seconds for time drift
 
 function totpGenerateSecret(): string {
   return otplibGenerateSecret();
@@ -180,11 +182,8 @@ function totpGenerateSecret(): string {
 
 function totpVerify(token: string, secret: string): boolean {
   try {
-    // SECURITY: window: 1 allows codes from ±30 seconds to handle time drift
-    // This is a balance between security (smaller window = less attack surface)
-    // and usability (allow for reasonable clock drift between client and server)
-    const result = otplibVerifySync({ token, secret, window: 1 });
-    return result?.valid === true;
+    // SECURITY: window of 1 allows codes from ±30 seconds to handle time drift
+    return totp.verify({ token, secret });
   } catch (error) {
     console.error('TOTP verification error:', error);
     return false;
@@ -1699,7 +1698,7 @@ export async function registerRoutes(
 
             // Fetch billing status for the server (using UUID for reliable lookup)
             // Note: Billing records are created during server deployment, not auto-initialized
-            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId, server.uuid);
+            const billingStatus = await getServerBillingStatus(server.id, req.userSession!.auth0UserId, server.uuid ?? undefined);
 
             return {
               ...server,
@@ -1791,7 +1790,7 @@ export async function registerRoutes(
             }
 
             // Fetch billing status for the server (using UUID for reliable lookup)
-            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId, server.uuid);
+            const billingStatus = await getServerBillingStatus(server.id, session.auth0UserId, server.uuid ?? undefined);
 
             return {
               ...server,

@@ -175,13 +175,7 @@ export function useReinstallTask(serverId: string) {
 
       // COMMISSIONED: Server is built (commissioned=3) - mark as complete
       if (buildStatus.commissioned === 3 && !buildStatus.isBuilding) {
-        // Check ref to prevent duplicate complete events
-        if (lastStatusRef.current === 'complete') {
-          stopPolling();
-          return;
-        }
-
-        // Set ref immediately and stop polling
+        // Set ref immediately and stop polling (already checked for complete at start of poll)
         lastStatusRef.current = 'complete';
         stopPolling();
 

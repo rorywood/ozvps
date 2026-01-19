@@ -430,7 +430,7 @@ app.use((req, res, next) => {
       // Start background job for cleaning up expired password reset tokens
       setInterval(async () => {
         try {
-          const deleted = await dbStorage.cleanupExpiredResetTokens();
+          const deleted = await dbStorage.cleanupExpiredPasswordResetTokens();
           if (deleted > 0) {
             log(`Cleaned up ${deleted} expired password reset tokens`, 'security');
           }

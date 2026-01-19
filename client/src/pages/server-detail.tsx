@@ -205,16 +205,17 @@ export default function ServerDetail() {
   // This prevents the flash of server overview before showing checklist
   const isCheckingSetupMode = isInitialSetup || (reinstallTask.isActive && reinstallTask.status !== 'complete');
 
-  const { data: server, isLoading } = useQuery({
+  const { data: server, isLoading, isError } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.getServer(serverId || ''),
     enabled: !!serverId,
     retry: 2, // Retry failed requests twice before giving up
     retryDelay: 1000, // 1 second between retries
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
       // During provisioning/setup, poll aggressively (1 second)
       // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
       // If server needs setup or is provisioning, poll faster
+      const data = query.state.data;
       if (data?.needsSetup || data?.status === 'provisioning') {
         return 1000; // REDUCED from 500ms to 1s to be less aggressive
       }
@@ -1276,7 +1277,7 @@ export default function ServerDetail() {
                       <StorageIcon className="h-4 w-4" />
                       <span>{server.plan.specs.disk} GB Storage</span>
                     </div>
-                    {server.plan.specs.traffic > 0 && (
+                    {server.plan.specs.traffic && server.plan.specs.traffic > 0 && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Globe className="h-4 w-4" />
                         <span>{server.plan.specs.traffic >= 1000 ? `${(server.plan.specs.traffic / 1000).toFixed(0)} TB` : `${server.plan.specs.traffic} GB`} Bandwidth</span>

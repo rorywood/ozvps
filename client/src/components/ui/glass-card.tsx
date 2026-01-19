@@ -1,7 +1,7 @@
 import { Card, type CardProps } from "./card";
 import { forwardRef } from "react";
 
-interface GlassCardProps extends CardProps {
+interface GlassCardProps extends Omit<CardProps, 'variant'> {
   variant?: "default" | "panel" | "interactive";
 }
 

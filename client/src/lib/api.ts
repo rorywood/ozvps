@@ -635,9 +635,33 @@ class ApiClient {
     return response.json();
   }
 
-  async getMe(): Promise<{ user: any; balance: number; balanceFormatted: string }> {
+  async getMe(): Promise<{
+    user: {
+      id: number;
+      email: string;
+      name: string;
+      extRelationId: string;
+      isAdmin?: boolean;
+      emailVerified?: boolean;
+    };
+    balance: number;
+    balanceFormatted: string;
+    emailVerified?: boolean;
+    email?: string;
+  }> {
     const response = await secureFetch(`${this.baseUrl}/me`);
     if (!response.ok) throw new Error('Failed to fetch user info');
+    return response.json();
+  }
+
+  async resendVerificationEmail(): Promise<{ success: boolean; message?: string }> {
+    const response = await secureFetch(`${this.baseUrl}/auth/resend-verification`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send verification email');
+    }
     return response.json();
   }
 
