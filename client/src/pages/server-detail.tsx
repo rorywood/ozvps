@@ -1017,7 +1017,8 @@ export default function ServerDetail() {
     );
   }
 
-  const isSuspended = server?.suspended === true;
+  // Server is suspended if VirtFusion says so OR if billing status is suspended
+  const isSuspended = server?.suspended === true || server?.billing?.status === 'suspended';
   const needsSetup = server?.needsSetup === true;
 
   // Determine if server is still being provisioned/built
