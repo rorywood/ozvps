@@ -151,7 +151,7 @@ app.use((req, res, next) => {
   // Serve static files in production
   if (process.env.NODE_ENV === "production") {
     const path = await import("path");
-    const staticPath = path.resolve(process.cwd(), "admin-dist");
+    const staticPath = path.resolve(process.cwd(), "admin-dist", "client");
     app.use(express.static(staticPath));
     app.get("*", (_req, res) => {
       res.sendFile(path.join(staticPath, "index.html"));
