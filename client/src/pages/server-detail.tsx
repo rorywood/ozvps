@@ -41,7 +41,9 @@ import {
   EyeOff,
   Shield,
   Server,
-  Mail
+  Mail,
+  Wallet,
+  Ban
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -640,6 +642,45 @@ export default function ServerDetail() {
       });
     }
   });
+
+  // Wallet query for reactivation - only fetch when server is suspended/unpaid
+  const { data: walletData, refetch: refetchWallet } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid',
+  });
+
+  // Reactivate server mutation
+  const reactivateMutation = useMutation({
+    mutationFn: (serverId: string) => api.reactivateServer(serverId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+      toast({
+        title: "Server Reactivated",
+        description: "Your server has been reactivated and is starting up.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reactivation Failed",
+        description: error.message || "Failed to reactivate server. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleReactivate = () => {
+    if (serverId) {
+      reactivateMutation.mutate(serverId);
+    }
+  };
+
+  // Calculate if user can afford to reactivate
+  const canAffordReactivation = walletData?.wallet && server?.billing?.monthlyPriceCents
+    ? walletData.wallet.balanceCents >= server.billing.monthlyPriceCents
+    : false;
 
   const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown' | 'poweroff') => {
     if (serverId) {
@@ -1251,31 +1292,66 @@ export default function ServerDetail() {
 
         {/* Suspension Banner */}
         {isSuspended && (
-          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-4 flex items-center justify-between gap-3" data-testid="banner-suspended">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-yellow-300">This VPS has been suspended</h3>
-                <p className="text-sm text-yellow-300/80">
-                  {server.billing?.status === 'suspended'
-                    ? 'Payment is overdue. Please add funds to restore your server.'
-                    : 'Please contact support for assistance.'}
-                </p>
+          <div className="bg-destructive/10 border border-destructive/50 rounded-lg p-4" data-testid="banner-suspended">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Ban className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-destructive">Server Suspended</h3>
+                  <p className="text-sm text-destructive/80 mt-1">
+                    {server.billing?.status === 'suspended'
+                      ? 'This server has been suspended due to non-payment.'
+                      : 'This server has been suspended. Please contact support for assistance.'}
+                  </p>
+                  {server.billing?.status === 'suspended' && server.billing?.monthlyPriceCents && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Amount due: <span className="font-medium text-foreground">${(server.billing.monthlyPriceCents / 100).toFixed(2)}</span>
+                      {walletData?.wallet && (
+                        <span className="ml-2">
+                          • Wallet: <span className={cn("font-medium", canAffordReactivation ? "text-success" : "text-destructive")}>
+                            ${(walletData.wallet.balanceCents / 100).toFixed(2)}
+                          </span>
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {server.billing?.status === 'suspended' ? (
+                  <>
+                    {canAffordReactivation ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleReactivate}
+                        disabled={reactivateMutation.isPending}
+                      >
+                        {reactivateMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Wallet className="h-4 w-4 mr-2" />
+                        )}
+                        Pay & Reactivate
+                      </Button>
+                    ) : (
+                      <Link href="/billing">
+                        <Button size="sm" variant="destructive">
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Add Funds
+                        </Button>
+                      </Link>
+                    )}
+                  </>
+                ) : (
+                  <Link href="/support">
+                    <Button variant="outline" size="sm" className="border-destructive/50 text-destructive hover:bg-destructive/10">
+                      Contact Support
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
-            {server.billing?.status === 'suspended' ? (
-              <Link href="/billing">
-                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
-                  Add Funds
-                </Button>
-              </Link>
-            ) : (
-              <Link href="/support">
-                <Button variant="outline" size="sm" className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/20">
-                  Open Ticket
-                </Button>
-              </Link>
-            )}
           </div>
         )}
         
