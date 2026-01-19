@@ -2,8 +2,7 @@ import { Express, Request, Response } from "express";
 import { db } from "../../server/db";
 import { twoFactorAuth } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
-import * as otplib from "otplib";
-const authenticator = otplib.authenticator;
+import { verifySync as otplibVerifySync } from "otplib";
 import argon2 from "argon2";
 import {
   isUserAdmin,
@@ -189,7 +188,7 @@ export function registerAuthRoutes(app: Express) {
       console.log(`[admin-auth] Found 2FA record, verifying code...`);
 
       // Verify the TOTP code
-      const isValid = authenticator.verify({ token: code, secret: tfa.secret });
+      const isValid = otplibVerifySync({ token: code, secret: tfa.secret });
 
       if (!isValid) {
         // Check backup codes
