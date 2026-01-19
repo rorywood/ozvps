@@ -12,10 +12,11 @@ export function registerServersRoutes(router: Router) {
       const perPage = Math.min(parseInt(req.query.perPage as string) || 50, 100);
       const search = req.query.search as string;
 
-      const servers = await virtfusionClient.listServers(page, perPage);
+      // listServers returns an array directly, not paginated response
+      const allServers = await virtfusionClient.listServers();
 
       // Filter by search if provided
-      let filteredServers = servers.data || [];
+      let filteredServers = allServers || [];
       if (search) {
         const searchLower = search.toLowerCase();
         filteredServers = filteredServers.filter((s: any) =>
@@ -25,9 +26,14 @@ export function registerServersRoutes(router: Router) {
         );
       }
 
+      // Simple pagination on filtered results
+      const total = filteredServers.length;
+      const startIndex = (page - 1) * perPage;
+      const paginatedServers = filteredServers.slice(startIndex, startIndex + perPage);
+
       // Enrich with billing data
       const enrichedServers = await Promise.all(
-        filteredServers.map(async (server: any) => {
+        paginatedServers.map(async (server: any) => {
           const [billing] = await db
             .select()
             .from(serverBilling)
@@ -53,8 +59,13 @@ export function registerServersRoutes(router: Router) {
 
       res.json({
         servers: enrichedServers,
-        pagination: servers.links || null,
-        meta: servers.meta || null,
+        pagination: {
+          currentPage: page,
+          perPage,
+          total,
+          totalPages: Math.ceil(total / perPage),
+        },
+        meta: { total },
       });
     } catch (error: any) {
       console.log(`[admin-servers] List servers error: ${error.message}`);

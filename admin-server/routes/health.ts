@@ -3,6 +3,7 @@ import { db } from "../../server/db";
 import { sql } from "drizzle-orm";
 import { redisClient } from "../../server/redis";
 import os from "os";
+import { exec } from "child_process";
 
 interface ServiceHealth {
   name: string;
@@ -68,7 +69,8 @@ async function checkVirtFusion(): Promise<ServiceHealth> {
 
   const start = Date.now();
   try {
-    const response = await fetch(`${apiUrl}/api/v1/self`, {
+    // Use hypervisors endpoint with minimal results for health check
+    const response = await fetch(`${apiUrl}/api/v1/compute/hypervisors?results=1`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${apiToken}`,
@@ -146,6 +148,55 @@ async function checkStripe(): Promise<ServiceHealth> {
   }
 }
 
+async function getDiskStats(): Promise<{ total: number; used: number; free: number; usagePercent: number } | null> {
+  return new Promise((resolve) => {
+    const platform = os.platform();
+
+    if (platform === "linux" || platform === "darwin") {
+      exec("df -k / | tail -1 | awk '{print $2,$3,$4}'", (error, stdout) => {
+        if (error) {
+          resolve(null);
+          return;
+        }
+        const [total, used, free] = stdout.trim().split(" ").map(Number);
+        if (!total || isNaN(total)) {
+          resolve(null);
+          return;
+        }
+        resolve({
+          total: Math.round(total / 1024), // MB
+          used: Math.round(used / 1024),
+          free: Math.round(free / 1024),
+          usagePercent: Math.round((used / total) * 100),
+        });
+      });
+    } else {
+      // Windows fallback - just return null for now
+      resolve(null);
+    }
+  });
+}
+
+async function getDatabaseStats(): Promise<{ size: string; connections: number; tables: number } | null> {
+  try {
+    // Get database size
+    const sizeResult = await db.execute(sql`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
+    const size = (sizeResult.rows[0] as any)?.size || "Unknown";
+
+    // Get active connections
+    const connectionsResult = await db.execute(sql`SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'`);
+    const connections = parseInt((connectionsResult.rows[0] as any)?.count || "0", 10);
+
+    // Get table count
+    const tablesResult = await db.execute(sql`SELECT count(*) as count FROM information_schema.tables WHERE table_schema = 'public'`);
+    const tables = parseInt((tablesResult.rows[0] as any)?.count || "0", 10);
+
+    return { size, connections, tables };
+  } catch (error) {
+    return null;
+  }
+}
+
 function getSystemStats() {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
@@ -185,11 +236,13 @@ export function registerHealthRoutes(app: Express) {
 
   // Detailed health check (requires auth in production, but middleware is applied separately)
   app.get("/api/health", async (_req: Request, res: Response) => {
-    const [database, redis, virtfusion, stripe] = await Promise.all([
+    const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
       checkDatabase(),
       checkRedis(),
       checkVirtFusion(),
       checkStripe(),
+      getDiskStats(),
+      getDatabaseStats(),
     ]);
 
     const services = [database, redis, virtfusion, stripe];
@@ -203,17 +256,23 @@ export function registerHealthRoutes(app: Express) {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       services,
-      system: getSystemStats(),
+      system: {
+        ...getSystemStats(),
+        disk,
+      },
+      database: dbStats,
     });
   });
 
   // Detailed health check (protected version)
   app.get("/api/admin/health/detailed", async (_req: Request, res: Response) => {
-    const [database, redis, virtfusion, stripe] = await Promise.all([
+    const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
       checkDatabase(),
       checkRedis(),
       checkVirtFusion(),
       checkStripe(),
+      getDiskStats(),
+      getDatabaseStats(),
     ]);
 
     const services = [database, redis, virtfusion, stripe];
@@ -227,7 +286,11 @@ export function registerHealthRoutes(app: Express) {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       services,
-      system: getSystemStats(),
+      system: {
+        ...getSystemStats(),
+        disk,
+      },
+      database: dbStats,
       environment: {
         nodeEnv: process.env.NODE_ENV,
         nodeVersion: process.version,

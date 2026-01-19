@@ -24,21 +24,21 @@ export default function Health() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      healthy: "bg-green-50 border-green-200",
-      degraded: "bg-yellow-50 border-yellow-200",
-      unhealthy: "bg-red-50 border-red-200",
+      healthy: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
+      degraded: "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800",
+      unhealthy: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
     };
-    return colors[status] || "bg-gray-50 border-gray-200";
+    return colors[status] || "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700";
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">System Health</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">System Health</h1>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
         >
           <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           Refresh
@@ -65,8 +65,8 @@ export default function Health() {
           </div>
 
           {/* Services */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Services</h2>
+          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Services</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {health.services.map((service) => (
                 <div
@@ -77,14 +77,14 @@ export default function Health() {
                     <div className="flex items-center gap-3">
                       <StatusIcon status={service.status} />
                       <div>
-                        <h3 className="font-medium text-gray-900">{service.name}</h3>
+                        <h3 className="font-medium text-gray-900 dark:text-white">{service.name}</h3>
                         {service.message && (
-                          <p className="text-sm text-gray-500">{service.message}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{service.message}</p>
                         )}
                       </div>
                     </div>
                     {service.latencyMs !== undefined && (
-                      <span className="text-sm text-gray-600">{service.latencyMs}ms</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">{service.latencyMs}ms</span>
                     )}
                   </div>
                 </div>
@@ -92,15 +92,15 @@ export default function Health() {
             </div>
           </div>
 
-          {/* System Info */}
+          {/* System Resources */}
           {health.system && (
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">System Resources</h2>
+            <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Resources</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Memory */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Memory</h3>
-                  <div className="bg-gray-100 rounded-full h-4 mb-2">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Memory</h3>
+                  <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-4 mb-2">
                     <div
                       className={`h-4 rounded-full ${
                         health.system.memory.usagePercent > 90
@@ -112,7 +112,7 @@ export default function Health() {
                       style={{ width: `${health.system.memory.usagePercent}%` }}
                     />
                   </div>
-                  <div className="flex justify-between text-sm text-gray-600">
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                     <span>{health.system.memory.used} MB used</span>
                     <span>{health.system.memory.total} MB total</span>
                   </div>
@@ -120,45 +120,95 @@ export default function Health() {
 
                 {/* CPU */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">CPU Load Average</h3>
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">CPU Load Average</h3>
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">1 min</span>
-                      <span className="font-medium">{health.system.cpu.loadAvg["1min"]}</span>
+                      <span className="text-gray-600 dark:text-gray-400">1 min</span>
+                      <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["1min"]}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">5 min</span>
-                      <span className="font-medium">{health.system.cpu.loadAvg["5min"]}</span>
+                      <span className="text-gray-600 dark:text-gray-400">5 min</span>
+                      <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["5min"]}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">15 min</span>
-                      <span className="font-medium">{health.system.cpu.loadAvg["15min"]}</span>
+                      <span className="text-gray-600 dark:text-gray-400">15 min</span>
+                      <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["15min"]}</span>
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-2">{health.system.cpu.cores} CPU cores</p>
                 </div>
 
-                {/* System Info */}
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">System</h3>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Hostname</span>
-                      <span className="font-medium">{health.system.hostname}</span>
+                {/* Disk Space */}
+                {health.system.disk && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Disk Space</h3>
+                    <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-4 mb-2">
+                      <div
+                        className={`h-4 rounded-full ${
+                          health.system.disk.usagePercent > 90
+                            ? "bg-red-500"
+                            : health.system.disk.usagePercent > 70
+                            ? "bg-yellow-500"
+                            : "bg-green-500"
+                        }`}
+                        style={{ width: `${health.system.disk.usagePercent}%` }}
+                      />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Platform</span>
-                      <span className="font-medium">{health.system.platform} ({health.system.arch})</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Uptime</span>
-                      <span className="font-medium">
-                        {Math.floor(health.system.uptime / 86400)}d{" "}
-                        {Math.floor((health.system.uptime % 86400) / 3600)}h{" "}
-                        {Math.floor((health.system.uptime % 3600) / 60)}m
-                      </span>
+                    <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                      <span>{Math.round(health.system.disk.used / 1024)} GB used</span>
+                      <span>{Math.round(health.system.disk.total / 1024)} GB total</span>
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Database Stats */}
+          {(health as any).database && (
+            <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Database</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{(health as any).database.size}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Database Size</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{(health as any).database.connections}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Active Connections</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{(health as any).database.tables}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Tables</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* System Info */}
+          {health.system && (
+            <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Info</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Hostname</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{health.system.hostname}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Platform</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{health.system.platform} ({health.system.arch})</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Uptime</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {Math.floor(health.system.uptime / 86400)}d{" "}
+                    {Math.floor((health.system.uptime % 86400) / 3600)}h{" "}
+                    {Math.floor((health.system.uptime % 3600) / 60)}m
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">CPU Cores</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{health.system.cpu.cores}</p>
                 </div>
               </div>
             </div>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
-import { Shield, AlertCircle } from "lucide-react";
+import { AlertCircle, Lock, Mail, KeyRound, ArrowLeft } from "lucide-react";
+import logo from "../assets/logo.png";
 
 export default function Login() {
   const { login, verify2FA } = useAuth();
@@ -23,7 +24,7 @@ export default function Login() {
 
       if (result.requires2FASetup) {
         setRequires2FASetup(true);
-        setError("Two-factor authentication must be enabled to access the admin panel.");
+        setError("Two-factor authentication must be enabled to access this area.");
         return;
       }
 
@@ -33,7 +34,7 @@ export default function Login() {
         setError(result.error);
       }
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || "Authentication failed");
     } finally {
       setIsLoading(false);
     }
@@ -48,9 +49,9 @@ export default function Login() {
 
     try {
       await verify2FA(pendingLoginToken, code);
-      toast.success("Login successful");
+      toast.success("Authenticated");
     } catch (err: any) {
-      setError(err.message || "Invalid 2FA code");
+      setError(err.message || "Invalid code");
     } finally {
       setIsLoading(false);
     }
@@ -58,31 +59,20 @@ export default function Login() {
 
   if (requires2FASetup) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-        <div className="max-w-md w-full">
-          <div className="bg-white rounded-xl shadow-lg p-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
+        <div className="max-w-sm w-full">
+          <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
             <div className="flex justify-center mb-6">
-              <div className="bg-yellow-100 p-4 rounded-full">
-                <AlertCircle className="h-12 w-12 text-yellow-600" />
+              <div className="p-3 bg-amber-500/10 rounded-xl">
+                <AlertCircle className="h-8 w-8 text-amber-400" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">
+            <h1 className="text-xl font-semibold text-center text-white mb-3">
               2FA Required
             </h1>
-            <p className="text-gray-600 text-center mb-6">
-              Two-factor authentication must be enabled on your account to access the admin panel.
-            </p>
-            <p className="text-gray-600 text-center mb-6">
-              Please enable 2FA in the main panel at{" "}
-              <a
-                href="https://app.ozvps.com.au/settings"
-                className="text-blue-600 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                app.ozvps.com.au
-              </a>{" "}
-              first, then return here to log in.
+            <p className="text-slate-400 text-sm text-center mb-6 leading-relaxed">
+              Two-factor authentication must be enabled on your account to access this area.
+              Please enable 2FA in the main panel first.
             </p>
             <button
               onClick={() => {
@@ -90,9 +80,10 @@ export default function Login() {
                 setEmail("");
                 setPassword("");
               }}
-              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              className="w-full py-2.5 px-4 bg-slate-700/50 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
             >
-              Back to Login
+              <ArrowLeft className="h-4 w-4" />
+              Back
             </button>
           </div>
         </div>
@@ -101,39 +92,25 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <div className="flex justify-center mb-6">
-            <div className="bg-blue-100 p-4 rounded-full">
-              <Shield className="h-12 w-12 text-blue-600" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">
-            Admin Panel
-          </h1>
-          <p className="text-gray-600 text-center mb-8">
-            {pendingLoginToken
-              ? "Enter your 2FA code to continue"
-              : "Sign in with your admin credentials"}
-          </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
+      <div className="max-w-sm w-full">
+        {/* Subtle logo */}
+        <div className="flex justify-center mb-8">
+          <img src={logo} alt="" className="h-8 opacity-60" />
+        </div>
 
+        <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{error}</p>
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-sm text-center">{error}</p>
             </div>
           )}
 
           {!pendingLoginToken ? (
-            <form onSubmit={handleLogin}>
-              <div className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Email
-                  </label>
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                   <input
                     id="email"
                     type="email"
@@ -141,45 +118,51 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoFocus
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                    placeholder="admin@example.com"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 outline-none transition-all text-sm"
+                    placeholder="Email"
                   />
                 </div>
-                <div>
-                  <label
-                    htmlFor="password"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Password
-                  </label>
+              </div>
+              <div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                   <input
                     id="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                    placeholder="••••••••"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 outline-none transition-all text-sm"
+                    placeholder="Password"
                   />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-6 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-500 focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Authenticating...
+                  </span>
+                ) : (
+                  "Continue"
+                )}
               </button>
             </form>
           ) : (
-            <form onSubmit={handleVerify2FA}>
+            <form onSubmit={handleVerify2FA} className="space-y-5">
+              <div className="text-center mb-2">
+                <div className="inline-flex p-3 bg-blue-500/10 rounded-xl mb-4">
+                  <KeyRound className="h-6 w-6 text-blue-400" />
+                </div>
+                <p className="text-slate-400 text-sm">
+                  Enter the 6-digit code from your authenticator
+                </p>
+              </div>
               <div>
-                <label
-                  htmlFor="code"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  2FA Code
-                </label>
                 <input
                   id="code"
                   type="text"
@@ -190,19 +173,23 @@ export default function Login() {
                   autoComplete="one-time-code"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-center text-2xl tracking-widest font-mono"
-                  placeholder="000000"
+                  className="w-full px-4 py-4 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 outline-none transition-all text-center text-2xl tracking-[0.3em] font-mono"
+                  placeholder="------"
                 />
-                <p className="mt-2 text-sm text-gray-500">
-                  Enter the 6-digit code from your authenticator app
-                </p>
               </div>
               <button
                 type="submit"
                 disabled={isLoading || code.length !== 6}
-                className="w-full mt-6 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-500 focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {isLoading ? "Verifying..." : "Verify"}
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Verifying...
+                  </span>
+                ) : (
+                  "Verify"
+                )}
               </button>
               <button
                 type="button"
@@ -211,16 +198,17 @@ export default function Login() {
                   setCode("");
                   setError(null);
                 }}
-                className="w-full mt-3 py-3 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                className="w-full py-2.5 px-4 text-slate-400 rounded-lg text-sm hover:text-white transition-all flex items-center justify-center gap-2"
               >
+                <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
             </form>
           )}
         </div>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          Protected admin access only
+        <p className="mt-6 text-center text-xs text-slate-600">
+          Restricted access
         </p>
       </div>
     </div>

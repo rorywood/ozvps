@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.success) {
       setUser(result.user);
       setCsrfToken(result.csrfToken);
+      setBootstrapMode((result as any).bootstrapMode || false);
     }
   };
 

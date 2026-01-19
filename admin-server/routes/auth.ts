@@ -278,6 +278,7 @@ export function registerAuthRoutes(app: Express) {
           name: tokenData.name,
         },
         csrfToken,
+        bootstrapMode: (req as any).bootstrapMode || false,
       });
     } catch (error: any) {
       console.error(`[admin-auth] 2FA verification error:`, error);
