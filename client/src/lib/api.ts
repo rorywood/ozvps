@@ -394,11 +394,11 @@ class ApiClient {
     return response.json();
   }
 
-  async requestCancellation(id: string, reason?: string, mode: 'grace' | 'immediate' = 'grace'): Promise<{ success: boolean; cancellation: any }> {
+  async requestCancellation(id: string, reason?: string, mode: 'grace' | 'immediate' = 'grace', password?: string): Promise<{ success: boolean; cancellation: any }> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}/cancellation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason, mode })
+      body: JSON.stringify({ reason, mode, password })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

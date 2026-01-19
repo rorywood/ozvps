@@ -128,6 +128,7 @@ export default function ServerDetail() {
   // Cancellation state
   const [cancellationReason, setCancellationReason] = useState<string>("");
   const [immediateConfirmText, setImmediateConfirmText] = useState("");
+  const [immediatePassword, setImmediatePassword] = useState("");
   
   // Password reset state
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
@@ -589,11 +590,12 @@ export default function ServerDetail() {
 
   // Cancellation mutations
   const requestCancellationMutation = useMutation({
-    mutationFn: ({ id, reason, mode }: { id: string, reason?: string, mode: 'grace' | 'immediate' }) =>
-      api.requestCancellation(id, reason, mode),
+    mutationFn: ({ id, reason, mode, password }: { id: string, reason?: string, mode: 'grace' | 'immediate', password?: string }) =>
+      api.requestCancellation(id, reason, mode, password),
     onSuccess: (_, variables) => {
       setCancellationReason("");
       setImmediateConfirmText("");
+      setImmediatePassword("");
       refetchCancellation();
       toast({
         title: variables.mode === 'immediate' ? "Server Destruction Started" : "Scheduled for Deletion",
@@ -2268,19 +2270,36 @@ export default function ServerDetail() {
                       />
                     </div>
 
+                    {/* Password Confirmation */}
+                    <div className="space-y-3">
+                      <Label className="text-sm text-foreground block">
+                        Enter your account password to confirm:
+                      </Label>
+                      <Input
+                        type="password"
+                        value={immediatePassword}
+                        onChange={(e) => setImmediatePassword(e.target.value)}
+                        placeholder="Your account password"
+                        className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                        data-testid="input-confirm-password"
+                        autoComplete="current-password"
+                      />
+                    </div>
+
                     {/* Destroy Button */}
                     <Button
                       className={cn(
                         "w-full h-12 text-base font-semibold",
-                        immediateConfirmText === server?.name && !isSuspended
+                        immediateConfirmText === server?.name && immediatePassword && !isSuspended
                           ? "bg-red-600 hover:bg-red-700 text-white"
                           : "bg-red-600/30 text-red-400/50 cursor-not-allowed"
                       )}
-                      disabled={immediateConfirmText !== server?.name || isSuspended || requestCancellationMutation.isPending}
+                      disabled={immediateConfirmText !== server?.name || !immediatePassword || isSuspended || requestCancellationMutation.isPending}
                       onClick={() => serverId && requestCancellationMutation.mutate({
                         id: serverId,
                         reason: cancellationReason || undefined,
-                        mode: 'immediate'
+                        mode: 'immediate',
+                        password: immediatePassword
                       })}
                       data-testid="button-destroy-server"
                     >
