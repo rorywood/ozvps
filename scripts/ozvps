@@ -16,7 +16,7 @@ cd /tmp 2>/dev/null || cd /
 #    ozvps --help       # Show help
 # ============================================================================
 
-VERSION="4.1.0"
+VERSION="4.1.1"
 INSTALL_DIR="/opt/ozvps-panel"
 SERVICE_NAME="ozvps-panel"
 GITHUB_REPO="rorywood/ozvps"
@@ -858,19 +858,19 @@ EOF
     fi
     success "Build complete"
 
-    # Prune dev dependencies for production to save space
+    # Run migrations BEFORE pruning (drizzle-kit is a dev dependency)
+    info "Running migrations..."
+    set -a && source .env && set +a
+    npx drizzle-kit push --force 2>/dev/null || true
+    success "Migrations applied"
+
+    # Prune dev dependencies for production to save space (AFTER migrations)
     local env=$(get_environment)
     if [[ "$env" == "production" ]]; then
         info "Pruning dev dependencies..."
         npm prune --production --silent 2>&1 | grep -v "^npm " || true
         success "Dev dependencies pruned"
     fi
-
-    # Migrations
-    info "Running migrations..."
-    set -a && source .env && set +a
-    npx drizzle-kit push --force 2>/dev/null || true
-    success "Migrations applied"
 
     # Auto-configure APP_DOMAIN for Stripe webhooks
     info "Configuring domain for webhooks..."
