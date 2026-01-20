@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
-import { Search, User, Wallet, Ban, Shield, RefreshCw, Mail, Key, LogOut, CheckCircle, Send } from "lucide-react";
+import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send } from "lucide-react";
 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -251,29 +251,17 @@ export default function Users() {
                             Email Verified
                           </div>
                         ) : (
-                          <>
-                            <button
-                              onClick={() => usersApi.verifyEmail(userDetails.user.auth0UserId).then(() => {
-                                toast.success("Email verified");
-                                queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
-                              })}
-                              className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-colors"
-                            >
-                              <Shield className="h-4 w-4" />
-                              Verify Email
-                            </button>
-                            <button
-                              onClick={() => usersApi.resendVerification(userDetails.user.auth0UserId).then(() => {
-                                toast.success("Verification email sent");
-                              }).catch((err: any) => {
-                                toast.error(err.message || "Failed to send verification email");
-                              })}
-                              className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-500/20 transition-colors"
-                            >
-                              <Send className="h-4 w-4" />
-                              Resend Verification
-                            </button>
-                          </>
+                          <button
+                            onClick={() => usersApi.resendVerification(userDetails.user.auth0UserId).then(() => {
+                              toast.success("Verification email sent");
+                            }).catch((err: any) => {
+                              toast.error(err.message || "Failed to send verification email");
+                            })}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-500/20 transition-colors"
+                          >
+                            <Send className="h-4 w-4" />
+                            Resend Verification Email
+                          </button>
                         )}
                         <button
                           onClick={() => {

@@ -1760,7 +1760,7 @@ export async function registerRoutes(
       }
 
       // Build billing map
-      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number; freeServer?: boolean }> = {};
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
@@ -1768,6 +1768,8 @@ export async function registerRoutes(
           suspendAt: b.suspendAt,
           monthlyPriceCents: b.monthlyPriceCents,
           freeServer: b.freeServer,
+          adminSuspended: b.adminSuspended || false,
+          adminSuspendedReason: b.adminSuspendedReason,
         };
       }
 
