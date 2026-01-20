@@ -7,47 +7,35 @@ import { auth0Client } from "../../server/auth0";
 import { virtfusionClient } from "../../server/virtfusion";
 
 export function registerUsersRoutes(router: Router) {
-  // List all users (paginated)
+  // List all users from Auth0 (paginated)
   router.get("/users", async (req: Request, res: Response) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const perPage = Math.min(parseInt(req.query.perPage as string) || 50, 100);
-      const offset = (page - 1) * perPage;
 
-      const users = await db
-        .select({
-          id: userMappings.id,
-          auth0UserId: userMappings.auth0UserId,
-          email: userMappings.email,
-          name: userMappings.name,
-          virtFusionUserId: userMappings.virtFusionUserId,
-          createdAt: userMappings.createdAt,
-        })
-        .from(userMappings)
-        .orderBy(desc(userMappings.createdAt))
-        .limit(perPage)
-        .offset(offset);
+      // Fetch users from Auth0 (0-indexed pages)
+      const { users: auth0Users, total } = await auth0Client.listUsers(page - 1, perPage);
 
-      // Get total count
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(userMappings);
-
-      // Get wallet and flags for each user
+      // Enrich with local data (wallets, flags)
       const usersWithDetails = await Promise.all(
-        users.map(async (user) => {
+        auth0Users.map(async (user) => {
           const [wallet] = await db
             .select()
             .from(wallets)
-            .where(eq(wallets.auth0UserId, user.auth0UserId));
+            .where(eq(wallets.auth0UserId, user.user_id));
 
           const [flags] = await db
             .select()
             .from(userFlags)
-            .where(eq(userFlags.auth0UserId, user.auth0UserId));
+            .where(eq(userFlags.auth0UserId, user.user_id));
 
           return {
-            ...user,
+            auth0UserId: user.user_id,
+            email: user.email,
+            name: user.name || null,
+            emailVerified: user.email_verified,
+            virtFusionUserId: user.app_metadata?.virtfusion_user_id || null,
+            isAdmin: user.app_metadata?.is_admin || false,
             wallet: wallet || null,
             blocked: flags?.blocked || false,
             blockedReason: flags?.blockedReason || null,
@@ -60,8 +48,8 @@ export function registerUsersRoutes(router: Router) {
         pagination: {
           currentPage: page,
           perPage,
-          total: count,
-          totalPages: Math.ceil(count / perPage),
+          total,
+          totalPages: Math.ceil(total / perPage),
         },
       });
     } catch (error: any) {
@@ -70,7 +58,7 @@ export function registerUsersRoutes(router: Router) {
     }
   });
 
-  // Search users
+  // Search users in Auth0
   router.get("/users/search", async (req: Request, res: Response) => {
     try {
       const query = req.query.q as string;
@@ -78,40 +66,29 @@ export function registerUsersRoutes(router: Router) {
         return res.status(400).json({ error: "Search query must be at least 2 characters" });
       }
 
-      const searchPattern = `%${query}%`;
-      const users = await db
-        .select({
-          id: userMappings.id,
-          auth0UserId: userMappings.auth0UserId,
-          email: userMappings.email,
-          name: userMappings.name,
-          virtFusionUserId: userMappings.virtFusionUserId,
-          createdAt: userMappings.createdAt,
-        })
-        .from(userMappings)
-        .where(
-          or(
-            like(userMappings.email, searchPattern),
-            like(userMappings.name, searchPattern)
-          )
-        )
-        .limit(50);
+      // Search in Auth0
+      const auth0Users = await auth0Client.searchUsers(query, 50);
 
-      // Get wallet info for each user
+      // Enrich with local data
       const usersWithWallets = await Promise.all(
-        users.map(async (user) => {
+        auth0Users.map(async (user) => {
           const [wallet] = await db
             .select()
             .from(wallets)
-            .where(eq(wallets.auth0UserId, user.auth0UserId));
+            .where(eq(wallets.auth0UserId, user.user_id));
 
           const [flags] = await db
             .select()
             .from(userFlags)
-            .where(eq(userFlags.auth0UserId, user.auth0UserId));
+            .where(eq(userFlags.auth0UserId, user.user_id));
 
           return {
-            ...user,
+            auth0UserId: user.user_id,
+            email: user.email,
+            name: user.name || null,
+            emailVerified: user.email_verified,
+            virtFusionUserId: user.app_metadata?.virtfusion_user_id || null,
+            isAdmin: user.app_metadata?.is_admin || false,
             wallet: wallet || null,
             blocked: flags?.blocked || false,
             blockedReason: flags?.blockedReason || null,

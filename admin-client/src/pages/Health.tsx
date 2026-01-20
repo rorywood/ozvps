@@ -124,7 +124,8 @@ export default function Health() {
                             <Play className="h-4 w-4" />
                           </button>
                         )}
-                        {isRunning && (
+                        {/* Don't show stop button for PostgreSQL - too dangerous */}
+                        {isRunning && service !== "postgresql" && (
                           <button
                             onClick={() => controlMutation.mutate({ service, action: "stop" })}
                             disabled={controlMutation.isPending}

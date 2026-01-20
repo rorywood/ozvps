@@ -544,6 +544,109 @@ class Auth0Client {
   }
 
   /**
+   * List all users from Auth0 (paginated)
+   */
+  async listUsers(page: number = 0, perPage: number = 50): Promise<{ users: Auth0User[]; total: number }> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      // Auth0 uses 0-based page numbers
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users?page=${page}&per_page=${perPage}&include_totals=true&sort=created_at:-1`,
+        {
+          headers: { Authorization: `Bearer ${managementToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to list Auth0 users: ${response.status}`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      const users: Auth0User[] = (data.users || []).map((u: any) => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        email_verified: u.email_verified,
+        app_metadata: u.app_metadata,
+      }));
+
+      return { users, total: data.total || users.length };
+    } catch (error: any) {
+      log(`Auth0 list users error: ${error.message}`, 'auth0');
+      throw error;
+    }
+  }
+
+  /**
+   * Search users in Auth0
+   */
+  async searchUsers(query: string, perPage: number = 50): Promise<Auth0User[]> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      // Auth0 Lucene query syntax
+      const searchQuery = `email:*${query}* OR name:*${query}*`;
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users?q=${encodeURIComponent(searchQuery)}&search_engine=v3&per_page=${perPage}`,
+        {
+          headers: { Authorization: `Bearer ${managementToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to search Auth0 users: ${response.status}`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status}`);
+      }
+
+      const users = await response.json() as any[];
+      return users.map((u: any) => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        email_verified: u.email_verified,
+        app_metadata: u.app_metadata,
+      }));
+    } catch (error: any) {
+      log(`Auth0 search users error: ${error.message}`, 'auth0');
+      throw error;
+    }
+  }
+
+  /**
+   * Block/unblock a user in Auth0
+   */
+  async setUserBlocked(auth0UserId: string, blocked: boolean): Promise<boolean> {
+    try {
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${managementToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ blocked }),
+        }
+      );
+
+      if (!response.ok) {
+        log(`Failed to ${blocked ? 'block' : 'unblock'} Auth0 user: ${response.status}`, 'auth0');
+        return false;
+      }
+
+      log(`${blocked ? 'Blocked' : 'Unblocked'} Auth0 user ${auth0UserId}`, 'auth0');
+      return true;
+    } catch (error: any) {
+      log(`Auth0 block user error: ${error.message}`, 'auth0');
+      return false;
+    }
+  }
+
+  /**
    * Delete a user from Auth0 (for rollback during failed registration)
    */
   async deleteUser(auth0UserId: string): Promise<{ success: boolean; error?: string }> {
