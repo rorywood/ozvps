@@ -171,7 +171,17 @@ export function registerBillingRoutes(router: Router) {
       if (monthlyPriceCents !== undefined) updateData.monthlyPriceCents = monthlyPriceCents;
       if (autoRenew !== undefined) updateData.autoRenew = autoRenew;
       if (freeServer !== undefined) updateData.freeServer = freeServer;
-      if (nextBillAt !== undefined) updateData.nextBillAt = nextBillAt ? new Date(nextBillAt) : null;
+      if (nextBillAt !== undefined) {
+        const newNextBillAt = nextBillAt ? new Date(nextBillAt) : null;
+        updateData.nextBillAt = newNextBillAt;
+
+        // If setting a future date and no explicit status provided, reset to active
+        // This allows admins to effectively "skip" the current billing cycle
+        if (newNextBillAt && newNextBillAt > new Date() && status === undefined) {
+          updateData.status = "active";
+          updateData.suspendAt = null; // Clear any pending suspension
+        }
+      }
       if (suspendAt !== undefined) updateData.suspendAt = suspendAt ? new Date(suspendAt) : null;
 
       const [updated] = await db
