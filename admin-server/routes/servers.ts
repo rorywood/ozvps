@@ -89,14 +89,38 @@ export function registerServersRoutes(router: Router) {
         .from(serverBilling)
         .where(eq(serverBilling.virtfusionServerId, String(serverId)));
 
-      // Get owner info
-      let owner = null;
+      // Get owner info - try multiple sources
+      let owner: { email: string; name: string | null; auth0UserId?: string } | null = null;
+
+      // First try userMappings if we have billing
       if (billing) {
         const [ownerMapping] = await db
           .select()
           .from(userMappings)
           .where(eq(userMappings.auth0UserId, billing.auth0UserId));
-        owner = ownerMapping || null;
+        if (ownerMapping) {
+          owner = {
+            email: ownerMapping.email,
+            name: ownerMapping.name,
+            auth0UserId: ownerMapping.auth0UserId,
+          };
+        }
+      }
+
+      // If no owner found, try to get from VirtFusion directly
+      if (!owner) {
+        try {
+          const vfOwner = await virtfusionClient.getServerOwner(String(serverId));
+          if (vfOwner) {
+            owner = {
+              email: vfOwner.email,
+              name: vfOwner.name,
+              auth0UserId: vfOwner.extRelationId || undefined,
+            };
+          }
+        } catch (err) {
+          // VirtFusion owner lookup failed, continue without
+        }
       }
 
       // Get cancellation status

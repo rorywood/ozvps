@@ -1443,7 +1443,7 @@ export default function BillingPage() {
                                       </span>
                                     ) : (
                                       <>
-                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} days) - Auto-charged at 6pm AEST
+                                        Next: {formatDate(charge.nextBillAt)} ({daysUntilBill} days)
                                       </>
                                     )}
                                   </div>

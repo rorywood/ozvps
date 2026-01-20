@@ -215,7 +215,7 @@ export default function Billing() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500 dark:text-gray-400">Selected:</span>
                 <span className="font-medium text-gray-900 dark:text-white">
-                  Server {selectedRecord.billing.virtfusionServerId}
+                  {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
                 </span>
                 <span className={`px-2 py-0.5 text-xs rounded ${getStatusColor(selectedRecord.billing.status)}`}>
                   {selectedRecord.billing.status}
@@ -300,7 +300,6 @@ export default function Billing() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Server</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Plan</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Price</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Next Bill</th>
@@ -318,16 +317,27 @@ export default function Billing() {
                     }`}
                   >
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900 dark:text-white">{record.billing.virtfusionServerId}</span>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {record.serverName || `Server #${record.billing.virtfusionServerId}`}
+                        </p>
+                        {record.serverUuid && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[180px]" title={record.serverUuid}>
+                            {record.serverUuid}
+                          </p>
+                        )}
+                        {!record.serverUuid && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            ID: {record.billing.virtfusionServerId}
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{record.user?.name || "Unknown"}</p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{record.user?.email || "N/A"}</p>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-900 dark:text-white">{record.plan?.name || "N/A"}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-gray-900 dark:text-white">
@@ -351,7 +361,7 @@ export default function Billing() {
                 ))}
                 {(!records?.records || records.records.length === 0) && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No billing records found
                     </td>
                   </tr>

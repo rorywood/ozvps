@@ -1532,11 +1532,18 @@ export default function ServerDetail() {
                           server.billing.status === 'unpaid' ? 'text-red-400' :
                           isDueToday ? 'text-amber-500' : 'text-foreground'
                         }`}>
-                          {isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : nextBillDate.toLocaleDateString('en-AU', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
+                          {isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : (
+                            <>
+                              {nextBillDate.toLocaleDateString('en-AU', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                              <span className="text-muted-foreground font-normal ml-1">
+                                ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                       {isDueToday && server.billing.status !== 'unpaid' && (

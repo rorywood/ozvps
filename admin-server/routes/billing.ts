@@ -40,12 +40,26 @@ export function registerBillingRoutes(router: Router) {
 
       const records = await query;
 
-      // Enrich records with Auth0 user data if local mapping is missing
+      // Enrich records with Auth0 user data and VirtFusion server info
       const enrichedRecords = await Promise.all(
         records.map(async (record) => {
+          let enrichedRecord = { ...record, serverName: undefined as string | undefined, serverUuid: undefined as string | undefined };
+
+          // Try to get server name/UUID from VirtFusion
+          try {
+            const server = await virtfusionClient.getServer(record.billing.virtfusionServerId);
+            if (server) {
+              enrichedRecord.serverName = server.name;
+              enrichedRecord.serverUuid = server.uuid;
+            }
+          } catch (err) {
+            // Server may not exist anymore, use stored UUID if available
+            enrichedRecord.serverUuid = record.billing.virtfusionServerUuid || undefined;
+          }
+
           // If user info is already available from userMappings, use it
           if (record.user?.email) {
-            return record;
+            return enrichedRecord;
           }
 
           // Otherwise, fetch from Auth0
@@ -54,7 +68,7 @@ export function registerBillingRoutes(router: Router) {
               const auth0User = await auth0Client.getUserById(record.billing.auth0UserId);
               if (auth0User) {
                 return {
-                  ...record,
+                  ...enrichedRecord,
                   user: {
                     email: auth0User.email,
                     name: auth0User.name || null,
@@ -66,7 +80,7 @@ export function registerBillingRoutes(router: Router) {
             }
           }
 
-          return record;
+          return enrichedRecord;
         })
       );
 
