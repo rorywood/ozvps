@@ -55,7 +55,6 @@ export default function Health() {
     postgresql: "PostgreSQL",
     redis: "Redis",
     ozvps: "OzVPS App",
-    "ozvps-admin": "Admin Panel",
   };
 
   return (
@@ -95,10 +94,9 @@ export default function Health() {
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Service Controls</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {["postgresql", "redis", "ozvps", "ozvps-admin"].map((service) => {
+              {["postgresql", "redis", "ozvps"].map((service) => {
                 const status = serviceStatus?.services?.[service];
                 const isRunning = status?.running;
-                const isAdminPanel = service === "ozvps-admin";
 
                 return (
                   <div
@@ -126,7 +124,7 @@ export default function Health() {
                             <Play className="h-4 w-4" />
                           </button>
                         )}
-                        {isRunning && !isAdminPanel && (
+                        {isRunning && (
                           <button
                             onClick={() => controlMutation.mutate({ service, action: "stop" })}
                             disabled={controlMutation.isPending}

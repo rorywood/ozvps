@@ -10,9 +10,21 @@ export default function Users() {
   const queryClient = useQueryClient();
 
   // List all users by default
-  const { data: allUsers, isLoading: loadingUsers, error: usersError } = useQuery({
+  const { data: allUsers, isLoading: loadingUsers, error: usersError, refetch: refetchUsers, isFetching } = useQuery({
     queryKey: ["users-list"],
-    queryFn: () => usersApi.list(1, 100),
+    queryFn: async () => {
+      console.log("[Users] Fetching users list...");
+      try {
+        const result = await usersApi.list(1, 100);
+        console.log("[Users] Got result:", result);
+        return result;
+      } catch (err) {
+        console.error("[Users] Error fetching users:", err);
+        throw err;
+      }
+    },
+    retry: 1,
+    staleTime: 0,
   });
 
   // Search only when query is entered
@@ -65,7 +77,17 @@ export default function Users() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Users</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Users</h1>
+        <button
+          onClick={() => refetchUsers()}
+          disabled={isFetching}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+        >
+          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User List Panel */}

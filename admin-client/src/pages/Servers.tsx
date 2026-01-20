@@ -220,6 +220,11 @@ export default function Servers() {
                           <div className="flex items-center gap-2 mb-3">
                             <CreditCard className="h-4 w-4 text-gray-400" />
                             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Billing</span>
+                            {serverDetails.billing.freeServer && (
+                              <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-full">
+                                Free Server
+                              </span>
+                            )}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
@@ -229,7 +234,11 @@ export default function Servers() {
                             <div>
                               <span className="text-gray-500 dark:text-gray-400 block">Monthly</span>
                               <span className="font-medium text-gray-900 dark:text-white">
-                                ${(serverDetails.billing.monthlyPriceCents / 100).toFixed(2)}
+                                {serverDetails.billing.freeServer ? (
+                                  <span className="text-green-400">$0.00 (Free)</span>
+                                ) : (
+                                  `$${(serverDetails.billing.monthlyPriceCents / 100).toFixed(2)}`
+                                )}
                               </span>
                             </div>
                             <div>

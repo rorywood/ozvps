@@ -1,14 +1,33 @@
 import { Request, Response, NextFunction } from "express";
-import crypto from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 
 // CSRF token storage (in-memory, per session)
 const csrfTokens = new Map<string, { token: string; createdAt: number }>();
 const CSRF_TOKEN_EXPIRY = 8 * 60 * 60 * 1000; // 8 hours (match session expiry)
 
 export function generateCsrfToken(sessionId: string): string {
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = randomBytes(32).toString("hex");
   csrfTokens.set(sessionId, { token, createdAt: Date.now() });
   return token;
+}
+
+// Safe string comparison that works with esbuild
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  try {
+    // Try to use native timingSafeEqual
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    // Fallback to constant-time comparison
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+  }
 }
 
 export function validateCsrfToken(sessionId: string, token: string): boolean {
@@ -23,10 +42,7 @@ export function validateCsrfToken(sessionId: string, token: string): boolean {
     return false;
   }
 
-  return crypto.timingSafeEquals(
-    Buffer.from(stored.token),
-    Buffer.from(token)
-  );
+  return safeCompare(stored.token, token);
 }
 
 export function clearCsrfToken(sessionId: string): void {
