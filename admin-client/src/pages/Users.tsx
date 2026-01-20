@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
@@ -7,25 +7,33 @@ import { Search, User, Wallet, Ban, Shield, RefreshCw, Mail, Key, LogOut } from 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [mountDebug, setMountDebug] = useState("initializing");
   const queryClient = useQueryClient();
 
+  // Debug: Track component mount
+  useEffect(() => {
+    console.log("[Users] Component mounted");
+    setMountDebug("mounted");
+    return () => console.log("[Users] Component unmounted");
+  }, []);
+
   // List all users by default
-  const { data: allUsers, isLoading: loadingUsers, error: usersError, refetch: refetchUsers, isFetching } = useQuery({
+  const { data: allUsers, isLoading: loadingUsers, error: usersError, refetch: refetchUsers, isFetching, status, fetchStatus } = useQuery({
     queryKey: ["users-list"],
     queryFn: async () => {
-      console.log("[Users] Fetching users list...");
-      try {
-        const result = await usersApi.list(1, 100);
-        console.log("[Users] Got result:", result);
-        return result;
-      } catch (err) {
-        console.error("[Users] Error fetching users:", err);
-        throw err;
-      }
+      console.log("[Users] queryFn called - fetching users list...");
+      const result = await usersApi.list(1, 100);
+      console.log("[Users] Got result:", result);
+      return result;
     },
     retry: 1,
     staleTime: 0,
   });
+
+  // Debug: Log query state changes
+  useEffect(() => {
+    console.log("[Users] Query state:", { status, fetchStatus, isLoading: loadingUsers, isFetching, hasData: !!allUsers, hasError: !!usersError });
+  }, [status, fetchStatus, loadingUsers, isFetching, allUsers, usersError]);
 
   // Search only when query is entered
   const { data: searchResults, isLoading: searching } = useQuery({
@@ -102,6 +110,11 @@ export default function Users() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500/40 outline-none text-gray-900 dark:text-white placeholder-gray-500"
               />
+            </div>
+
+            {/* Debug info */}
+            <div className="p-2 mb-4 bg-gray-800 rounded-lg text-xs font-mono text-gray-400">
+              Mount: {mountDebug} | Status: {status} | Fetch: {fetchStatus} | Loading: {loadingUsers ? "Y" : "N"} | Data: {allUsers?.users?.length ?? "null"}
             </div>
 
             {usersError && (
