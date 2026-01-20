@@ -1441,7 +1441,11 @@ export default function BillingPage() {
                                       <span className="text-destructive">
                                         Suspended - {formatCurrency(charge.monthlyPriceCents)} required to reactivate
                                       </span>
-                                    ) : daysUntilBill <= 0 ? (
+                                    ) : daysUntilBill < 0 ? (
+                                      <span className="text-red-400 font-medium">
+                                        Overdue ({Math.abs(daysUntilBill)} day{Math.abs(daysUntilBill) !== 1 ? 's' : ''}) - Payment required immediately
+                                      </span>
+                                    ) : daysUntilBill === 0 ? (
                                       <span className="text-amber-500 font-medium">
                                         Due today - Wallet charged at 6pm AEST
                                       </span>

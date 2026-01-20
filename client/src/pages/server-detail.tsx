@@ -1517,23 +1517,24 @@ export default function ServerDetail() {
                   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                   const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
                   const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-                  const isDueToday = daysUntilBill <= 0;
+                  const isOverdue = daysUntilBill < 0;
+                  const isDueToday = daysUntilBill === 0;
                   const isDueTomorrow = daysUntilBill === 1;
 
                   return (
                     <div className="border-t border-border pt-4">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                        {server.billing.status === 'unpaid' ? 'Payment Due' : 'Next Due'}
+                        {server.billing.status === 'unpaid' ? 'Payment Due' : isOverdue ? 'Overdue' : 'Next Due'}
                       </p>
                       <div className="flex items-center gap-2">
-                        {(server.billing.status === 'unpaid' || isDueToday) && (
-                          <AlertCircle className={`h-4 w-4 ${server.billing.status === 'unpaid' ? 'text-red-400' : 'text-amber-500'}`} />
+                        {(server.billing.status === 'unpaid' || isOverdue || isDueToday) && (
+                          <AlertCircle className={`h-4 w-4 ${server.billing.status === 'unpaid' || isOverdue ? 'text-red-400' : 'text-amber-500'}`} />
                         )}
                         <p className={`text-sm font-medium ${
-                          server.billing.status === 'unpaid' ? 'text-red-400' :
+                          server.billing.status === 'unpaid' || isOverdue ? 'text-red-400' :
                           isDueToday ? 'text-amber-500' : 'text-foreground'
                         }`}>
-                          {isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : (
+                          {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : (
                             <>
                               {nextBillDate.toLocaleDateString('en-AU', {
                                 day: 'numeric',
@@ -1547,7 +1548,12 @@ export default function ServerDetail() {
                           )}
                         </p>
                       </div>
-                      {isDueToday && server.billing.status !== 'unpaid' && (
+                      {isOverdue && server.billing.status !== 'unpaid' && (
+                        <p className="text-xs text-red-400/80 mt-1">
+                          Payment required immediately
+                        </p>
+                      )}
+                      {isDueToday && !isOverdue && server.billing.status !== 'unpaid' && (
                         <p className="text-xs text-amber-500/80 mt-1">
                           Wallet charged at 6pm AEST
                         </p>

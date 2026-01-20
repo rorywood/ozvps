@@ -7,15 +7,16 @@ import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
 import { Badge } from "./badge";
 
-// Helper to check if billing is due today or tomorrow
-function getBillingDueStatus(nextBillAt?: string): 'today' | 'tomorrow' | null {
+// Helper to check if billing is due today, tomorrow, or overdue
+function getBillingDueStatus(nextBillAt?: string): 'overdue' | 'today' | 'tomorrow' | null {
   if (!nextBillAt) return null;
   const billDate = new Date(nextBillAt);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
   const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysUntil <= 0) return 'today';
+  if (daysUntil < 0) return 'overdue';
+  if (daysUntil === 0) return 'today';
   if (daysUntil === 1) return 'tomorrow';
   return null;
 }
@@ -127,6 +128,12 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
               <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
                 UNPAID
+              </Badge>
+            )}
+            {billingDue === 'overdue' && billingStatus?.status !== 'unpaid' && billingStatus?.status !== 'suspended' && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                OVERDUE
               </Badge>
             )}
             {billingDue === 'today' && billingStatus?.status !== 'unpaid' && billingStatus?.status !== 'suspended' && (
