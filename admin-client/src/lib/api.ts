@@ -286,6 +286,13 @@ export const healthApi = {
     api.post<{ success: boolean; message: string }>(`/services/${service}/${action}`),
 };
 
+// Settings API
+export const settingsApi = {
+  getRegistration: () => api.get<{ enabled: boolean }>("/settings/registration"),
+  updateRegistration: (enabled: boolean) =>
+    api.put<{ enabled: boolean }>("/settings/registration", { enabled }),
+};
+
 // VirtFusion API
 export const virtfusionApi = {
   getHypervisors: () => api.get<{ hypervisors: any[] }>("/vf/hypervisors"),

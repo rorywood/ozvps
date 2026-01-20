@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
-import { healthApi, billingApi, ticketsApi } from "../lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { healthApi, billingApi, ticketsApi, settingsApi } from "../lib/api";
+import { toast } from "sonner";
 import {
   Activity,
   Server,
@@ -9,6 +10,8 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  UserPlus,
+  Settings,
 } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
@@ -76,6 +79,8 @@ function StatCard({
 }
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
+
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ["health"],
     queryFn: healthApi.get,
@@ -92,6 +97,20 @@ export default function Dashboard() {
     queryKey: ["ticket-counts"],
     queryFn: ticketsApi.getCounts,
     refetchInterval: 60000,
+  });
+
+  const { data: registrationSetting } = useQuery({
+    queryKey: ["registration-setting"],
+    queryFn: settingsApi.getRegistration,
+  });
+
+  const toggleRegistrationMutation = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.updateRegistration(enabled),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["registration-setting"] });
+      toast.success(`Registration ${data.enabled ? "enabled" : "disabled"}`);
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to update setting"),
   });
 
   const formatCurrency = (cents: number) => {
@@ -136,6 +155,40 @@ export default function Dashboard() {
           icon={Activity}
           color="purple"
         />
+      </div>
+
+      {/* Quick Settings */}
+      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Settings className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Quick Settings</h2>
+        </div>
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${registrationSetting?.enabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+              <UserPlus className={`h-5 w-5 ${registrationSetting?.enabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">User Registration</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {registrationSetting?.enabled ? 'New users can create accounts' : 'Registration is disabled'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => toggleRegistrationMutation.mutate(!registrationSetting?.enabled)}
+            disabled={toggleRegistrationMutation.isPending}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+              registrationSetting?.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+            } ${toggleRegistrationMutation.isPending ? 'opacity-50' : ''}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                registrationSetting?.enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Service Health */}
