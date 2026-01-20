@@ -103,20 +103,18 @@ export function registerUsersRoutes(router: Router) {
     }
   });
 
-  // Get user details
+  // Get user details (from Auth0 + local data)
   router.get("/users/:auth0UserId", async (req: Request, res: Response) => {
     try {
       const { auth0UserId } = req.params;
 
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Get user from Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
+      // Get local data
       const [wallet] = await db
         .select()
         .from(wallets)
@@ -140,7 +138,12 @@ export function registerUsersRoutes(router: Router) {
 
       res.json({
         user: {
-          ...user,
+          auth0UserId: auth0User.user_id,
+          email: auth0User.email,
+          name: auth0User.name || null,
+          emailVerified: auth0User.email_verified,
+          virtFusionUserId: auth0User.app_metadata?.virtfusion_user_id || null,
+          isAdmin: auth0User.app_metadata?.is_admin || false,
           wallet: wallet || null,
           blocked: flags?.blocked || false,
           blockedReason: flags?.blockedReason || null,
