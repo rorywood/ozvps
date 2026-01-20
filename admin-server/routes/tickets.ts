@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
 import { tickets, ticketMessages, userMappings, adminTicketUpdateSchema, ticketMessageSchema } from "../../shared/schema";
 import { eq, desc, and, or, sql, isNull, ne } from "drizzle-orm";
+import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerTicketsRoutes(router: Router) {
   // Get ticket counts by status
@@ -169,10 +170,14 @@ export function registerTicketsRoutes(router: Router) {
         })
         .where(eq(tickets.id, id));
 
+      // Audit log
+      await auditSuccess(req, "ticket.message", "ticket", String(id));
+
       console.log(`[admin-tickets] Message added to ticket ${id} by ${session.email}`);
 
       res.json({ message: newMessage });
     } catch (error: any) {
+      await auditFailure(req, "ticket.message", "ticket", error.message, req.params.id);
       console.log(`[admin-tickets] Add message error: ${error.message}`);
       res.status(500).json({ error: "Failed to add message" });
     }
@@ -217,10 +222,14 @@ export function registerTicketsRoutes(router: Router) {
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      // Audit log
+      await auditSuccess(req, "ticket.update", "ticket", String(id), undefined, parsed.data);
+
       console.log(`[admin-tickets] Ticket ${id} updated by ${session.email}: ${JSON.stringify(parsed.data)}`);
 
       res.json({ ticket: updated });
     } catch (error: any) {
+      await auditFailure(req, "ticket.update", "ticket", error.message, req.params.id);
       console.log(`[admin-tickets] Update ticket error: ${error.message}`);
       res.status(500).json({ error: "Failed to update ticket" });
     }
@@ -250,10 +259,14 @@ export function registerTicketsRoutes(router: Router) {
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      // Audit log
+      await auditSuccess(req, "ticket.close", "ticket", String(id));
+
       console.log(`[admin-tickets] Ticket ${id} closed by ${session.email}`);
 
       res.json({ ticket: updated });
     } catch (error: any) {
+      await auditFailure(req, "ticket.close", "ticket", error.message, req.params.id);
       console.log(`[admin-tickets] Close ticket error: ${error.message}`);
       res.status(500).json({ error: "Failed to close ticket" });
     }
@@ -284,10 +297,14 @@ export function registerTicketsRoutes(router: Router) {
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      // Audit log
+      await auditSuccess(req, "ticket.reopen", "ticket", String(id));
+
       console.log(`[admin-tickets] Ticket ${id} reopened by ${session.email}`);
 
       res.json({ ticket: updated });
     } catch (error: any) {
+      await auditFailure(req, "ticket.reopen", "ticket", error.message, req.params.id);
       console.log(`[admin-tickets] Reopen ticket error: ${error.message}`);
       res.status(500).json({ error: "Failed to reopen ticket" });
     }
@@ -318,10 +335,14 @@ export function registerTicketsRoutes(router: Router) {
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      // Audit log
+      await auditSuccess(req, "ticket.delete", "ticket", String(id));
+
       console.log(`[admin-tickets] Ticket ${id} deleted by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "ticket.delete", "ticket", error.message, req.params.id);
       console.log(`[admin-tickets] Delete ticket error: ${error.message}`);
       res.status(500).json({ error: "Failed to delete ticket" });
     }

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { dbStorage } from "../../server/db-storage";
+import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerSettingsRoutes(router: Router): void {
 
@@ -29,12 +30,16 @@ export function registerSettingsRoutes(router: Router): void {
 
       await dbStorage.upsertSecuritySetting("registration_enabled", null, enabled);
 
+      // Audit log
+      await auditSuccess(req, "settings.registration", "settings", "registration_enabled", undefined, { enabled });
+
       console.log(
         `[admin-settings] Registration ${enabled ? "enabled" : "disabled"} by ${session.email}`
       );
 
       res.json({ enabled });
     } catch (error: any) {
+      await auditFailure(req, "settings.registration", "settings", error.message);
       console.log(`[admin-settings] Error updating registration setting: ${error.message}`);
       res.status(500).json({ error: "Failed to update registration setting" });
     }

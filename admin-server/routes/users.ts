@@ -5,6 +5,7 @@ import { eq, desc, like, or, sql } from "drizzle-orm";
 import { dbStorage } from "../../server/storage";
 import { auth0Client } from "../../server/auth0";
 import { virtfusionClient } from "../../server/virtfusion";
+import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerUsersRoutes(router: Router) {
   // List all users from Auth0 (paginated)
@@ -232,10 +233,14 @@ export function registerUsersRoutes(router: Router) {
           .where(eq(sessions.auth0UserId, auth0UserId));
       }
 
+      // Audit log
+      await auditSuccess(req, blocked ? "user.block" : "user.unblock", "user", auth0UserId, user.email, { blocked, reason });
+
       console.log(`[admin-users] User ${user.email} ${blocked ? "blocked" : "unblocked"} by ${session.email}`);
 
       res.json({ success: true, blocked });
     } catch (error: any) {
+      await auditFailure(req, "user.block", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Block user error: ${error.message}`);
       res.status(500).json({ error: "Failed to update user" });
     }
@@ -281,10 +286,14 @@ export function registerUsersRoutes(router: Router) {
         });
       }
 
+      // Audit log
+      await auditSuccess(req, "user.verify-email", "user", auth0UserId, user.email);
+
       console.log(`[admin-users] Email verified for ${user.email} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "user.verify-email", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Verify email error: ${error.message}`);
       res.status(500).json({ error: "Failed to verify email" });
     }
@@ -349,10 +358,14 @@ export function registerUsersRoutes(router: Router) {
         .set({ balanceCents: newBalance, updatedAt: new Date() })
         .where(eq(wallets.auth0UserId, auth0UserId));
 
+      // Audit log
+      await auditSuccess(req, "user.wallet-adjust", "user", auth0UserId, user.email, { amountCents, description, reason, newBalance });
+
       console.log(`[admin-users] Wallet adjusted for ${user.email}: ${amountCents} cents by ${session.email}`);
 
       res.json({ success: true, newBalance });
     } catch (error: any) {
+      await auditFailure(req, "user.wallet-adjust", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Wallet adjust error: ${error.message}`);
       res.status(500).json({ error: "Failed to adjust wallet" });
     }
@@ -398,10 +411,14 @@ export function registerUsersRoutes(router: Router) {
         .set({ virtFusionUserId })
         .where(eq(wallets.auth0UserId, auth0UserId));
 
+      // Audit log
+      await auditSuccess(req, "user.link-virtfusion", "user", auth0UserId, user.email, { virtFusionUserId });
+
       console.log(`[admin-users] User ${user.email} linked to VirtFusion user ${virtFusionUserId} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "user.link-virtfusion", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Link VirtFusion error: ${error.message}`);
       res.status(500).json({ error: "Failed to link VirtFusion user" });
     }
@@ -418,10 +435,14 @@ export function registerUsersRoutes(router: Router) {
         .set({ revokedAt: new Date(), revokedReason: "ADMIN_REVOKED" })
         .where(eq(sessions.auth0UserId, auth0UserId));
 
+      // Audit log
+      await auditSuccess(req, "user.revoke-sessions", "user", auth0UserId);
+
       console.log(`[admin-users] Sessions revoked for ${auth0UserId} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "user.revoke-sessions", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Revoke sessions error: ${error.message}`);
       res.status(500).json({ error: "Failed to revoke sessions" });
     }

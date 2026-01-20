@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { verifySync as otplibVerifySync } from "otplib";
 import { isEncrypted, decryptSecret } from "../../server/crypto";
 import argon2 from "argon2";
+import { createHmac, timingSafeEqual } from "crypto";
 import {
   isUserAdmin,
   createAdminSession,
@@ -13,6 +14,60 @@ import {
 } from "../middleware/admin-auth";
 import { generateCsrfToken, clearCsrfToken } from "../middleware/csrf";
 import { getClientIp } from "../middleware/ip-whitelist";
+
+// HMAC secret for signing pending login tokens
+// Use SESSION_SECRET from env, or a fallback for development
+const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET || process.env.AUTH0_CLIENT_SECRET || "admin-panel-pending-token-secret";
+
+/**
+ * Create a signed pending login token with HMAC
+ */
+function createPendingLoginToken(data: { auth0UserId: string; email: string; name: string | null; exp: number }): string {
+  const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
+  const signature = createHmac("sha256", PENDING_TOKEN_SECRET)
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+/**
+ * Verify and decode a pending login token
+ */
+function verifyPendingLoginToken(token: string): { auth0UserId: string; email: string; name: string | null; exp: number } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) {
+      return null;
+    }
+
+    const [payload, signature] = parts;
+
+    // Verify signature
+    const expectedSignature = createHmac("sha256", PENDING_TOKEN_SECRET)
+      .update(payload)
+      .digest("base64url");
+
+    if (signature.length !== expectedSignature.length) {
+      return null;
+    }
+
+    if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+      return null;
+    }
+
+    // Decode payload
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString());
+
+    // Check expiry
+    if (Date.now() > data.exp) {
+      return null;
+    }
+
+    return data;
+  } catch {
+    return null;
+  }
+}
 
 // Verify password using Auth0 Resource Owner Password Grant
 // This requires the Auth0 application to have "Password" grant type enabled
@@ -85,7 +140,7 @@ export function registerAuthRoutes(app: Express) {
     }
 
     // Generate CSRF token for the session
-    const csrfToken = generateCsrfToken(sessionId);
+    const csrfToken = await generateCsrfToken(sessionId);
 
     return res.json({
       authenticated: true,
@@ -138,14 +193,14 @@ export function registerAuthRoutes(app: Express) {
       });
     }
 
-    // 2FA is enabled, return a temporary token for the second step
-    // Store in memory with short expiry (5 minutes)
-    const pendingLoginToken = Buffer.from(JSON.stringify({
+    // 2FA is enabled, return a signed temporary token for the second step
+    // Token is HMAC-signed and expires in 5 minutes
+    const pendingLoginToken = createPendingLoginToken({
       auth0UserId,
       email,
       name: userName,
       exp: Date.now() + 5 * 60 * 1000,
-    })).toString("base64");
+    });
 
     return res.json({
       requires2FA: true,
@@ -162,15 +217,10 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: "Token and 2FA code required" });
       }
 
-      // Decode and validate the pending login token
-      let tokenData: { auth0UserId: string; email: string; name: string | null; exp: number };
-      try {
-        tokenData = JSON.parse(Buffer.from(pendingLoginToken, "base64").toString());
-        if (Date.now() > tokenData.exp) {
-          return res.status(401).json({ error: "Login session expired. Please start over." });
-        }
-      } catch {
-        return res.status(400).json({ error: "Invalid token" });
+      // Verify and decode the pending login token (HMAC-signed)
+      const tokenData = verifyPendingLoginToken(pendingLoginToken);
+      if (!tokenData) {
+        return res.status(401).json({ error: "Invalid or expired login token. Please start over." });
       }
 
       console.log(`[admin-auth] Verifying 2FA for ${tokenData.email} (${tokenData.auth0UserId})`);
@@ -259,7 +309,7 @@ export function registerAuthRoutes(app: Express) {
       );
 
       // Generate CSRF token
-      const csrfToken = generateCsrfToken(sessionId);
+      const csrfToken = await generateCsrfToken(sessionId);
 
       // Set session cookie
       res.cookie("admin_session", sessionId, {
@@ -292,7 +342,7 @@ export function registerAuthRoutes(app: Express) {
 
     if (sessionId) {
       await revokeAdminSession(sessionId, "LOGOUT");
-      clearCsrfToken(sessionId);
+      await clearCsrfToken(sessionId);
     }
 
     res.clearCookie("admin_session", {

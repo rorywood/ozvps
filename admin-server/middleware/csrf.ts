@@ -1,15 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { randomBytes, timingSafeEqual } from "crypto";
+import { redisClient } from "../../server/redis";
 
-// CSRF token storage (in-memory, per session)
-const csrfTokens = new Map<string, { token: string; createdAt: number }>();
-const CSRF_TOKEN_EXPIRY = 8 * 60 * 60 * 1000; // 8 hours (match session expiry)
+const CSRF_TOKEN_EXPIRY = 8 * 60 * 60; // 8 hours in seconds (match session expiry)
+const CSRF_TOKEN_PREFIX = "admin:csrf:";
 
-export function generateCsrfToken(sessionId: string): string {
-  const token = randomBytes(32).toString("hex");
-  csrfTokens.set(sessionId, { token, createdAt: Date.now() });
-  return token;
-}
+// Fallback in-memory storage (used when Redis is unavailable)
+const memoryFallback = new Map<string, { token: string; createdAt: number }>();
 
 // Safe string comparison that works with esbuild
 function safeCompare(a: string, b: string): boolean {
@@ -30,31 +27,79 @@ function safeCompare(a: string, b: string): boolean {
   }
 }
 
-export function validateCsrfToken(sessionId: string, token: string): boolean {
-  const stored = csrfTokens.get(sessionId);
-  if (!stored) {
+function isRedisAvailable(): boolean {
+  return redisClient !== null && redisClient.isReady;
+}
+
+export async function generateCsrfToken(sessionId: string): Promise<string> {
+  const token = randomBytes(32).toString("hex");
+
+  if (isRedisAvailable()) {
+    try {
+      await redisClient!.set(`${CSRF_TOKEN_PREFIX}${sessionId}`, token, {
+        EX: CSRF_TOKEN_EXPIRY,
+      });
+    } catch (err) {
+      console.error("[csrf] Redis error, falling back to memory:", (err as Error).message);
+      memoryFallback.set(sessionId, { token, createdAt: Date.now() });
+    }
+  } else {
+    memoryFallback.set(sessionId, { token, createdAt: Date.now() });
+  }
+
+  return token;
+}
+
+export async function validateCsrfToken(sessionId: string, token: string): Promise<boolean> {
+  let storedToken: string | null = null;
+
+  if (isRedisAvailable()) {
+    try {
+      storedToken = await redisClient!.get(`${CSRF_TOKEN_PREFIX}${sessionId}`);
+    } catch (err) {
+      console.error("[csrf] Redis error, checking memory fallback:", (err as Error).message);
+      // Fall through to check memory
+    }
+  }
+
+  // Check memory fallback if Redis didn't have it
+  if (!storedToken) {
+    const stored = memoryFallback.get(sessionId);
+    if (stored) {
+      // Check expiry for memory fallback
+      if (Date.now() - stored.createdAt > CSRF_TOKEN_EXPIRY * 1000) {
+        memoryFallback.delete(sessionId);
+        return false;
+      }
+      storedToken = stored.token;
+    }
+  }
+
+  if (!storedToken) {
     return false;
   }
 
-  // Check expiry
-  if (Date.now() - stored.createdAt > CSRF_TOKEN_EXPIRY) {
-    csrfTokens.delete(sessionId);
-    return false;
+  return safeCompare(storedToken, token);
+}
+
+export async function clearCsrfToken(sessionId: string): Promise<void> {
+  if (isRedisAvailable()) {
+    try {
+      await redisClient!.del(`${CSRF_TOKEN_PREFIX}${sessionId}`);
+    } catch (err) {
+      console.error("[csrf] Redis error clearing token:", (err as Error).message);
+    }
   }
-
-  return safeCompare(stored.token, token);
+  // Always try to clear from memory too
+  memoryFallback.delete(sessionId);
 }
 
-export function clearCsrfToken(sessionId: string): void {
-  csrfTokens.delete(sessionId);
-}
-
-// Clean up expired tokens periodically
+// Clean up expired tokens from memory fallback periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [sessionId, data] of csrfTokens.entries()) {
-    if (now - data.createdAt > CSRF_TOKEN_EXPIRY) {
-      csrfTokens.delete(sessionId);
+  for (const [sessionId, data] of memoryFallback.entries()) {
+    if (now - data.createdAt > CSRF_TOKEN_EXPIRY * 1000) {
+      memoryFallback.delete(sessionId);
     }
   }
 }, 60 * 60 * 1000); // Run every hour
@@ -76,9 +121,16 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction) 
     return res.status(403).json({ error: "CSRF token required" });
   }
 
-  if (!validateCsrfToken(sessionId, csrfToken)) {
-    return res.status(403).json({ error: "Invalid CSRF token" });
-  }
-
-  next();
+  // Async validation
+  validateCsrfToken(sessionId, csrfToken)
+    .then((valid) => {
+      if (!valid) {
+        return res.status(403).json({ error: "Invalid CSRF token" });
+      }
+      next();
+    })
+    .catch((err) => {
+      console.error("[csrf] Validation error:", err.message);
+      res.status(500).json({ error: "CSRF validation failed" });
+    });
 }

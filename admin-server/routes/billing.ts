@@ -5,6 +5,7 @@ import { eq, desc, and, gte, lte, sql, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
 import { runBillingJob } from "../../server/billing";
 import { auth0Client } from "../../server/auth0";
+import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerBillingRoutes(router: Router) {
   // List all billing records
@@ -194,10 +195,14 @@ export function registerBillingRoutes(router: Router) {
         return res.status(404).json({ error: "Billing record not found" });
       }
 
+      // Audit log
+      await auditSuccess(req, "billing.update", "billing", String(id), undefined, updateData);
+
       console.log(`[admin-billing] Billing record ${id} updated by ${session.email}: ${JSON.stringify(updateData)}`);
 
       res.json({ record: updated });
     } catch (error: any) {
+      await auditFailure(req, "billing.update", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Update record error: ${error.message}`);
       res.status(500).json({ error: "Failed to update billing record" });
     }
@@ -240,10 +245,14 @@ export function registerBillingRoutes(router: Router) {
       // Unsuspend in VirtFusion (this also boots the server automatically)
       await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
 
+      // Audit log
+      await auditSuccess(req, "billing.unsuspend", "billing", String(id), billing.virtfusionServerId, { nextBillAt });
+
       console.log(`[admin-billing] Server ${billing.virtfusionServerId} unsuspended (billing) by ${session.email}`);
 
       res.json({ success: true, nextBillAt });
     } catch (error: any) {
+      await auditFailure(req, "billing.unsuspend", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Unsuspend error: ${error.message}`);
       res.status(500).json({ error: "Failed to unsuspend server" });
     }
@@ -273,10 +282,14 @@ export function registerBillingRoutes(router: Router) {
       // Delete the billing record
       await db.delete(serverBilling).where(eq(serverBilling.id, id));
 
+      // Audit log
+      await auditSuccess(req, "billing.delete", "billing", String(id), billing.virtfusionServerId);
+
       console.log(`[admin-billing] Billing record ${id} (server ${billing.virtfusionServerId}) deleted by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "billing.delete", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Delete record error: ${error.message}`);
       res.status(500).json({ error: "Failed to delete billing record" });
     }
@@ -311,6 +324,9 @@ export function registerBillingRoutes(router: Router) {
         }
       }
 
+      // Audit log
+      await auditSuccess(req, "billing.cleanup-orphaned", "billing", undefined, undefined, { cleaned, total: allBillingRecords.length });
+
       res.json({
         success: true,
         cleaned,
@@ -318,6 +334,7 @@ export function registerBillingRoutes(router: Router) {
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error: any) {
+      await auditFailure(req, "billing.cleanup-orphaned", "billing", error.message);
       console.log(`[admin-billing] Cleanup error: ${error.message}`);
       res.status(500).json({ error: "Failed to cleanup orphaned records" });
     }
@@ -335,8 +352,12 @@ export function registerBillingRoutes(router: Router) {
         .then(() => console.log(`[admin-billing] Manual billing job completed`))
         .catch((err) => console.log(`[admin-billing] Manual billing job error: ${err.message}`));
 
+      // Audit log
+      await auditSuccess(req, "billing.run-job", "billing");
+
       res.json({ success: true, message: "Billing job started" });
     } catch (error: any) {
+      await auditFailure(req, "billing.run-job", "billing", error.message);
       console.log(`[admin-billing] Run job error: ${error.message}`);
       res.status(500).json({ error: "Failed to start billing job" });
     }

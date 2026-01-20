@@ -3,6 +3,7 @@ import { db } from "../../server/db";
 import { serverBilling, serverCancellations, userMappings } from "../../shared/schema";
 import { eq, desc, and, like, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
+import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerServersRoutes(router: Router) {
   // List all servers (from VirtFusion)
@@ -263,10 +264,14 @@ export function registerServersRoutes(router: Router) {
       // Suspend in VirtFusion
       await virtfusionClient.suspendServer(String(serverId));
 
+      // Audit log
+      await auditSuccess(req, "server.admin-suspend", "server", String(serverId), undefined, { reason });
+
       console.log(`[admin-servers] Server ${serverId} admin-suspended by ${session.email}: ${reason}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "server.admin-suspend", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Admin suspend error: ${error.message}`);
       res.status(500).json({ error: "Failed to suspend server" });
     }
@@ -297,10 +302,14 @@ export function registerServersRoutes(router: Router) {
       // Unsuspend in VirtFusion (this also boots the server automatically)
       await virtfusionClient.unsuspendServer(String(serverId));
 
+      // Audit log
+      await auditSuccess(req, "server.admin-unsuspend", "server", String(serverId));
+
       console.log(`[admin-servers] Server ${serverId} admin-unsuspended by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "server.admin-unsuspend", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Admin unsuspend error: ${error.message}`);
       res.status(500).json({ error: "Failed to unsuspend server" });
     }
@@ -341,10 +350,14 @@ export function registerServersRoutes(router: Router) {
           )
         );
 
+      // Audit log
+      await auditSuccess(req, "server.delete", "server", String(serverId), undefined, { reason });
+
       console.log(`[admin-servers] Server ${serverId} deleted by ${session.email}: ${reason || "No reason"}`);
 
       res.json({ success: true });
     } catch (error: any) {
+      await auditFailure(req, "server.delete", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Delete error: ${error.message}`);
       res.status(500).json({ error: "Failed to delete server" });
     }
@@ -384,10 +397,17 @@ export function registerServersRoutes(router: Router) {
         .set({ auth0UserId: newAuth0UserId, updatedAt: new Date() })
         .where(eq(serverBilling.virtfusionServerId, String(serverId)));
 
+      // Audit log
+      await auditSuccess(req, "server.transfer", "server", String(serverId), undefined, {
+        newOwnerEmail: newOwner.email,
+        newAuth0UserId,
+      });
+
       console.log(`[admin-servers] Server ${serverId} transferred to ${newOwner.email} by ${session.email}`);
 
       res.json({ success: true, newOwner: { email: newOwner.email, name: newOwner.name } });
     } catch (error: any) {
+      await auditFailure(req, "server.transfer", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Transfer error: ${error.message}`);
       res.status(500).json({ error: "Failed to transfer server" });
     }
