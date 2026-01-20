@@ -277,7 +277,7 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
-  // Admin unsuspend
+  // Admin unsuspend (works for any suspension - admin or VirtFusion direct)
   router.post("/servers/:serverId/admin-unsuspend", async (req: Request, res: Response) => {
     try {
       const serverId = parseInt(req.params.serverId, 10);
@@ -287,7 +287,10 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Invalid server ID" });
       }
 
-      // Update billing record - clear adminSuspended and restore status to active
+      // Unsuspend in VirtFusion first (this also boots the server automatically)
+      await virtfusionClient.unsuspendServer(String(serverId));
+
+      // Update billing record if it exists - clear adminSuspended and restore status to active
       await db
         .update(serverBilling)
         .set({
@@ -299,18 +302,15 @@ export function registerServersRoutes(router: Router) {
         })
         .where(eq(serverBilling.virtfusionServerId, String(serverId)));
 
-      // Unsuspend in VirtFusion (this also boots the server automatically)
-      await virtfusionClient.unsuspendServer(String(serverId));
-
       // Audit log
       await auditSuccess(req, "server.admin-unsuspend", "server", String(serverId));
 
-      console.log(`[admin-servers] Server ${serverId} admin-unsuspended by ${session.email}`);
+      console.log(`[admin-servers] Server ${serverId} unsuspended by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
       await auditFailure(req, "server.admin-unsuspend", "server", error.message, req.params.serverId);
-      console.log(`[admin-servers] Admin unsuspend error: ${error.message}`);
+      console.log(`[admin-servers] Unsuspend error: ${error.message}`);
       res.status(500).json({ error: "Failed to unsuspend server" });
     }
   });

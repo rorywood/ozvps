@@ -194,13 +194,22 @@ export default function Servers() {
                   </div>
                 ) : serverDetails && (
                   <div className="space-y-6">
-                    {/* Admin Suspension Warning */}
+                    {/* Suspension Warning */}
                     {serverDetails.billing?.adminSuspended && (
                       <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
                         <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
                         <div>
                           <p className="font-medium text-red-400">Admin Suspended</p>
                           <p className="text-sm text-red-400/80">{serverDetails.billing.adminSuspendedReason}</p>
+                        </div>
+                      </div>
+                    )}
+                    {serverDetails.server?.suspended && !serverDetails.billing?.adminSuspended && (
+                      <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-orange-400">Suspended in VirtFusion</p>
+                          <p className="text-sm text-orange-400/80">This server was suspended directly in VirtFusion (not via admin panel)</p>
                         </div>
                       </div>
                     )}
@@ -425,7 +434,7 @@ export default function Servers() {
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                       <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Admin Actions</h3>
                       <div className="flex flex-wrap gap-2">
-                        {serverDetails.billing?.adminSuspended ? (
+                        {(serverDetails.billing?.adminSuspended || serverDetails.server?.suspended) ? (
                           <button
                             onClick={() => unsuspendMutation.mutate(selectedServer.id)}
                             disabled={unsuspendMutation.isPending}
