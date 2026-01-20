@@ -1417,11 +1417,9 @@ export default function ServerDetail() {
                 <div className="border-t border-border pt-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Location</p>
                   <div className="flex items-center gap-2">
-                    {server.location?.country === 'Australia' && (
-                      <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
-                    )}
+                    <img src={flagAU} alt="AU" className="h-4 w-6 object-cover rounded" />
                     <span className="text-sm text-foreground">
-                      {server.location?.name || server.location?.city || 'Unknown'}{server.location?.country ? `, ${server.location.country}` : ''}
+                      {server.location?.name || server.location?.city || 'Brisbane'}
                     </span>
                   </div>
                 </div>
@@ -1515,7 +1513,10 @@ export default function ServerDetail() {
                 ) : server.billing?.nextBillAt && (() => {
                   const nextBillDate = new Date(server.billing.nextBillAt);
                   const now = new Date();
-                  const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  // Normalize to start of day in local timezone for accurate day count
+                  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
+                  const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
                   const isDueToday = daysUntilBill <= 0;
                   const isDueTomorrow = daysUntilBill === 1;
 

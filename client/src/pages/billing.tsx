@@ -1377,9 +1377,13 @@ export default function BillingPage() {
                       {upcomingChargesData.upcoming.map((charge, index) => {
                           const nextBillDate = new Date(charge.nextBillAt);
                           const now = new Date();
-                          const daysUntilBill = Math.ceil((nextBillDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                          // Normalize to start of day in local timezone for accurate day count
+                          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
+                          const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
                           const suspendDate = charge.suspendAt ? new Date(charge.suspendAt) : null;
-                          const daysUntilSuspension = suspendDate ? Math.ceil((suspendDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                          const suspendDateStart = suspendDate ? new Date(suspendDate.getFullYear(), suspendDate.getMonth(), suspendDate.getDate()) : null;
+                          const daysUntilSuspension = suspendDateStart ? Math.round((suspendDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
                           return (
                             <Link

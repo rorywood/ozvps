@@ -133,7 +133,7 @@ export default function Servers() {
                           {server.name || `Server ${server.id}`}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                          {server.primaryIpAddress}
+                          {server.primaryIp}
                         </p>
                       </div>
                     </div>
@@ -168,7 +168,7 @@ export default function Servers() {
                         {selectedServer.name || `Server ${selectedServer.id}`}
                       </h2>
                       <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                        {selectedServer.primaryIpAddress}
+                        {selectedServer.primaryIp}
                       </p>
                     </div>
                   </div>
@@ -215,7 +215,7 @@ export default function Servers() {
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">IP Address</span>
-                            <span className="font-mono text-gray-900 dark:text-white">{serverDetails.server.primaryIpAddress}</span>
+                            <span className="font-mono text-gray-900 dark:text-white">{serverDetails.server.primaryIp}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">Hostname</span>

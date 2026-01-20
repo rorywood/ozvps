@@ -8,6 +8,10 @@ export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDueDateModal, setShowDueDateModal] = useState(false);
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [newDueDate, setNewDueDate] = useState("");
+  const [suspendReason, setSuspendReason] = useState("Non-payment of invoice");
   const queryClient = useQueryClient();
 
   const { data: records, isLoading } = useQuery({
@@ -106,29 +110,34 @@ export default function Billing() {
     });
   };
 
-  const handleChangeDueDate = () => {
+  const handleOpenDueDateModal = () => {
     if (!selectedRecord) return;
-    const newDate = prompt(
-      "Enter new due date (YYYY-MM-DD):",
-      selectedRecord.billing.nextBillAt?.split("T")[0] || ""
-    );
-    if (newDate) {
-      updateRecordMutation.mutate({
-        id: selectedRecord.billing.id,
-        data: { nextBillAt: new Date(newDate).toISOString() },
-      });
-    }
+    setNewDueDate(selectedRecord.billing.nextBillAt?.split("T")[0] || "");
+    setShowDueDateModal(true);
   };
 
-  const handleSuspendBilling = () => {
+  const handleSaveDueDate = () => {
+    if (!selectedRecord || !newDueDate) return;
+    updateRecordMutation.mutate({
+      id: selectedRecord.billing.id,
+      data: { nextBillAt: new Date(newDueDate).toISOString() },
+    });
+    setShowDueDateModal(false);
+  };
+
+  const handleOpenSuspendModal = () => {
     if (!selectedRecord) return;
-    const reason = prompt("Enter suspension reason:", "Non-payment of invoice");
-    if (reason) {
-      suspendMutation.mutate({
-        serverId: parseInt(selectedRecord.billing.virtfusionServerId, 10),
-        reason,
-      });
-    }
+    setSuspendReason("Non-payment of invoice");
+    setShowSuspendModal(true);
+  };
+
+  const handleConfirmSuspend = () => {
+    if (!selectedRecord || !suspendReason) return;
+    suspendMutation.mutate({
+      serverId: parseInt(selectedRecord.billing.virtfusionServerId, 10),
+      reason: suspendReason,
+    });
+    setShowSuspendModal(false);
   };
 
   return (
@@ -232,7 +241,7 @@ export default function Billing() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={handleChangeDueDate}
+                  onClick={handleOpenDueDateModal}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-500/20 transition-colors"
                 >
                   <Calendar className="h-4 w-4" />
@@ -261,7 +270,7 @@ export default function Billing() {
                   </button>
                 ) : selectedRecord.billing.status !== "cancelled" && (
                   <button
-                    onClick={handleSuspendBilling}
+                    onClick={handleOpenSuspendModal}
                     disabled={suspendMutation.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
                   >
@@ -422,6 +431,93 @@ export default function Billing() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Due Date Modal */}
+      {showDueDateModal && selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Change Due Date</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Set a new billing due date for {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Due Date</label>
+                <input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowDueDateModal(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDueDate}
+                disabled={!newDueDate || updateRecordMutation.isPending}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {updateRecordMutation.isPending ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend Server Modal */}
+      {showSuspendModal && selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/10 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Suspend Server</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              This will suspend the server and prevent it from running. The user will see the suspension reason.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Suspension Reason</label>
+                <input
+                  type="text"
+                  value={suspendReason}
+                  onChange={(e) => setSuspendReason(e.target.value)}
+                  placeholder="Enter reason for suspension"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowSuspendModal(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSuspend}
+                disabled={!suspendReason || suspendMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {suspendMutation.isPending ? "Suspending..." : "Suspend Server"}
               </button>
             </div>
           </div>

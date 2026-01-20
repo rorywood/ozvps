@@ -430,7 +430,7 @@ export function registerBillingRoutes(router: Router) {
         .from(serverBilling)
         .where(eq(serverBilling.freeServer, true));
 
-      // Get servers due for billing in next 24 hours
+      // Get servers due for billing in next 24 hours (excluding free servers)
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
 
@@ -442,6 +442,7 @@ export function registerBillingRoutes(router: Router) {
         .where(
           and(
             eq(serverBilling.status, "active"),
+            eq(serverBilling.freeServer, false),
             lte(serverBilling.nextBillAt, tomorrow)
           )
         );
