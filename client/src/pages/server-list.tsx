@@ -38,10 +38,15 @@ export default function ServerList() {
   const cancellations = dashboardData?.cancellations || {};
   const billingStatuses = dashboardData?.billingStatuses || {};
 
-  // Find servers with billing issues
-  const suspendedServers = servers.filter(s => billingStatuses[s.id]?.status === 'suspended');
+  // Find servers with billing issues (exclude admin suspensions)
+  const billingSuspendedServers = servers.filter(s =>
+    billingStatuses[s.id]?.status === 'suspended' && !billingStatuses[s.id]?.adminSuspended
+  );
+  const adminSuspendedServers = servers.filter(s =>
+    billingStatuses[s.id]?.adminSuspended === true
+  );
   const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
-  const hasOverdueServers = suspendedServers.length > 0 || unpaidServers.length > 0;
+  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0;
 
   useSyncPowerActions(servers);
 
@@ -62,7 +67,27 @@ export default function ServerList() {
       <div className="space-y-6">
         <EmailVerificationBanner />
 
-        {/* Overdue Servers Alert */}
+        {/* Admin Suspended Servers Alert */}
+        {adminSuspendedServers.length > 0 && (
+          <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-destructive mb-1">Account Suspended</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  <span className="block">
+                    <span className="text-destructive font-medium">{adminSuspendedServers.length} server{adminSuspendedServers.length > 1 ? 's' : ''} suspended</span> due to terms of service violation.
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Please contact support if you believe this is an error.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Overdue Servers Alert (billing-related only) */}
         {hasOverdueServers && (
           <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
             <div className="flex items-start gap-3">
@@ -70,9 +95,9 @@ export default function ServerList() {
               <div className="flex-1">
                 <h3 className="font-semibold text-destructive mb-1">Payment Required</h3>
                 <p className="text-sm text-muted-foreground mb-2">
-                  {suspendedServers.length > 0 && (
+                  {billingSuspendedServers.length > 0 && (
                     <span className="block">
-                      <span className="text-destructive font-medium">{suspendedServers.length} server{suspendedServers.length > 1 ? 's' : ''} suspended</span> due to non-payment.
+                      <span className="text-destructive font-medium">{billingSuspendedServers.length} server{billingSuspendedServers.length > 1 ? 's' : ''} suspended</span> due to non-payment.
                     </span>
                   )}
                   {unpaidServers.length > 0 && (

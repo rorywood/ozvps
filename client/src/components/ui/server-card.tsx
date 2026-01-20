@@ -26,6 +26,8 @@ interface BillingStatus {
   suspendAt?: string | null;
   monthlyPriceCents?: number;
   freeServer?: boolean;
+  adminSuspended?: boolean;
+  adminSuspendedReason?: string | null;
 }
 
 interface ServerCardProps {
@@ -109,10 +111,16 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
                 FREE
               </Badge>
             )}
-            {billingStatus?.status === 'suspended' && (
+            {billingStatus?.adminSuspended && (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <Ban className="h-2.5 w-2.5 mr-0.5" />
                 SUSPENDED
+              </Badge>
+            )}
+            {billingStatus?.status === 'suspended' && !billingStatus?.adminSuspended && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                PAYMENT DUE
               </Badge>
             )}
             {billingStatus?.status === 'unpaid' && !billingStatus?.freeServer && (
