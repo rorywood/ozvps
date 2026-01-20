@@ -199,13 +199,16 @@ export function registerBillingRoutes(router: Router) {
       const nextBillAt = new Date();
       nextBillAt.setMonth(nextBillAt.getMonth() + 1);
 
-      // Update billing status
+      // Update billing status - also clear admin suspension flags
       await db
         .update(serverBilling)
         .set({
           status: "active",
           suspendAt: null,
           nextBillAt,
+          adminSuspended: false,
+          adminSuspendedAt: null,
+          adminSuspendedReason: null,
           updatedAt: new Date(),
         })
         .where(eq(serverBilling.id, id));

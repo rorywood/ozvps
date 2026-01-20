@@ -224,10 +224,11 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Suspension reason is required" });
       }
 
-      // Update billing record
+      // Update billing record - set both adminSuspended and status
       await db
         .update(serverBilling)
         .set({
+          status: "suspended",
           adminSuspended: true,
           adminSuspendedAt: new Date(),
           adminSuspendedReason: reason,
@@ -257,10 +258,11 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Invalid server ID" });
       }
 
-      // Update billing record
+      // Update billing record - clear adminSuspended and restore status to active
       await db
         .update(serverBilling)
         .set({
+          status: "active",
           adminSuspended: false,
           adminSuspendedAt: null,
           adminSuspendedReason: null,
