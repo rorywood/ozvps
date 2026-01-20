@@ -648,7 +648,19 @@ export class VirtFusionClient {
       await this.request(`/servers/${serverId}/unsuspend`, {
         method: 'POST',
       });
-      log(`Server ${serverId} unsuspended in VirtFusion`, 'virtfusion');
+      log(`Server ${serverId} unsuspend request sent to VirtFusion`, 'virtfusion');
+
+      // Give VirtFusion a moment to process the unsuspend
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify the server is actually unsuspended
+      const verifyResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
+      if (verifyResponse.data.suspended) {
+        log(`WARNING: Server ${serverId} still shows as suspended after unsuspend request`, 'virtfusion');
+        // Try again
+        await this.request(`/servers/${serverId}/unsuspend`, { method: 'POST' });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
 
       // Then boot the server so the user doesn't have to manually power it on
       try {
