@@ -1443,7 +1443,7 @@ export default function BillingPage() {
                                       </span>
                                     ) : daysUntilBill === 1 ? (
                                       <span className="text-amber-500">
-                                        Due tomorrow ({formatDate(charge.nextBillAt)}) - Auto-charged at 6pm AEST
+                                        Due tomorrow - Ensure your wallet has sufficient funds
                                       </span>
                                     ) : (
                                       <>

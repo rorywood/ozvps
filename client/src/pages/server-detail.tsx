@@ -1552,6 +1552,11 @@ export default function ServerDetail() {
                           Wallet charged at 6pm AEST
                         </p>
                       )}
+                      {isDueTomorrow && server.billing.status !== 'unpaid' && (
+                        <p className="text-xs text-amber-500/80 mt-1">
+                          Ensure your wallet has sufficient funds
+                        </p>
+                      )}
                       {server.billing.status === 'unpaid' && server.billing.suspendAt && (
                         <p className="text-xs text-red-400/80 mt-1">
                           Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
