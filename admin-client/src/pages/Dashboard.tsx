@@ -231,7 +231,7 @@ export default function Dashboard() {
 
       {/* System Info */}
       {health?.system && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Memory Usage</h3>
             <div className="space-y-2">
@@ -241,7 +241,13 @@ export default function Dashboard() {
               </div>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div
-                  className="bg-blue-600 h-2 rounded-full"
+                  className={`h-2 rounded-full ${
+                    health.system.memory.usagePercent > 90
+                      ? "bg-red-500"
+                      : health.system.memory.usagePercent > 70
+                      ? "bg-yellow-500"
+                      : "bg-blue-600"
+                  }`}
                   style={{ width: `${health.system.memory.usagePercent}%` }}
                 />
               </div>
@@ -283,6 +289,44 @@ export default function Dashboard() {
                 </div>
               );
             })()}
+          </div>
+
+          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Disk Usage</h3>
+            {health.system.disk ? (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Used</span>
+                  <span className="font-medium dark:text-white">
+                    {health.system.disk.total >= 1024
+                      ? `${(health.system.disk.used / 1024).toFixed(1)} GB`
+                      : `${health.system.disk.used} MB`}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      health.system.disk.usagePercent > 90
+                        ? "bg-red-500"
+                        : health.system.disk.usagePercent > 70
+                        ? "bg-yellow-500"
+                        : "bg-blue-600"
+                    }`}
+                    style={{ width: `${health.system.disk.usagePercent}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                  <span>{health.system.disk.usagePercent}% used</span>
+                  <span>
+                    {health.system.disk.total >= 1024
+                      ? `${(health.system.disk.total / 1024).toFixed(1)} GB`
+                      : `${health.system.disk.total} MB`} total
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Not available</p>
+            )}
           </div>
 
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
