@@ -110,6 +110,9 @@ export const usersApi = {
   verifyEmail: (auth0UserId: string) =>
     api.post(`/users/${encodeURIComponent(auth0UserId)}/verify-email`),
 
+  resendVerification: (auth0UserId: string) =>
+    api.post(`/users/${encodeURIComponent(auth0UserId)}/resend-verification`),
+
   adjustWallet: (auth0UserId: string, amountCents: number, description: string, reason?: string) =>
     api.post(`/users/${encodeURIComponent(auth0UserId)}/wallet/adjust`, {
       amountCents,

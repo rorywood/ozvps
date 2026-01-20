@@ -104,6 +104,15 @@ export default function Dashboard() {
     total_disk_gb: servers.reduce((sum, s) => sum + (s.plan?.specs?.disk || 0), 0),
   };
 
+  // Aggregate resource usage across all servers
+  const aggregateUsage = {
+    cpu: servers.reduce((sum, s) => sum + (s.stats?.cpu_usage || 0), 0) / Math.max(servers.length, 1),
+    ramUsed: servers.reduce((sum, s) => sum + (s.stats?.ram_usage || 0), 0),
+    ramTotal: servers.reduce((sum, s) => sum + (s.plan?.specs?.ram || 0), 0),
+    diskUsed: servers.reduce((sum, s) => sum + (s.stats?.disk_usage || 0), 0),
+    diskTotal: servers.reduce((sum, s) => sum + (s.plan?.specs?.disk || 0), 0),
+  };
+
   const formatBandwidth = (bytes: number): string => {
     const gb = bytes / (1024 * 1024 * 1024);
     // Bandwidth uses decimal units (1TB = 1000GB), not binary (1TiB = 1024GiB)
@@ -305,6 +314,65 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Resource Usage Progress Bars */}
+        {servers.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div className="border border-border rounded-lg p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">CPU Usage (avg)</span>
+                <span className="font-medium text-foreground">{aggregateUsage.cpu.toFixed(0)}%</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className={cn(
+                    "h-2 rounded-full transition-all",
+                    aggregateUsage.cpu > 90 ? "bg-red-500" : aggregateUsage.cpu > 70 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${Math.min(aggregateUsage.cpu, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="border border-border rounded-lg p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Memory Usage</span>
+                <span className="font-medium text-foreground">
+                  {(aggregateUsage.ramUsed / 1024).toFixed(1)} / {(aggregateUsage.ramTotal / 1024).toFixed(1)} GB
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className={cn(
+                    "h-2 rounded-full transition-all",
+                    aggregateUsage.ramTotal > 0 && (aggregateUsage.ramUsed / aggregateUsage.ramTotal) > 0.9 ? "bg-red-500" :
+                    aggregateUsage.ramTotal > 0 && (aggregateUsage.ramUsed / aggregateUsage.ramTotal) > 0.7 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${aggregateUsage.ramTotal > 0 ? Math.min((aggregateUsage.ramUsed / aggregateUsage.ramTotal) * 100, 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="border border-border rounded-lg p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Disk Usage</span>
+                <span className="font-medium text-foreground">
+                  {aggregateUsage.diskUsed.toFixed(1)} / {aggregateUsage.diskTotal.toFixed(0)} GB
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className={cn(
+                    "h-2 rounded-full transition-all",
+                    aggregateUsage.diskTotal > 0 && (aggregateUsage.diskUsed / aggregateUsage.diskTotal) > 0.9 ? "bg-red-500" :
+                    aggregateUsage.diskTotal > 0 && (aggregateUsage.diskUsed / aggregateUsage.diskTotal) > 0.7 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${aggregateUsage.diskTotal > 0 ? Math.min((aggregateUsage.diskUsed / aggregateUsage.diskTotal) * 100, 100) : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* DO-Style Horizontal Server Rows */}
         <PageSection title="Your Servers" className="mt-4">

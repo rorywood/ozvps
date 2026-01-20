@@ -1,17 +1,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { billingApi, serversApi } from "../lib/api";
+import { billingApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, AlertTriangle, Pause, X, Trash2 } from "lucide-react";
+import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, X, Trash2 } from "lucide-react";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDueDateModal, setShowDueDateModal] = useState(false);
-  const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [newDueDate, setNewDueDate] = useState("");
-  const [suspendReason, setSuspendReason] = useState("Non-payment of invoice");
   const queryClient = useQueryClient();
 
   const { data: records, isLoading } = useQuery({
@@ -72,21 +70,6 @@ export default function Billing() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const suspendMutation = useMutation({
-    mutationFn: ({ serverId, reason }: { serverId: number; reason: string }) =>
-      serversApi.adminSuspend(serverId, reason),
-    onSuccess: () => {
-      toast.success("Server suspended for billing");
-      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
-      setSelectedRecord(null);
-      setShowSuspendModal(false);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to suspend server");
-      setShowSuspendModal(false);
-    },
-  });
-
   const formatCurrency = (cents: number) =>
     new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 
@@ -127,20 +110,6 @@ export default function Billing() {
       data: { nextBillAt: new Date(newDueDate).toISOString() },
     });
     setShowDueDateModal(false);
-  };
-
-  const handleOpenSuspendModal = () => {
-    if (!selectedRecord) return;
-    setSuspendReason("Non-payment of invoice");
-    setShowSuspendModal(true);
-  };
-
-  const handleConfirmSuspend = () => {
-    if (!selectedRecord || !suspendReason) return;
-    suspendMutation.mutate({
-      serverId: parseInt(selectedRecord.billing.virtfusionServerId, 10),
-      reason: suspendReason,
-    });
   };
 
   return (
@@ -262,7 +231,7 @@ export default function Billing() {
                   <Gift className="h-4 w-4" />
                   {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
                 </button>
-                {selectedRecord.billing.status === "suspended" ? (
+                {selectedRecord.billing.status === "suspended" && (
                   <button
                     onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
                     disabled={unsuspendMutation.isPending}
@@ -270,15 +239,6 @@ export default function Billing() {
                   >
                     <Play className="h-4 w-4" />
                     Unsuspend
-                  </button>
-                ) : selectedRecord.billing.status !== "cancelled" && (
-                  <button
-                    onClick={handleOpenSuspendModal}
-                    disabled={suspendMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
-                  >
-                    <Pause className="h-4 w-4" />
-                    Suspend (Billing)
                   </button>
                 )}
                 <button
@@ -478,54 +438,6 @@ export default function Billing() {
         </div>
       )}
 
-      {/* Suspend Server Modal */}
-      {showSuspendModal && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-500/10 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Suspend Server</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
-                </p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              This will suspend the server and prevent it from running. The user will see the suspension reason.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Suspension Reason</label>
-                <input
-                  type="text"
-                  value={suspendReason}
-                  onChange={(e) => setSuspendReason(e.target.value)}
-                  placeholder="Enter reason for suspension"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowSuspendModal(false)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmSuspend}
-                disabled={!suspendReason || suspendMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {suspendMutation.isPending ? "Suspending..." : "Suspend Server"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

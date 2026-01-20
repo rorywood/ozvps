@@ -299,6 +299,41 @@ export function registerUsersRoutes(router: Router) {
     }
   });
 
+  // Resend verification email
+  router.post("/users/:auth0UserId/resend-verification", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const session = req.adminSession!;
+
+      const [user] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Resend verification email via Auth0
+      const result = await auth0Client.resendVerificationEmail(auth0UserId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || "Failed to send verification email" });
+      }
+
+      // Audit log
+      await auditSuccess(req, "user.resend-verification", "user", auth0UserId, user.email);
+
+      console.log(`[admin-users] Verification email resent for ${user.email} by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditFailure(req, "user.resend-verification", "user", error.message, req.params.auth0UserId);
+      console.log(`[admin-users] Resend verification error: ${error.message}`);
+      res.status(500).json({ error: "Failed to resend verification email" });
+    }
+  });
+
   // Adjust wallet balance
   router.post("/users/:auth0UserId/wallet/adjust", async (req: Request, res: Response) => {
     try {
