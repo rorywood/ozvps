@@ -138,7 +138,11 @@ function getTransactionType(type: string, metadata?: any, amountCents?: number):
     if (metadata?.source === 'auto_topup') return 'Auto Top-Up';
     return 'Credit';
   }
-  if (type === 'debit') return 'Debit';
+  if (type === 'debit') {
+    // Show the description from metadata if available (e.g. "Server renewal")
+    if (metadata?.description) return metadata.description;
+    return 'Debit';
+  }
   if (type === 'refund') return 'Refund';
   if (type === 'auto_topup') return 'Auto Top-Up';
   return type.replace(/_/g, ' ');

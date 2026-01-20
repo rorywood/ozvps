@@ -79,8 +79,12 @@ export default function Billing() {
       toast.success("Server suspended for billing");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       setSelectedRecord(null);
+      setShowSuspendModal(false);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to suspend server");
+      setShowSuspendModal(false);
+    },
   });
 
   const formatCurrency = (cents: number) =>
@@ -137,7 +141,6 @@ export default function Billing() {
       serverId: parseInt(selectedRecord.billing.virtfusionServerId, 10),
       reason: suspendReason,
     });
-    setShowSuspendModal(false);
   };
 
   return (

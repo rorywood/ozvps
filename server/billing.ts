@@ -93,6 +93,9 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     return true; // Return true so it doesn't get marked as failed
   }
 
+  // Get server name for transaction description
+  const serverName = await getServerName(billing.virtfusionServerId);
+
   const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
 
   return await db.transaction(async (tx) => {
@@ -137,15 +140,14 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       auth0UserId: billing.auth0UserId,
       virtfusionServerId: billing.virtfusionServerId,
       amountCents: billing.monthlyPriceCents,
-      description: `Monthly server billing for ${billing.virtfusionServerId}`,
+      description: `Server renewal - ${serverName}`,
       idempotencyKey,
     });
 
     // Record in wallet transactions (for user visibility)
-    // For reactivation, include more details about the unpaid amount
     const transactionDescription = reactivation
-      ? `Server reactivation - Unpaid balance $${(billing.monthlyPriceCents / 100).toFixed(2)} (Server ID: ${billing.virtfusionServerId})`
-      : 'Monthly billing';
+      ? 'Server reactivation'
+      : 'Server renewal';
 
     await tx.insert(walletTransactions).values({
       auth0UserId: billing.auth0UserId,
@@ -153,6 +155,7 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       amountCents: -billing.monthlyPriceCents, // Negative for debits
       metadata: {
         serverId: billing.virtfusionServerId,
+        serverName,
         description: transactionDescription,
         ...(reactivation && {
           reactivation: true,
