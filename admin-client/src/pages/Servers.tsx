@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive } from "lucide-react";
+import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon } from "lucide-react";
 
 export default function Servers() {
   const [search, setSearch] = useState("");
@@ -20,6 +20,13 @@ export default function Servers() {
     enabled: !!selectedServer?.id,
   });
 
+  const { data: serverStats, isLoading: loadingStats } = useQuery({
+    queryKey: ["server-stats", selectedServer?.id],
+    queryFn: () => serversApi.getStats(selectedServer.id),
+    enabled: !!selectedServer?.id && serverDetails?.server?.status === "running",
+    refetchInterval: 15000, // Refresh stats every 15 seconds
+  });
+
   const powerMutation = useMutation({
     mutationFn: ({ serverId, action }: { serverId: number; action: string }) =>
       serversApi.powerAction(serverId, action),
@@ -29,6 +36,7 @@ export default function Servers() {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["servers"] });
         queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
+        queryClient.invalidateQueries({ queryKey: ["server-stats", selectedServer?.id] });
       }, 2000);
     },
     onError: (err: any) => toast.error(err.message),
@@ -38,6 +46,7 @@ export default function Servers() {
     queryClient.invalidateQueries({ queryKey: ["servers"] });
     if (selectedServer?.id) {
       queryClient.invalidateQueries({ queryKey: ["server", selectedServer.id] });
+      queryClient.invalidateQueries({ queryKey: ["server-stats", selectedServer.id] });
     }
   };
 
@@ -211,6 +220,110 @@ export default function Servers() {
                           <div className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">Hostname</span>
                             <span className="font-medium text-gray-900 dark:text-white truncate ml-2">{serverDetails.server.hostname}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Resource Usage */}
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Cpu className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Resources</span>
+                          {loadingStats && <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />}
+                        </div>
+                        {serverDetails.server.status !== "running" ? (
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Server is not running</p>
+                        ) : serverStats?.stats ? (
+                          <div className="space-y-3">
+                            {/* CPU */}
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-500 dark:text-gray-400">CPU</span>
+                                <span className="text-gray-900 dark:text-white">{serverStats.stats.cpu_usage.toFixed(1)}%</span>
+                              </div>
+                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    serverStats.stats.cpu_usage > 90
+                                      ? "bg-red-500"
+                                      : serverStats.stats.cpu_usage > 70
+                                      ? "bg-yellow-500"
+                                      : "bg-green-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, serverStats.stats.cpu_usage)}%` }}
+                                />
+                              </div>
+                            </div>
+                            {/* RAM */}
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-500 dark:text-gray-400">RAM</span>
+                                <span className="text-gray-900 dark:text-white">
+                                  {serverStats.stats.memory_used_mb} / {serverStats.stats.memory_total_mb} MB ({serverStats.stats.ram_usage.toFixed(1)}%)
+                                </span>
+                              </div>
+                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    serverStats.stats.ram_usage > 90
+                                      ? "bg-red-500"
+                                      : serverStats.stats.ram_usage > 70
+                                      ? "bg-yellow-500"
+                                      : "bg-green-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, serverStats.stats.ram_usage)}%` }}
+                                />
+                              </div>
+                            </div>
+                            {/* Disk */}
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-500 dark:text-gray-400">Disk</span>
+                                <span className="text-gray-900 dark:text-white">
+                                  {serverStats.stats.disk_used_gb.toFixed(1)} / {serverStats.stats.disk_total_gb.toFixed(1)} GB ({serverStats.stats.disk_usage.toFixed(1)}%)
+                                </span>
+                              </div>
+                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    serverStats.stats.disk_usage > 90
+                                      ? "bg-red-500"
+                                      : serverStats.stats.disk_usage > 70
+                                      ? "bg-yellow-500"
+                                      : "bg-green-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, serverStats.stats.disk_usage)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Loading stats...</p>
+                        )}
+                      </div>
+
+                      {/* Server Specs */}
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <HardDrive className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Specifications</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-lg font-bold text-blue-500">{serverDetails.server.plan?.specs?.vcpu || 1}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">vCPU</div>
+                          </div>
+                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-lg font-bold text-green-500">
+                              {serverDetails.server.plan?.specs?.ram >= 1024
+                                ? `${(serverDetails.server.plan.specs.ram / 1024).toFixed(0)} GB`
+                                : `${serverDetails.server.plan?.specs?.ram || 1024} MB`}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">RAM</div>
+                          </div>
+                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-lg font-bold text-purple-500">{serverDetails.server.plan?.specs?.disk || 20} GB</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Disk</div>
                           </div>
                         </div>
                       </div>

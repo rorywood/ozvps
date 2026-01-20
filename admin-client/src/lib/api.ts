@@ -131,6 +131,20 @@ export const serversApi = {
 
   get: (serverId: number) => api.get<{ server: any; billing: any; owner: any }>(`/servers/${serverId}`),
 
+  getStats: (serverId: number) =>
+    api.get<{
+      stats: {
+        cpu_usage: number;
+        ram_usage: number;
+        disk_usage: number;
+        memory_total_mb: number;
+        memory_used_mb: number;
+        memory_free_mb: number;
+        disk_used_gb: number;
+        disk_total_gb: number;
+      };
+    }>(`/servers/${serverId}/stats`),
+
   powerAction: (serverId: number, action: string) =>
     api.post(`/servers/${serverId}/power/${action}`),
 

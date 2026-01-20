@@ -57,7 +57,7 @@ export default function Layout() {
         }`}
       >
         <div className="flex items-center justify-between h-16 px-4 bg-gray-800 dark:bg-gray-900">
-          <img src={logo} alt="OzVPS" className="h-12" />
+          <img src={logo} alt="OzVPS" className="h-14" />
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden text-gray-400 hover:text-white"
@@ -114,7 +114,7 @@ export default function Layout() {
               <Menu className="h-6 w-6" />
             </button>
             <div className="flex-1 lg:hidden text-center">
-              <img src={logo} alt="OzVPS" className="h-10 inline-block" />
+              <img src={logo} alt="OzVPS" className="h-12 inline-block" />
             </div>
             <div className="flex items-center gap-4">
               <div className="hidden lg:block text-sm text-gray-600 dark:text-gray-400">

@@ -4,6 +4,7 @@ import { serverBilling, billingLedger, wallets, walletTransactions, userMappings
 import { eq, desc, and, gte, lte, sql, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
 import { runBillingJob } from "../../server/billing";
+import { auth0Client } from "../../server/auth0";
 
 export function registerBillingRoutes(router: Router) {
   // List all billing records
@@ -39,7 +40,37 @@ export function registerBillingRoutes(router: Router) {
 
       const records = await query;
 
-      res.json({ records });
+      // Enrich records with Auth0 user data if local mapping is missing
+      const enrichedRecords = await Promise.all(
+        records.map(async (record) => {
+          // If user info is already available from userMappings, use it
+          if (record.user?.email) {
+            return record;
+          }
+
+          // Otherwise, fetch from Auth0
+          if (record.billing.auth0UserId) {
+            try {
+              const auth0User = await auth0Client.getUserById(record.billing.auth0UserId);
+              if (auth0User) {
+                return {
+                  ...record,
+                  user: {
+                    email: auth0User.email,
+                    name: auth0User.name || null,
+                  },
+                };
+              }
+            } catch (err) {
+              // Auth0 lookup failed, keep original record
+            }
+          }
+
+          return record;
+        })
+      );
+
+      res.json({ records: enrichedRecords });
     } catch (error: any) {
       console.log(`[admin-billing] List records error: ${error.message}`);
       res.status(500).json({ error: "Failed to list billing records" });
@@ -73,6 +104,26 @@ export function registerBillingRoutes(router: Router) {
         return res.status(404).json({ error: "Billing record not found" });
       }
 
+      // Enrich with Auth0 user data if local mapping is missing
+      let enrichedRecord = record;
+      if (!record.user?.email && record.billing.auth0UserId) {
+        try {
+          const auth0User = await auth0Client.getUserById(record.billing.auth0UserId);
+          if (auth0User) {
+            enrichedRecord = {
+              ...record,
+              user: {
+                email: auth0User.email,
+                name: auth0User.name || null,
+                auth0UserId: record.billing.auth0UserId,
+              },
+            };
+          }
+        } catch (err) {
+          // Auth0 lookup failed, keep original record
+        }
+      }
+
       // Get ledger entries for this server
       const ledgerEntries = await db
         .select()
@@ -81,7 +132,7 @@ export function registerBillingRoutes(router: Router) {
         .orderBy(desc(billingLedger.createdAt))
         .limit(50);
 
-      res.json({ record, ledgerEntries });
+      res.json({ record: enrichedRecord, ledgerEntries });
     } catch (error: any) {
       console.log(`[admin-billing] Get record error: ${error.message}`);
       res.status(500).json({ error: "Failed to get billing record" });
@@ -294,7 +345,35 @@ export function registerBillingRoutes(router: Router) {
         .limit(limit)
         .offset(offset);
 
-      res.json({ entries });
+      // Enrich entries with Auth0 user data if local mapping is missing
+      const enrichedEntries = await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.user?.email) {
+            return entry;
+          }
+
+          if (entry.ledger.auth0UserId) {
+            try {
+              const auth0User = await auth0Client.getUserById(entry.ledger.auth0UserId);
+              if (auth0User) {
+                return {
+                  ...entry,
+                  user: {
+                    email: auth0User.email,
+                    name: auth0User.name || null,
+                  },
+                };
+              }
+            } catch (err) {
+              // Auth0 lookup failed, keep original entry
+            }
+          }
+
+          return entry;
+        })
+      );
+
+      res.json({ entries: enrichedEntries });
     } catch (error: any) {
       console.log(`[admin-billing] Get ledger error: ${error.message}`);
       res.status(500).json({ error: "Failed to get billing ledger" });

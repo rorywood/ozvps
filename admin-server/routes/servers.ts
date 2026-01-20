@@ -122,6 +122,23 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Get server live stats (CPU, RAM, disk usage)
+  router.get("/servers/:serverId/stats", async (req: Request, res: Response) => {
+    try {
+      const serverId = parseInt(req.params.serverId, 10);
+      if (isNaN(serverId)) {
+        return res.status(400).json({ error: "Invalid server ID" });
+      }
+
+      const stats = await virtfusionClient.getServerLiveStats(String(serverId));
+
+      res.json({ stats });
+    } catch (error: any) {
+      console.log(`[admin-servers] Get server stats error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get server stats" });
+    }
+  });
+
   // Power actions (start, stop, restart, kill)
   router.post("/servers/:serverId/power/:action", async (req: Request, res: Response) => {
     try {
