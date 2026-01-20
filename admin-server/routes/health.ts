@@ -228,10 +228,119 @@ function getSystemStats() {
   };
 }
 
+// Service control helper
+async function controlService(service: string, action: "start" | "stop" | "restart"): Promise<{ success: boolean; message: string }> {
+  return new Promise((resolve) => {
+    const platform = os.platform();
+
+    if (platform !== "linux") {
+      resolve({ success: false, message: "Service control only available on Linux" });
+      return;
+    }
+
+    // Map service names to systemd service names
+    const serviceMap: Record<string, string> = {
+      "postgresql": "postgresql",
+      "redis": "redis-server",
+      "ozvps": "ozvps",
+      "ozvps-admin": "ozvps-admin",
+    };
+
+    const systemdService = serviceMap[service];
+    if (!systemdService) {
+      resolve({ success: false, message: `Unknown service: ${service}` });
+      return;
+    }
+
+    // Don't allow stopping the admin panel from itself
+    if (service === "ozvps-admin" && action === "stop") {
+      resolve({ success: false, message: "Cannot stop admin panel from itself" });
+      return;
+    }
+
+    exec(`systemctl ${action} ${systemdService}`, (error, _stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, message: stderr || error.message });
+      } else {
+        resolve({ success: true, message: `Service ${service} ${action}ed successfully` });
+      }
+    });
+  });
+}
+
+// Get service status
+async function getServiceStatus(service: string): Promise<{ running: boolean; enabled: boolean }> {
+  return new Promise((resolve) => {
+    const platform = os.platform();
+
+    if (platform !== "linux") {
+      resolve({ running: false, enabled: false });
+      return;
+    }
+
+    const serviceMap: Record<string, string> = {
+      "postgresql": "postgresql",
+      "redis": "redis-server",
+      "ozvps": "ozvps",
+      "ozvps-admin": "ozvps-admin",
+    };
+
+    const systemdService = serviceMap[service];
+    if (!systemdService) {
+      resolve({ running: false, enabled: false });
+      return;
+    }
+
+    exec(`systemctl is-active ${systemdService} && systemctl is-enabled ${systemdService}`, (error, stdout) => {
+      const lines = stdout.trim().split("\n");
+      resolve({
+        running: lines[0] === "active",
+        enabled: lines[1] === "enabled",
+      });
+    });
+  });
+}
+
 export function registerHealthRoutes(app: Express) {
   // Basic health check (for load balancers)
   app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Service control endpoint
+  app.post("/api/services/:service/:action", async (req: Request, res: Response) => {
+    const { service, action } = req.params;
+
+    if (!["start", "stop", "restart"].includes(action)) {
+      return res.status(400).json({ error: "Invalid action. Must be start, stop, or restart" });
+    }
+
+    if (!["postgresql", "redis", "ozvps", "ozvps-admin"].includes(service)) {
+      return res.status(400).json({ error: "Unknown service" });
+    }
+
+    const result = await controlService(service, action as "start" | "stop" | "restart");
+
+    if (result.success) {
+      console.log(`[admin-health] Service ${service} ${action}ed`);
+      res.json(result);
+    } else {
+      res.status(500).json({ error: result.message });
+    }
+  });
+
+  // Get all service statuses
+  app.get("/api/services/status", async (_req: Request, res: Response) => {
+    const services = ["postgresql", "redis", "ozvps", "ozvps-admin"];
+    const statuses: Record<string, { running: boolean; enabled: boolean }> = {};
+
+    await Promise.all(
+      services.map(async (service) => {
+        statuses[service] = await getServiceStatus(service);
+      })
+    );
+
+    res.json({ services: statuses });
   });
 
   // Detailed health check (requires auth in production, but middleware is applied separately)

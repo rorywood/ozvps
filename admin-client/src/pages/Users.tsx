@@ -10,7 +10,7 @@ export default function Users() {
   const queryClient = useQueryClient();
 
   // List all users by default
-  const { data: allUsers, isLoading: loadingUsers } = useQuery({
+  const { data: allUsers, isLoading: loadingUsers, error: usersError } = useQuery({
     queryKey: ["users-list"],
     queryFn: () => usersApi.list(1, 100),
   });
@@ -81,6 +81,12 @@ export default function Users() {
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500/40 outline-none text-gray-900 dark:text-white placeholder-gray-500"
               />
             </div>
+
+            {usersError && (
+              <div className="p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                Error loading users: {(usersError as any)?.message || "Unknown error"}
+              </div>
+            )}
 
             {isLoadingList ? (
               <div className="flex justify-center py-8">

@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { healthApi } from "../lib/api";
-import { Activity, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import { Activity, CheckCircle, AlertTriangle, XCircle, RefreshCw, Play, Square, RotateCw } from "lucide-react";
 
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
@@ -16,10 +17,29 @@ function StatusIcon({ status }: { status: string }) {
 }
 
 export default function Health() {
+  const queryClient = useQueryClient();
+
   const { data: health, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["health-detailed"],
     queryFn: healthApi.get,
     refetchInterval: 30000,
+  });
+
+  const { data: serviceStatus } = useQuery({
+    queryKey: ["service-status"],
+    queryFn: healthApi.getServiceStatus,
+    refetchInterval: 10000,
+  });
+
+  const controlMutation = useMutation({
+    mutationFn: ({ service, action }: { service: string; action: "start" | "stop" | "restart" }) =>
+      healthApi.controlService(service, action),
+    onSuccess: (data, { service, action }) => {
+      toast.success(`${service} ${action}ed successfully`);
+      queryClient.invalidateQueries({ queryKey: ["service-status"] });
+      queryClient.invalidateQueries({ queryKey: ["health-detailed"] });
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to control service"),
   });
 
   const getStatusColor = (status: string) => {
@@ -29,6 +49,13 @@ export default function Health() {
       unhealthy: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
     };
     return colors[status] || "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700";
+  };
+
+  const serviceDisplayNames: Record<string, string> = {
+    postgresql: "PostgreSQL",
+    redis: "Redis",
+    ozvps: "OzVPS App",
+    "ozvps-admin": "Admin Panel",
   };
 
   return (
@@ -56,17 +83,78 @@ export default function Health() {
             <div className="flex items-center gap-4">
               <StatusIcon status={health.status} />
               <div>
-                <h2 className="text-xl font-semibold capitalize">{health.status}</h2>
-                <p className="text-sm text-gray-500">
+                <h2 className="text-xl font-semibold capitalize text-gray-900 dark:text-white">{health.status}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Last checked: {new Date(health.timestamp).toLocaleString()}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Services */}
+          {/* Service Controls */}
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Services</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Service Controls</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {["postgresql", "redis", "ozvps", "ozvps-admin"].map((service) => {
+                const status = serviceStatus?.services?.[service];
+                const isRunning = status?.running;
+                const isAdminPanel = service === "ozvps-admin";
+
+                return (
+                  <div
+                    key={service}
+                    className={`p-4 rounded-lg border ${isRunning ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${isRunning ? "bg-green-500" : "bg-red-500"}`} />
+                        <div>
+                          <h3 className="font-medium text-gray-900 dark:text-white">{serviceDisplayNames[service]}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {isRunning ? "Running" : "Stopped"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {!isRunning && (
+                          <button
+                            onClick={() => controlMutation.mutate({ service, action: "start" })}
+                            disabled={controlMutation.isPending}
+                            className="p-2 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
+                            title="Start"
+                          >
+                            <Play className="h-4 w-4" />
+                          </button>
+                        )}
+                        {isRunning && !isAdminPanel && (
+                          <button
+                            onClick={() => controlMutation.mutate({ service, action: "stop" })}
+                            disabled={controlMutation.isPending}
+                            className="p-2 bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                            title="Stop"
+                          >
+                            <Square className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => controlMutation.mutate({ service, action: "restart" })}
+                          disabled={controlMutation.isPending}
+                          className="p-2 bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+                          title="Restart"
+                        >
+                          <RotateCw className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Services Health */}
+          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">External Services</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {health.services.map((service) => (
                 <div

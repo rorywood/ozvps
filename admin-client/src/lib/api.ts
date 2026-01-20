@@ -260,6 +260,12 @@ export const healthApi = {
       system: any;
       environment: any;
     }>("/admin/health/detailed"),
+
+  getServiceStatus: () =>
+    api.get<{ services: Record<string, { running: boolean; enabled: boolean }> }>("/services/status"),
+
+  controlService: (service: string, action: "start" | "stop" | "restart") =>
+    api.post<{ success: boolean; message: string }>(`/services/${service}/${action}`),
 };
 
 // VirtFusion API
