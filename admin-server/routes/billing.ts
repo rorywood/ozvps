@@ -171,6 +171,80 @@ export function registerBillingRoutes(router: Router) {
     }
   });
 
+  // Delete billing record (for orphaned records)
+  router.delete("/billing/records/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+      const { confirm } = req.body;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ID" });
+      }
+
+      if (confirm !== "DELETE") {
+        return res.status(400).json({ error: "Confirmation required" });
+      }
+
+      const [billing] = await db.select().from(serverBilling).where(eq(serverBilling.id, id));
+
+      if (!billing) {
+        return res.status(404).json({ error: "Billing record not found" });
+      }
+
+      // Delete the billing record
+      await db.delete(serverBilling).where(eq(serverBilling.id, id));
+
+      console.log(`[admin-billing] Billing record ${id} (server ${billing.virtfusionServerId}) deleted by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.log(`[admin-billing] Delete record error: ${error.message}`);
+      res.status(500).json({ error: "Failed to delete billing record" });
+    }
+  });
+
+  // Clean up orphaned billing records
+  router.post("/billing/cleanup-orphaned", async (req: Request, res: Response) => {
+    try {
+      const session = req.adminSession!;
+
+      console.log(`[admin-billing] Cleanup orphaned records triggered by ${session.email}`);
+
+      // Get all billing records
+      const allBillingRecords = await db.select().from(serverBilling);
+
+      let cleaned = 0;
+      const errors: string[] = [];
+
+      for (const record of allBillingRecords) {
+        try {
+          // Check if server exists in VirtFusion
+          await virtfusionClient.getServer(record.virtfusionServerId);
+        } catch (error: any) {
+          if (error.message?.includes("404") || error.message?.includes("not found")) {
+            // Server doesn't exist, delete the billing record
+            await db.delete(serverBilling).where(eq(serverBilling.id, record.id));
+            console.log(`[admin-billing] Deleted orphaned billing record ${record.id} for server ${record.virtfusionServerId}`);
+            cleaned++;
+          } else {
+            errors.push(`Server ${record.virtfusionServerId}: ${error.message}`);
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        cleaned,
+        total: allBillingRecords.length,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      console.log(`[admin-billing] Cleanup error: ${error.message}`);
+      res.status(500).json({ error: "Failed to cleanup orphaned records" });
+    }
+  });
+
   // Run billing job manually
   router.post("/billing/run-job", async (req: Request, res: Response) => {
     try {

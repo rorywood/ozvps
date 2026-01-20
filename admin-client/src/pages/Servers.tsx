@@ -24,12 +24,22 @@ export default function Servers() {
     mutationFn: ({ serverId, action }: { serverId: number; action: string }) =>
       serversApi.powerAction(serverId, action),
     onSuccess: () => {
-      toast.success("Power action executed");
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
-      queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
+      toast.success("Power action sent - status will update shortly");
+      // Delay refetch to allow VirtFusion to process the action
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["servers"] });
+        queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
+      }, 2000);
     },
     onError: (err: any) => toast.error(err.message),
   });
+
+  const refreshServer = () => {
+    queryClient.invalidateQueries({ queryKey: ["servers"] });
+    if (selectedServer?.id) {
+      queryClient.invalidateQueries({ queryKey: ["server", selectedServer.id] });
+    }
+  };
 
   const suspendMutation = useMutation({
     mutationFn: ({ serverId, reason }: { serverId: number; reason: string }) =>
@@ -153,9 +163,18 @@ export default function Servers() {
                       </p>
                     </div>
                   </div>
-                  <span className={`px-3 py-1.5 rounded-lg text-sm font-medium ${getStatusColor(selectedServer.status)}`}>
-                    {selectedServer.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={refreshServer}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                      title="Refresh status"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${loadingDetails ? 'animate-spin' : ''}`} />
+                    </button>
+                    <span className={`px-3 py-1.5 rounded-lg text-sm font-medium ${getStatusColor(serverDetails?.server?.status || selectedServer.status)}`}>
+                      {serverDetails?.server?.status || selectedServer.status}
+                    </span>
+                  </div>
                 </div>
 
                 {loadingDetails ? (

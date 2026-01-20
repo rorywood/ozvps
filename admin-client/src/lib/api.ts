@@ -168,9 +168,13 @@ export const billingApi = {
 
   updateRecord: (id: number, data: any) => api.put(`/billing/records/${id}`, data),
 
+  deleteRecord: (id: number) => api.delete(`/billing/records/${id}`, { confirm: "DELETE" }),
+
   unsuspendRecord: (id: number) => api.post(`/billing/records/${id}/unsuspend`),
 
   runBillingJob: () => api.post("/billing/run-job"),
+
+  cleanupOrphaned: () => api.post<{ cleaned: number; total: number; errors?: string[] }>("/billing/cleanup-orphaned"),
 
   getLedger: (limit = 100, offset = 0, auth0UserId?: string, serverId?: string) => {
     let url = `/billing/ledger?limit=${limit}&offset=${offset}`;

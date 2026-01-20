@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, AlertTriangle, Pause, X } from "lucide-react";
+import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, AlertTriangle, Pause, X, Trash2 } from "lucide-react";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -23,6 +23,27 @@ export default function Billing() {
   const runJobMutation = useMutation({
     mutationFn: billingApi.runBillingJob,
     onSuccess: () => toast.success("Billing job started"),
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: billingApi.cleanupOrphaned,
+    onSuccess: (data) => {
+      toast.success(`Cleaned up ${data.cleaned} orphaned records`);
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteRecordMutation = useMutation({
+    mutationFn: (id: number) => billingApi.deleteRecord(id),
+    onSuccess: () => {
+      toast.success("Billing record deleted");
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      setSelectedRecord(null);
+    },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -114,14 +135,28 @@ export default function Billing() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Billing</h1>
-        <button
-          onClick={() => runJobMutation.mutate()}
-          disabled={runJobMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <RefreshCw className={`h-4 w-4 ${runJobMutation.isPending ? "animate-spin" : ""}`} />
-          Run Billing Job
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (confirm("This will delete billing records for servers that no longer exist in VirtFusion. Continue?")) {
+                cleanupMutation.mutate();
+              }
+            }}
+            disabled={cleanupMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/20 transition-colors"
+          >
+            <Trash2 className={`h-4 w-4 ${cleanupMutation.isPending ? "animate-spin" : ""}`} />
+            Cleanup Orphaned
+          </button>
+          <button
+            onClick={() => runJobMutation.mutate()}
+            disabled={runJobMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 ${runJobMutation.isPending ? "animate-spin" : ""}`} />
+            Run Billing Job
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -234,6 +269,18 @@ export default function Billing() {
                     Suspend (Billing)
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete billing record for server ${selectedRecord.billing.virtfusionServerId}? This cannot be undone.`)) {
+                      deleteRecordMutation.mutate(selectedRecord.billing.id);
+                    }
+                  }}
+                  disabled={deleteRecordMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Record
+                </button>
               </div>
             </div>
           </div>
