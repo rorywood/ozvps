@@ -45,10 +45,29 @@ export default function Dashboard() {
     },
   });
 
+  // Query wallet balance for overdue payment handling
+  const { data: walletData } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    staleTime: 30000,
+  });
+
   const servers = dashboardData?.servers || [];
   const bandwidthData = dashboardData?.bandwidth;
   const cancellations = dashboardData?.cancellations || {};
   const billingStatuses = dashboardData?.billingStatuses || {};
+  const walletBalance = walletData?.wallet?.balanceCents || 0;
+
+  // Helper to calculate days overdue
+  const getDaysOverdue = (nextBillAt?: string): number => {
+    if (!nextBillAt) return 0;
+    const billDate = new Date(nextBillAt);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+    const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntil < 0 ? Math.abs(daysUntil) : 0;
+  };
 
   // Find servers with billing issues (exclude admin suspensions)
   const billingSuspendedServers = servers.filter(s =>
@@ -59,6 +78,21 @@ export default function Dashboard() {
   );
   const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
   const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0;
+
+  // Find servers overdue by more than 2 days (critical)
+  const criticalOverdueServers = servers.filter(s => {
+    const billing = billingStatuses[s.id];
+    if (!billing || billing.freeServer || billing.adminSuspended) return false;
+    const daysOverdue = getDaysOverdue(billing.nextBillAt);
+    return daysOverdue > 2;
+  });
+
+  // Calculate total amount owed for critical overdue servers
+  const totalAmountOwed = criticalOverdueServers.reduce((sum, s) => {
+    return sum + (billingStatuses[s.id]?.monthlyPriceCents || 0);
+  }, 0);
+
+  const hasSufficientFunds = walletBalance >= totalAmountOwed;
 
   useSyncPowerActions(servers);
 
@@ -88,6 +122,72 @@ export default function Dashboard() {
     <AppShell>
       <div className="space-y-8">
         <EmailVerificationBanner />
+
+        {/* Critical Overdue Banner - More than 2 days overdue */}
+        {criticalOverdueServers.length > 0 && (
+          <div className="border-2 border-red-500 rounded-lg p-5 bg-red-500/10">
+            <div className="flex items-start gap-4">
+              <div className="bg-red-500 rounded-full p-2 flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-red-500 text-lg mb-2">Urgent: Payment Overdue</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  You have <span className="text-red-500 font-semibold">{criticalOverdueServers.length} server{criticalOverdueServers.length > 1 ? 's' : ''}</span> with
+                  payments overdue by more than 2 days. Your server{criticalOverdueServers.length > 1 ? 's' : ''} may be suspended or deleted if payment is not received.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {criticalOverdueServers.map(s => {
+                    const daysOverdue = getDaysOverdue(billingStatuses[s.id]?.nextBillAt);
+                    return (
+                      <span key={s.id} className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded">
+                        {s.name || `Server #${s.id}`} ({daysOverdue} days overdue)
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-3 pt-2 border-t border-red-500/30">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Amount owed: </span>
+                    <span className="font-bold text-red-500">
+                      {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(totalAmountOwed / 100)}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Wallet balance: </span>
+                    <span className={`font-bold ${hasSufficientFunds ? 'text-green-500' : 'text-amber-500'}`}>
+                      {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(walletBalance / 100)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  {hasSufficientFunds ? (
+                    <Button variant="destructive" asChild>
+                      <Link href="/billing">
+                        <Wallet className="h-4 w-4 mr-2" />
+                        Pay Now
+                      </Link>
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="destructive" asChild>
+                        <Link href="/billing">
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Top Up Wallet
+                        </Link>
+                      </Button>
+                      <p className="text-xs text-amber-500 self-center">
+                        Insufficient funds - please add{' '}
+                        {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format((totalAmountOwed - walletBalance) / 100)}{' '}
+                        to your wallet
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Admin Suspended Servers Alert */}
         {adminSuspendedServers.length > 0 && (
