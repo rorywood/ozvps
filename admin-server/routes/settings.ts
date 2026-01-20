@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { dbStorage } from "../../server/db-storage";
+import { dbStorage } from "../../server/storage";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerSettingsRoutes(router: Router): void {
