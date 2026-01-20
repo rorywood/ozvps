@@ -233,7 +233,11 @@ function getSystemStats() {
 const serviceMap: Record<string, string[]> = {
   "postgresql": ["postgresql", "postgresql-15", "postgresql-14", "postgres"],
   "redis": ["redis-server", "redis"],
-  "ozvps": ["ozvps", "ozvps-panel", "ozvps-app"],
+};
+
+// PM2 process names for the app
+const pm2ProcessMap: Record<string, string> = {
+  "ozvps": "ozvps",
 };
 
 // Find which service name actually exists
@@ -265,6 +269,21 @@ async function controlService(service: string, action: "start" | "stop" | "resta
     return { success: false, message: "Cannot control admin panel from itself" };
   }
 
+  // Check if this is a PM2 process
+  const pm2Process = pm2ProcessMap[service];
+  if (pm2Process) {
+    return new Promise((resolve) => {
+      exec(`pm2 ${action} ${pm2Process}`, (error, _stdout, stderr) => {
+        if (error) {
+          resolve({ success: false, message: stderr || error.message });
+        } else {
+          resolve({ success: true, message: `PM2 process ${pm2Process} ${action}ed successfully` });
+        }
+      });
+    });
+  }
+
+  // Otherwise use systemctl
   const systemdService = await findServiceName(service);
   if (!systemdService) {
     return { success: false, message: `Unknown service: ${service}` };
@@ -294,6 +313,35 @@ async function getServiceStatus(service: string): Promise<{ running: boolean; en
     return { running: false, enabled: false, exists: false };
   }
 
+  // Check if this is a PM2 process
+  const pm2Process = pm2ProcessMap[service];
+  if (pm2Process) {
+    return new Promise((resolve) => {
+      exec(`pm2 jlist`, (error, stdout) => {
+        if (error) {
+          resolve({ running: false, enabled: false, exists: false });
+          return;
+        }
+        try {
+          const processes = JSON.parse(stdout);
+          const process = processes.find((p: any) => p.name === pm2Process);
+          if (process) {
+            resolve({
+              running: process.pm2_env?.status === "online",
+              enabled: true, // PM2 processes are always "enabled" if they exist
+              exists: true,
+            });
+          } else {
+            resolve({ running: false, enabled: false, exists: false });
+          }
+        } catch {
+          resolve({ running: false, enabled: false, exists: false });
+        }
+      });
+    });
+  }
+
+  // Otherwise use systemctl
   const systemdService = await findServiceName(service);
   if (!systemdService) {
     return { running: false, enabled: false, exists: false };
