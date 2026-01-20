@@ -292,10 +292,49 @@ export async function runBillingJob(): Promise<void> {
     }
   }
 
-  // Step C: Send reminders for servers due tomorrow
+  // Step C: Cleanup orphaned billing records (servers deleted from VirtFusion)
+  await cleanupOrphanedBillingRecords();
+
+  // Step D: Send reminders for servers due tomorrow
   await sendBillingReminders();
 
   log('Billing job completed', 'billing');
+}
+
+// Cleanup billing records for servers that no longer exist in VirtFusion
+async function cleanupOrphanedBillingRecords(): Promise<void> {
+  // Only check active/paid/unpaid records - cancelled ones are already handled
+  const activeRecords = await db.select().from(serverBilling)
+    .where(
+      or(
+        eq(serverBilling.status, 'active'),
+        eq(serverBilling.status, 'paid'),
+        eq(serverBilling.status, 'unpaid'),
+        eq(serverBilling.status, 'suspended')
+      )
+    );
+
+  let cleaned = 0;
+
+  for (const record of activeRecords) {
+    try {
+      // Try to get the server from VirtFusion
+      await virtfusionClient.getServer(record.virtfusionServerId);
+    } catch (error: any) {
+      // If 404 or not found, the server has been deleted
+      if (error.message?.includes('404') || error.message?.includes('not found') || error.message?.includes('Not Found')) {
+        // Delete the billing record
+        await db.delete(serverBilling).where(eq(serverBilling.id, record.id));
+        log(`Cleaned up orphaned billing record ${record.id} for deleted server ${record.virtfusionServerId}`, 'billing');
+        cleaned++;
+      }
+      // For other errors (network issues, etc), skip this record
+    }
+  }
+
+  if (cleaned > 0) {
+    log(`Cleaned up ${cleaned} orphaned billing records`, 'billing');
+  }
 }
 
 // Send billing reminders for servers due in the next 24 hours
