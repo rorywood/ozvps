@@ -1,11 +1,24 @@
 import { StatusBadge, type StatusType } from "./status-badge";
 import { Button } from "./button";
 import { Progress } from "./progress";
-import { ChevronRight, Ban, AlertTriangle, Gift } from "lucide-react";
+import { ChevronRight, Ban, AlertTriangle, Gift, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
 import { Badge } from "./badge";
+
+// Helper to check if billing is due today or tomorrow
+function getBillingDueStatus(nextBillAt?: string): 'today' | 'tomorrow' | null {
+  if (!nextBillAt) return null;
+  const billDate = new Date(nextBillAt);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+  const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysUntil <= 0) return 'today';
+  if (daysUntil === 1) return 'tomorrow';
+  return null;
+}
 
 interface BillingStatus {
   status: string;
@@ -24,6 +37,7 @@ interface ServerCardProps {
 
 export function ServerCard({ server, cancellation, billingStatus, onClick }: ServerCardProps) {
   const { getDisplayStatus } = usePowerActions();
+  const billingDue = billingStatus?.freeServer ? null : getBillingDueStatus(billingStatus?.nextBillAt);
 
   // Get the display status (with deletion/power action states)
   const displayStatus = getDisplayStatus(
@@ -105,6 +119,18 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
               <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
                 UNPAID
+              </Badge>
+            )}
+            {billingDue === 'today' && billingStatus?.status !== 'unpaid' && billingStatus?.status !== 'suspended' && (
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <Clock className="h-2.5 w-2.5 mr-0.5" />
+                DUE TODAY
+              </Badge>
+            )}
+            {billingDue === 'tomorrow' && billingStatus?.status !== 'unpaid' && billingStatus?.status !== 'suspended' && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0 border-amber-500/50 text-amber-500">
+                <Clock className="h-2.5 w-2.5 mr-0.5" />
+                DUE TOMORROW
               </Badge>
             )}
           </div>
