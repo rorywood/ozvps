@@ -1471,12 +1471,12 @@ export default function ServerDetail() {
                       Billing
                     </p>
                     <div className="flex items-center gap-2">
-                      <Gift className="h-4 w-4 text-success" />
-                      <p className="text-sm font-medium text-success">
+                      <Gift className="h-4 w-4 text-blue-500" />
+                      <p className="text-sm font-medium text-blue-500">
                         Complimentary
                       </p>
                     </div>
-                    <p className="text-xs text-success/80 mt-1">
+                    <p className="text-xs text-blue-400 mt-1">
                       This server is free - you are not being charged
                     </p>
                   </div>

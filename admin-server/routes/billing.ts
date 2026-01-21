@@ -164,6 +164,12 @@ export function registerBillingRoutes(router: Router) {
         return res.status(400).json({ error: "Invalid ID" });
       }
 
+      // Get the current billing record first
+      const [currentBilling] = await db.select().from(serverBilling).where(eq(serverBilling.id, id));
+      if (!currentBilling) {
+        return res.status(404).json({ error: "Billing record not found" });
+      }
+
       const { status, monthlyPriceCents, autoRenew, freeServer, nextBillAt, suspendAt } = req.body;
 
       const updateData: Record<string, any> = { updatedAt: new Date() };
@@ -185,6 +191,20 @@ export function registerBillingRoutes(router: Router) {
       }
       if (suspendAt !== undefined) updateData.suspendAt = suspendAt ? new Date(suspendAt) : null;
 
+      // If status is being changed to 'suspended', actually suspend in VirtFusion
+      if (status === 'suspended' && currentBilling.status !== 'suspended') {
+        try {
+          await virtfusionClient.suspendServer(currentBilling.virtfusionServerId);
+          updateData.adminSuspended = true;
+          updateData.adminSuspendedAt = new Date();
+          updateData.adminSuspendedReason = 'Admin manual suspension';
+          console.log(`[admin-billing] Server ${currentBilling.virtfusionServerId} suspended in VirtFusion by ${session.email}`);
+        } catch (vfError: any) {
+          console.log(`[admin-billing] Failed to suspend server ${currentBilling.virtfusionServerId} in VirtFusion: ${vfError.message}`);
+          return res.status(500).json({ error: `Failed to suspend server in VirtFusion: ${vfError.message}` });
+        }
+      }
+
       const [updated] = await db
         .update(serverBilling)
         .set(updateData)
@@ -196,7 +216,7 @@ export function registerBillingRoutes(router: Router) {
       }
 
       // Audit log
-      await auditSuccess(req, "billing.update", "billing", String(id), undefined, updateData);
+      await auditSuccess(req, "billing.update", "billing", String(id), currentBilling.virtfusionServerId, updateData);
 
       console.log(`[admin-billing] Billing record ${id} updated by ${session.email}: ${JSON.stringify(updateData)}`);
 
@@ -205,6 +225,55 @@ export function registerBillingRoutes(router: Router) {
       await auditFailure(req, "billing.update", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Update record error: ${error.message}`);
       res.status(500).json({ error: "Failed to update billing record" });
+    }
+  });
+
+  // Suspend a server (admin)
+  router.post("/billing/records/:id/suspend", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const session = req.adminSession!;
+      const { reason } = req.body;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid ID" });
+      }
+
+      const [billing] = await db.select().from(serverBilling).where(eq(serverBilling.id, id));
+
+      if (!billing) {
+        return res.status(404).json({ error: "Billing record not found" });
+      }
+
+      if (billing.status === 'suspended') {
+        return res.status(400).json({ error: "Server is already suspended" });
+      }
+
+      // Suspend in VirtFusion
+      await virtfusionClient.suspendServer(billing.virtfusionServerId);
+
+      // Update billing status
+      await db
+        .update(serverBilling)
+        .set({
+          status: "suspended",
+          adminSuspended: true,
+          adminSuspendedAt: new Date(),
+          adminSuspendedReason: reason || 'Admin suspension',
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.id, id));
+
+      // Audit log
+      await auditSuccess(req, "billing.suspend", "billing", String(id), billing.virtfusionServerId, { reason });
+
+      console.log(`[admin-billing] Server ${billing.virtfusionServerId} suspended by ${session.email}: ${reason || 'No reason'}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditFailure(req, "billing.suspend", "billing", error.message, req.params.id);
+      console.log(`[admin-billing] Suspend error: ${error.message}`);
+      res.status(500).json({ error: `Failed to suspend server: ${error.message}` });
     }
   });
 

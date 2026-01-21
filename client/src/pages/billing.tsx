@@ -1430,7 +1430,7 @@ export default function BillingPage() {
                                   </div>
                                   <div className="text-xs text-muted-foreground">
                                     {charge.freeServer ? (
-                                      <span className="text-purple-400">
+                                      <span className="text-blue-400">
                                         Complimentary hosting - No payment required
                                       </span>
                                     ) : charge.status === 'unpaid' && daysUntilSuspension !== null ? (

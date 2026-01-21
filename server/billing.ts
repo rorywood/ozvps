@@ -262,13 +262,18 @@ export async function runBillingJob(): Promise<void> {
       )
     );
 
-  // B2: Also suspend any unpaid server that is 7+ days overdue (nextBillAt is 7+ days in the past)
+  // B2: Also suspend any server that is 7+ days overdue (nextBillAt is 7+ days in the past)
   // This catches servers that may have been missed or have null/incorrect suspendAt
+  // Check all non-paid statuses (active, unpaid) - not just unpaid
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const longOverdueServers = await db.select().from(serverBilling)
     .where(
       and(
-        eq(serverBilling.status, 'unpaid'),
+        or(
+          eq(serverBilling.status, 'unpaid'),
+          eq(serverBilling.status, 'active'),
+          eq(serverBilling.status, 'paid')
+        ),
         eq(serverBilling.freeServer, false),
         lte(serverBilling.nextBillAt, sevenDaysAgo) // 7+ days overdue
       )
@@ -287,6 +292,24 @@ export async function runBillingJob(): Promise<void> {
 
   for (const billing of allOverdueServers) {
     try {
+      // For servers that are still 'active' or 'paid' (caught by B2), try to charge first
+      // If charge succeeds, skip suspension
+      if (billing.status === 'active' || billing.status === 'paid') {
+        log(`Server ${billing.virtfusionServerId} is 7+ days overdue but status is '${billing.status}', attempting charge first`, 'billing');
+        const charged = await chargeServer(billing);
+        if (charged) {
+          log(`Server ${billing.virtfusionServerId} charge succeeded, skipping suspension`, 'billing');
+          continue;
+        }
+        // Charge failed, mark as unpaid before suspending
+        await db.update(serverBilling)
+          .set({
+            status: 'unpaid',
+            updatedAt: new Date(),
+          })
+          .where(eq(serverBilling.id, billing.id));
+      }
+
       await virtfusionClient.suspendServer(billing.virtfusionServerId);
 
       await db.update(serverBilling)
