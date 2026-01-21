@@ -75,7 +75,7 @@ function Header({ isLoggedIn }: { isLoggedIn: boolean }) {
             <img
               src={logo}
               alt="OzVPS"
-              className="h-10 w-auto dark:invert-0 invert cursor-pointer"
+              className="h-14 w-auto dark:invert-0 invert cursor-pointer"
             />
           </Link>
 
@@ -618,7 +618,7 @@ function Footer() {
             <img
               src={logo}
               alt="OzVPS"
-              className="h-8 w-auto dark:invert-0 invert"
+              className="h-10 w-auto dark:invert-0 invert"
             />
             <span className="text-sm text-muted-foreground">
               Australian VPS Hosting
