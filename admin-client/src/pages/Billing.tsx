@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { billingApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, DollarSign, Calendar, Gift, X, Trash2 } from "lucide-react";
+import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2 } from "lucide-react";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -49,11 +49,23 @@ export default function Billing() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const suspendMutation = useMutation({
+    mutationFn: (id: number) => billingApi.suspendRecord(id, "Admin manual suspension"),
+    onSuccess: () => {
+      toast.success("Server suspended");
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      setSelectedRecord(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const unsuspendMutation = useMutation({
     mutationFn: (id: number) => billingApi.unsuspendRecord(id),
     onSuccess: () => {
       toast.success("Server unsuspended");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
@@ -231,7 +243,7 @@ export default function Billing() {
                   <Gift className="h-4 w-4" />
                   {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
                 </button>
-                {selectedRecord.billing.status === "suspended" && (
+                {selectedRecord.billing.status === "suspended" ? (
                   <button
                     onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
                     disabled={unsuspendMutation.isPending}
@@ -239,6 +251,19 @@ export default function Billing() {
                   >
                     <Play className="h-4 w-4" />
                     Unsuspend
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Suspend server ${selectedRecord.billing.virtfusionServerId}? This will stop the server.`)) {
+                        suspendMutation.mutate(selectedRecord.billing.id);
+                      }
+                    }}
+                    disabled={suspendMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-400 border border-orange-500/30 rounded-lg text-sm hover:bg-orange-500/20 transition-colors"
+                  >
+                    <Pause className="h-4 w-4" />
+                    Suspend Server
                   </button>
                 )}
                 <button

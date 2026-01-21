@@ -266,6 +266,8 @@ export async function runBillingJob(): Promise<void> {
   // This catches servers that may have been missed or have null/incorrect suspendAt
   // Check all non-paid statuses (active, unpaid) - not just unpaid
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  log(`B2 check: looking for servers with nextBillAt <= ${sevenDaysAgo.toISOString()}`, 'billing');
+
   const longOverdueServers = await db.select().from(serverBilling)
     .where(
       and(
@@ -278,6 +280,11 @@ export async function runBillingJob(): Promise<void> {
         lte(serverBilling.nextBillAt, sevenDaysAgo) // 7+ days overdue
       )
     );
+
+  // Log details of what we found
+  for (const s of longOverdueServers) {
+    log(`B2 found: server ${s.virtfusionServerId}, status=${s.status}, nextBillAt=${s.nextBillAt?.toISOString()}, freeServer=${s.freeServer}`, 'billing');
+  }
 
   // Combine and dedupe the lists
   const allOverdueServers = [...overdueServers];
@@ -292,6 +299,8 @@ export async function runBillingJob(): Promise<void> {
 
   for (const billing of allOverdueServers) {
     try {
+      log(`Processing overdue server ${billing.virtfusionServerId}: status=${billing.status}, nextBillAt=${billing.nextBillAt?.toISOString()}`, 'billing');
+
       // For servers that are still 'active' or 'paid' (caught by B2), try to charge first
       // If charge succeeds, skip suspension
       if (billing.status === 'active' || billing.status === 'paid') {
@@ -308,9 +317,12 @@ export async function runBillingJob(): Promise<void> {
             updatedAt: new Date(),
           })
           .where(eq(serverBilling.id, billing.id));
+        log(`Server ${billing.virtfusionServerId} marked as unpaid, proceeding to suspend`, 'billing');
       }
 
+      log(`Calling VirtFusion suspendServer for ${billing.virtfusionServerId}`, 'billing');
       await virtfusionClient.suspendServer(billing.virtfusionServerId);
+      log(`VirtFusion suspend completed for ${billing.virtfusionServerId}`, 'billing');
 
       await db.update(serverBilling)
         .set({
@@ -319,7 +331,7 @@ export async function runBillingJob(): Promise<void> {
         })
         .where(eq(serverBilling.id, billing.id));
 
-      log(`Suspended server ${billing.virtfusionServerId}`, 'billing');
+      log(`Suspended server ${billing.virtfusionServerId} - database updated to status=suspended`, 'billing');
 
       // Send server suspended email
       try {

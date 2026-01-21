@@ -187,6 +187,8 @@ export const billingApi = {
 
   deleteRecord: (id: number) => api.delete(`/billing/records/${id}`, { confirm: "DELETE" }),
 
+  suspendRecord: (id: number, reason?: string) => api.post(`/billing/records/${id}/suspend`, { reason }),
+
   unsuspendRecord: (id: number) => api.post(`/billing/records/${id}/unsuspend`),
 
   runBillingJob: () => api.post("/billing/run-job"),
