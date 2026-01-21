@@ -1,10 +1,16 @@
 import { db } from './db';
-import { serverBilling, billingLedger, wallets, walletTransactions } from '../shared/schema';
+import { serverBilling, billingLedger, wallets, walletTransactions, userFlags } from '../shared/schema';
 import { eq, and, lte, isNull, or, not, gte, lt } from 'drizzle-orm';
 import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
 import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail } from './email';
+
+// Check if a user's account is suspended
+async function isUserAccountSuspended(auth0UserId: string): Promise<boolean> {
+  const [flags] = await db.select().from(userFlags).where(eq(userFlags.auth0UserId, auth0UserId));
+  return flags?.suspended ?? false;
+}
 
 // Helper to get user email from Auth0
 async function getUserEmail(auth0UserId: string): Promise<string | null> {
@@ -210,6 +216,12 @@ export async function runBillingJob(): Promise<void> {
 
   for (const billing of dueServers) {
     try {
+      // Skip billing for users with suspended accounts
+      if (await isUserAccountSuspended(billing.auth0UserId)) {
+        log(`Skipping billing for server ${billing.virtfusionServerId} - user account is suspended`, 'billing');
+        continue;
+      }
+
       const charged = await chargeServer(billing);
 
       if (!charged) {
@@ -299,6 +311,12 @@ export async function runBillingJob(): Promise<void> {
 
   for (const billing of allOverdueServers) {
     try {
+      // Skip suspension for users with suspended accounts - their servers are already powered off
+      if (await isUserAccountSuspended(billing.auth0UserId)) {
+        log(`Skipping suspension for server ${billing.virtfusionServerId} - user account is suspended`, 'billing');
+        continue;
+      }
+
       log(`Processing overdue server ${billing.virtfusionServerId}: status=${billing.status}, nextBillAt=${billing.nextBillAt?.toISOString()}`, 'billing');
 
       // For servers that are still 'active' or 'paid' (caught by B2), try to charge first

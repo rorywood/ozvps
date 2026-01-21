@@ -310,12 +310,37 @@ export function registerUsersRoutes(router: Router) {
         });
       }
 
+      // If suspending, power off all user's servers
+      let poweredOffCount = 0;
+      if (suspended) {
+        const userServers = await db
+          .select()
+          .from(serverBilling)
+          .where(eq(serverBilling.auth0UserId, auth0UserId));
+
+        for (const server of userServers) {
+          if (server.status !== 'cancelled') {
+            try {
+              // Power off the server
+              await virtfusionClient.powerAction(server.virtfusionServerId, 'stop');
+              poweredOffCount++;
+              console.log(`[admin-users] Powered off server ${server.virtfusionServerId} for suspended user ${auth0User.email}`);
+            } catch (err: any) {
+              console.log(`[admin-users] Failed to power off server ${server.virtfusionServerId}: ${err.message}`);
+            }
+          }
+        }
+        if (poweredOffCount > 0) {
+          console.log(`[admin-users] Powered off ${poweredOffCount} servers for suspended user ${auth0User.email}`);
+        }
+      }
+
       // Audit log
-      await auditSuccess(req, suspended ? "user.suspend" : "user.unsuspend", "user", auth0UserId, auth0User.email, { suspended, reason });
+      await auditSuccess(req, suspended ? "user.suspend" : "user.unsuspend", "user", auth0UserId, auth0User.email, { suspended, reason, poweredOffCount });
 
       console.log(`[admin-users] User ${auth0User.email} account ${suspended ? "suspended" : "unsuspended"} by ${session.email}`);
 
-      res.json({ success: true, suspended });
+      res.json({ success: true, suspended, poweredOffCount });
     } catch (error: any) {
       await auditFailure(req, "user.suspend", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Suspend user error: ${error.message}`);
