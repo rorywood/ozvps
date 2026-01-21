@@ -723,17 +723,20 @@ export function registerUsersRoutes(router: Router) {
 
       // 4. Delete Auth0 account
       try {
-        await auth0Client.deleteUser(auth0UserId);
-        results.auth0Deleted = true;
-        console.log(`[admin-users] Auth0 user ${auth0UserId} deleted`);
-      } catch (err: any) {
-        if (err.message?.includes('404') || err.message?.includes('not found')) {
+        const auth0Result = await auth0Client.deleteUser(auth0UserId);
+        if (auth0Result.success) {
+          results.auth0Deleted = true;
+          console.log(`[admin-users] Auth0 user ${auth0UserId} deleted`);
+        } else if (auth0Result.error?.includes('404') || auth0Result.error?.includes('not found')) {
           console.log(`[admin-users] Auth0 user already deleted`);
           results.auth0Deleted = true; // Already gone
         } else {
-          console.log(`[admin-users] Auth0 deletion failed: ${err.message}`);
-          results.errors.push(`Auth0 deletion failed: ${err.message}`);
+          console.log(`[admin-users] Auth0 deletion failed: ${auth0Result.error}`);
+          results.errors.push(`Auth0 deletion failed: ${auth0Result.error}`);
         }
+      } catch (err: any) {
+        console.log(`[admin-users] Auth0 deletion error: ${err.message}`);
+        results.errors.push(`Auth0 deletion error: ${err.message}`);
       }
 
       // 5. Delete local database records (order matters for foreign key constraints)
