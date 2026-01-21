@@ -1589,8 +1589,25 @@ export async function registerRoutes(
       if (!session || new Date(session.expiresAt) < new Date()) {
         if (session) await storage.deleteSession(sessionId);
         res.clearCookie(SESSION_COOKIE);
-      res.clearCookie(CSRF_COOKIE);
+        res.clearCookie(CSRF_COOKIE);
         return res.status(401).json({ error: 'Session expired' });
+      }
+
+      // Check if session was revoked (e.g., by admin blocking user)
+      if (session.revokedAt) {
+        res.clearCookie(SESSION_COOKIE);
+        res.clearCookie(CSRF_COOKIE);
+        const reason = session.revokedReason;
+        if (reason === 'USER_BLOCKED') {
+          return res.status(401).json({
+            error: 'Your account has been suspended. Please contact support.',
+            code: 'SESSION_REVOKED_BLOCKED'
+          });
+        }
+        return res.status(401).json({
+          error: 'Your session has ended. Please sign in again.',
+          code: 'SESSION_REVOKED'
+        });
       }
 
       // Check Auth0 for updated admin status and email verification (refreshes every call)

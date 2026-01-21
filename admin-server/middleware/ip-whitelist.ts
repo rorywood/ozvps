@@ -140,8 +140,101 @@ export async function ipWhitelistMiddleware(req: Request, res: Response, next: N
 
   // IP not whitelisted - block access
   console.log(`[admin] IP ${clientIp} blocked - not in whitelist`);
-  return res.status(403).json({
-    error: "Access denied",
-    message: "Your IP address is not authorized to access the admin panel",
-  });
+
+  // For API requests, return JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(403).json({
+      error: "Access denied",
+      message: "Your IP address is not authorized to access the admin panel",
+    });
+  }
+
+  // For page requests, return a styled HTML error page
+  return res.status(403).send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied - OzVPS Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #e2e8f0;
+    }
+    .container {
+      text-align: center;
+      padding: 3rem;
+      max-width: 500px;
+    }
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 1.5rem;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon svg {
+      width: 40px;
+      height: 40px;
+      color: #ef4444;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #f1f5f9;
+    }
+    p {
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+    .ip {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.5rem;
+      font-family: monospace;
+      font-size: 0.875rem;
+      color: #cbd5e1;
+    }
+    .help {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v.01M12 12v-2m0-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <h1>Access Denied</h1>
+    <p>Your IP address is not authorized to access the admin panel.</p>
+    <p>Contact an administrator if you need access.</p>
+    <div class="ip">Your IP: ${clientIp}</div>
+    <div class="help">
+      If you believe this is an error, please contact the system administrator.
+    </div>
+  </div>
+</body>
+</html>
+  `);
 }
