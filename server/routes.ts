@@ -1628,6 +1628,17 @@ export async function registerRoutes(
         }
       }
 
+      // Check if user account is suspended
+      let accountSuspended = false;
+      let accountSuspendedReason: string | null = null;
+      if (session.auth0UserId) {
+        const userFlags = await storage.getUserFlags(session.auth0UserId);
+        if (userFlags?.blocked) {
+          accountSuspended = true;
+          accountSuspendedReason = userFlags.blockedReason || null;
+        }
+      }
+
       res.json({
         user: {
           id: session.userId,
@@ -1637,6 +1648,8 @@ export async function registerRoutes(
           extRelationId: session.extRelationId,
           isAdmin,
           emailVerified,
+          accountSuspended,
+          accountSuspendedReason,
         },
       });
     } catch (error: any) {
@@ -1931,6 +1944,12 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/power', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
+      // Check if user account is suspended
+      const userFlags = await storage.getUserFlags(req.userSession!.auth0UserId!);
+      if (userFlags?.blocked) {
+        return res.status(403).json({ error: 'Your account has been suspended. Please contact support for assistance.' });
+      }
+
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
@@ -2203,6 +2222,12 @@ export async function registerRoutes(
 
   app.post('/api/servers/:id/reinstall', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
+      // Check if user account is suspended
+      const userFlags = await storage.getUserFlags(req.userSession!.auth0UserId!);
+      if (userFlags?.blocked) {
+        return res.status(403).json({ error: 'Your account has been suspended. Please contact support for assistance.' });
+      }
+
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
@@ -5487,6 +5512,13 @@ export async function registerRoutes(
 
       if (!auth0UserId || !virtFusionUserId || !extRelationId) {
         return res.status(400).json({ error: 'Invalid session state' });
+      }
+
+      // Check if user account is suspended
+      const userFlags = await storage.getUserFlags(auth0UserId);
+      if (userFlags?.blocked) {
+        log(`Suspended user attempted to deploy: ${auth0UserId}`, 'security');
+        return res.status(403).json({ error: 'Your account has been suspended. Please contact support for assistance.' });
       }
 
       const result = deploySchema.safeParse(req.body);

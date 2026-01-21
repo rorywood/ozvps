@@ -13,6 +13,8 @@ interface User {
   emailVerified?: boolean;
   virtFusionUserId?: number;
   extRelationId?: string;
+  accountSuspended?: boolean;
+  accountSuspendedReason?: string | null;
 }
 
 interface AuthMeResponse {

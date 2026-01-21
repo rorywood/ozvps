@@ -42,8 +42,8 @@ export default function Users() {
   const blockMutation = useMutation({
     mutationFn: ({ auth0UserId, blocked, reason }: { auth0UserId: string; blocked: boolean; reason?: string }) =>
       usersApi.blockUser(auth0UserId, blocked, reason),
-    onSuccess: () => {
-      toast.success("User updated");
+    onSuccess: (_, variables) => {
+      toast.success(variables.blocked ? "Account suspended" : "Account unsuspended");
       queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
@@ -126,8 +126,8 @@ export default function Users() {
                         <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                       </div>
                       {user.blocked && (
-                        <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full border border-red-500/30">
-                          Blocked
+                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded-full border border-orange-500/30">
+                          Suspended
                         </span>
                       )}
                     </div>
@@ -168,8 +168,8 @@ export default function Users() {
                     </div>
                   </div>
                   {selectedUser.blocked && (
-                    <span className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium border border-red-500/30">
-                      Blocked
+                    <span className="px-3 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30">
+                      Account Suspended
                     </span>
                   )}
                 </div>
@@ -228,7 +228,7 @@ export default function Users() {
                           onClick={() => {
                             const reason = userDetails.user.blocked
                               ? undefined
-                              : prompt("Enter block reason:");
+                              : prompt("Enter suspension reason (e.g., Terms of Service violation):");
                             if (!userDetails.user.blocked && !reason) return;
                             blockMutation.mutate({
                               auth0UserId: userDetails.user.auth0UserId,
@@ -239,11 +239,11 @@ export default function Users() {
                           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                             userDetails.user.blocked
                               ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/20"
-                              : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/20"
+                              : "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500/20"
                           }`}
                         >
                           <Ban className="h-4 w-4" />
-                          {userDetails.user.blocked ? "Unblock" : "Block"}
+                          {userDetails.user.blocked ? "Unsuspend Account" : "Suspend Account"}
                         </button>
                         {userDetails.user.emailVerified ? (
                           <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg">

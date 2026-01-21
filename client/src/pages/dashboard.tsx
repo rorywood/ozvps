@@ -20,11 +20,13 @@ import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import { cn } from "@/lib/utils";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Dashboard() {
   useDocumentTitle('Dashboard');
   const [, setLocation] = useLocation();
   const { getDisplayStatus } = usePowerActions();
+  const { user } = useAuth();
 
   // Combined dashboard query - reduces 4 API calls to 1
   const { data: dashboardData, isLoading, error } = useQuery({
@@ -122,6 +124,32 @@ export default function Dashboard() {
     <AppShell>
       <div className="space-y-8">
         <EmailVerificationBanner />
+
+        {/* Account Suspended Banner */}
+        {user?.accountSuspended && (
+          <div className="border-2 border-orange-500 rounded-lg p-5 bg-orange-500/10">
+            <div className="flex items-start gap-4">
+              <div className="bg-orange-500 rounded-full p-2 flex-shrink-0">
+                <Ban className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-orange-500 text-lg mb-2">Account Suspended</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Your account has been suspended. You cannot deploy new servers or make changes to existing servers.
+                </p>
+                {user.accountSuspendedReason && (
+                  <div className="mt-2 p-2 bg-orange-500/10 rounded border border-orange-500/20">
+                    <p className="text-xs uppercase text-muted-foreground mb-1">Reason:</p>
+                    <p className="text-sm text-foreground">{user.accountSuspendedReason}</p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground mt-3">
+                  Please contact support if you believe this is an error.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Critical Overdue Banner - More than 2 days overdue */}
         {criticalOverdueServers.length > 0 && (
