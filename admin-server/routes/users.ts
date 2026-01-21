@@ -1,10 +1,15 @@
 import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
-import { userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth, serverBilling } from "../../shared/schema";
-import { eq, desc, like, or, sql } from "drizzle-orm";
+import {
+  userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth,
+  serverBilling, deployOrders, billingLedger, serverCancellations, invoices,
+  tickets, ticketMessages, promoCodeUsage, passwordResetTokens
+} from "../../shared/schema";
+import { eq, desc, like, or, sql, inArray } from "drizzle-orm";
 import { dbStorage } from "../../server/storage";
 import { auth0Client } from "../../server/auth0";
 import { virtfusionClient } from "../../server/virtfusion";
+import { getUncachableStripeClient } from "../../server/stripeClient";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 
 export function registerUsersRoutes(router: Router) {
@@ -592,6 +597,221 @@ export function registerUsersRoutes(router: Router) {
     } catch (error: any) {
       console.log(`[admin-users] List wallets error: ${error.message}`);
       res.status(500).json({ error: "Failed to list wallets" });
+    }
+  });
+
+  // Purge user - DANGEROUS: Completely removes user from all systems
+  // Deletes: VirtFusion servers + user, Stripe customer, Auth0 account, all local database records
+  router.post("/users/:auth0UserId/purge", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const { confirm } = req.body;
+      const adminSession = req.adminSession!;
+
+      // Require explicit confirmation
+      if (confirm !== "PURGE") {
+        return res.status(400).json({
+          error: "Confirmation required. Send { confirm: 'PURGE' } to confirm this destructive action."
+        });
+      }
+
+      console.log(`[admin-users] Starting purge for ${auth0UserId} by ${adminSession.email}`);
+
+      const results: {
+        auth0Deleted: boolean;
+        virtfusionServersDeleted: number;
+        virtfusionUserDeleted: boolean;
+        stripeCustomerDeleted: boolean;
+        localRecordsDeleted: {
+          sessions: number;
+          userFlags: number;
+          walletTransactions: number;
+          wallets: number;
+          deployOrders: number;
+          serverBilling: number;
+          billingLedger: number;
+          serverCancellations: number;
+          invoices: number;
+          twoFactorAuth: number;
+          ticketMessages: number;
+          tickets: number;
+          promoCodeUsage: number;
+          passwordResetTokens: number;
+          userMappings: number;
+        };
+        errors: string[];
+      } = {
+        auth0Deleted: false,
+        virtfusionServersDeleted: 0,
+        virtfusionUserDeleted: false,
+        stripeCustomerDeleted: false,
+        localRecordsDeleted: {
+          sessions: 0,
+          userFlags: 0,
+          walletTransactions: 0,
+          wallets: 0,
+          deployOrders: 0,
+          serverBilling: 0,
+          billingLedger: 0,
+          serverCancellations: 0,
+          invoices: 0,
+          twoFactorAuth: 0,
+          ticketMessages: 0,
+          tickets: 0,
+          promoCodeUsage: 0,
+          passwordResetTokens: 0,
+          userMappings: 0,
+        },
+        errors: [],
+      };
+
+      // 1. Get user info from Auth0 first (need VirtFusion ID and email for Stripe)
+      let virtFusionUserId: number | null = null;
+      let userEmail: string | null = null;
+      try {
+        const auth0User = await auth0Client.getUserById(auth0UserId);
+        if (auth0User) {
+          virtFusionUserId = auth0User.app_metadata?.virtfusion_user_id || null;
+          userEmail = auth0User.email || null;
+          console.log(`[admin-users] Found user: email=${userEmail}, virtFusionId=${virtFusionUserId}`);
+        } else {
+          console.log(`[admin-users] User ${auth0UserId} not found in Auth0, continuing with local cleanup`);
+        }
+      } catch (err: any) {
+        console.log(`[admin-users] Failed to fetch Auth0 user: ${err.message}`);
+        results.errors.push(`Auth0 fetch failed: ${err.message}`);
+      }
+
+      // 2. Delete VirtFusion servers and user
+      if (virtFusionUserId) {
+        try {
+          const cleanupResult = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
+          results.virtfusionServersDeleted = cleanupResult.serversDeleted;
+          results.virtfusionUserDeleted = cleanupResult.success;
+          if (!cleanupResult.success) {
+            results.errors.push(...cleanupResult.errors);
+          }
+          console.log(`[admin-users] VirtFusion cleanup: ${cleanupResult.serversDeleted} servers deleted, user deleted: ${cleanupResult.success}`);
+        } catch (err: any) {
+          console.log(`[admin-users] VirtFusion cleanup failed: ${err.message}`);
+          results.errors.push(`VirtFusion cleanup failed: ${err.message}`);
+        }
+      }
+
+      // 3. Delete Stripe customer
+      try {
+        const [wallet] = await db.select().from(wallets).where(eq(wallets.auth0UserId, auth0UserId));
+        if (wallet?.stripeCustomerId) {
+          const stripe = await getUncachableStripeClient();
+          try {
+            await stripe.customers.del(wallet.stripeCustomerId);
+            results.stripeCustomerDeleted = true;
+            console.log(`[admin-users] Stripe customer ${wallet.stripeCustomerId} deleted`);
+          } catch (stripeErr: any) {
+            if (stripeErr.code === 'resource_missing') {
+              console.log(`[admin-users] Stripe customer already deleted`);
+              results.stripeCustomerDeleted = true; // Already gone
+            } else {
+              throw stripeErr;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.log(`[admin-users] Stripe deletion failed: ${err.message}`);
+        results.errors.push(`Stripe deletion failed: ${err.message}`);
+      }
+
+      // 4. Delete Auth0 account
+      try {
+        await auth0Client.deleteUser(auth0UserId);
+        results.auth0Deleted = true;
+        console.log(`[admin-users] Auth0 user ${auth0UserId} deleted`);
+      } catch (err: any) {
+        if (err.message?.includes('404') || err.message?.includes('not found')) {
+          console.log(`[admin-users] Auth0 user already deleted`);
+          results.auth0Deleted = true; // Already gone
+        } else {
+          console.log(`[admin-users] Auth0 deletion failed: ${err.message}`);
+          results.errors.push(`Auth0 deletion failed: ${err.message}`);
+        }
+      }
+
+      // 5. Delete local database records (order matters for foreign key constraints)
+      try {
+        // Get ticket IDs for this user first (for ticket messages)
+        const userTickets = await db.select({ id: tickets.id }).from(tickets).where(eq(tickets.auth0UserId, auth0UserId));
+        const ticketIds = userTickets.map(t => t.id);
+
+        // Delete ticket messages for user's tickets
+        if (ticketIds.length > 0) {
+          const ticketMsgResult = await db.delete(ticketMessages).where(inArray(ticketMessages.ticketId, ticketIds));
+          results.localRecordsDeleted.ticketMessages = ticketMsgResult.rowCount || 0;
+        }
+
+        // Delete records in order (children before parents)
+        const deleteResults = await Promise.all([
+          db.delete(sessions).where(eq(sessions.auth0UserId, auth0UserId)),
+          db.delete(billingLedger).where(eq(billingLedger.auth0UserId, auth0UserId)),
+          db.delete(serverCancellations).where(eq(serverCancellations.auth0UserId, auth0UserId)),
+          db.delete(invoices).where(eq(invoices.auth0UserId, auth0UserId)),
+          db.delete(promoCodeUsage).where(eq(promoCodeUsage.auth0UserId, auth0UserId)),
+          db.delete(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId)),
+          db.delete(tickets).where(eq(tickets.auth0UserId, auth0UserId)),
+          db.delete(deployOrders).where(eq(deployOrders.auth0UserId, auth0UserId)),
+          db.delete(serverBilling).where(eq(serverBilling.auth0UserId, auth0UserId)),
+          db.delete(walletTransactions).where(eq(walletTransactions.auth0UserId, auth0UserId)),
+          db.delete(userFlags).where(eq(userFlags.auth0UserId, auth0UserId)),
+        ]);
+
+        results.localRecordsDeleted.sessions = deleteResults[0].rowCount || 0;
+        results.localRecordsDeleted.billingLedger = deleteResults[1].rowCount || 0;
+        results.localRecordsDeleted.serverCancellations = deleteResults[2].rowCount || 0;
+        results.localRecordsDeleted.invoices = deleteResults[3].rowCount || 0;
+        results.localRecordsDeleted.promoCodeUsage = deleteResults[4].rowCount || 0;
+        results.localRecordsDeleted.twoFactorAuth = deleteResults[5].rowCount || 0;
+        results.localRecordsDeleted.tickets = deleteResults[6].rowCount || 0;
+        results.localRecordsDeleted.deployOrders = deleteResults[7].rowCount || 0;
+        results.localRecordsDeleted.serverBilling = deleteResults[8].rowCount || 0;
+        results.localRecordsDeleted.walletTransactions = deleteResults[9].rowCount || 0;
+        results.localRecordsDeleted.userFlags = deleteResults[10].rowCount || 0;
+
+        // Delete wallet last (after transactions)
+        const walletResult = await db.delete(wallets).where(eq(wallets.auth0UserId, auth0UserId));
+        results.localRecordsDeleted.wallets = walletResult.rowCount || 0;
+
+        // Delete user mapping
+        const userMappingResult = await db.delete(userMappings).where(eq(userMappings.auth0UserId, auth0UserId));
+        results.localRecordsDeleted.userMappings = userMappingResult.rowCount || 0;
+
+        // Delete password reset tokens by email if we have it
+        if (userEmail) {
+          const resetResult = await db.delete(passwordResetTokens).where(eq(passwordResetTokens.email, userEmail));
+          results.localRecordsDeleted.passwordResetTokens = resetResult.rowCount || 0;
+        }
+
+        console.log(`[admin-users] Local database cleanup complete:`, results.localRecordsDeleted);
+      } catch (err: any) {
+        console.log(`[admin-users] Database cleanup failed: ${err.message}`);
+        results.errors.push(`Database cleanup failed: ${err.message}`);
+      }
+
+      // Audit log
+      await auditSuccess(req, "user.purge", "user", auth0UserId, userEmail || auth0UserId, {
+        virtfusionServersDeleted: results.virtfusionServersDeleted,
+        stripeDeleted: results.stripeCustomerDeleted,
+        auth0Deleted: results.auth0Deleted,
+      });
+
+      console.log(`[admin-users] Purge complete for ${auth0UserId} by ${adminSession.email}:`, results);
+
+      res.json({
+        success: results.errors.length === 0,
+        results,
+      });
+    } catch (error: any) {
+      await auditFailure(req, "user.purge", "user", error.message, req.params.auth0UserId);
+      console.log(`[admin-users] Purge error: ${error.message}`);
+      res.status(500).json({ error: "Failed to purge user", details: error.message });
     }
   });
 }

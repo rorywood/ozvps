@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
-import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff } from "lucide-react";
+import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff, Trash2, AlertTriangle } from "lucide-react";
 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [purgeConfirmText, setPurgeConfirmText] = useState("");
   const queryClient = useQueryClient();
 
   // List all users from Auth0
@@ -70,6 +72,24 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ["user-transactions", selectedUser?.auth0UserId] });
     },
     onError: (err: any) => toast.error(err.message),
+  });
+
+  const purgeMutation = useMutation({
+    mutationFn: (auth0UserId: string) => usersApi.purgeUser(auth0UserId),
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success("User completely purged from all systems");
+      } else {
+        toast.warning(`Purge completed with errors: ${data.results.errors.join(", ")}`);
+      }
+      setShowPurgeConfirm(false);
+      setPurgeConfirmText("");
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ["users-list"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to purge user");
+    },
   });
 
   const formatCurrency = (cents: number) =>
@@ -346,6 +366,14 @@ export default function Users() {
                           <LogOut className="h-4 w-4" />
                           Revoke Sessions
                         </button>
+                        {/* Purge User - Dangerous */}
+                        <button
+                          onClick={() => setShowPurgeConfirm(true)}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-600 dark:text-red-400 border border-red-600/30 rounded-lg hover:bg-red-600/20 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Purge User
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -446,6 +474,79 @@ export default function Users() {
           )}
         </div>
       </div>
+
+      {/* Purge Confirmation Modal */}
+      {showPurgeConfirm && userDetails?.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/10 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Purge User</h3>
+            </div>
+
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-600 dark:text-red-400 text-sm font-medium">
+                This action is IRREVERSIBLE and will permanently delete:
+              </p>
+              <ul className="mt-2 text-sm text-red-600 dark:text-red-400 list-disc list-inside space-y-1">
+                <li>All servers in VirtFusion</li>
+                <li>VirtFusion user account</li>
+                <li>Stripe customer & payment methods</li>
+                <li>Auth0 account</li>
+                <li>All local database records (wallet, billing, tickets, etc.)</li>
+              </ul>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                User: <span className="font-semibold text-gray-900 dark:text-white">{userDetails.user.email}</span>
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Type <span className="font-mono font-bold text-red-500">PURGE</span> to confirm:
+              </p>
+              <input
+                type="text"
+                value={purgeConfirmText}
+                onChange={(e) => setPurgeConfirmText(e.target.value)}
+                placeholder="Type PURGE to confirm"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none font-mono"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowPurgeConfirm(false);
+                  setPurgeConfirmText("");
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => purgeMutation.mutate(userDetails.user.auth0UserId)}
+                disabled={purgeConfirmText !== "PURGE" || purgeMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {purgeMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Purging...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Purge User Forever
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

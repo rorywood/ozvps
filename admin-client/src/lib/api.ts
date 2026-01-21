@@ -125,6 +125,19 @@ export const usersApi = {
 
   listWallets: (limit = 50, offset = 0) =>
     api.get<{ wallets: any[] }>(`/wallets?limit=${limit}&offset=${offset}`),
+
+  purgeUser: (auth0UserId: string) =>
+    api.post<{
+      success: boolean;
+      results: {
+        auth0Deleted: boolean;
+        virtfusionServersDeleted: number;
+        virtfusionUserDeleted: boolean;
+        stripeCustomerDeleted: boolean;
+        localRecordsDeleted: Record<string, number>;
+        errors: string[];
+      };
+    }>(`/users/${encodeURIComponent(auth0UserId)}/purge`, { confirm: "PURGE" }),
 };
 
 // Servers API
