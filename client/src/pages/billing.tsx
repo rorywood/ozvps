@@ -1381,13 +1381,13 @@ export default function BillingPage() {
                       {upcomingChargesData.upcoming.map((charge, index) => {
                           const nextBillDate = new Date(charge.nextBillAt);
                           const now = new Date();
-                          // Normalize to start of day in local timezone for accurate day count
-                          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                          const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
-                          const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                          // Use UTC for consistent day calculation (avoids DST/timezone issues)
+                          const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+                          const billDateUTC = Date.UTC(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
+                          const daysUntilBill = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
                           const suspendDate = charge.suspendAt ? new Date(charge.suspendAt) : null;
-                          const suspendDateStart = suspendDate ? new Date(suspendDate.getFullYear(), suspendDate.getMonth(), suspendDate.getDate()) : null;
-                          const daysUntilSuspension = suspendDateStart ? Math.round((suspendDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                          const suspendDateUTC = suspendDate ? Date.UTC(suspendDate.getFullYear(), suspendDate.getMonth(), suspendDate.getDate()) : null;
+                          const daysUntilSuspension = suspendDateUTC ? Math.round((suspendDateUTC - todayUTC) / (1000 * 60 * 60 * 24)) : null;
 
                           return (
                             <Link

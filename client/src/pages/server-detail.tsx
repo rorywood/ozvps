@@ -1567,10 +1567,10 @@ export default function ServerDetail() {
                 ) : server.billing?.nextBillAt && (() => {
                   const nextBillDate = new Date(server.billing.nextBillAt);
                   const now = new Date();
-                  // Normalize to start of day in local timezone for accurate day count
-                  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                  const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
-                  const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                  // Use UTC for consistent day calculation (avoids DST/timezone issues)
+                  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+                  const billDateUTC = Date.UTC(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
+                  const daysUntilBill = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
                   const isOverdue = daysUntilBill < 0;
                   const isDueToday = daysUntilBill === 0;
                   const isDueTomorrow = daysUntilBill === 1;

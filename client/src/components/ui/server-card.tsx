@@ -7,14 +7,14 @@ import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
 import { Badge } from "./badge";
 
-// Helper to check if billing is due today, tomorrow, or overdue
+// Helper to check if billing is due today, tomorrow, or overdue (uses UTC to avoid timezone/DST issues)
 function getBillingDueStatus(nextBillAt?: string): 'overdue' | 'today' | 'tomorrow' | null {
   if (!nextBillAt) return null;
   const billDate = new Date(nextBillAt);
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
-  const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const billDateUTC = Date.UTC(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+  const daysUntil = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
   if (daysUntil < 0) return 'overdue';
   if (daysUntil === 0) return 'today';
   if (daysUntil === 1) return 'tomorrow';
