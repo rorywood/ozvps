@@ -29,6 +29,8 @@ interface BillingStatus {
   freeServer?: boolean;
   adminSuspended?: boolean;
   adminSuspendedReason?: string | null;
+  planId?: number;
+  planName?: string | null;
 }
 
 interface ServerCardProps {
@@ -150,7 +152,7 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5 truncate">
-            {server.plan?.name || "Unknown Plan"}
+            {billingStatus?.planName || server.plan?.name || "Unknown Plan"}
           </p>
         </div>
         <StatusBadge status={getStatusBadgeStatus()} />

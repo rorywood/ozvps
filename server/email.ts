@@ -79,17 +79,17 @@ export async function sendPasswordResetEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
                 <tr>
                   <td style="padding: 40px;">
                     <h1 style="margin: 0 0 16px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Reset Your Password</h1>
@@ -176,6 +176,140 @@ If you didn't request a password reset, you can safely ignore this email.
 }
 
 /**
+ * Send email verification email
+ */
+export async function sendEmailVerificationEmail(
+  to: string,
+  verifyLink: string,
+  expiresInHours: number = 24
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send email verification email', 'email');
+    return {
+      success: false,
+      error: 'Email service not configured. Please contact administrator.'
+    };
+  }
+
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: 'Verify Your OzVPS Email Address',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Verify Your Email</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 40px;">
+                    <h1 style="margin: 0 0 16px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Verify Your Email</h1>
+
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      Thanks for signing up for OzVPS! Please verify your email address by clicking the button below.
+                    </p>
+
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 8px 0 24px;">
+                          <a href="${verifyLink}" style="display: inline-block; padding: 14px 28px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                            Verify Email Address
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin: 0 0 16px; color: ${emailStyles.textMuted}; font-size: 14px; line-height: 1.6;">
+                      This link will expire in <strong style="color: ${emailStyles.textDark};">${expiresInHours} hours</strong>. If you didn't create an account, you can safely ignore this email.
+                    </p>
+
+                    <div style="border-top: 1px solid ${emailStyles.borderColor}; margin: 24px 0 0; padding: 24px 0 0;">
+                      <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 13px;">
+                        If the button doesn't work, copy and paste this link:
+                      </p>
+                      <p style="margin: 0; word-break: break-all;">
+                        <a href="${verifyLink}" style="color: ${emailStyles.primaryColor}; font-size: 13px; text-decoration: none;">${verifyLink}</a>
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 13px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+              </p>
+              <p style="margin: 0; color: ${emailStyles.textLight}; font-size: 12px;">
+                Australian owned and operated
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+Verify Your OzVPS Email Address
+
+Thanks for signing up for OzVPS! Please verify your email address by clicking the link below:
+
+${verifyLink}
+
+This link will expire in ${expiresInHours} hours.
+
+If you didn't create an account, you can safely ignore this email.
+
+---
+© ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send email verification email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Email verification email sent to ${to}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending email verification email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send SSH credentials email for newly provisioned server
  */
 export async function sendServerCredentialsEmail(
@@ -218,21 +352,21 @@ export async function sendServerCredentialsEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
 
                 <!-- Success Header -->
                 <tr>
-                  <td style="padding: 24px 40px; background-color: ${emailStyles.successColor}; border-radius: 8px 8px 0 0;">
+                  <td style="padding: 24px 40px; background-color: ${emailStyles.successColor};">
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td>
@@ -454,21 +588,21 @@ export async function sendServerReinstallEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
 
                 <!-- Header -->
                 <tr>
-                  <td style="padding: 24px 40px; background-color: ${emailStyles.primaryColor}; border-radius: 8px 8px 0 0;">
+                  <td style="padding: 24px 40px; background-color: ${emailStyles.primaryColor};">
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td>
@@ -682,17 +816,17 @@ export async function sendPasswordChangedEmail(to: string): Promise<EmailResult>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
                 <tr>
                   <td style="padding: 40px; text-align: center;">
 
@@ -808,17 +942,17 @@ export async function sendBillingReminderEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
                 <tr>
                   <td style="padding: 40px;">
                     <h1 style="margin: 0 0 16px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Payment Reminder</h1>
@@ -968,21 +1102,21 @@ export async function sendPaymentFailedEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
 
                 <!-- Warning Header -->
                 <tr>
-                  <td style="padding: 24px 40px; background-color: ${dangerColor}; border-radius: 8px 8px 0 0;">
+                  <td style="padding: 24px 40px; background-color: ${dangerColor};">
                     <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Payment Failed</h1>
                   </td>
                 </tr>
@@ -1131,21 +1265,21 @@ export async function sendServerSuspendedEmail(
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
 
-          <!-- Logo -->
+          <!-- Logo on dark background -->
           <tr>
-            <td style="padding: 0 0 32px; text-align: center;">
-              <img src="${logoUrl}" alt="OzVPS" width="160" height="auto" style="display: block; margin: 0 auto;" />
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
             <td>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 8px; border: 1px solid ${emailStyles.borderColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
 
                 <!-- Suspended Header -->
                 <tr>
-                  <td style="padding: 24px 40px; background-color: #1f2937; border-radius: 8px 8px 0 0;">
+                  <td style="padding: 24px 40px; background-color: #374151;">
                     <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Server Suspended</h1>
                   </td>
                 </tr>
@@ -1247,6 +1381,214 @@ Need help? Contact support@ozvps.com.au
     return { success: true, messageId: data?.id };
   } catch (err: any) {
     log(`Error sending server suspended email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send admin notification email for new support tickets
+ */
+export async function sendAdminTicketNotificationEmail(
+  ticketId: number,
+  title: string,
+  category: string,
+  priority: string,
+  description: string,
+  userEmail: string,
+  userName: string | null
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send admin ticket notification', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  // Get admin notification email from environment variable
+  const adminEmails = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (!adminEmails) {
+    log('ADMIN_NOTIFICATION_EMAIL not configured - skipping admin notification', 'email');
+    return { success: false, error: 'Admin notification email not configured' };
+  }
+
+  const adminEmailList = adminEmails.split(',').map(e => e.trim()).filter(e => e);
+  if (adminEmailList.length === 0) {
+    log('No admin emails configured - skipping notification', 'email');
+    return { success: false, error: 'No admin emails configured' };
+  }
+
+  const adminUrl = process.env.ADMIN_URL || 'https://admin.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+
+  // Priority badge color mapping
+  const priorityColors: Record<string, { bg: string; text: string }> = {
+    low: { bg: '#6b7280', text: '#ffffff' },
+    normal: { bg: '#3b82f6', text: '#ffffff' },
+    high: { bg: '#f59e0b', text: '#000000' },
+    urgent: { bg: '#ef4444', text: '#ffffff' },
+  };
+  const priorityStyle = priorityColors[priority] || priorityColors.normal;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: adminEmailList,
+      subject: `[${priority.toUpperCase()}] New Support Ticket #${ticketId}: ${title}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>New Support Ticket</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 32px;">
+                    <!-- Header -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600; color: ${emailStyles.textDark};">
+                            New Support Ticket
+                          </h1>
+                          <p style="margin: 0 0 24px 0; font-size: 14px; color: ${emailStyles.textMuted};">
+                            A new support ticket has been submitted
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Ticket Info -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 8px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding-bottom: 16px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Ticket</p>
+                                <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${emailStyles.textDark};">#${ticketId}: ${title}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 16px;">
+                                <table width="100%" cellpadding="0" cellspacing="0">
+                                  <tr>
+                                    <td width="50%" style="vertical-align: top;">
+                                      <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Category</p>
+                                      <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark};">${category}</p>
+                                    </td>
+                                    <td width="50%" style="vertical-align: top;">
+                                      <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Priority</p>
+                                      <span style="display: inline-block; padding: 2px 10px; font-size: 12px; font-weight: 600; background-color: ${priorityStyle.bg}; color: ${priorityStyle.text}; border-radius: 4px; text-transform: uppercase;">${priority}</span>
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">From</p>
+                                <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark};">${userName || 'User'} &lt;${userEmail}&gt;</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Description -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                      <tr>
+                        <td>
+                          <p style="margin: 0 0 8px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Message</p>
+                          <div style="padding: 16px; background-color: ${emailStyles.bgLight}; border-radius: 8px; border-left: 3px solid ${emailStyles.primaryColor};">
+                            <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark}; line-height: 1.6; white-space: pre-wrap;">${description}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Action Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center">
+                          <a href="${adminUrl}/tickets"
+                             style="display: inline-block; padding: 14px 32px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                            View Ticket in Admin Panel
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 0; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: ${emailStyles.textLight};">
+                This is an automated notification from OzVPS Support System
+              </p>
+              <p style="margin: 0; font-size: 12px; color: ${emailStyles.textLight};">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+NEW SUPPORT TICKET
+
+Ticket #${ticketId}: ${title}
+Category: ${category}
+Priority: ${priority}
+From: ${userName || 'User'} <${userEmail}>
+
+Message:
+${description}
+
+---
+View ticket: ${adminUrl}/tickets
+
+This is an automated notification from OzVPS Support System.
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send admin ticket notification: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Admin ticket notification sent for ticket #${ticketId} to ${adminEmailList.join(', ')}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending admin ticket notification: ${err.message}`, 'email');
     return { success: false, error: err.message };
   }
 }

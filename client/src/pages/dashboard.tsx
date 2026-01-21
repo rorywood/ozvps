@@ -425,7 +425,11 @@ export default function Dashboard() {
                         {isAccountSuspended ? (
                           <span className="text-orange-500">This server can't be viewed or modified while your account is suspended</span>
                         ) : (
-                          server.primaryIp
+                          <>
+                            <span>{billingStatuses[server.id]?.planName || server.plan?.name || 'Unknown Plan'}</span>
+                            <span className="mx-1.5">·</span>
+                            <span>{server.primaryIp}</span>
+                          </>
                         )}
                       </div>
                     </div>

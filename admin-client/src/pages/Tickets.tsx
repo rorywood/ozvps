@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ticketsApi } from "../lib/api";
 import { toast } from "sonner";
-import { MessageSquare, Send, X, RefreshCw } from "lucide-react";
+import { MessageSquare, Send, X, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 
 export default function Tickets() {
   const [statusFilter, setStatusFilter] = useState("open");
@@ -42,6 +42,38 @@ export default function Tickets() {
     mutationFn: (id: number) => ticketsApi.close(id),
     onSuccess: () => {
       toast.success("Ticket closed");
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-counts"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: (id: number) => ticketsApi.reopen(id),
+    onSuccess: () => {
+      toast.success("Ticket reopened");
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", selectedTicket?.ticket?.id] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => ticketsApi.update(id, data),
+    onSuccess: () => {
+      toast.success("Ticket updated");
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket", selectedTicket?.ticket?.id] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => ticketsApi.delete(id),
+    onSuccess: () => {
+      toast.success("Ticket deleted");
+      setSelectedTicket(null);
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-counts"] });
     },
@@ -148,23 +180,106 @@ export default function Tickets() {
         <div className="lg:col-span-2">
           {selectedTicket ? (
             <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedTicket.ticket.title}</h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400">{selectedTicket.user?.email}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    Created: {new Date(selectedTicket.ticket.createdAt).toLocaleString()}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-lg ${getStatusColor(selectedTicket.ticket.status)}`}>
-                    {selectedTicket.ticket.status.replace("_", " ")}
-                  </span>
+                  {(selectedTicket.ticket.status === "closed" || selectedTicket.ticket.status === "resolved") && (
+                    <button
+                      onClick={() => reopenMutation.mutate(selectedTicket.ticket.id)}
+                      disabled={reopenMutation.isPending}
+                      className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors"
+                      title="Reopen ticket"
+                    >
+                      <RotateCcw className="h-5 w-5" />
+                    </button>
+                  )}
                   {selectedTicket.ticket.status !== "closed" && (
                     <button
                       onClick={() => closeMutation.mutate(selectedTicket.ticket.id)}
-                      className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      disabled={closeMutation.isPending}
+                      className="p-2 text-gray-500 dark:text-gray-400 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
+                      title="Close ticket"
                     >
                       <X className="h-5 w-5" />
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this ticket? This action cannot be undone.")) {
+                        deleteMutation.mutate(selectedTicket.ticket.id);
+                      }
+                    }}
+                    disabled={deleteMutation.isPending}
+                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    title="Delete ticket"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Ticket Controls */}
+              <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status</label>
+                  <select
+                    value={selectedTicket.ticket.status}
+                    onChange={(e) => {
+                      const newStatus = e.target.value;
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, status: newStatus } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { status: newStatus } });
+                    }}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white"
+                  >
+                    <option value="new">New</option>
+                    <option value="open">Open</option>
+                    <option value="waiting_user">Waiting User</option>
+                    <option value="waiting_admin">Waiting Admin</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Priority</label>
+                  <select
+                    value={selectedTicket.ticket.priority}
+                    onChange={(e) => {
+                      const newPriority = e.target.value;
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, priority: newPriority } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { priority: newPriority } });
+                    }}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Category</label>
+                  <select
+                    value={selectedTicket.ticket.category}
+                    onChange={(e) => {
+                      const newCategory = e.target.value;
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, category: newCategory } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { category: newCategory } });
+                    }}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white"
+                  >
+                    <option value="general">General</option>
+                    <option value="billing">Billing</option>
+                    <option value="technical">Technical</option>
+                    <option value="sales">Sales</option>
+                    <option value="abuse">Abuse</option>
+                  </select>
                 </div>
               </div>
 
@@ -222,6 +337,15 @@ export default function Tickets() {
                   >
                     <Send className="h-5 w-5" />
                   </button>
+                </div>
+              )}
+
+              {/* Closed ticket notice */}
+              {selectedTicket.ticket.status === "closed" && (
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-center">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    This ticket is closed. Click the reopen button to resume the conversation.
+                  </p>
                 </div>
               )}
             </div>

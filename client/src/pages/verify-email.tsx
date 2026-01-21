@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { Mail, Loader2, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Mail, Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle } from "lucide-react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -13,9 +13,43 @@ export default function VerifyEmailPage() {
   useDocumentTitle("Verify Your Email - OzVPS");
 
   const [, navigate] = useLocation();
+  const searchString = useSearch();
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading, logout } = useAuth();
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Extract token from URL if present
+  const params = new URLSearchParams(searchString);
+  const token = params.get('token');
+
+  // State for token verification
+  const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  // Handle token verification on mount
+  useEffect(() => {
+    if (token && verifyState === 'idle') {
+      setVerifyState('verifying');
+
+      // Call the verify API endpoint
+      fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.ok) {
+            setVerifyState('success');
+            // Refresh auth state after verification
+            queryClient.invalidateQueries({ queryKey: ['auth'] });
+          } else {
+            setVerifyState('error');
+            setVerifyError(data.error || 'Failed to verify email');
+          }
+        })
+        .catch((err) => {
+          setVerifyState('error');
+          setVerifyError('Failed to connect to server. Please try again.');
+        });
+    }
+  }, [token, verifyState, queryClient]);
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -73,10 +107,100 @@ export default function VerifyEmailPage() {
     navigate('/login');
   };
 
-  if (authLoading) {
+  // Show loading state
+  if (authLoading || (token && verifyState === 'verifying')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          {token && <p className="text-muted-foreground">Verifying your email...</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // Token verification result page
+  if (token) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
+        {/* Background decoration */}
+        <div className="fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-radial from-primary/5 via-transparent to-transparent" />
+          <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-radial from-blue-500/5 via-transparent to-transparent" />
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full max-w-md"
+          >
+            {/* Logo */}
+            <div className="text-center mb-8">
+              <img
+                src={logo}
+                alt="OzVPS"
+                className="h-12 w-auto dark:invert-0 invert mx-auto mb-4 drop-shadow-lg"
+              />
+            </div>
+
+            {/* Card */}
+            <div className="bg-card/50 backdrop-blur-sm border border-border rounded-2xl p-8 shadow-xl">
+              <div className="text-center">
+                {verifyState === 'success' ? (
+                  <>
+                    <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-foreground mb-3">
+                      Email Verified!
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      Your email has been successfully verified. You can now access all features of OzVPS.
+                    </p>
+                    <Button onClick={() => navigate('/')} className="w-full">
+                      Go to Dashboard
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <XCircle className="h-10 w-10 text-red-500" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-foreground mb-3">
+                      Verification Failed
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      {verifyError || 'The verification link is invalid or has expired.'}
+                    </p>
+                    <div className="space-y-3">
+                      {user ? (
+                        <Button onClick={() => navigate('/verify-email')} className="w-full">
+                          Request New Verification Email
+                        </Button>
+                      ) : (
+                        <>
+                          <Button onClick={() => navigate('/login')} className="w-full">
+                            Sign In
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Sign in to request a new verification email
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Footer */}
+        <footer className="py-6 text-center text-sm text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} OzVPS. All rights reserved.</p>
+        </footer>
       </div>
     );
   }

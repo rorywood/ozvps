@@ -1441,7 +1441,7 @@ export default function ServerDetail() {
               <div className="space-y-4">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Plan</p>
-                  <p className="text-sm font-semibold text-foreground">{server.plan?.name || 'Unknown Plan'}</p>
+                  <p className="text-sm font-semibold text-foreground">{server.billing?.planName || server.plan?.name || 'Unknown Plan'}</p>
                 </div>
 
                 <div className="border-t border-border pt-4">

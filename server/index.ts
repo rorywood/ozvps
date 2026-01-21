@@ -266,6 +266,13 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: MAX_URL_ENCODED_SIZE }));
 app.use(cookieParser());
 
+// Serve uploaded profile pictures
+import path from "path";
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+  maxAge: '7d',
+  etag: true,
+}));
+
 // Sensitive fields to redact from logs
 const SENSITIVE_FIELDS = ['password', 'token', 'secret', 'apiKey', 'authorization', 'cookie', 'accessToken', 'refreshToken', 'credentials'];
 

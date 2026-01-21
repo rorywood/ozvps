@@ -85,6 +85,7 @@ export const wallets = pgTable("wallets", {
   autoTopupThresholdCents: integer("auto_topup_threshold_cents").default(500),
   autoTopupAmountCents: integer("auto_topup_amount_cents").default(2000),
   autoTopupPaymentMethodId: text("auto_topup_payment_method_id"),
+  profilePictureUrl: text("profile_picture_url"), // User's profile picture URL
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -256,6 +257,18 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   usedAt: timestamp("used_at"),
 });
 
+// Email verification tokens table - custom verification flow
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verified: boolean("verified").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  verifiedAt: timestamp("verified_at"),
+});
+
 // Support ticket categories (departments)
 export const TICKET_CATEGORIES = [
   'sales',
@@ -343,6 +356,7 @@ export const insertTicketSchema = createInsertSchema(tickets);
 export const insertTicketMessageSchema = createInsertSchema(ticketMessages);
 export const insertTwoFactorAuthSchema = createInsertSchema(twoFactorAuth);
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
+export const insertEmailVerificationTokenSchema = createInsertSchema(emailVerificationTokens);
 
 // Types
 export type Plan = typeof plans.$inferSelect;
@@ -373,6 +387,8 @@ export type TwoFactorAuth = typeof twoFactorAuth.$inferSelect;
 export type InsertTwoFactorAuth = z.infer<typeof insertTwoFactorAuthSchema>;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type InsertEmailVerificationToken = z.infer<typeof insertEmailVerificationTokenSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),

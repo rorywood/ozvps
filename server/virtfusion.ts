@@ -1602,7 +1602,7 @@ export class VirtFusionClient {
   async deleteUserById(userId: number): Promise<boolean> {
     try {
       log(`Deleting VirtFusion user ${userId}`, 'virtfusion');
-      await this.request(`/users/${userId}/byId`, {
+      await this.request(`/users/${userId}`, {
         method: 'DELETE',
       });
       log(`Successfully deleted VirtFusion user ${userId}`, 'virtfusion');
@@ -1614,6 +1614,21 @@ export class VirtFusionClient {
       }
       log(`Failed to delete VirtFusion user ${userId}: ${error}`, 'virtfusion');
       return false;
+    }
+  }
+
+  // Check if user has any active servers
+  async userHasActiveServers(userId: number): Promise<{ hasServers: boolean; serverCount: number; servers: { id: string; name: string }[] }> {
+    try {
+      const servers = await this.listServersByUserId(userId);
+      return {
+        hasServers: servers.length > 0,
+        serverCount: servers.length,
+        servers: servers.map(s => ({ id: s.id, name: s.name || `Server ${s.id}` })),
+      };
+    } catch (error: any) {
+      log(`Failed to check servers for user ${userId}: ${error}`, 'virtfusion');
+      return { hasServers: false, serverCount: 0, servers: [] };
     }
   }
 

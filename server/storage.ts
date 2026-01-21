@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -829,6 +829,15 @@ export const dbStorage = {
     const [updated] = await db
       .update(wallets)
       .set({ virtFusionUserId, updatedAt: new Date() })
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async updateProfilePicture(auth0UserId: string, profilePictureUrl: string | null): Promise<Wallet | undefined> {
+    const [updated] = await db
+      .update(wallets)
+      .set({ profilePictureUrl, updatedAt: new Date() })
       .where(eq(wallets.auth0UserId, auth0UserId))
       .returning();
     return updated;
@@ -2311,5 +2320,96 @@ export const dbStorage = {
       emailVerifiedOverrideAt: flags.emailVerifiedOverrideAt,
       emailVerifiedOverrideBy: flags.emailVerifiedOverrideBy,
     };
+  },
+
+  // ========== EMAIL VERIFICATION TOKENS ==========
+
+  // Create email verification token for a user
+  async createEmailVerificationToken(auth0UserId: string, email: string): Promise<EmailVerificationToken> {
+    // Generate a secure random token
+    const token = randomBytes(32).toString('hex');
+    // Token expires in 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // Invalidate any existing tokens for this user
+    await db
+      .delete(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.auth0UserId, auth0UserId));
+
+    // Create new token
+    const [verificationToken] = await db
+      .insert(emailVerificationTokens)
+      .values({
+        auth0UserId,
+        email: email.toLowerCase(),
+        token,
+        expiresAt,
+        verified: false,
+      } as typeof emailVerificationTokens.$inferInsert)
+      .returning();
+
+    return verificationToken;
+  },
+
+  // Get email verification token by token string
+  async getEmailVerificationToken(token: string): Promise<EmailVerificationToken | undefined> {
+    const [verificationToken] = await db
+      .select()
+      .from(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.token, token));
+    return verificationToken;
+  },
+
+  // Get pending verification token for a user
+  async getPendingVerificationToken(auth0UserId: string): Promise<EmailVerificationToken | undefined> {
+    const [verificationToken] = await db
+      .select()
+      .from(emailVerificationTokens)
+      .where(
+        and(
+          eq(emailVerificationTokens.auth0UserId, auth0UserId),
+          eq(emailVerificationTokens.verified, false),
+          sql`${emailVerificationTokens.expiresAt} > NOW()`
+        )
+      );
+    return verificationToken;
+  },
+
+  // Mark email as verified
+  async markEmailVerified(token: string): Promise<EmailVerificationToken | undefined> {
+    const [updated] = await db
+      .update(emailVerificationTokens)
+      .set({ verified: true, verifiedAt: new Date() })
+      .where(eq(emailVerificationTokens.token, token))
+      .returning();
+    return updated;
+  },
+
+  // Check if user has verified their email
+  async isEmailVerified(auth0UserId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(emailVerificationTokens)
+      .where(
+        and(
+          eq(emailVerificationTokens.auth0UserId, auth0UserId),
+          eq(emailVerificationTokens.verified, true)
+        )
+      );
+    return !!result;
+  },
+
+  // Cleanup expired email verification tokens
+  async cleanupExpiredEmailVerificationTokens(): Promise<number> {
+    const result = await db
+      .delete(emailVerificationTokens)
+      .where(
+        and(
+          sql`${emailVerificationTokens.expiresAt} < NOW()`,
+          eq(emailVerificationTokens.verified, false)
+        )
+      )
+      .returning();
+    return result.length;
   },
 };

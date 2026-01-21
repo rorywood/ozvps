@@ -17,7 +17,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
@@ -1026,6 +1026,22 @@ export async function registerRoutes(
       const csrfToken = generateCsrfToken();
       setCsrfCookie(res, csrfToken, expiresAt);
 
+      // Send verification email (non-blocking - don't fail registration if email fails)
+      try {
+        const verificationToken = await dbStorage.createEmailVerificationToken(auth0UserId, email);
+        const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+        const verifyLink = `${appUrl}/verify-email?token=${verificationToken.token}`;
+        const { sendEmailVerificationEmail } = await import('./email');
+        const emailResult = await sendEmailVerificationEmail(email, verifyLink);
+        if (emailResult.success) {
+          log(`Verification email sent to new user ${email}`, 'auth');
+        } else {
+          log(`Failed to send verification email to ${email}: ${emailResult.error}`, 'auth');
+        }
+      } catch (emailError: any) {
+        log(`Error sending verification email to ${email}: ${emailError.message}`, 'auth');
+      }
+
       res.status(201).json({
         user: {
           id: auth0UserId,
@@ -1699,12 +1715,12 @@ export async function registerRoutes(
     }
   });
 
-  // Resend verification email - requires authentication
+  // Resend verification email - requires authentication (custom verification system)
   app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
 
-      // Check if already verified
+      // Check if already verified via Auth0 or our custom system
       if (session.emailVerified) {
         return res.status(400).json({ error: 'Email is already verified' });
       }
@@ -1713,17 +1729,80 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'User account not properly configured' });
       }
 
-      const result = await auth0Client.resendVerificationEmail(session.auth0UserId);
-
-      if (!result.success) {
-        return res.status(400).json({ error: result.error || 'Failed to send verification email' });
+      // Check if user already verified in our system
+      const isVerified = await dbStorage.isEmailVerified(session.auth0UserId);
+      if (isVerified) {
+        // Update session to reflect verification
+        await storage.updateSession(session.id, { emailVerified: true });
+        return res.status(400).json({ error: 'Email is already verified' });
       }
 
-      log(`Verification email resent for ${session.email}`, 'auth');
+      // Create new verification token
+      const verificationToken = await dbStorage.createEmailVerificationToken(session.auth0UserId, session.email);
+
+      // Generate verification link
+      const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+      const verifyLink = `${appUrl}/verify-email?token=${verificationToken.token}`;
+
+      // Send verification email
+      const { sendEmailVerificationEmail } = await import('./email');
+      const result = await sendEmailVerificationEmail(session.email, verifyLink);
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || 'Failed to send verification email' });
+      }
+
+      log(`Verification email sent to ${session.email}`, 'auth');
       res.json({ success: true, message: 'Verification email sent. Please check your inbox.' });
     } catch (error: any) {
       log(`Resend verification error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to send verification email' });
+    }
+  });
+
+  // Verify email token - public endpoint (no auth required)
+  app.get('/api/auth/verify-email', async (req, res) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Verification token is required' });
+      }
+
+      // Get the token from database
+      const verificationToken = await dbStorage.getEmailVerificationToken(token);
+
+      if (!verificationToken) {
+        return res.status(400).json({ error: 'Invalid verification link' });
+      }
+
+      // Check if already verified
+      if (verificationToken.verified) {
+        return res.json({ success: true, message: 'Email is already verified', alreadyVerified: true });
+      }
+
+      // Check if expired
+      if (new Date(verificationToken.expiresAt) < new Date()) {
+        return res.status(400).json({ error: 'Verification link has expired. Please request a new one.' });
+      }
+
+      // Mark email as verified in our database
+      await dbStorage.markEmailVerified(token);
+
+      // Also mark as verified in Auth0
+      try {
+        await auth0Client.updateUser(verificationToken.auth0UserId, { email_verified: true });
+        log(`Email verified in Auth0 for ${verificationToken.email}`, 'auth');
+      } catch (auth0Error: any) {
+        // Log but don't fail - our database is the source of truth
+        log(`Failed to update Auth0 email_verified: ${auth0Error.message}`, 'auth');
+      }
+
+      log(`Email verified for ${verificationToken.email}`, 'auth');
+      res.json({ success: true, message: 'Email verified successfully!' });
+    } catch (error: any) {
+      log(`Email verification error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to verify email' });
     }
   });
 
@@ -1735,6 +1814,13 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'VirtFusion account not linked' });
       }
       const servers = await virtfusionClient.listServersWithStats(userId);
+
+      // Fetch all plans to build a map of planId -> planName
+      const allPlans = await dbStorage.getAllPlans();
+      const planMap: Record<number, string> = {};
+      for (const plan of allPlans) {
+        planMap[plan.id] = plan.name;
+      }
 
       // Fetch bandwidth status and billing info for each server in parallel
       const serversWithBandwidthAndBilling = await Promise.all(
@@ -1767,6 +1853,8 @@ export async function registerRoutes(
                 adminSuspended: billingStatus.adminSuspended,
                 adminSuspendedAt: billingStatus.adminSuspendedAt,
                 adminSuspendedReason: billingStatus.adminSuspendedReason,
+                planId: billingStatus.planId,
+                planName: planMap[billingStatus.planId] || null,
               } : null,
             };
           } catch (error) {
@@ -1795,11 +1883,18 @@ export async function registerRoutes(
       }
 
       // Fetch all data in parallel
-      const [servers, cancellations, billingRecords] = await Promise.all([
+      const [servers, cancellations, billingRecords, allPlans] = await Promise.all([
         virtfusionClient.listServersWithStats(userId),
         dbStorage.getUserCancellations(session.auth0UserId!),
         dbStorage.getServerBillingByUser(session.auth0UserId!),
+        dbStorage.getAllPlans(),
       ]);
+
+      // Build plan map for lookups
+      const planMap: Record<number, string> = {};
+      for (const plan of allPlans) {
+        planMap[plan.id] = plan.name;
+      }
 
       // Build cancellation map
       const activeCancellations = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
@@ -1814,7 +1909,7 @@ export async function registerRoutes(
       }
 
       // Build billing map
-      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null }> = {};
+      const billingMap: Record<string, { status: string; nextBillAt?: Date; suspendAt?: Date | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null; planId?: number; planName?: string | null }> = {};
       for (const b of billingRecords) {
         billingMap[b.virtfusionServerId] = {
           status: b.status,
@@ -1824,6 +1919,8 @@ export async function registerRoutes(
           freeServer: b.freeServer,
           adminSuspended: b.adminSuspended || false,
           adminSuspendedReason: b.adminSuspendedReason,
+          planId: b.planId,
+          planName: planMap[b.planId] || null,
         };
       }
 
@@ -1866,6 +1963,8 @@ export async function registerRoutes(
                 adminSuspended: billingStatus.adminSuspended,
                 adminSuspendedAt: billingStatus.adminSuspendedAt,
                 adminSuspendedReason: billingStatus.adminSuspendedReason,
+                planId: billingStatus.planId,
+                planName: planMap[billingStatus.planId] || null,
               } : null,
             };
           } catch (error) {
@@ -1961,6 +2060,14 @@ export async function registerRoutes(
         log(`Warning: Could not fetch billing status for server ${req.params.id}: ${billingError.message}`, 'api');
       }
 
+      // Fetch plan name if billing exists
+      let planName: string | null = null;
+      if (billingStatus?.planId) {
+        const allPlans = await dbStorage.getAllPlans();
+        const plan = allPlans.find(p => p.id === billingStatus.planId);
+        planName = plan?.name || null;
+      }
+
       res.json({
         ...server,
         bandwidthExceeded,
@@ -1975,6 +2082,8 @@ export async function registerRoutes(
           adminSuspended: billingStatus.adminSuspended,
           adminSuspendedAt: billingStatus.adminSuspendedAt,
           adminSuspendedReason: billingStatus.adminSuspendedReason,
+          planId: billingStatus.planId,
+          planName,
         } : null,
       });
     } catch (error: any) {
@@ -2888,12 +2997,16 @@ export async function registerRoutes(
   app.get('/api/user/profile', authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
-      
+
+      // Get wallet to retrieve profile picture
+      const wallet = await dbStorage.getWallet(session.auth0UserId!);
+
       res.json({
         id: session.userId || session.id,
         email: session.email,
         name: session.name,
         virtFusionUserId: session.virtFusionUserId,
+        profilePictureUrl: wallet?.profilePictureUrl || null,
         createdAt: new Date().toISOString(),
       });
     } catch (error: any) {
@@ -2994,6 +3107,103 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error changing password: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  // ===========================================
+  // PROFILE PICTURE UPLOAD
+  // ===========================================
+
+  // Upload profile picture (base64)
+  app.post('/api/user/profile-picture', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      const { image } = req.body; // Base64 image string
+
+      if (!image) {
+        return res.status(400).json({ error: 'No image provided' });
+      }
+
+      // Validate base64 image
+      const matches = image.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/);
+      if (!matches) {
+        return res.status(400).json({ error: 'Invalid image format. Use JPEG, PNG, GIF, or WebP.' });
+      }
+
+      const [, extension, base64Data] = matches;
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Check file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (buffer.length > maxSize) {
+        return res.status(400).json({ error: 'Image too large. Maximum size is 10MB.' });
+      }
+
+      // Create uploads directory if it doesn't exist
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'profile-pictures');
+      await fs.mkdir(uploadsDir, { recursive: true });
+
+      // Generate unique filename
+      const filename = `${session.auth0UserId!.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${extension}`;
+      const filepath = path.join(uploadsDir, filename);
+
+      // Delete old profile picture if exists
+      const wallet = await dbStorage.getWallet(session.auth0UserId!);
+      if (wallet?.profilePictureUrl) {
+        const oldFilename = wallet.profilePictureUrl.replace('/uploads/profile-pictures/', '');
+        const oldFilepath = path.join(uploadsDir, oldFilename);
+        try {
+          await fs.unlink(oldFilepath);
+        } catch {
+          // Ignore if old file doesn't exist
+        }
+      }
+
+      // Save the file
+      await fs.writeFile(filepath, buffer);
+
+      // Update database with new URL
+      const profilePictureUrl = `/uploads/profile-pictures/${filename}`;
+      await dbStorage.updateProfilePicture(session.auth0UserId!, profilePictureUrl);
+
+      log(`Profile picture uploaded for ${session.email}: ${filename}`, 'api');
+      res.json({ success: true, profilePictureUrl });
+    } catch (error: any) {
+      log(`Error uploading profile picture: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to upload profile picture' });
+    }
+  });
+
+  // Delete profile picture
+  app.delete('/api/user/profile-picture', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+
+      const wallet = await dbStorage.getWallet(session.auth0UserId!);
+      if (wallet?.profilePictureUrl) {
+        // Delete file from disk
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'profile-pictures');
+        const filename = wallet.profilePictureUrl.replace('/uploads/profile-pictures/', '');
+        const filepath = path.join(uploadsDir, filename);
+        try {
+          await fs.unlink(filepath);
+        } catch {
+          // Ignore if file doesn't exist
+        }
+      }
+
+      // Clear profile picture URL in database
+      await dbStorage.updateProfilePicture(session.auth0UserId!, null);
+
+      log(`Profile picture deleted for ${session.email}`, 'api');
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Error deleting profile picture: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to delete profile picture' });
     }
   });
 
@@ -6130,6 +6340,20 @@ export async function registerRoutes(
       });
 
       log(`Ticket #${ticket.id} created by ${req.userSession!.email}`, 'support');
+
+      // Send admin notification email (non-blocking, don't fail if email fails)
+      sendAdminTicketNotificationEmail(
+        ticket.id,
+        title,
+        category,
+        priority,
+        description,
+        req.userSession!.email!,
+        req.userSession!.name || null
+      ).catch(err => {
+        log(`Failed to send admin notification for ticket #${ticket.id}: ${err.message}`, 'email');
+      });
+
       res.status(201).json({ ticket });
     } catch (error: any) {
       log(`Error creating ticket: ${error.message}`, 'api');

@@ -24,7 +24,10 @@ import {
   ShieldCheck,
   ShieldOff,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Camera,
+  Trash2,
+  Upload
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -51,6 +54,7 @@ export default function Account() {
   const [disableToken, setDisableToken] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
 
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['userProfile'],
@@ -169,8 +173,81 @@ export default function Account() {
       setName(profile.name || "");
       setEmail(profile.email || "");
       setTimezone(profile.timezone || "");
+      setProfilePictureUrl(profile.profilePictureUrl || null);
     }
   }, [profile]);
+
+  // Profile picture mutations
+  const uploadProfilePictureMutation = useMutation({
+    mutationFn: (base64Image: string) => api.uploadProfilePicture(base64Image),
+    onSuccess: (data) => {
+      setProfilePictureUrl(data.profilePictureUrl);
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      toast({
+        title: "Profile Picture Updated",
+        description: "Your profile picture has been uploaded successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload profile picture.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteProfilePictureMutation = useMutation({
+    mutationFn: () => api.deleteProfilePicture(),
+    onSuccess: () => {
+      setProfilePictureUrl(null);
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      toast({
+        title: "Profile Picture Removed",
+        description: "Your profile picture has been removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete profile picture.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.match(/^image\/(jpeg|jpg|png|gif|webp)$/)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a JPEG, PNG, GIF, or WebP image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Image must be less than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Convert to base64 and upload
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      uploadProfilePictureMutation.mutate(base64);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const updateProfileMutation = useMutation({
     mutationFn: (updates: { name?: string; email?: string; timezone?: string }) => 
@@ -296,6 +373,63 @@ export default function Account() {
               </div>
 
               <div className="space-y-4">
+                {/* Profile Picture */}
+                <div className="flex items-center gap-4 pb-4 border-b border-border">
+                  <div className="relative">
+                    {profilePictureUrl ? (
+                      <img
+                        src={profilePictureUrl}
+                        alt="Profile"
+                        className="h-20 w-20 rounded-full object-cover border-2 border-border"
+                      />
+                    ) : (
+                      <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center border-2 border-border">
+                        <User className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                    <label
+                      htmlFor="profile-picture-input"
+                      className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-colors shadow-md"
+                    >
+                      {uploadProfilePictureMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4 text-primary-foreground" />
+                      )}
+                    </label>
+                    <input
+                      id="profile-picture-input"
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                      disabled={uploadProfilePictureMutation.isPending}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Profile Picture</p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      JPEG, PNG, GIF, or WebP. Max 10MB.
+                    </p>
+                    {profilePictureUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteProfilePictureMutation.mutate()}
+                        disabled={deleteProfilePictureMutation.isPending}
+                        className="h-7 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10"
+                      >
+                        {deleteProfilePictureMutation.isPending ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3 w-3 mr-1" />
+                        )}
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-muted-foreground">Name</Label>
                   {isEditing ? (

@@ -448,6 +448,7 @@ class ApiClient {
     enabled?: boolean;
     timezone?: string;
     twoFactorAuth?: boolean;
+    profilePictureUrl?: string | null;
     created?: string;
     updated?: string;
     createdAt?: string;
@@ -481,6 +482,31 @@ class ApiClient {
     if (!response.ok) {
       const data = await response.json();
       throw new Error(data.error || 'Failed to change password');
+    }
+    return response.json();
+  }
+
+  // Profile Picture
+  async uploadProfilePicture(base64Image: string): Promise<{ success: boolean; profilePictureUrl: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/profile-picture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Image })
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to upload profile picture');
+    }
+    return response.json();
+  }
+
+  async deleteProfilePicture(): Promise<{ success: boolean }> {
+    const response = await secureFetch(`${this.baseUrl}/user/profile-picture`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to delete profile picture');
     }
     return response.json();
   }

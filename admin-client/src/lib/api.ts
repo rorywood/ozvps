@@ -131,7 +131,6 @@ export const usersApi = {
       success: boolean;
       results: {
         auth0Deleted: boolean;
-        virtfusionServersDeleted: number;
         virtfusionUserDeleted: boolean;
         stripeCustomerDeleted: boolean;
         localRecordsDeleted: Record<string, number>;

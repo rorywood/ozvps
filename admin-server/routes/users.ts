@@ -619,7 +619,6 @@ export function registerUsersRoutes(router: Router) {
 
       const results: {
         auth0Deleted: boolean;
-        virtfusionServersDeleted: number;
         virtfusionUserDeleted: boolean;
         stripeCustomerDeleted: boolean;
         localRecordsDeleted: {
@@ -642,7 +641,6 @@ export function registerUsersRoutes(router: Router) {
         errors: string[];
       } = {
         auth0Deleted: false,
-        virtfusionServersDeleted: 0,
         virtfusionUserDeleted: false,
         stripeCustomerDeleted: false,
         localRecordsDeleted: {
@@ -682,23 +680,39 @@ export function registerUsersRoutes(router: Router) {
         results.errors.push(`Auth0 fetch failed: ${err.message}`);
       }
 
-      // 2. Delete VirtFusion servers and user
+      // 2. Check if VirtFusion user has active servers - block purge if they do
       if (virtFusionUserId) {
         try {
-          const cleanupResult = await virtfusionClient.cleanupUserAndServers(virtFusionUserId);
-          results.virtfusionServersDeleted = cleanupResult.serversDeleted;
-          results.virtfusionUserDeleted = cleanupResult.success;
-          if (!cleanupResult.success) {
-            results.errors.push(...cleanupResult.errors);
+          const serverCheck = await virtfusionClient.userHasActiveServers(virtFusionUserId);
+          if (serverCheck.hasServers) {
+            console.log(`[admin-users] Purge blocked - user has ${serverCheck.serverCount} active servers`);
+            return res.status(400).json({
+              error: `Cannot purge user - they have ${serverCheck.serverCount} active server(s) in VirtFusion. Delete the servers first before purging the user.`,
+              servers: serverCheck.servers,
+            });
           }
-          console.log(`[admin-users] VirtFusion cleanup: ${cleanupResult.serversDeleted} servers deleted, user deleted: ${cleanupResult.success}`);
         } catch (err: any) {
-          console.log(`[admin-users] VirtFusion cleanup failed: ${err.message}`);
-          results.errors.push(`VirtFusion cleanup failed: ${err.message}`);
+          console.log(`[admin-users] Failed to check VirtFusion servers: ${err.message}`);
+          // Allow purge to continue if check fails - servers may already be deleted
         }
       }
 
-      // 3. Delete Stripe customer
+      // 3. Delete VirtFusion user (servers should already be deleted)
+      if (virtFusionUserId) {
+        try {
+          const userDeleted = await virtfusionClient.deleteUserById(virtFusionUserId);
+          results.virtfusionUserDeleted = userDeleted;
+          if (!userDeleted) {
+            results.errors.push(`Failed to delete VirtFusion user ${virtFusionUserId}`);
+          }
+          console.log(`[admin-users] VirtFusion user deletion: success=${userDeleted}`);
+        } catch (err: any) {
+          console.log(`[admin-users] VirtFusion user deletion failed: ${err.message}`);
+          results.errors.push(`VirtFusion user deletion failed: ${err.message}`);
+        }
+      }
+
+      // 4. Delete Stripe customer
       try {
         const [wallet] = await db.select().from(wallets).where(eq(wallets.auth0UserId, auth0UserId));
         if (wallet?.stripeCustomerId) {
@@ -721,7 +735,7 @@ export function registerUsersRoutes(router: Router) {
         results.errors.push(`Stripe deletion failed: ${err.message}`);
       }
 
-      // 4. Delete Auth0 account
+      // 5. Delete Auth0 account
       try {
         const auth0Result = await auth0Client.deleteUser(auth0UserId);
         if (auth0Result.success) {
@@ -739,7 +753,7 @@ export function registerUsersRoutes(router: Router) {
         results.errors.push(`Auth0 deletion error: ${err.message}`);
       }
 
-      // 5. Delete local database records (order matters for foreign key constraints)
+      // 6. Delete local database records (order matters for foreign key constraints)
       try {
         // Get ticket IDs for this user first (for ticket messages)
         const userTickets = await db.select({ id: tickets.id }).from(tickets).where(eq(tickets.auth0UserId, auth0UserId));
@@ -800,7 +814,7 @@ export function registerUsersRoutes(router: Router) {
 
       // Audit log
       await auditSuccess(req, "user.purge", "user", auth0UserId, userEmail || auth0UserId, {
-        virtfusionServersDeleted: results.virtfusionServersDeleted,
+        virtfusionUserDeleted: results.virtfusionUserDeleted,
         stripeDeleted: results.stripeCustomerDeleted,
         auth0Deleted: results.auth0Deleted,
       });
