@@ -653,11 +653,15 @@ class ApiClient {
       extRelationId: string;
       isAdmin?: boolean;
       emailVerified?: boolean;
+      accountSuspended?: boolean;
+      accountSuspendedReason?: string | null;
     };
     balance: number;
     balanceFormatted: string;
     emailVerified?: boolean;
     email?: string;
+    accountSuspended?: boolean;
+    accountSuspendedReason?: string | null;
   }> {
     const response = await secureFetch(`${this.baseUrl}/me`);
     if (!response.ok) throw new Error('Failed to fetch user info');
