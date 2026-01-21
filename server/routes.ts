@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import crypto, { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { z } from "zod";
@@ -3126,7 +3127,8 @@ export async function registerRoutes(
   // ===========================================
 
   // Upload profile picture (base64)
-  app.post('/api/user/profile-picture', authMiddleware, async (req, res) => {
+  // Use a higher body limit for this endpoint (15MB to accommodate 10MB image + base64 overhead)
+  app.post('/api/user/profile-picture', express.json({ limit: '15mb' }), authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
       const { image } = req.body; // Base64 image string
