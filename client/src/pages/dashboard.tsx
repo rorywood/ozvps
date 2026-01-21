@@ -376,83 +376,99 @@ export default function Dashboard() {
                 const isDeleting = displayStatus === 'destroying' || displayStatus === 'queued_deletion';
                 const isScheduledDeletion = displayStatus === 'scheduled_deletion';
                 const isProvisioning = displayStatus === 'setting up';
+                const isAccountSuspended = user?.accountSuspended;
 
-                return (
-                  <Link key={server.id} href={`/servers/${server.id}`}>
-                    <div
-                      className={cn(
-                        "flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer",
-                        index !== 0 && "border-t border-border"
-                      )}
-                    >
-                      {/* Status dot - small and minimal */}
-                      <div className={cn(
-                        "h-2 w-2 rounded-full flex-shrink-0",
-                        isRunning && "bg-success",
-                        isStopped && "bg-muted-foreground",
-                        isDeleting && "bg-red-500 animate-pulse",
-                        isScheduledDeletion && "bg-orange-500",
-                        isProvisioning && "bg-blue-500 animate-pulse",
-                        !isRunning && !isStopped && !isDeleting && !isScheduledDeletion && !isProvisioning && "bg-warning"
-                      )} />
+                const serverContent = (
+                  <div
+                    className={cn(
+                      "flex items-center gap-4 px-4 py-3 transition-colors",
+                      index !== 0 && "border-t border-border",
+                      isAccountSuspended ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/30 cursor-pointer"
+                    )}
+                  >
+                    {/* Status dot - small and minimal */}
+                    <div className={cn(
+                      "h-2 w-2 rounded-full flex-shrink-0",
+                      isRunning && "bg-success",
+                      isStopped && "bg-muted-foreground",
+                      isDeleting && "bg-red-500 animate-pulse",
+                      isScheduledDeletion && "bg-orange-500",
+                      isProvisioning && "bg-blue-500 animate-pulse",
+                      !isRunning && !isStopped && !isDeleting && !isScheduledDeletion && !isProvisioning && "bg-warning"
+                    )} />
 
-                      {/* Server name - bold */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-foreground truncate">
-                            {server.name || 'New Server'}
-                          </span>
-                          {billingStatuses[server.id]?.freeServer && (
-                            <Badge variant="info" className="text-[10px] px-1.5 py-0 flex-shrink-0">
-                              <Gift className="h-2.5 w-2.5 mr-0.5" />
-                              FREE
-                            </Badge>
-                          )}
-                          {billingStatuses[server.id]?.status === 'suspended' && (
-                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
-                              <Ban className="h-2.5 w-2.5 mr-0.5" />
-                              SUSPENDED
-                            </Badge>
-                          )}
-                          {billingStatuses[server.id]?.status === 'unpaid' && !billingStatuses[server.id]?.freeServer && (
-                            <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
-                              UNPAID
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {server.primaryIp}
-                        </div>
+                    {/* Server name - bold */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground truncate">
+                          {server.name || 'New Server'}
+                        </span>
+                        {billingStatuses[server.id]?.freeServer && (
+                          <Badge variant="info" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                            <Gift className="h-2.5 w-2.5 mr-0.5" />
+                            FREE
+                          </Badge>
+                        )}
+                        {billingStatuses[server.id]?.status === 'suspended' && (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                            <Ban className="h-2.5 w-2.5 mr-0.5" />
+                            SUSPENDED
+                          </Badge>
+                        )}
+                        {billingStatuses[server.id]?.status === 'unpaid' && !billingStatuses[server.id]?.freeServer && (
+                          <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                            UNPAID
+                          </Badge>
+                        )}
                       </div>
-
-                      {/* Specs - compact display */}
-                      <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-                        <div>{server.plan?.specs?.vcpu || 0} vCPU</div>
-                        <div>{Math.round((server.plan?.specs?.ram || 0) / 1024)}GB RAM</div>
-                        <div>{server.plan?.specs?.disk || 0}GB</div>
+                      <div className="text-xs text-muted-foreground">
+                        {isAccountSuspended ? (
+                          <span className="text-orange-500">This server can't be viewed or modified while your account is suspended</span>
+                        ) : (
+                          server.primaryIp
+                        )}
                       </div>
-
-                      {/* Status badge - minimal */}
-                      <Badge
-                        variant={
-                          isRunning ? "success" :
-                          isDeleting ? "destructive" :
-                          isScheduledDeletion ? "warning" :
-                          isProvisioning ? "info" :
-                          "secondary"
-                        }
-                        className="capitalize"
-                      >
-                        {displayStatus === 'destroying' ? 'Removing' :
-                         displayStatus === 'queued_deletion' ? 'Removing' :
-                         displayStatus === 'scheduled_deletion' ? 'Scheduled' :
-                         displayStatus}
-                      </Badge>
-
-                      {/* Arrow */}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     </div>
-                  </Link>
+
+                    {/* Specs - compact display */}
+                    <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+                      <div>{server.plan?.specs?.vcpu || 0} vCPU</div>
+                      <div>{Math.round((server.plan?.specs?.ram || 0) / 1024)}GB RAM</div>
+                      <div>{server.plan?.specs?.disk || 0}GB</div>
+                    </div>
+
+                    {/* Status badge - minimal */}
+                    <Badge
+                      variant={
+                        isAccountSuspended ? "warning" :
+                        isRunning ? "success" :
+                        isDeleting ? "destructive" :
+                        isScheduledDeletion ? "warning" :
+                        isProvisioning ? "info" :
+                        "secondary"
+                      }
+                      className="capitalize"
+                    >
+                      {isAccountSuspended ? "Locked" :
+                       displayStatus === 'destroying' ? 'Removing' :
+                       displayStatus === 'queued_deletion' ? 'Removing' :
+                       displayStatus === 'scheduled_deletion' ? 'Scheduled' :
+                       displayStatus}
+                    </Badge>
+
+                    {/* Arrow or Lock icon */}
+                    {isAccountSuspended ? (
+                      <Ban className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    )}
+                  </div>
+                );
+
+                return isAccountSuspended ? (
+                  <div key={server.id}>{serverContent}</div>
+                ) : (
+                  <Link key={server.id} href={`/servers/${server.id}`}>{serverContent}</Link>
                 );
               })}
             </div>
