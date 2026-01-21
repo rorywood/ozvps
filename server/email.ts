@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { log } from './log';
+import { log } from './logger';
 
 // Resend API key from environment - NEVER hardcode API keys!
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -7,8 +7,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'OzVPS <noreply@ozvps.com.au>';
 
 // Validate Resend configuration
 if (!RESEND_API_KEY) {
-  console.warn('⚠️  WARNING: RESEND_API_KEY not configured. Password reset emails will fail.');
-  console.warn('   Set RESEND_API_KEY in your .env file');
+  log('RESEND_API_KEY not configured - password reset emails will fail', 'email', { level: 'warn' });
 }
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;

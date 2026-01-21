@@ -12,7 +12,7 @@ import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
-import { log } from './log';
+import { log } from './logger';
 import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -185,8 +185,8 @@ function totpVerify(token: string, secret: string): boolean {
     // Uses default window of 1 (±30 seconds) for time drift tolerance
     const result = otplibVerifySync({ token, secret });
     return result?.valid === true;
-  } catch (error) {
-    console.error('TOTP verification error:', error);
+  } catch (error: any) {
+    log(`TOTP verification error: ${error?.message || error}`, 'auth', { level: 'error' });
     return false;
   }
 }
