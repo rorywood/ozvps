@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, promoCodes, promoCodeUsage, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -2111,5 +2111,174 @@ export const dbStorage = {
       )
       .returning();
     return result.length;
+  },
+
+  // ========== PROMO CODES ==========
+
+  // Get promo code by code (case-insensitive)
+  async getPromoCodeByCode(code: string): Promise<PromoCode | undefined> {
+    const [promo] = await db
+      .select()
+      .from(promoCodes)
+      .where(eq(promoCodes.code, code.toUpperCase()));
+    return promo;
+  },
+
+  // Get promo code by ID
+  async getPromoCodeById(id: number): Promise<PromoCode | undefined> {
+    const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.id, id));
+    return promo;
+  },
+
+  // Get all promo codes (for admin)
+  async getAllPromoCodes(): Promise<PromoCode[]> {
+    return db.select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+  },
+
+  // Create promo code
+  async createPromoCode(data: Omit<InsertPromoCode, 'id' | 'currentUses' | 'createdAt' | 'updatedAt'>): Promise<PromoCode> {
+    const [promo] = await db
+      .insert(promoCodes)
+      .values({
+        ...data,
+        code: data.code.toUpperCase(),
+      } as typeof promoCodes.$inferInsert)
+      .returning();
+    return promo;
+  },
+
+  // Update promo code
+  async updatePromoCode(id: number, updates: Partial<Omit<PromoCode, 'id' | 'code' | 'createdAt' | 'createdBy'>>): Promise<PromoCode | undefined> {
+    const [updated] = await db
+      .update(promoCodes)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(promoCodes.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Delete promo code
+  async deletePromoCode(id: number): Promise<boolean> {
+    const result = await db.delete(promoCodes).where(eq(promoCodes.id, id)).returning();
+    return result.length > 0;
+  },
+
+  // Increment promo code usage count (atomic)
+  async incrementPromoCodeUsage(id: number): Promise<PromoCode | undefined> {
+    const [updated] = await db
+      .update(promoCodes)
+      .set({
+        currentUses: sql`${promoCodes.currentUses} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(promoCodes.id, id))
+      .returning();
+    return updated;
+  },
+
+  // Get user's usage count for a promo code
+  async getPromoCodeUsageCount(promoCodeId: number, auth0UserId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(promoCodeUsage)
+      .where(
+        and(
+          eq(promoCodeUsage.promoCodeId, promoCodeId),
+          eq(promoCodeUsage.auth0UserId, auth0UserId)
+        )
+      );
+    return result?.count || 0;
+  },
+
+  // Record promo code usage
+  async recordPromoCodeUsage(data: Omit<InsertPromoCodeUsage, 'id' | 'usedAt'>): Promise<PromoCodeUsage> {
+    const [usage] = await db
+      .insert(promoCodeUsage)
+      .values(data as typeof promoCodeUsage.$inferInsert)
+      .returning();
+    return usage;
+  },
+
+  // Get promo code usage history (for admin)
+  async getPromoCodeUsageHistory(promoCodeId: number, limit: number = 100): Promise<PromoCodeUsage[]> {
+    return db
+      .select()
+      .from(promoCodeUsage)
+      .where(eq(promoCodeUsage.promoCodeId, promoCodeId))
+      .orderBy(desc(promoCodeUsage.usedAt))
+      .limit(limit);
+  },
+
+  // Validate promo code - returns validation result with discount info
+  async validatePromoCode(
+    code: string,
+    auth0UserId: string,
+    planId: number,
+    priceCents: number
+  ): Promise<{
+    valid: boolean;
+    error?: string;
+    promoCode?: PromoCode;
+    discountCents?: number;
+    finalPriceCents?: number;
+  }> {
+    const promo = await this.getPromoCodeByCode(code);
+
+    if (!promo) {
+      return { valid: false, error: 'Invalid promo code' };
+    }
+
+    // Check if active
+    if (!promo.active) {
+      return { valid: false, error: 'This promo code is no longer active' };
+    }
+
+    // Check validity period
+    const now = new Date();
+    if (promo.validFrom && now < new Date(promo.validFrom)) {
+      return { valid: false, error: 'This promo code is not yet valid' };
+    }
+    if (promo.validUntil && now > new Date(promo.validUntil)) {
+      return { valid: false, error: 'This promo code has expired' };
+    }
+
+    // Check total usage limit
+    if (promo.maxUsesTotal !== null && promo.currentUses >= promo.maxUsesTotal) {
+      return { valid: false, error: 'This promo code has reached its usage limit' };
+    }
+
+    // Check per-user usage limit
+    if (promo.maxUsesPerUser !== null) {
+      const userUsageCount = await this.getPromoCodeUsageCount(promo.id, auth0UserId);
+      if (userUsageCount >= promo.maxUsesPerUser) {
+        return { valid: false, error: 'You have already used this promo code' };
+      }
+    }
+
+    // Check if applies to this plan
+    if (promo.appliesTo === 'specific') {
+      const planIds = (promo.planIds as number[]) || [];
+      if (!planIds.includes(planId)) {
+        return { valid: false, error: 'This promo code does not apply to the selected plan' };
+      }
+    }
+
+    // Calculate discount
+    let discountCents: number;
+    if (promo.discountType === 'percentage') {
+      discountCents = Math.round(priceCents * (promo.discountValue / 100));
+    } else {
+      // Fixed discount - cap at price
+      discountCents = Math.min(promo.discountValue, priceCents);
+    }
+
+    const finalPriceCents = priceCents - discountCents;
+
+    return {
+      valid: true,
+      promoCode: promo,
+      discountCents,
+      finalPriceCents,
+    };
   },
 };

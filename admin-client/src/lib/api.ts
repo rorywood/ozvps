@@ -311,3 +311,87 @@ export const virtfusionApi = {
   getPackageTemplates: (id: number) => api.get<{ templates: any[] }>(`/vf/packages/${id}/templates`),
   getStats: () => api.get<{ stats: any }>("/vf/stats"),
 };
+
+// Promo Codes types
+export interface PromoCode {
+  id: number;
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  appliesTo: "all" | "specific";
+  planIds: number[] | null;
+  maxUsesTotal: number | null;
+  maxUsesPerUser: number | null;
+  currentUses: number;
+  validFrom: string;
+  validUntil: string | null;
+  active: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromoCodeUsage {
+  id: number;
+  promoCodeId: number;
+  auth0UserId: string;
+  deployOrderId: number | null;
+  discountAppliedCents: number;
+  originalPriceCents: number;
+  finalPriceCents: number;
+  usedAt: string;
+  userEmail?: string;
+}
+
+export interface CreatePromoCodeInput {
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  appliesTo?: "all" | "specific";
+  planIds?: number[];
+  maxUsesTotal?: number | null;
+  maxUsesPerUser?: number;
+  validFrom?: string;
+  validUntil?: string | null;
+  active?: boolean;
+}
+
+export interface UpdatePromoCodeInput {
+  discountType?: "percentage" | "fixed";
+  discountValue?: number;
+  appliesTo?: "all" | "specific";
+  planIds?: number[];
+  maxUsesTotal?: number | null;
+  maxUsesPerUser?: number;
+  validFrom?: string;
+  validUntil?: string | null;
+  active?: boolean;
+}
+
+// Promo Codes API
+export const promoCodesApi = {
+  list: () => api.get<{ promoCodes: PromoCode[] }>("/promo-codes"),
+
+  get: (id: number) =>
+    api.get<{ promoCode: PromoCode; usageHistory: PromoCodeUsage[] }>(`/promo-codes/${id}`),
+
+  create: (data: CreatePromoCodeInput) =>
+    api.post<{ promoCode: PromoCode }>("/promo-codes", data),
+
+  update: (id: number, data: UpdatePromoCodeInput) =>
+    api.put<{ promoCode: PromoCode }>(`/promo-codes/${id}`, data),
+
+  toggle: (id: number) =>
+    api.post<{ promoCode: PromoCode }>(`/promo-codes/${id}/toggle`),
+
+  delete: (id: number) =>
+    api.delete<{ success: boolean }>(`/promo-codes/${id}`, { confirm: "DELETE" }),
+
+  getStats: () =>
+    api.get<{
+      totalCodes: number;
+      activeCodes: number;
+      inactiveCodes: number;
+      totalUsage: number;
+    }>("/promo-codes-stats"),
+};

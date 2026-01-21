@@ -750,6 +750,15 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
+  const promoValidationRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // 10 promo validation requests per minute
+    message: { error: 'Too many promo code validation requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -5491,6 +5500,60 @@ export async function registerRoutes(
     }
   });
 
+  // Validate a promo code (authenticated)
+  app.post('/api/promo/validate', authMiddleware, promoValidationRateLimiter, async (req, res) => {
+    try {
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+
+      const { code, planId } = req.body;
+
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Promo code is required' });
+      }
+
+      if (!planId || typeof planId !== 'number') {
+        return res.status(400).json({ error: 'Plan ID is required' });
+      }
+
+      // Get plan to calculate discount
+      const plan = await dbStorage.getPlanById(planId);
+      if (!plan || !plan.active) {
+        return res.status(404).json({ error: 'Plan not found or inactive' });
+      }
+
+      // Validate promo code
+      const validation = await dbStorage.validatePromoCode(
+        code,
+        auth0UserId,
+        planId,
+        plan.priceMonthly
+      );
+
+      if (!validation.valid) {
+        return res.status(400).json({
+          valid: false,
+          error: validation.error,
+        });
+      }
+
+      res.json({
+        valid: true,
+        code: validation.promoCode!.code,
+        discountType: validation.promoCode!.discountType,
+        discountValue: validation.promoCode!.discountValue,
+        discountCents: validation.discountCents,
+        originalPriceCents: plan.priceMonthly,
+        finalPriceCents: validation.finalPriceCents,
+      });
+    } catch (error: any) {
+      log(`Promo validation error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to validate promo code' });
+    }
+  });
+
   // Deploy a new VPS (authenticated)
   // osId is optional - if not provided, server is created without OS (awaiting setup)
   // Hostname can be a single label (myserver) or full domain (test.example.com)
@@ -5502,6 +5565,7 @@ export async function registerRoutes(
     osId: z.number().min(1).optional(),
     hostname: z.string().min(1).max(253).regex(hostnameRegex).optional(),
     locationCode: z.string().optional(),
+    promoCode: z.string().max(20).optional(),
   });
 
   app.post('/api/deploy', authMiddleware, requireEmailVerified, deploymentRateLimiter, async (req, res) => {
@@ -5527,7 +5591,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Invalid deploy request: ${errorMessages}` });
       }
 
-      const { planId, osId, hostname, locationCode } = result.data;
+      const { planId, osId, hostname, locationCode, promoCode } = result.data;
 
       // Get hypervisor GROUP from location (default to Brisbane)
       const location = LOCATION_CONFIG[locationCode || 'BNE'];
@@ -5544,6 +5608,31 @@ export async function registerRoutes(
 
       if (!plan.virtfusionPackageId) {
         return res.status(400).json({ error: 'Plan not configured for deployment' });
+      }
+
+      // Validate promo code if provided
+      let finalPriceCents = plan.priceMonthly;
+      let promoValidation: {
+        valid: boolean;
+        promoCode?: { id: number; code: string };
+        discountCents?: number;
+        finalPriceCents?: number;
+      } | undefined;
+
+      if (promoCode) {
+        promoValidation = await dbStorage.validatePromoCode(
+          promoCode,
+          auth0UserId,
+          planId,
+          plan.priceMonthly
+        );
+
+        if (!promoValidation.valid) {
+          return res.status(400).json({ error: promoValidation.error || 'Invalid promo code' });
+        }
+
+        finalPriceCents = promoValidation.finalPriceCents!;
+        log(`Promo code ${promoCode} applied: discount ${promoValidation.discountCents} cents, final price ${finalPriceCents} cents`, 'api');
       }
 
       // Only verify OS template if osId is provided
@@ -5575,7 +5664,7 @@ export async function registerRoutes(
       const deployResult = await dbStorage.createDeployWithDebit(
         auth0UserId,
         planId,
-        plan.priceMonthly,
+        finalPriceCents, // Use discounted price if promo applied
         serverHostname,
         plan.name
       );
@@ -5665,6 +5754,24 @@ export async function registerRoutes(
         });
       } catch (billingError: any) {
         log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
+      }
+
+      // Record promo code usage if one was applied (non-critical, log if it fails)
+      if (promoValidation?.valid && promoValidation.promoCode) {
+        try {
+          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
+          await dbStorage.recordPromoCodeUsage({
+            promoCodeId: promoValidation.promoCode.id,
+            auth0UserId,
+            deployOrderId: order.id,
+            discountAppliedCents: promoValidation.discountCents!,
+            originalPriceCents: plan.priceMonthly,
+            finalPriceCents: finalPriceCents,
+          });
+          log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
+        } catch (promoError: any) {
+          log(`Warning: Could not record promo code usage: ${promoError.message}`, 'api');
+        }
       }
 
       // Always return success if server was provisioned

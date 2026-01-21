@@ -11,6 +11,7 @@ import Tickets from "./pages/Tickets";
 import Health from "./pages/Health";
 import Logs from "./pages/Logs";
 import Whitelist from "./pages/Whitelist";
+import PromoCodes from "./pages/PromoCodes";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -63,6 +64,7 @@ function AppRoutes() {
         <Route path="health" element={<Health />} />
         <Route path="logs" element={<Logs />} />
         <Route path="whitelist" element={<Whitelist />} />
+        <Route path="promo-codes" element={<PromoCodes />} />
       </Route>
     </Routes>
   );

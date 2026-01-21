@@ -19,7 +19,9 @@ import {
   AlertCircle,
   Mail,
   Wallet,
-  HelpCircle
+  HelpCircle,
+  Tag,
+  X
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
@@ -94,6 +96,19 @@ export default function DeployPage() {
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [promoValidation, setPromoValidation] = useState<{
+    valid: boolean;
+    error?: string;
+    code?: string;
+    discountType?: 'percentage' | 'fixed';
+    discountValue?: number;
+    discountCents?: number;
+    originalPriceCents?: number;
+    finalPriceCents?: number;
+  } | null>(null);
+  const [validatingPromo, setValidatingPromo] = useState(false);
 
   // Check email verification status
   const { data: authData, isLoading: authLoading } = useQuery({
@@ -158,8 +173,45 @@ export default function DeployPage() {
 
   const stripeConfigured = stripeStatus?.configured ?? false;
 
+  const handleApplyPromoCode = async () => {
+    if (!promoCodeInput.trim() || !selectedPlanId) return;
+
+    setValidatingPromo(true);
+    try {
+      const result = await api.validatePromoCode(promoCodeInput.trim().toUpperCase(), selectedPlanId);
+      setPromoValidation(result);
+      if (result.valid) {
+        setPromoCode(promoCodeInput.trim().toUpperCase());
+        toast({
+          title: "Promo code applied!",
+          description: `You save ${formatCurrency(result.discountCents || 0)}`,
+        });
+      } else {
+        toast({
+          title: "Invalid promo code",
+          description: result.error || "This promo code cannot be applied",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to validate promo code. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setValidatingPromo(false);
+    }
+  };
+
+  const handleRemovePromoCode = () => {
+    setPromoCode("");
+    setPromoCodeInput("");
+    setPromoValidation(null);
+  };
+
   const deployMutation = useMutation({
-    mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string }) =>
+    mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string; promoCode?: string }) =>
       api.deployServer(data),
     onSuccess: (data: { orderId: number; serverId: number }) => {
       toast({
@@ -193,7 +245,10 @@ export default function DeployPage() {
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
   const selectedLocation = locations.find(l => l.code === selectedLocationCode);
   const templates = templatesData || [];
-  const canAfford = wallet && selectedPlan && wallet.balanceCents >= selectedPlan.priceMonthly;
+  const finalPrice = promoValidation?.valid && promoValidation.finalPriceCents !== undefined
+    ? promoValidation.finalPriceCents
+    : (selectedPlan?.priceMonthly || 0);
+  const canAfford = wallet && selectedPlan && wallet.balanceCents >= finalPrice;
 
   // Check if all plans are out of stock (using strict equality for reliability)
   const allPlansOutOfStock = plans.length > 0 && plans.every(p => p.active === false);
@@ -250,6 +305,7 @@ export default function DeployPage() {
       osId: selectedOsId,
       hostname: hostname.trim().toLowerCase(),
       locationCode: selectedLocationCode,
+      promoCode: promoCode || undefined,
     });
   };
 
@@ -753,14 +809,74 @@ export default function DeployPage() {
                     </div>
                   </div>
 
+                  {/* Promo Code */}
+                  {selectedPlanId && (
+                    <div className="border-t border-border pt-4">
+                      <div className="text-xs uppercase text-muted-foreground tracking-wide mb-2 flex items-center gap-1">
+                        <Tag className="h-3 w-3" />
+                        Promo Code
+                      </div>
+                      {promoCode && promoValidation?.valid ? (
+                        <div className="flex items-center justify-between bg-success/10 border border-success/20 rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-success" />
+                            <span className="font-mono text-sm font-medium text-success">{promoCode}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRemovePromoCode}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter code"
+                            value={promoCodeInput}
+                            onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                            className="flex-1 font-mono text-sm h-9"
+                            maxLength={20}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleApplyPromoCode}
+                            disabled={validatingPromo || !promoCodeInput.trim()}
+                            className="h-9 px-3"
+                          >
+                            {validatingPromo ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              "Apply"
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Pricing */}
                   <div className="border-t border-border pt-4 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Monthly price</span>
-                      <span className="font-mono font-medium text-foreground">
+                      <span className={cn(
+                        "font-mono font-medium",
+                        promoValidation?.valid ? "text-muted-foreground line-through" : "text-foreground"
+                      )}>
                         {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
                       </span>
                     </div>
+                    {promoValidation?.valid && promoValidation.discountCents && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-success">Discount ({promoValidation.discountType === 'percentage' ? `${promoValidation.discountValue}%` : 'Fixed'})</span>
+                        <span className="font-mono font-medium text-success">
+                          -{formatCurrency(promoValidation.discountCents)}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Balance</span>
                       <span className={cn(
@@ -778,7 +894,7 @@ export default function DeployPage() {
                     <div className="flex justify-between items-center pt-2 border-t border-border">
                       <span className="font-medium text-foreground">Due now</span>
                       <span className="font-mono font-bold text-xl text-primary">
-                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                        {selectedPlan ? formatCurrency(finalPrice) : "—"}
                       </span>
                     </div>
                   </div>
@@ -819,7 +935,7 @@ export default function DeployPage() {
                                 Insufficient Balance
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                You need {selectedPlan ? formatCurrency(selectedPlan.priceMonthly - (wallet?.balanceCents || 0)) : '—'} more to deploy this server.
+                                You need {selectedPlan ? formatCurrency(finalPrice - (wallet?.balanceCents || 0)) : '—'} more to deploy this server.
                               </p>
                             </div>
                           </div>

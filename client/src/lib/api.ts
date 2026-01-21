@@ -706,7 +706,29 @@ class ApiClient {
     return response.json();
   }
 
-  async deployServer(data: { planId: number; osId?: number; hostname?: string; locationCode?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
+  async validatePromoCode(code: string, planId: number): Promise<{
+    valid: boolean;
+    error?: string;
+    code?: string;
+    discountType?: 'percentage' | 'fixed';
+    discountValue?: number;
+    discountCents?: number;
+    originalPriceCents?: number;
+    finalPriceCents?: number;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/promo/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, planId }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { valid: false, error: data.error || 'Invalid promo code' };
+    }
+    return data;
+  }
+
+  async deployServer(data: { planId: number; osId?: number; hostname?: string; locationCode?: string; promoCode?: string }): Promise<{ orderId: number; serverId: number; success: boolean }> {
     const response = await secureFetch(`${this.baseUrl}/deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

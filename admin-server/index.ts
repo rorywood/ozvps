@@ -19,6 +19,7 @@ import { registerBillingRoutes } from "./routes/billing";
 import { registerTicketsRoutes } from "./routes/tickets";
 import { registerVirtFusionRoutes } from "./routes/virtfusion";
 import { registerSettingsRoutes } from "./routes/settings";
+import { registerPromoCodeRoutes } from "./routes/promo-codes";
 import { setupLogWebSocket } from "./websocket/logs";
 
 const app = express();
@@ -139,6 +140,7 @@ app.use((req, res, next) => {
   registerTicketsRoutes(protectedRouter);
   registerVirtFusionRoutes(protectedRouter);
   registerSettingsRoutes(protectedRouter);
+  registerPromoCodeRoutes(protectedRouter);
 
   app.use('/api', protectedRouter);
 

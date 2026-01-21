@@ -505,3 +505,67 @@ export const addIpWhitelistSchema = z.object({
 });
 
 export type AddIpWhitelistInput = z.infer<typeof addIpWhitelistSchema>;
+
+// ============================================
+// PROMOTIONAL CODES
+// ============================================
+
+// Promo codes table - discount codes for server deployments
+export const promoCodes = pgTable("promo_codes", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  code: text("code").notNull().unique(), // Stored uppercase
+  discountType: text("discount_type").notNull(), // 'percentage' | 'fixed'
+  discountValue: integer("discount_value").notNull(), // % (0-100) or cents
+  appliesTo: text("applies_to").notNull().default("all"), // 'all' | 'specific'
+  planIds: jsonb("plan_ids"), // Array of plan IDs if 'specific'
+  maxUsesTotal: integer("max_uses_total"), // null = unlimited
+  maxUsesPerUser: integer("max_uses_per_user").default(1),
+  currentUses: integer("current_uses").notNull().default(0),
+  validFrom: timestamp("valid_from").defaultNow().notNull(),
+  validUntil: timestamp("valid_until"), // null = no expiry
+  active: boolean("active").default(true).notNull(),
+  createdBy: text("created_by").notNull(), // Admin auth0UserId
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Promo code usage tracking - records each use of a promo code
+export const promoCodeUsage = pgTable("promo_code_usage", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  promoCodeId: integer("promo_code_id").notNull(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  deployOrderId: integer("deploy_order_id"),
+  discountAppliedCents: integer("discount_applied_cents").notNull(),
+  originalPriceCents: integer("original_price_cents").notNull(),
+  finalPriceCents: integer("final_price_cents").notNull(),
+  usedAt: timestamp("used_at").defaultNow().notNull(),
+});
+
+// Insert schemas for promo codes
+export const insertPromoCodeSchema = createInsertSchema(promoCodes);
+export const insertPromoCodeUsageSchema = createInsertSchema(promoCodeUsage);
+
+// Types for promo codes
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type PromoCodeUsage = typeof promoCodeUsage.$inferSelect;
+export type InsertPromoCodeUsage = z.infer<typeof insertPromoCodeUsageSchema>;
+
+// Validation schema for creating/updating promo codes
+export const createPromoCodeSchema = z.object({
+  code: z.string().min(3, 'Code must be at least 3 characters').max(20, 'Code must be 20 characters or less').transform(val => val.toUpperCase()),
+  discountType: z.enum(['percentage', 'fixed']),
+  discountValue: z.number().positive('Discount value must be positive'),
+  appliesTo: z.enum(['all', 'specific']).default('all'),
+  planIds: z.array(z.number()).optional(),
+  maxUsesTotal: z.number().positive().optional().nullable(),
+  maxUsesPerUser: z.number().positive().default(1),
+  validFrom: z.string().datetime().optional(),
+  validUntil: z.string().datetime().optional().nullable(),
+  active: z.boolean().default(true),
+});
+
+export const updatePromoCodeSchema = createPromoCodeSchema.partial().omit({ code: true });
+
+export type CreatePromoCodeInput = z.infer<typeof createPromoCodeSchema>;
+export type UpdatePromoCodeInput = z.infer<typeof updatePromoCodeSchema>;

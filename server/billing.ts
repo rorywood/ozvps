@@ -215,7 +215,7 @@ export async function runBillingJob(): Promise<void> {
       if (!charged) {
         // Payment failed - mark as unpaid and set suspension date
         if (billing.status !== 'unpaid') {
-          const suspendAt = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000); // 5 days
+          const suspendAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
           await db.update(serverBilling)
             .set({
@@ -237,7 +237,7 @@ export async function runBillingJob(): Promise<void> {
                 serverName,
                 formatCurrency(billing.monthlyPriceCents),
                 formatDate(suspendAt),
-                5 // days until suspension
+                7 // days until suspension
               );
             }
           } catch (emailError: any) {

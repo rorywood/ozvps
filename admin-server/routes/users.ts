@@ -190,13 +190,9 @@ export function registerUsersRoutes(router: Router) {
         return res.status(400).json({ error: "blocked must be a boolean" });
       }
 
-      // Check user exists
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -234,9 +230,9 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Audit log
-      await auditSuccess(req, blocked ? "user.block" : "user.unblock", "user", auth0UserId, user.email, { blocked, reason });
+      await auditSuccess(req, blocked ? "user.block" : "user.unblock", "user", auth0UserId, auth0User.email, { blocked, reason });
 
-      console.log(`[admin-users] User ${user.email} ${blocked ? "blocked" : "unblocked"} by ${session.email}`);
+      console.log(`[admin-users] User ${auth0User.email} ${blocked ? "blocked" : "unblocked"} by ${session.email}`);
 
       res.json({ success: true, blocked });
     } catch (error: any) {
@@ -252,12 +248,9 @@ export function registerUsersRoutes(router: Router) {
       const { auth0UserId } = req.params;
       const session = req.adminSession!;
 
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -287,9 +280,9 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Audit log
-      await auditSuccess(req, "user.verify-email", "user", auth0UserId, user.email);
+      await auditSuccess(req, "user.verify-email", "user", auth0UserId, auth0User.email);
 
-      console.log(`[admin-users] Email verified for ${user.email} by ${session.email}`);
+      console.log(`[admin-users] Email verified for ${auth0User.email} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
@@ -305,12 +298,9 @@ export function registerUsersRoutes(router: Router) {
       const { auth0UserId } = req.params;
       const session = req.adminSession!;
 
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -322,9 +312,9 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Audit log
-      await auditSuccess(req, "user.resend-verification", "user", auth0UserId, user.email);
+      await auditSuccess(req, "user.resend-verification", "user", auth0UserId, auth0User.email);
 
-      console.log(`[admin-users] Verification email resent for ${user.email} by ${session.email}`);
+      console.log(`[admin-users] Verification email resent for ${auth0User.email} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
@@ -349,13 +339,9 @@ export function registerUsersRoutes(router: Router) {
         return res.status(400).json({ error: "description is required" });
       }
 
-      // Check user exists
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -394,9 +380,9 @@ export function registerUsersRoutes(router: Router) {
         .where(eq(wallets.auth0UserId, auth0UserId));
 
       // Audit log
-      await auditSuccess(req, "user.wallet-adjust", "user", auth0UserId, user.email, { amountCents, description, reason, newBalance });
+      await auditSuccess(req, "user.wallet-adjust", "user", auth0UserId, auth0User.email, { amountCents, description, reason, newBalance });
 
-      console.log(`[admin-users] Wallet adjusted for ${user.email}: ${amountCents} cents by ${session.email}`);
+      console.log(`[admin-users] Wallet adjusted for ${auth0User.email}: ${amountCents} cents by ${session.email}`);
 
       res.json({ success: true, newBalance });
     } catch (error: any) {
@@ -417,13 +403,9 @@ export function registerUsersRoutes(router: Router) {
         return res.status(400).json({ error: "virtFusionUserId must be a number" });
       }
 
-      // Check user exists
-      const [user] = await db
-        .select()
-        .from(userMappings)
-        .where(eq(userMappings.auth0UserId, auth0UserId));
-
-      if (!user) {
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -434,11 +416,8 @@ export function registerUsersRoutes(router: Router) {
         return res.status(400).json({ error: "VirtFusion user not found" });
       }
 
-      // Update mapping
-      await db
-        .update(userMappings)
-        .set({ virtFusionUserId })
-        .where(eq(userMappings.auth0UserId, auth0UserId));
+      // Update Auth0 app_metadata with VirtFusion user ID
+      await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUserId);
 
       // Also update wallet if it exists
       await db
@@ -447,9 +426,9 @@ export function registerUsersRoutes(router: Router) {
         .where(eq(wallets.auth0UserId, auth0UserId));
 
       // Audit log
-      await auditSuccess(req, "user.link-virtfusion", "user", auth0UserId, user.email, { virtFusionUserId });
+      await auditSuccess(req, "user.link-virtfusion", "user", auth0UserId, auth0User.email, { virtFusionUserId });
 
-      console.log(`[admin-users] User ${user.email} linked to VirtFusion user ${virtFusionUserId} by ${session.email}`);
+      console.log(`[admin-users] User ${auth0User.email} linked to VirtFusion user ${virtFusionUserId} by ${session.email}`);
 
       res.json({ success: true });
     } catch (error: any) {
