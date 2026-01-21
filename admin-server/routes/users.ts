@@ -45,6 +45,8 @@ export function registerUsersRoutes(router: Router) {
             wallet: wallet || null,
             blocked: flags?.blocked || false,
             blockedReason: flags?.blockedReason || null,
+            suspended: flags?.suspended || false,
+            suspendedReason: flags?.suspendedReason || null,
           };
         })
       );
@@ -103,6 +105,8 @@ export function registerUsersRoutes(router: Router) {
             wallet: wallet || null,
             blocked: flags?.blocked || false,
             blockedReason: flags?.blockedReason || null,
+            suspended: flags?.suspended || false,
+            suspendedReason: flags?.suspendedReason || null,
           };
         })
       );
@@ -163,6 +167,9 @@ export function registerUsersRoutes(router: Router) {
           wallet: wallet || null,
           blocked: flags?.blocked || false,
           blockedReason: flags?.blockedReason || null,
+          suspended: flags?.suspended || false,
+          suspendedReason: flags?.suspendedReason || null,
+          suspendedAt: flags?.suspendedAt || null,
           twoFactorEnabled: tfa?.enabled || false,
           twoFactorVerifiedAt: tfa?.verifiedAt || null,
           activeSessions: activeSessions[0]?.count || 0,
@@ -236,44 +243,14 @@ export function registerUsersRoutes(router: Router) {
         });
       }
 
-      // Revoke all sessions if blocking
+      // Revoke all sessions if blocking (logs them out immediately)
       if (blocked) {
         await db
           .update(sessions)
           .set({ revokedAt: new Date(), revokedReason: "USER_BLOCKED" })
           .where(eq(sessions.auth0UserId, auth0UserId));
-
-        // Also suspend all user's servers in VirtFusion
-        const userServers = await db
-          .select()
-          .from(serverBilling)
-          .where(eq(serverBilling.auth0UserId, auth0UserId));
-
-        let suspendedCount = 0;
-        for (const server of userServers) {
-          if (server.status !== 'suspended' && server.status !== 'cancelled') {
-            try {
-              await virtfusionClient.suspendServer(server.virtfusionServerId);
-              await db
-                .update(serverBilling)
-                .set({
-                  status: 'suspended',
-                  adminSuspended: true,
-                  adminSuspendedAt: new Date(),
-                  adminSuspendedReason: reason || 'User account suspended',
-                  updatedAt: new Date(),
-                })
-                .where(eq(serverBilling.id, server.id));
-              suspendedCount++;
-              console.log(`[admin-users] Suspended server ${server.virtfusionServerId} for blocked user ${auth0User.email}`);
-            } catch (err: any) {
-              console.log(`[admin-users] Failed to suspend server ${server.virtfusionServerId}: ${err.message}`);
-            }
-          }
-        }
-        if (suspendedCount > 0) {
-          console.log(`[admin-users] Suspended ${suspendedCount} servers for blocked user ${auth0User.email}`);
-        }
+        console.log(`[admin-users] All sessions revoked for blocked user ${auth0User.email}`);
+        // Note: Server suspension is a separate action - use the billing endpoints to suspend servers if needed
       }
 
       // Audit log
@@ -286,6 +263,63 @@ export function registerUsersRoutes(router: Router) {
       await auditFailure(req, "user.block", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Block user error: ${error.message}`);
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Suspend/unsuspend user account (can still login but cannot deploy or control servers)
+  router.post("/users/:auth0UserId/suspend", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const { suspended, reason } = req.body;
+      const session = req.adminSession!;
+
+      if (typeof suspended !== "boolean") {
+        return res.status(400).json({ error: "suspended must be a boolean" });
+      }
+
+      // Check user exists in Auth0
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update or create user flags
+      const [existing] = await db
+        .select()
+        .from(userFlags)
+        .where(eq(userFlags.auth0UserId, auth0UserId));
+
+      if (existing) {
+        await db
+          .update(userFlags)
+          .set({
+            suspended,
+            suspendedReason: suspended ? (reason || null) : null,
+            suspendedAt: suspended ? new Date() : null,
+            suspendedBy: suspended ? session.auth0UserId : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(userFlags.auth0UserId, auth0UserId));
+      } else {
+        await db.insert(userFlags).values({
+          auth0UserId,
+          suspended,
+          suspendedReason: suspended ? (reason || null) : null,
+          suspendedAt: suspended ? new Date() : null,
+          suspendedBy: suspended ? session.auth0UserId : null,
+        });
+      }
+
+      // Audit log
+      await auditSuccess(req, suspended ? "user.suspend" : "user.unsuspend", "user", auth0UserId, auth0User.email, { suspended, reason });
+
+      console.log(`[admin-users] User ${auth0User.email} account ${suspended ? "suspended" : "unsuspended"} by ${session.email}`);
+
+      res.json({ success: true, suspended });
+    } catch (error: any) {
+      await auditFailure(req, "user.suspend", "user", error.message, req.params.auth0UserId);
+      console.log(`[admin-users] Suspend user error: ${error.message}`);
+      res.status(500).json({ error: "Failed to update user suspension" });
     }
   });
 

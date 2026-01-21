@@ -293,6 +293,12 @@ export function registerBillingRoutes(router: Router) {
         return res.status(404).json({ error: "Billing record not found" });
       }
 
+      // Unsuspend in VirtFusion FIRST (before updating database)
+      // This ensures we don't mark as active if VirtFusion fails
+      console.log(`[admin-billing] Calling VirtFusion unsuspend for server ${billing.virtfusionServerId}`);
+      await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+      console.log(`[admin-billing] VirtFusion unsuspend completed for server ${billing.virtfusionServerId}`);
+
       // Set next bill date to 1 month from now
       const nextBillAt = new Date();
       nextBillAt.setMonth(nextBillAt.getMonth() + 1);
@@ -310,9 +316,6 @@ export function registerBillingRoutes(router: Router) {
           updatedAt: new Date(),
         })
         .where(eq(serverBilling.id, id));
-
-      // Unsuspend in VirtFusion (this also boots the server automatically)
-      await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
 
       // Audit log
       await auditSuccess(req, "billing.unsuspend", "billing", String(id), billing.virtfusionServerId, { nextBillAt });

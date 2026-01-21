@@ -42,9 +42,15 @@ export const sessions = pgTable("sessions", {
 export const userFlags = pgTable("user_flags", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull().unique(),
+  // Blocked = user cannot log in at all
   blocked: boolean("blocked").default(false).notNull(),
   blockedReason: text("blocked_reason"),
   blockedAt: timestamp("blocked_at"),
+  // Suspended = user can log in but cannot deploy or control servers (can still view billing)
+  suspended: boolean("suspended").default(false).notNull(),
+  suspendedReason: text("suspended_reason"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: text("suspended_by"), // Admin who suspended
   // Admin can manually verify email, bypassing Auth0's email_verified status
   emailVerifiedOverride: boolean("email_verified_override").default(false).notNull(),
   emailVerifiedOverrideAt: timestamp("email_verified_override_at"),

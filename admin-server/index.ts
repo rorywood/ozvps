@@ -73,6 +73,26 @@ const authLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
+// Very strict rate limit for 2FA - prevents brute force
+const twoFactorLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // Only 5 attempts per 5 minutes
+  message: { error: 'Too many 2FA attempts. Please wait 5 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+
+// Strict limit for dangerous operations
+const dangerousOpLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 dangerous operations per minute
+  message: { error: 'Too many operations. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute
@@ -84,6 +104,13 @@ const apiLimiter = rateLimit({
 
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/verify-2fa', twoFactorLimiter);
+app.use('/api/users/:id/block', dangerousOpLimiter);
+app.use('/api/users/:id/suspend', dangerousOpLimiter);
+app.use('/api/users/:id/wallet/adjust', dangerousOpLimiter);
+app.use('/api/billing/records/:id/suspend', dangerousOpLimiter);
+app.use('/api/billing/records/:id/unsuspend', dangerousOpLimiter);
+app.use('/api/servers/:id/delete', dangerousOpLimiter);
 app.use('/api/', apiLimiter);
 
 // Body parsing

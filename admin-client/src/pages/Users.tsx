@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
-import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send } from "lucide-react";
+import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff } from "lucide-react";
 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,7 +43,18 @@ export default function Users() {
     mutationFn: ({ auth0UserId, blocked, reason }: { auth0UserId: string; blocked: boolean; reason?: string }) =>
       usersApi.blockUser(auth0UserId, blocked, reason),
     onSuccess: (_, variables) => {
-      toast.success(variables.blocked ? "Account suspended" : "Account unsuspended");
+      toast.success(variables.blocked ? "Account blocked (cannot log in)" : "Account unblocked");
+      queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
+      queryClient.invalidateQueries({ queryKey: ["users-list"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: ({ auth0UserId, suspended, reason }: { auth0UserId: string; suspended: boolean; reason?: string }) =>
+      usersApi.suspendUser(auth0UserId, suspended, reason),
+    onSuccess: (_, variables) => {
+      toast.success(variables.suspended ? "Account suspended (can log in but restricted)" : "Account unsuspended");
       queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
@@ -126,6 +137,11 @@ export default function Users() {
                         <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                       </div>
                       {user.blocked && (
+                        <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full border border-red-500/30">
+                          Blocked
+                        </span>
+                      )}
+                      {user.suspended && !user.blocked && (
                         <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded-full border border-orange-500/30">
                           Suspended
                         </span>
@@ -167,11 +183,18 @@ export default function Users() {
                       <p className="text-sm text-gray-500 dark:text-gray-400">{selectedUser.email}</p>
                     </div>
                   </div>
-                  {selectedUser.blocked && (
-                    <span className="px-3 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30">
-                      Account Suspended
-                    </span>
-                  )}
+                  <div className="flex gap-2">
+                    {selectedUser.blocked && (
+                      <span className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium border border-red-500/30">
+                        Blocked
+                      </span>
+                    )}
+                    {selectedUser.suspended && (
+                      <span className="px-3 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30">
+                        Suspended
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {loadingUser ? (
@@ -236,11 +259,35 @@ export default function Users() {
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                       <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Actions</h3>
                       <div className="flex flex-wrap gap-2">
+                        {/* Suspend Account - restricts actions but allows login */}
+                        <button
+                          onClick={() => {
+                            const reason = userDetails.user.suspended
+                              ? undefined
+                              : prompt("Enter suspension reason (e.g., Terms of Service violation):");
+                            if (!userDetails.user.suspended && !reason) return;
+                            suspendMutation.mutate({
+                              auth0UserId: userDetails.user.auth0UserId,
+                              suspended: !userDetails.user.suspended,
+                              reason,
+                            });
+                          }}
+                          disabled={suspendMutation.isPending}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                            userDetails.user.suspended
+                              ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/20"
+                              : "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500/20"
+                          }`}
+                        >
+                          <Lock className="h-4 w-4" />
+                          {userDetails.user.suspended ? "Unsuspend Account" : "Suspend Account"}
+                        </button>
+                        {/* Block Account - prevents login entirely */}
                         <button
                           onClick={() => {
                             const reason = userDetails.user.blocked
                               ? undefined
-                              : prompt("Enter suspension reason (e.g., Terms of Service violation):");
+                              : prompt("Enter block reason (this will prevent login):");
                             if (!userDetails.user.blocked && !reason) return;
                             blockMutation.mutate({
                               auth0UserId: userDetails.user.auth0UserId,
@@ -248,14 +295,15 @@ export default function Users() {
                               reason,
                             });
                           }}
+                          disabled={blockMutation.isPending}
                           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                             userDetails.user.blocked
                               ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/20"
-                              : "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500/20"
+                              : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/20"
                           }`}
                         >
                           <Ban className="h-4 w-4" />
-                          {userDetails.user.blocked ? "Unsuspend Account" : "Suspend Account"}
+                          {userDetails.user.blocked ? "Unblock Account" : "Block Account"}
                         </button>
                         {/* Email Verification Status */}
                         {userDetails.user.emailVerifiedAuth0 ? (

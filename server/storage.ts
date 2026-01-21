@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, promoCodes, promoCodeUsage, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -23,9 +23,15 @@ export interface Session {
 
 export interface UserFlags {
   auth0UserId: string;
+  // Blocked = user cannot log in at all
   blocked: boolean;
   blockedReason?: string | null;
   blockedAt?: Date | null;
+  // Suspended = user can log in but cannot deploy or control servers
+  suspended?: boolean;
+  suspendedReason?: string | null;
+  suspendedAt?: Date | null;
+  suspendedBy?: string | null;
   // Admin email verification override - bypasses Auth0's email_verified
   emailVerifiedOverride?: boolean;
   emailVerifiedOverrideAt?: Date | null;
@@ -2279,6 +2285,31 @@ export const dbStorage = {
       promoCode: promo,
       discountCents,
       finalPriceCents,
+    };
+  },
+
+  // User Flags - Read directly from database (not cache)
+  // Use this for checking suspension status as it's more up-to-date than Redis cache
+  async getUserFlagsFromDb(auth0UserId: string): Promise<UserFlags | undefined> {
+    const [flags] = await db
+      .select()
+      .from(userFlagsTable)
+      .where(eq(userFlagsTable.auth0UserId, auth0UserId));
+
+    if (!flags) return undefined;
+
+    return {
+      auth0UserId: flags.auth0UserId,
+      blocked: flags.blocked,
+      blockedReason: flags.blockedReason,
+      blockedAt: flags.blockedAt,
+      suspended: flags.suspended,
+      suspendedReason: flags.suspendedReason,
+      suspendedAt: flags.suspendedAt,
+      suspendedBy: flags.suspendedBy,
+      emailVerifiedOverride: flags.emailVerifiedOverride,
+      emailVerifiedOverrideAt: flags.emailVerifiedOverrideAt,
+      emailVerifiedOverrideBy: flags.emailVerifiedOverrideBy,
     };
   },
 };

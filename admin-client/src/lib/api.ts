@@ -107,6 +107,9 @@ export const usersApi = {
   blockUser: (auth0UserId: string, blocked: boolean, reason?: string) =>
     api.post(`/users/${encodeURIComponent(auth0UserId)}/block`, { blocked, reason }),
 
+  suspendUser: (auth0UserId: string, suspended: boolean, reason?: string) =>
+    api.post(`/users/${encodeURIComponent(auth0UserId)}/suspend`, { suspended, reason }),
+
   verifyEmail: (auth0UserId: string) =>
     api.post(`/users/${encodeURIComponent(auth0UserId)}/verify-email`),
 

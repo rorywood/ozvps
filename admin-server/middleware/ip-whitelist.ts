@@ -3,9 +3,9 @@ import { db } from "../../server/db";
 import { adminIpWhitelist } from "../../shared/schema";
 import { eq, and, gt, or, isNull } from "drizzle-orm";
 
-// Cache whitelist for 60 seconds to avoid DB hits on every request
+// Cache whitelist for 10 seconds - short TTL for security-critical setting
 let whitelistCache: { entries: typeof adminIpWhitelist.$inferSelect[]; updatedAt: number } | null = null;
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const CACHE_TTL = 10 * 1000; // 10 seconds (security-critical)
 
 async function getWhitelistEntries() {
   const now = Date.now();

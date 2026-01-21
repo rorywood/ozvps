@@ -13,6 +13,10 @@ interface User {
   emailVerified?: boolean;
   virtFusionUserId?: number;
   extRelationId?: string;
+  // Blocked = cannot log in at all (will be logged out)
+  accountBlocked?: boolean;
+  accountBlockedReason?: string | null;
+  // Suspended = can log in but cannot deploy or control servers
   accountSuspended?: boolean;
   accountSuspendedReason?: string | null;
 }

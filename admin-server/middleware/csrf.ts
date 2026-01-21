@@ -104,7 +104,7 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000); // Run every hour
 
-export function csrfMiddleware(req: Request, res: Response, next: NextFunction) {
+export async function csrfMiddleware(req: Request, res: Response, next: NextFunction) {
   // Skip CSRF check for GET, HEAD, OPTIONS requests (they should be idempotent)
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return next();
@@ -121,16 +121,15 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction) 
     return res.status(403).json({ error: "CSRF token required" });
   }
 
-  // Async validation
-  validateCsrfToken(sessionId, csrfToken)
-    .then((valid) => {
-      if (!valid) {
-        return res.status(403).json({ error: "Invalid CSRF token" });
-      }
-      next();
-    })
-    .catch((err) => {
-      console.error("[csrf] Validation error:", err.message);
-      res.status(500).json({ error: "CSRF validation failed" });
-    });
+  // Await validation before proceeding
+  try {
+    const valid = await validateCsrfToken(sessionId, csrfToken);
+    if (!valid) {
+      return res.status(403).json({ error: "Invalid CSRF token" });
+    }
+    next();
+  } catch (err: any) {
+    console.error("[csrf] Validation error:", err.message);
+    res.status(500).json({ error: "CSRF validation failed" });
+  }
 }
