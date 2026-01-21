@@ -5,19 +5,51 @@ import { api } from "@/lib/api";
 import { VncViewer } from "@/components/vnc-viewer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Monitor, ArrowLeft, AlertCircle } from "lucide-react";
+import { Loader2, Monitor, ArrowLeft, AlertCircle, Ban } from "lucide-react";
 import { Link } from "wouter";
 import { useConsoleLock } from "@/hooks/use-console-lock";
 import { ConsoleLockedOverlay } from "@/components/console-locked-overlay";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const serverId = params?.id;
-  
+  const { user } = useAuth();
+
   // Check if this is a popout window
   const isPopout = searchString.includes('popout=true');
+
+  // Check if account is suspended - show blocked message
+  if (user?.accountSuspended) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-6">
+          <div className="flex items-start gap-4">
+            <Ban className="h-6 w-6 text-destructive flex-shrink-0 mt-1" />
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-foreground mb-2">
+                Account Suspended
+              </h2>
+              <p className="text-muted-foreground mb-4">
+                Your account has been suspended and you cannot access the console at this time.
+              </p>
+              {user.accountSuspendedReason && (
+                <div className="bg-destructive/10 rounded p-3 mb-4">
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Reason:</p>
+                  <p className="text-sm text-foreground">{user.accountSuspendedReason}</p>
+                </div>
+              )}
+              <Button variant="outline" asChild className="w-full">
+                <Link href="/support">Contact Support</Link>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
   
   // Console lock for 15 seconds after boot
   const consoleLock = useConsoleLock(serverId || '');

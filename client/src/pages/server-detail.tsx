@@ -63,6 +63,7 @@ import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,6 +87,47 @@ export default function ServerDetail() {
   const serverId = params?.id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // Check if account is suspended - redirect to dashboard with notice
+  if (user?.accountSuspended) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto py-12">
+          <div className="bg-destructive/10 border-l-4 border-l-destructive rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <Ban className="h-6 w-6 text-destructive flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-foreground mb-2">
+                  Account Suspended
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  Your account has been suspended and you cannot access your servers at this time.
+                </p>
+                {user.accountSuspendedReason && (
+                  <div className="bg-destructive/10 rounded p-3 mb-4">
+                    <p className="text-xs uppercase text-muted-foreground mb-1">Reason:</p>
+                    <p className="text-sm text-foreground">{user.accountSuspendedReason}</p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Please contact support if you believe this is an error or to discuss reactivating your account.
+                </p>
+                <div className="mt-6 flex gap-3">
+                  <Button variant="outline" asChild>
+                    <Link href="/billing">View Billing</Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/support">Contact Support</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
   const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
   const [selectedOs, setSelectedOs] = useState<string>("");
   const [hostname, setHostname] = useState<string>("");
