@@ -148,7 +148,7 @@ function Router() {
         <Pricing />
       </Route>
       <Route path="/">
-        <Redirect to="/login" />
+        <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard">
         <AuthGuard>
