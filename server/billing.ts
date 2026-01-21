@@ -251,6 +251,7 @@ export async function runBillingJob(): Promise<void> {
   }
 
   // Step B: Suspend overdue servers (skip complimentary servers)
+  // B1: Servers with suspendAt date that has passed
   const overdueServers = await db.select().from(serverBilling)
     .where(
       and(
@@ -261,9 +262,30 @@ export async function runBillingJob(): Promise<void> {
       )
     );
 
-  log(`Found ${overdueServers.length} servers ready for suspension`, 'billing');
+  // B2: Also suspend any unpaid server that is 7+ days overdue (nextBillAt is 7+ days in the past)
+  // This catches servers that may have been missed or have null/incorrect suspendAt
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const longOverdueServers = await db.select().from(serverBilling)
+    .where(
+      and(
+        eq(serverBilling.status, 'unpaid'),
+        eq(serverBilling.freeServer, false),
+        lte(serverBilling.nextBillAt, sevenDaysAgo) // 7+ days overdue
+      )
+    );
 
-  for (const billing of overdueServers) {
+  // Combine and dedupe the lists
+  const allOverdueServers = [...overdueServers];
+  const existingIds = new Set(overdueServers.map(s => s.id));
+  for (const server of longOverdueServers) {
+    if (!existingIds.has(server.id)) {
+      allOverdueServers.push(server);
+    }
+  }
+
+  log(`Found ${allOverdueServers.length} servers ready for suspension (${overdueServers.length} by suspendAt, ${longOverdueServers.length} by 7+ days overdue)`, 'billing');
+
+  for (const billing of allOverdueServers) {
     try {
       await virtfusionClient.suspendServer(billing.virtfusionServerId);
 
