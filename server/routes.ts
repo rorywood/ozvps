@@ -459,16 +459,16 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     // Update last activity timestamp
     await storage.updateSessionActivity(sessionId);
 
-    // Check if user is blocked
+    // Check if user is blocked (read from database for most up-to-date status)
     if (session.auth0UserId) {
-      const userFlags = await storage.getUserFlags(session.auth0UserId);
+      const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId);
       if (userFlags?.blocked) {
         // Revoke the session and return blocked error
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
         res.clearCookie(SESSION_COOKIE);
-      res.clearCookie(CSRF_COOKIE);
-        return res.status(401).json({ 
-          error: 'Your account has been suspended. Please contact support.',
+        res.clearCookie(CSRF_COOKIE);
+        return res.status(401).json({
+          error: 'Your account has been blocked. Please contact support.',
           code: 'SESSION_REVOKED_BLOCKED'
         });
       }
@@ -2130,6 +2130,15 @@ export async function registerRoutes(
 
   app.put('/api/servers/:id/name', authMiddleware, async (req, res) => {
     try {
+      // Check if user account is blocked or suspended
+      const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
+      if (userFlags?.blocked) {
+        return res.status(403).json({ error: 'Your account has been blocked. Please contact support for assistance.' });
+      }
+      if (userFlags?.suspended) {
+        return res.status(403).json({ error: 'Your account has been suspended. Server controls are disabled.' });
+      }
+
       const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
@@ -2721,7 +2730,16 @@ export async function registerRoutes(
     try {
       const serverId = req.params.id;
       const session = req.userSession!;
-      
+
+      // Check if user account is blocked or suspended
+      const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId!);
+      if (userFlags?.blocked) {
+        return res.status(403).json({ error: 'Your account has been blocked. Please contact support for assistance.' });
+      }
+      if (userFlags?.suspended) {
+        return res.status(403).json({ error: 'Your account has been suspended. Server controls are disabled.' });
+      }
+
       // Verify server ownership
       const { server, error, status } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
       if (!server) {
