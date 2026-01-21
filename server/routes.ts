@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
@@ -2581,6 +2581,7 @@ export async function registerRoutes(
   });
 
   // Reset server password - security-sensitive endpoint with ownership verification
+  // Password is sent via email for security - never shown in UI
   app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
       // Check if user account is blocked or suspended
@@ -2600,7 +2601,7 @@ export async function registerRoutes(
       if (server.suspended) {
         return res.status(403).json({ error: 'Server is suspended. Password reset is disabled.' });
       }
-      
+
       // Block password reset if server has a pending cancellation
       const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
       if (pendingCancellation) {
@@ -2614,8 +2615,28 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
 
-      log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
-      res.json({ success: true, password: result.password, username: result.username });
+      // Get server details for the email
+      const serverName = server.name || `Server ${req.params.id}`;
+      const serverIp = server.primaryIp || server.ips?.[0]?.address || 'Check dashboard';
+      const username = result.username || 'root';
+      const userEmail = req.userSession!.email!;
+
+      // Send password via email
+      const emailResult = await sendServerPasswordResetEmail(
+        userEmail,
+        serverName,
+        serverIp,
+        username,
+        result.password
+      );
+
+      if (!emailResult.success) {
+        log(`Failed to send password reset email for server ${req.params.id}: ${emailResult.error}`, 'api');
+        return res.status(500).json({ error: 'Password was reset but email failed to send. Please contact support.' });
+      }
+
+      log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId} - sent via email`, 'api');
+      res.json({ success: true, emailSent: true });
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to reset server password. Please try again or contact support.' });

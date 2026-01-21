@@ -180,8 +180,6 @@ export default function ServerDetail() {
   
   // Password reset state
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState<string | null>(null);
-  const [passwordCopied, setPasswordCopied] = useState(false);
 
   // Track if credentials were emailed (persists after reinstallTask.reset())
   const [credentialsWereEmailed, setCredentialsWereEmailed] = useState(() => {
@@ -625,16 +623,15 @@ export default function ServerDetail() {
     }
   });
   
-  // Password reset mutation
+  // Password reset mutation - password is sent via email for security
   const passwordResetMutation = useMutation({
     mutationFn: (id: string) => api.resetServerPassword(id),
     onSuccess: (response) => {
-      if (response.password) {
-        setNewPassword(response.password);
-        setPasswordCopied(false);
+      if (response.emailSent) {
+        setPasswordResetDialogOpen(false);
         toast({
           title: "Password Reset Successful",
-          description: "Your new server password has been generated. Please save it now.",
+          description: "Your new password has been sent to your email address.",
         });
       }
     },
@@ -2765,139 +2762,75 @@ export default function ServerDetail() {
       {/* Provisioning dialog removed - now showing full-page view */}
 
       {/* Password Reset Dialog */}
-      <Dialog 
-        open={passwordResetDialogOpen} 
-        onOpenChange={(open) => {
-          if (!open) {
-            // Clear password when dialog closes
-            setNewPassword(null);
-            setPasswordCopied(false);
-          }
-          setPasswordResetDialogOpen(open);
-        }}
+      <Dialog
+        open={passwordResetDialogOpen}
+        onOpenChange={setPasswordResetDialogOpen}
       >
         <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <Key className="h-5 w-5 text-blue-400" />
-              {newPassword ? "New Password Generated" : "Reset Server Password"}
+              Reset Server Password
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {newPassword 
-                ? "Your new password has been generated. Copy it now - it will not be shown again."
-                : "This will generate a new root/administrator password for your server."
-              }
+              This will generate a new root/administrator password for your server.
             </DialogDescription>
           </DialogHeader>
-          
-          {newPassword ? (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-green-400 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-green-400">Password Reset Successful</div>
-                    <div className="text-sm text-green-400/80 mt-1">
-                      Your server password has been changed. Use the password below to log in.
-                    </div>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
+                <div>
+                  <div className="font-medium text-amber-400">Confirm Password Reset</div>
+                  <div className="text-sm text-amber-400/80">
+                    This will immediately change the root/administrator password on your server.
+                    Any existing SSH sessions may be affected.
                   </div>
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">New Password</label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 p-3 bg-muted rounded-md border border-border font-mono text-sm text-foreground break-all">
-                    {newPassword}
+            </div>
+
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Mail className="h-5 w-5 text-blue-400 mt-0.5" />
+                <div>
+                  <div className="font-medium text-blue-400">Password Sent Via Email</div>
+                  <div className="text-sm text-blue-400/80">
+                    For security, your new password will be sent to your email address and will not be displayed here.
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="shrink-0 border-border"
-                    onClick={() => {
-                      navigator.clipboard.writeText(newPassword);
-                      setPasswordCopied(true);
-                      toast({
-                        title: "Password Copied",
-                        description: "The password has been copied to your clipboard.",
-                      });
-                    }}
-                    data-testid="button-copy-password"
-                  >
-                    {passwordCopied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               </div>
-              
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-xs text-amber-400/80">
-                    This password will not be shown again. Make sure to save it in a secure location before closing this dialog.
-                  </p>
-                </div>
-              </div>
-              
-              <Button 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => {
-                  setPasswordResetDialogOpen(false);
-                  setNewPassword(null);
-                  setPasswordCopied(false);
-                }}
-                data-testid="button-done-password"
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-border"
+                onClick={() => setPasswordResetDialogOpen(false)}
+                data-testid="button-cancel-password-reset"
               >
-                Done
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => {
+                  if (serverId) {
+                    passwordResetMutation.mutate(serverId);
+                  }
+                }}
+                disabled={passwordResetMutation.isPending}
+                data-testid="button-confirm-password-reset"
+              >
+                {passwordResetMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Key className="h-4 w-4 mr-2" />
+                )}
+                Reset Password
               </Button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-amber-400">Confirm Password Reset</div>
-                    <div className="text-sm text-amber-400/80">
-                      This will immediately change the root/administrator password on your server. 
-                      Any existing SSH sessions may be affected.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1 border-border"
-                  onClick={() => setPasswordResetDialogOpen(false)}
-                  data-testid="button-cancel-password-reset"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => {
-                    if (serverId) {
-                      passwordResetMutation.mutate(serverId);
-                    }
-                  }}
-                  disabled={passwordResetMutation.isPending}
-                  data-testid="button-confirm-password-reset"
-                >
-                  {passwordResetMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Key className="h-4 w-4 mr-2" />
-                  )}
-                  Reset Password
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
 
