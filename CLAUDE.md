@@ -28,9 +28,29 @@
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-19)
+## Recent Session Work (2026-01-21)
 
-### Admin Panel Implementation (IN PROGRESS)
+### Completed This Session
+1. **Plan name on server cards** - Added plan name display to dashboard, servers page, and server detail sidebar
+2. **Admin ticket email notifications** - Sends email to `ADMIN_NOTIFICATION_EMAIL` when new support ticket submitted
+3. **Admin ticket management** - Added status/priority/category dropdowns, reopen/close/delete functionality
+4. **Profile picture upload** - Base64 image upload to account settings (10MB limit, stored in `/uploads/profile-pictures/`)
+   - Added `profilePictureUrl` field to wallets table
+   - Fixed body size limit issue (was 100KB, now 15MB for this endpoint)
+5. **Email verification fixes**:
+   - Fixed duplicate emails (Auth0 + custom) - now sets `email_verified=true` in Auth0 immediately to suppress Auth0's email
+   - Added auto-redirect after successful verification (2 second delay)
+6. **VirtFusion user deletion** - Fixed to use correct API endpoint: `DELETE /users/{extRelationId}/byExtRelation?relStr=true`
+
+### Pending Tasks
+1. **Admin suspend account bug** - "User not found" error when clicking suspend button in admin panel
+2. **Promotional codes feature** - Full implementation planned (see plan file: `modular-watching-island.md`)
+   - Database: `promoCodes` and `promoCodeUsage` tables
+   - Admin UI for creating/managing codes
+   - Client-side validation during deploy
+   - Discount application during server provisioning
+
+### Admin Panel (COMPLETED - 2026-01-19)
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
 **Architecture:**
@@ -45,27 +65,7 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 3. Mandatory 2FA verification
 4. IP whitelist (bootstrap mode: allow all if whitelist empty)
 
-**Files Created:**
-- `admin-server/index.ts` - Express entry point
-- `admin-server/routes/auth.ts` - Login with 2FA
-- `admin-server/routes/users.ts`, `servers.ts`, `billing.ts`, `tickets.ts`
-- `admin-server/middleware/admin-auth.ts` - Session validation, uses Auth0 API
-- `admin-server/middleware/ip-whitelist.ts` - IP filtering
-- `admin-client/src/` - Full React frontend
-
-**Current Issue (DEBUGGING):**
-2FA verification failing with: `Invalid Base32 string: Unknown letter: "9"`
-- The 2FA secret in database for `rorywood11@gmail.com` may not be Base32 encoded
-- Auth0 user ID: `auth0|695de54b76e4c65171b58b57`
-- otplib import fixed (use `verifySync` from 'otplib')
-- Need to check what format the 2FA secret is stored in
-
-**Key Changes Made:**
-- Removed hardcoded admin email list - now uses Auth0 `app_metadata.is_admin`
-- Removed database user_mappings requirement - all user data from Auth0
-- Only database dependency is 2FA secrets (stored in `two_factor_auth` table)
-
-### Previous Work (Earlier 2026-01-19)
+### Previous Work (2026-01-19)
 - TypeScript cleanup, all errors fixed
 - Rate limiting adjustments
 - Email templates redesigned (white/light theme)
@@ -112,7 +112,8 @@ git checkout claude/dev-l5488
 ```
 
 ## TODO / Known Issues
-- [ ] None currently tracked
+- [ ] Admin suspend account bug - "User not found" error
+- [ ] Promotional codes feature (plan file: `modular-watching-island.md`)
 
 ## Notes for Claude
 - User prefers direct, concise responses
