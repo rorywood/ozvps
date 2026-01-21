@@ -1946,8 +1946,8 @@ export default function ServerDetail() {
                     <span
                       className={cn(
                         "text-lg font-bold",
-                        liveStats && liveStats.disk_usage >= 90 ? "text-red-500" :
-                        liveStats && liveStats.disk_usage >= 75 ? "text-amber-500" :
+                        liveStats && liveStats.disk_usage >= 85 ? "text-red-500" :
+                        liveStats && liveStats.disk_usage >= 60 ? "text-amber-500" :
                         "text-foreground"
                       )}
                       data-testid="text-disk-percent"
@@ -1971,8 +1971,8 @@ export default function ServerDetail() {
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
                       server.status === 'running' && !powerActionPending && !consoleLock.isLocked
-                        ? liveStats && liveStats.disk_usage >= 90 ? "bg-red-500" :
-                          liveStats && liveStats.disk_usage >= 75 ? "bg-amber-500" :
+                        ? liveStats && liveStats.disk_usage >= 85 ? "bg-red-500" :
+                          liveStats && liveStats.disk_usage >= 60 ? "bg-amber-500" :
                           "bg-blue-500"
                         : "bg-muted/30"
                     )}
