@@ -48,6 +48,10 @@ export default function LoginPage() {
   const [twoFAToken, setTwoFAToken] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [savedRecaptchaToken, setSavedRecaptchaToken] = useState<string | undefined>(undefined);
+  const [twoFAMethod, setTwoFAMethod] = useState<'totp' | 'email'>('totp');
+  const [auth0UserId, setAuth0UserId] = useState<string>("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
 
   const [showUserNotFound, setShowUserNotFound] = useState(false);
 
@@ -205,6 +209,9 @@ export default function LoginPage() {
     onSuccess: (data) => {
       if (data.requires2FA) {
         setRequires2FA(true);
+        setTwoFAMethod(data.twoFAMethod || 'totp');
+        setAuth0UserId(data.auth0UserId || '');
+        setEmailCodeSent(false);
         setError("");
         setIsSubmitting(false);
         return;
@@ -315,10 +322,40 @@ export default function LoginPage() {
     setTwoFAToken("");
     setUseBackupCode(false);
     setError("");
+    setTwoFAMethod('totp');
+    setAuth0UserId('');
+    setEmailCodeSent(false);
+  };
+
+  const handleSendEmailCode = async () => {
+    if (!auth0UserId || !email) {
+      setError("Unable to send verification code. Please try again.");
+      return;
+    }
+
+    setSendingEmailCode(true);
+    setError("");
+
+    try {
+      const result = await api.sendEmail2FACode(email, auth0UserId);
+      if (result.success) {
+        setEmailCodeSent(true);
+        toast({
+          title: "Code Sent",
+          description: "A verification code has been sent to your email.",
+        });
+      } else {
+        setError(result.message || "Failed to send verification code.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to send verification code.");
+    } finally {
+      setSendingEmailCode(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
       {/* Left Side - Branded Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Gradient Overlay */}
@@ -354,7 +391,7 @@ export default function LoginPage() {
                 High Performance<br />
                 <span className="text-primary">Cloud Servers</span>
               </h1>
-              <p className="text-xl text-slate-400 leading-relaxed max-w-md">
+              <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                 Deploy powerful virtual servers with Australian data centers and 24/7 expert support.
               </p>
             </div>
@@ -367,7 +404,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Instant Deployment</h3>
-                  <p className="text-sm text-slate-500">Servers ready in under 60 seconds</p>
+                  <p className="text-sm text-[#737373]">Servers ready in under 60 seconds</p>
                 </div>
               </div>
 
@@ -377,7 +414,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Australian Infrastructure</h3>
-                  <p className="text-sm text-slate-500">Low latency, local data sovereignty</p>
+                  <p className="text-sm text-[#737373]">Low latency, local data sovereignty</p>
                 </div>
               </div>
 
@@ -387,14 +424,14 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Enterprise Security</h3>
-                  <p className="text-sm text-slate-500">DDoS protection included</p>
+                  <p className="text-sm text-[#737373]">DDoS protection included</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-sm text-slate-600">
+          <div className="text-sm text-[#525252]">
             © {new Date().getFullYear()} OzVPS. All rights reserved.
           </div>
         </div>
@@ -420,7 +457,7 @@ export default function LoginPage() {
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
-              <p className="text-slate-400 mb-4">
+              <p className="text-[#a6a6a6] mb-4">
                 {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
               </p>
               <Button
@@ -435,13 +472,13 @@ export default function LoginPage() {
           )}
 
           {/* Form Card */}
-          <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-2xl font-bold text-white mb-2">
                 {requires2FA ? "Two-Factor Authentication" : "Welcome back"}
               </h1>
-              <p className="text-slate-400">
+              <p className="text-[#a6a6a6]">
                 {requires2FA
                   ? useBackupCode
                     ? "Enter your backup code to continue"
@@ -491,14 +528,14 @@ export default function LoginPage() {
 
                 {/* Email */}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium text-slate-300">Email</Label>
+                  <Label htmlFor="email" className="text-sm font-medium text-[#ebebeb]">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                     <Input
                       id="email"
                       type="email"
                       placeholder="you@example.com"
-                      className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                      className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                       value={email}
                       onChange={(e) => { setEmail(e.target.value); setShowUserNotFound(false); setError(""); }}
                       autoComplete="email"
@@ -510,14 +547,14 @@ export default function LoginPage() {
 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-slate-300">Password</Label>
+                  <Label htmlFor="password" className="text-sm font-medium text-[#ebebeb]">Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                     <Input
                       id="password"
                       type="password"
                       placeholder="Enter your password"
-                      className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                      className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setError(""); }}
                       autoComplete="current-password"
@@ -531,7 +568,7 @@ export default function LoginPage() {
                   <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
                     <div ref={recaptchaRef} />
                     {!recaptchaLoaded && (
-                      <div className="flex items-center justify-center p-4 text-slate-400 text-sm">
+                      <div className="flex items-center justify-center p-4 text-[#a6a6a6] text-sm">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         Loading verification...
                       </div>
@@ -572,7 +609,7 @@ export default function LoginPage() {
                   <div className="text-center">
                     <Link
                       href="/forgot-password"
-                      className="text-sm text-slate-400 hover:text-primary transition-colors"
+                      className="text-sm text-[#a6a6a6] hover:text-primary transition-colors"
                       data-testid="link-forgot-password"
                     >
                       Forgot your password?
@@ -582,13 +619,13 @@ export default function LoginPage() {
 
                 {/* reCAPTCHA Notice */}
                 {recaptchaEnabled && (
-                  <p className="text-xs text-slate-500 text-center">
+                  <p className="text-xs text-[#737373] text-center">
                     Protected by reCAPTCHA.{' '}
-                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors">
+                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
                       Privacy
                     </a>
                     {' '}·{' '}
-                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors">
+                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
                       Terms
                     </a>
                   </p>
@@ -599,15 +636,23 @@ export default function LoginPage() {
               <form onSubmit={handle2FASubmit} className="space-y-6">
                 {/* 2FA Info */}
                 <div className="flex items-start gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                  <Smartphone className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  {twoFAMethod === 'email' ? (
+                    <Mail className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Smartphone className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  )}
                   <div className="flex-1">
                     <p className="text-base font-semibold text-white mb-1">
                       {useBackupCode ? "Use a backup code" : "Verify your identity"}
                     </p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-[#a6a6a6]">
                       {useBackupCode
                         ? "Enter one of your backup codes"
-                        : "Enter the 6-digit code from your authenticator app"}
+                        : twoFAMethod === 'email'
+                          ? emailCodeSent
+                            ? "Enter the 6-digit code sent to your email"
+                            : "Click below to receive a verification code via email"
+                          : "Enter the 6-digit code from your authenticator app"}
                     </p>
                   </div>
                 </div>
@@ -620,55 +665,98 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* 2FA Code Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="twofa-code" className="text-sm font-medium text-slate-300">
-                    {useBackupCode ? "Backup Code" : "Verification Code"}
-                  </Label>
-                  <Input
-                    id="twofa-code"
-                    type="text"
-                    placeholder={useBackupCode ? "XXXXXXXX" : "000000"}
-                    className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-600 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
-                    value={twoFAToken}
-                    onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    maxLength={useBackupCode ? 8 : 6}
-                    autoFocus
-                    autoComplete="one-time-code"
-                    data-testid="input-2fa-code"
-                  />
-                </div>
+                {/* Email 2FA - Send Code Button (shown when email method and code not sent yet) */}
+                {twoFAMethod === 'email' && !emailCodeSent && !useBackupCode && (
+                  <Button
+                    type="button"
+                    onClick={handleSendEmailCode}
+                    disabled={sendingEmailCode}
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90"
+                  >
+                    {sendingEmailCode ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-5 w-5 mr-2" />
+                        Send verification code
+                      </>
+                    )}
+                  </Button>
+                )}
 
-                {/* Verify Button */}
-                <Button
-                  type="submit"
-                  className="w-full h-12 text-base font-semibold rounded-xl"
-                  disabled={isSubmitting || loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
-                  data-testid="button-verify-2fa"
-                >
-                  {(isSubmitting || loginMutation.isPending) ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    "Verify and continue"
-                  )}
-                </Button>
+                {/* 2FA Code Input (shown for TOTP, backup codes, or after email code sent) */}
+                {(twoFAMethod === 'totp' || useBackupCode || emailCodeSent) && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="twofa-code" className="text-sm font-medium text-[#ebebeb]">
+                        {useBackupCode ? "Backup Code" : "Verification Code"}
+                      </Label>
+                      <Input
+                        id="twofa-code"
+                        type="text"
+                        placeholder={useBackupCode ? "XXXXXXXX" : "000000"}
+                        className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                        value={twoFAToken}
+                        onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        maxLength={useBackupCode ? 8 : 6}
+                        autoFocus
+                        autoComplete="one-time-code"
+                        data-testid="input-2fa-code"
+                      />
+                    </div>
+
+                    {/* Verify Button */}
+                    <Button
+                      type="submit"
+                      className="w-full h-12 text-base font-semibold rounded-xl"
+                      disabled={isSubmitting || loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
+                      data-testid="button-verify-2fa"
+                    >
+                      {(isSubmitting || loginMutation.isPending) ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify and continue"
+                      )}
+                    </Button>
+                  </>
+                )}
 
                 {/* 2FA Options */}
-                <div className="flex flex-col gap-3 pt-4 border-t border-slate-800">
+                <div className="flex flex-col gap-3 pt-4 border-t border-white/10">
                   <button
                     type="button"
-                    onClick={() => setUseBackupCode(!useBackupCode)}
+                    onClick={() => {
+                      setUseBackupCode(!useBackupCode);
+                      setTwoFAToken("");
+                    }}
                     className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
                   >
-                    {useBackupCode ? "Use authenticator app instead" : "Use a backup code instead"}
+                    {useBackupCode
+                      ? twoFAMethod === 'email'
+                        ? "Use email code instead"
+                        : "Use authenticator app instead"
+                      : "Use a backup code instead"}
                   </button>
+                  {twoFAMethod === 'email' && emailCodeSent && !useBackupCode && (
+                    <button
+                      type="button"
+                      onClick={handleSendEmailCode}
+                      disabled={sendingEmailCode}
+                      className="text-sm text-[#a6a6a6] hover:text-white font-medium transition-colors"
+                    >
+                      {sendingEmailCode ? "Sending..." : "Resend verification code"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleBack2FA}
-                    className="flex items-center justify-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+                    className="flex items-center justify-center gap-2 text-sm text-[#a6a6a6] hover:text-white transition-colors"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Back to sign in
@@ -681,14 +769,14 @@ export default function LoginPage() {
           {/* Footer Links */}
           {!requires2FA && (
             <div className="mt-8 text-center space-y-4">
-              <p className="text-slate-400">
+              <p className="text-[#a6a6a6]">
                 Don't have an account?{' '}
                 <Link href="/register" className="text-primary hover:text-primary/80 font-semibold transition-colors" data-testid="link-register">
                   Sign up for free
                 </Link>
               </p>
-              <p className="text-sm text-slate-600">
-                <a href="https://ozvps.com.au" className="hover:text-slate-400 transition-colors flex items-center justify-center gap-2" data-testid="link-back-to-website">
+              <p className="text-sm text-[#525252]">
+                <a href="https://ozvps.com.au" className="hover:text-[#a6a6a6] transition-colors flex items-center justify-center gap-2" data-testid="link-back-to-website">
                   <ArrowLeft className="h-4 w-4" />
                   Back to ozvps.com.au
                 </a>

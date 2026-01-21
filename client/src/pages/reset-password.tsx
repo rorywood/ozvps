@@ -71,7 +71,7 @@ export default function ResetPasswordPage() {
   // No token provided - show error in the new design
   if (!token) {
     return (
-      <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
         {/* Left Side - Branded Panel */}
         <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-primary/10" />
@@ -92,12 +92,12 @@ export default function ResetPasswordPage() {
                   Reset Your<br />
                   <span className="text-primary">Password</span>
                 </h1>
-                <p className="text-xl text-slate-400 leading-relaxed max-w-md">
+                <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                   Create a new secure password to regain access to your account.
                 </p>
               </div>
             </div>
-            <div className="text-sm text-slate-600">
+            <div className="text-sm text-[#525252]">
               © {new Date().getFullYear()} OzVPS. All rights reserved.
             </div>
           </div>
@@ -111,13 +111,13 @@ export default function ResetPasswordPage() {
                 <img src={logo} alt="OzVPS" className="h-12 w-auto mx-auto cursor-pointer brightness-0 invert" />
               </Link>
             </div>
-            <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+            <div className="bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20">
               <div className="text-center py-4">
                 <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <XCircle className="h-10 w-10 text-red-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-3">Invalid Reset Link</h2>
-                <p className="text-slate-400 mb-8">
+                <p className="text-[#a6a6a6] mb-8">
                   No reset token was provided. Please request a new password reset link.
                 </p>
                 <Button asChild className="w-full h-12 font-semibold rounded-xl bg-primary hover:bg-primary/90">
@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
       {/* Left Side - Branded Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Gradient Overlay */}
@@ -167,7 +167,7 @@ export default function ResetPasswordPage() {
                 Reset Your<br />
                 <span className="text-primary">Password</span>
               </h1>
-              <p className="text-xl text-slate-400 leading-relaxed max-w-md">
+              <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                 Create a new secure password to regain access to your account.
               </p>
             </div>
@@ -180,7 +180,7 @@ export default function ResetPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Secure Reset</h3>
-                  <p className="text-sm text-slate-500">Encrypted token verification</p>
+                  <p className="text-sm text-[#737373]">Encrypted token verification</p>
                 </div>
               </div>
 
@@ -190,7 +190,7 @@ export default function ResetPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Instant Access</h3>
-                  <p className="text-sm text-slate-500">Login immediately after reset</p>
+                  <p className="text-sm text-[#737373]">Login immediately after reset</p>
                 </div>
               </div>
 
@@ -200,14 +200,14 @@ export default function ResetPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Servers Safe</h3>
-                  <p className="text-sm text-slate-500">All your data remains intact</p>
+                  <p className="text-sm text-[#737373]">All your data remains intact</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-sm text-slate-600">
+          <div className="text-sm text-[#525252]">
             © {new Date().getFullYear()} OzVPS. All rights reserved.
           </div>
         </div>
@@ -228,12 +228,12 @@ export default function ResetPasswordPage() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+          <div className="bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20">
             {/* Loading/Validating */}
             {validating && (
               <div className="text-center py-8">
                 <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
-                <p className="text-slate-400">Validating reset link...</p>
+                <p className="text-[#a6a6a6]">Validating reset link...</p>
               </div>
             )}
 
@@ -248,14 +248,14 @@ export default function ResetPasswordPage() {
                   <XCircle className="h-10 w-10 text-red-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-3">Invalid or Expired Link</h2>
-                <p className="text-slate-400 mb-8">
+                <p className="text-[#a6a6a6] mb-8">
                   {(validationError as Error).message}
                 </p>
                 <div className="space-y-3">
                   <Button asChild className="w-full h-12 font-semibold rounded-xl bg-primary hover:bg-primary/90">
                     <Link href="/forgot-password">Request new link</Link>
                   </Button>
-                  <Button variant="outline" asChild className="w-full h-12 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800">
+                  <Button variant="outline" asChild className="w-full h-12 rounded-xl border-white/10 text-[#ebebeb] hover:bg-[#161b22]">
                     <Link href="/login">Back to login</Link>
                   </Button>
                 </div>
@@ -273,7 +273,7 @@ export default function ResetPasswordPage() {
                   <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-3">Password Reset!</h2>
-                <p className="text-slate-400 mb-8">
+                <p className="text-[#a6a6a6] mb-8">
                   Your password has been successfully reset. You can now log in with your new password.
                 </p>
                 <Button asChild className="w-full h-12 font-semibold rounded-xl bg-primary hover:bg-primary/90">
@@ -288,13 +288,13 @@ export default function ResetPasswordPage() {
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold text-white mb-2">Create new password</h1>
-                  <p className="text-slate-400">
+                  <p className="text-[#a6a6a6]">
                     Enter a strong password for your account
                   </p>
                 </div>
 
                 {tokenData.email && (
-                  <div className="text-center text-sm text-slate-400 bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 mb-6">
+                  <div className="text-center text-sm text-[#a6a6a6] bg-[#161b22]/50 border border-white/10 rounded-xl p-3 mb-6">
                     Resetting password for <span className="text-white font-medium">{tokenData.email}</span>
                   </div>
                 )}
@@ -312,16 +312,16 @@ export default function ResetPasswordPage() {
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium text-slate-300">
+                    <Label htmlFor="password" className="text-sm font-medium text-[#ebebeb]">
                       New Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
                         placeholder="Enter new password"
-                        className="pl-12 pr-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                        className="pl-12 pr-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
@@ -330,7 +330,7 @@ export default function ResetPasswordPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#737373] hover:text-[#ebebeb] transition-colors"
                       >
                         {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
@@ -338,21 +338,21 @@ export default function ResetPasswordPage() {
                     {password && !passwordValid ? (
                       <p className="text-xs text-red-400">Password must be at least 8 characters</p>
                     ) : (
-                      <p className="text-xs text-slate-500">Must be at least 8 characters long</p>
+                      <p className="text-xs text-[#737373]">Must be at least 8 characters long</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-300">
+                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-[#ebebeb]">
                       Confirm Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                       <Input
                         id="confirmPassword"
                         type={showConfirmPassword ? "text" : "password"}
                         placeholder="Confirm new password"
-                        className="pl-12 pr-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                        className="pl-12 pr-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
@@ -360,7 +360,7 @@ export default function ResetPasswordPage() {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#737373] hover:text-[#ebebeb] transition-colors"
                       >
                         {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
@@ -397,8 +397,8 @@ export default function ResetPasswordPage() {
           {/* Footer Links */}
           {tokenData?.valid && !success && (
             <div className="mt-8 text-center space-y-4">
-              <p className="text-sm text-slate-600">
-                <Link href="/login" className="hover:text-slate-400 transition-colors flex items-center justify-center gap-2">
+              <p className="text-sm text-[#525252]">
+                <Link href="/login" className="hover:text-[#a6a6a6] transition-colors flex items-center justify-center gap-2">
                   <ArrowLeft className="h-4 w-4" />
                   Back to login
                 </Link>

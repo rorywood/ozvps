@@ -1,4 +1,4 @@
-import { getStripeSync } from './stripeClient';
+import { getStripeSync, getUncachableStripeClient } from './stripeClient';
 import { dbStorage } from './storage';
 import { log } from './log';
 import { retryUnpaidServers } from './billing';
@@ -125,14 +125,43 @@ export class WebhookHandlers {
         }
         
         log(`Processing wallet top-up: user=${auth0UserId}, amount=${creditAmount} cents, event=${event.id}`, 'stripe');
-        
+
+        // Fetch card details from the payment intent for transaction display
+        let cardBrand: string | undefined;
+        let cardLast4: string | undefined;
+        try {
+          if (session.payment_intent) {
+            const stripe = await getUncachableStripeClient();
+            const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+            const paymentMethodId = typeof paymentIntent.payment_method === 'string'
+              ? paymentIntent.payment_method
+              : paymentIntent.payment_method?.id;
+
+            if (paymentMethodId) {
+              const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+              if (paymentMethod.card?.brand) {
+                cardBrand = paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1);
+              }
+              cardLast4 = paymentMethod.card?.last4;
+              log(`Card details fetched: ${cardBrand} •••• ${cardLast4}`, 'stripe');
+            }
+          }
+        } catch (cardError: any) {
+          // Card info is optional for display, don't fail the transaction
+          log(`Could not fetch card details: ${cardError.message}`, 'stripe');
+        }
+
         try {
           const updatedWallet = await dbStorage.creditWallet(auth0UserId, creditAmount, {
             type: 'credit',
             stripeEventId: event.id,
             stripePaymentIntentId: session.payment_intent,
             stripeSessionId: session.id,
-            metadata: { reason: 'Wallet top-up' },
+            metadata: {
+              reason: 'Wallet top-up',
+              cardBrand,
+              cardLast4,
+            },
           });
 
           log(`Wallet credited: user=${auth0UserId}, new_balance=${updatedWallet.balanceCents} cents`, 'stripe');

@@ -2047,6 +2047,54 @@ export const dbStorage = {
     return updated;
   },
 
+  // Email 2FA methods
+  async setTwoFactorMethod(auth0UserId: string, method: 'totp' | 'email'): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({ method, updatedAt: new Date() })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async setEmailOtpCode(auth0UserId: string, code: string, expiresAt: Date): Promise<TwoFactorAuth | undefined> {
+    const [updated] = await db
+      .update(twoFactorAuth)
+      .set({
+        emailOtpCode: code,
+        emailOtpExpiresAt: expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
+      .returning();
+    return updated;
+  },
+
+  async clearEmailOtpCode(auth0UserId: string): Promise<void> {
+    await db
+      .update(twoFactorAuth)
+      .set({
+        emailOtpCode: null,
+        emailOtpExpiresAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(twoFactorAuth.auth0UserId, auth0UserId));
+  },
+
+  async createEmailTwoFactorAuth(auth0UserId: string): Promise<TwoFactorAuth> {
+    // For email 2FA, we use a placeholder secret since TOTP isn't needed
+    const [tfa] = await db
+      .insert(twoFactorAuth)
+      .values({
+        auth0UserId,
+        secret: 'EMAIL_2FA_PLACEHOLDER',
+        method: 'email',
+        enabled: false,
+      })
+      .returning();
+    return tfa;
+  },
+
   async deleteTwoFactorAuth(auth0UserId: string): Promise<void> {
     await db.delete(twoFactorAuth).where(eq(twoFactorAuth.auth0UserId, auth0UserId));
   },

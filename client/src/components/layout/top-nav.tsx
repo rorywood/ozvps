@@ -66,25 +66,34 @@ interface UserMeResponse {
     email: string;
     name?: string;
     isAdmin?: boolean;
+    profilePictureUrl?: string | null;
   };
 }
 
-function UserAvatar({ email, name, size = 32 }: { email: string; name?: string; size?: number }) {
+function UserAvatar({ email, name, size = 32, profilePictureUrl }: { email: string; name?: string; size?: number; profilePictureUrl?: string | null }) {
   const gravatarUrl = getGravatarUrl(email, size * 2);
   const initials = name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : email[0].toUpperCase();
-  
+
+  // Use custom profile picture if available, otherwise fall back to Gravatar
+  const imageUrl = profilePictureUrl || gravatarUrl;
+
   return (
-    <div 
+    <div
       className="relative rounded-full overflow-hidden ring-2 ring-white/10 hover:ring-primary/50 transition-all"
       style={{ width: size, height: size }}
     >
-      <img 
-        src={gravatarUrl} 
+      <img
+        src={imageUrl}
         alt={name || email}
         className="w-full h-full object-cover"
         onError={(e) => {
-          e.currentTarget.style.display = 'none';
-          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+          // If custom image fails, try Gravatar; if Gravatar fails, show initials
+          if (profilePictureUrl && e.currentTarget.src !== gravatarUrl) {
+            e.currentTarget.src = gravatarUrl;
+          } else {
+            e.currentTarget.style.display = 'none';
+            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+          }
         }}
       />
       <div className="hidden absolute inset-0 bg-primary/20 flex items-center justify-center text-xs font-medium text-white">
@@ -130,11 +139,11 @@ function ProfileDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button 
+        <button
           className="flex items-center gap-2 p-1.5 pr-2 rounded-full hover:bg-foreground/5 transition-colors"
           data-testid="button-profile-dropdown"
         >
-          {user?.email && <UserAvatar email={user.email} name={user.name} size={36} />}
+          {user?.email && <UserAvatar email={user.email} name={user.name} size={36} profilePictureUrl={user.profilePictureUrl} />}
           <span className="hidden sm:block text-sm font-medium text-foreground max-w-[120px] truncate" data-testid="text-nav-username">
             {formatDisplayName(user?.name, user?.email)}
           </span>
@@ -147,7 +156,7 @@ function ProfileDropdown() {
       >
         <DropdownMenuLabel className="font-normal">
           <div className="flex items-center gap-3 py-1">
-            {user?.email && <UserAvatar email={user.email} name={user.name} size={40} />}
+            {user?.email && <UserAvatar email={user.email} name={user.name} size={40} profilePictureUrl={user.profilePictureUrl} />}
             <div className="flex flex-col space-y-0.5 overflow-hidden">
               <p className="text-sm font-medium text-foreground truncate">{formatDisplayName(user?.name, user?.email)}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
@@ -464,7 +473,7 @@ function MobileNav() {
                 <div className="p-6 border-b border-border">
                   {user?.email && (
                     <div className="flex items-center gap-3">
-                      <UserAvatar email={user.email} name={user.name} size={48} />
+                      <UserAvatar email={user.email} name={user.name} size={48} profilePictureUrl={user.profilePictureUrl} />
                       <div className="flex flex-col overflow-hidden">
                         <p className="text-sm font-medium text-foreground truncate">{formatDisplayName(user.name, user.email)}</p>
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>

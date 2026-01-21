@@ -1592,3 +1592,126 @@ This is an automated notification from OzVPS Support System.
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send a two-factor authentication code via email
+ */
+export async function sendTwoFactorCodeEmail(
+  to: string,
+  code: string,
+  expiresInMinutes: number = 10
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Cannot send 2FA code email: Resend not configured', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  try {
+    const logoUrl = getLogoUrl();
+
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      subject: `${code} is your OzVPS verification code`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Verification Code</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: ${emailStyles.bgLight}; font-family: ${emailStyles.fontFamily};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: ${emailStyles.bgLight};">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: ${emailStyles.bgWhite}; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); overflow: hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: ${emailStyles.bgWhite}; padding: 32px 40px; text-align: center; border-bottom: 1px solid ${emailStyles.borderColor};">
+              <img src="${logoUrl}" alt="OzVPS" height="48" style="height: 48px; width: auto;">
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 48px 40px; text-align: center;">
+              <div style="width: 64px; height: 64px; background-color: #dbeafe; border-radius: 50%; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 32px;">🔐</span>
+              </div>
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: ${emailStyles.textDark};">
+                Your Verification Code
+              </h1>
+              <p style="margin: 0 0 32px; font-size: 16px; color: ${emailStyles.textMuted}; line-height: 1.6;">
+                Enter this code to complete your sign-in:
+              </p>
+
+              <!-- Code Box -->
+              <div style="background-color: ${emailStyles.bgLight}; border: 2px dashed ${emailStyles.borderColor}; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+                <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: ${emailStyles.primaryColor}; font-family: 'Courier New', monospace;">
+                  ${code}
+                </div>
+              </div>
+
+              <p style="margin: 0; font-size: 14px; color: ${emailStyles.textMuted};">
+                This code expires in <strong>${expiresInMinutes} minutes</strong>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Security Notice -->
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <div style="background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px;">
+                <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.5;">
+                  <strong>Security tip:</strong> Never share this code with anyone. OzVPS staff will never ask for your verification code.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: ${emailStyles.bgLight}; padding: 24px 40px; text-align: center; border-top: 1px solid ${emailStyles.borderColor};">
+              <p style="margin: 0 0 8px; font-size: 13px; color: ${emailStyles.textLight};">
+                If you didn't request this code, you can safely ignore this email.
+              </p>
+              <p style="margin: 0; font-size: 12px; color: ${emailStyles.textLight};">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+Your OzVPS Verification Code
+
+${code}
+
+Enter this code to complete your sign-in. This code expires in ${expiresInMinutes} minutes.
+
+Security tip: Never share this code with anyone. OzVPS staff will never ask for your verification code.
+
+If you didn't request this code, you can safely ignore this email.
+
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send 2FA code email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`2FA code email sent to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending 2FA code email: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}

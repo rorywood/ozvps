@@ -97,53 +97,53 @@
   :root.dark {
     color-scheme: dark;
 
-    /* DigitalOcean-style Dark Mode Colors */
-    --theme-background: hsl(219 95% 7%);
-    --theme-foreground: hsl(0 0% 95%);
-    --theme-card: hsl(219 95% 10%);
-    --theme-card-foreground: hsl(0 0% 95%);
-    --theme-sidebar: hsl(219 95% 8%);
-    --theme-popover: hsl(219 95% 10%);
-    --theme-popover-foreground: hsl(0 0% 95%);
+    /* OzVPS Dark Mode Colors - matching ozvps.com.au */
+    --theme-background: hsl(216 33% 6%);           /* #0a0d14 - darkest background */
+    --theme-foreground: hsl(0 0% 100%);            /* #ffffff - text primary */
+    --theme-card: hsl(216 28% 7%);                 /* #0d1117 - surface/card */
+    --theme-card-foreground: hsl(0 0% 92%);        /* #ebebeb - text secondary */
+    --theme-sidebar: hsl(216 33% 6%);              /* #0a0d14 - same as background */
+    --theme-popover: hsl(215 21% 11%);             /* #161b22 - card elevated */
+    --theme-popover-foreground: hsl(0 0% 92%);     /* #ebebeb - text secondary */
 
-    /* Primary - Bright blue like DO */
-    --theme-primary: hsl(211 100% 50%);
+    /* Primary - OzVPS Blue #0080ff */
+    --theme-primary: hsl(210 100% 50%);
     --theme-primary-foreground: hsl(0 0% 100%);
 
-    /* Secondary - subtle gray-blue */
-    --theme-secondary: hsl(219 30% 15%);
-    --theme-secondary-foreground: hsl(0 0% 95%);
+    /* Secondary - card elevated color */
+    --theme-secondary: hsl(215 21% 11%);           /* #161b22 */
+    --theme-secondary-foreground: hsl(0 0% 92%);
 
-    /* Muted - darker gray */
-    --theme-muted: hsl(219 30% 15%);
-    --theme-muted-foreground: hsl(215 20% 65%);
+    /* Muted - for subtle backgrounds */
+    --theme-muted: hsl(215 21% 11%);               /* #161b22 */
+    --theme-muted-foreground: hsl(0 0% 65%);       /* #a6a6a6 - text muted */
 
-    /* Accent */
-    --theme-accent: hsl(219 30% 15%);
-    --theme-accent-foreground: hsl(0 0% 95%);
+    /* Accent - cyan accent for special elements */
+    --theme-accent: hsl(215 21% 11%);
+    --theme-accent-foreground: hsl(190 100% 50%);  /* #00d4ff - cyan accent */
 
-    /* Destructive - brighter red */
+    /* Destructive - red */
     --theme-destructive: hsl(0 84% 60%);
     --theme-destructive-foreground: hsl(0 0% 100%);
 
-    /* Borders - subtle in dark mode */
-    --theme-border: hsl(219 30% 18%);
-    --theme-input: hsl(219 30% 18%);
-    --theme-ring: hsl(211 100% 50%);
+    /* Borders - subtle white/5 to white/10 */
+    --theme-border: hsl(0 0% 100% / 0.08);
+    --theme-input: hsl(0 0% 100% / 0.08);
+    --theme-ring: hsl(210 100% 50%);               /* #0080ff */
 
-    /* Status Colors - DigitalOcean style */
-    --theme-success: hsl(145 80% 33%);
+    /* Status Colors */
+    --theme-success: hsl(160 84% 39%);             /* emerald-500 */
     --theme-success-foreground: hsl(0 0% 100%);
     --theme-warning: hsl(14 100% 60%);
     --theme-warning-foreground: hsl(0 0% 100%);
-    --theme-info: hsl(199 95% 48%);
+    --theme-info: hsl(190 100% 50%);               /* #00d4ff - cyan */
     --theme-info-foreground: hsl(0 0% 100%);
 
-    /* Chart colors - match DO */
-    --theme-chart-1: hsl(211 100% 50%);
-    --theme-chart-2: hsl(145 80% 33%);
+    /* Chart colors */
+    --theme-chart-1: hsl(210 100% 50%);            /* #0080ff - primary blue */
+    --theme-chart-2: hsl(160 84% 39%);             /* emerald-500 */
     --theme-chart-3: hsl(14 100% 60%);
-    --theme-chart-4: hsl(271 81% 56%);
+    --theme-chart-4: hsl(190 100% 50%);            /* #00d4ff - cyan */
     --theme-chart-5: hsl(45 93% 47%);
   }
 
