@@ -11,7 +11,7 @@ import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, passwordRequirementsSchema, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from './logger';
 import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
@@ -449,12 +449,34 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
         res.clearCookie(SESSION_COOKIE);
-      res.clearCookie(CSRF_COOKIE);
-        return res.status(401).json({ 
+        res.clearCookie(CSRF_COOKIE);
+        return res.status(401).json({
           error: 'Your session expired due to inactivity. Please sign in again.',
           code: 'SESSION_IDLE_TIMEOUT'
         });
       }
+    }
+
+    // Session binding check - verify user agent matches to detect session hijacking
+    // Note: We check user agent but only log IP changes (not block) because IPs can change legitimately
+    const currentUserAgent = req.headers['user-agent'] || '';
+    const currentIp = getClientIp(req);
+
+    if (session.userAgent && currentUserAgent && session.userAgent !== currentUserAgent) {
+      // User agent mismatch is suspicious - likely session hijacking attempt
+      log(`Session binding violation - user agent mismatch for ${session.email}: stored="${session.userAgent?.substring(0, 50)}", current="${currentUserAgent.substring(0, 50)}"`, 'security');
+      await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.SECURITY_VIOLATION);
+      res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
+      return res.status(401).json({
+        error: 'Session security violation detected. Please sign in again.',
+        code: 'SESSION_SECURITY_VIOLATION'
+      });
+    }
+
+    // Log IP changes for security monitoring (don't block as IPs change legitimately on mobile/VPN)
+    if (session.ipAddress && currentIp && session.ipAddress !== currentIp) {
+      log(`Session IP change for ${session.email}: ${session.ipAddress} -> ${currentIp}`, 'security');
     }
 
     // Update last activity timestamp
@@ -1172,8 +1194,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Reset token is required' });
       }
 
-      if (!password || typeof password !== 'string' || password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      // Validate password strength
+      const passwordValidation = passwordRequirementsSchema.safeParse(password);
+      if (!passwordValidation.success) {
+        const errorMessage = passwordValidation.error.errors[0]?.message || 'Invalid password';
+        return res.status(400).json({ error: errorMessage });
       }
 
       // Get and validate token
@@ -1216,6 +1241,20 @@ export async function registerRoutes(
 
       // Revoke all existing sessions for security
       await storage.revokeSessionsByAuth0UserId(user.user_id, SESSION_REVOKE_REASONS.PASSWORD_CHANGED);
+
+      // Audit log: password reset
+      const clientIp = getClientIp(req);
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId: user.user_id,
+          email: resetToken.email,
+          action: 'PASSWORD_RESET',
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      }
 
       log(`Password successfully reset for ${resetToken.email}`, 'auth');
 
@@ -1542,7 +1581,7 @@ export async function registerRoutes(
         log(`User ${email} email verified via database override`, 'auth');
       }
 
-      // Create local session
+      // Create local session with IP and user agent binding for security
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
@@ -1554,6 +1593,8 @@ export async function registerRoutes(
         isAdmin,
         emailVerified,
         expiresAt,
+        ipAddress: clientIp,
+        userAgent: req.headers['user-agent'] || undefined,
       });
 
       res.cookie(SESSION_COOKIE, session.id, {
@@ -1567,6 +1608,20 @@ export async function registerRoutes(
       // Set CSRF token cookie for double-submit pattern
       const csrfToken = generateCsrfToken();
       setCsrfCookie(res, csrfToken, expiresAt);
+
+      // Audit log: successful login
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId: auth0UserIdPrefixed,
+          email: email,
+          action: 'LOGIN_SUCCESS',
+          details: { twoFactorUsed: !!tfa?.enabled },
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      }
 
       res.json({
         user: {
@@ -2936,9 +2991,26 @@ export async function registerRoutes(
         scheduledDeletionAt,
         mode,
       });
-      
+
+      // Audit log: server cancellation requested
+      const clientIp = getClientIp(req);
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId: session.auth0UserId!,
+          email: session.email,
+          action: 'SERVER_CANCELLATION_REQUESTED',
+          targetType: 'server',
+          targetId: serverId,
+          details: { serverName: server.name, mode, scheduledDeletionAt: scheduledDeletionAt.toISOString() },
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      }
+
       log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, mode=${mode}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
-      
+
       res.json({ success: true, cancellation });
     } catch (error: any) {
       log(`Error requesting cancellation for server ${req.params.id}: ${error.message}`, 'api');
@@ -3476,6 +3548,20 @@ export async function registerRoutes(
       // Enable 2FA with backup codes
       await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
 
+      // Audit log: 2FA enabled
+      const clientIp = getClientIp(req);
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId: session.auth0UserId,
+          email: session.email,
+          action: '2FA_ENABLED',
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      }
+
       log(`2FA enabled for user ${session.email}`, 'security');
 
       res.json({
@@ -3523,6 +3609,21 @@ export async function registerRoutes(
       }
 
       await dbStorage.disableTwoFactorAuth(session.auth0UserId);
+
+      // Audit log: 2FA disabled
+      const clientIp = getClientIp(req);
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId: session.auth0UserId,
+          email: session.email,
+          action: '2FA_DISABLED',
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      }
+
       log(`2FA disabled for user ${session.email}`, 'security');
 
       res.json({ success: true, message: '2FA has been disabled' });
@@ -6285,6 +6386,23 @@ export async function registerRoutes(
         });
       } catch (billingError: any) {
         log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
+      }
+
+      // Audit log: server created
+      const clientIp = getClientIp(req);
+      try {
+        await dbStorage.createUserAuditLog({
+          auth0UserId,
+          email: req.userSession!.email,
+          action: 'SERVER_CREATED',
+          targetType: 'server',
+          targetId: serverResult.serverId.toString(),
+          details: { planCode: plan.code, hostname: serverHostname },
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent'] || undefined,
+        });
+      } catch (auditError: any) {
+        log(`Failed to create audit log: ${auditError.message}`, 'api');
       }
 
       // Record promo code usage if one was applied (non-critical, log if it fails)

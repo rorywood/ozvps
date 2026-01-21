@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, loginAttempts, accountLockouts, userAuditLogs, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage, type LoginAttempt, type AccountLockout, type UserAuditLog } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -19,6 +19,8 @@ export interface Session {
   revokedAt?: Date | null;
   revokedReason?: string | null;
   lastActivityAt: Date;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 export interface UserFlags {
@@ -49,6 +51,8 @@ export interface IStorage {
     isAdmin?: boolean;
     emailVerified?: boolean;
     expiresAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
   }): Promise<Session>;
   getSession(id: string): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
@@ -79,6 +83,8 @@ export class MemoryStorage implements IStorage {
     isAdmin?: boolean;
     emailVerified?: boolean;
     expiresAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
     const now = new Date();
@@ -96,6 +102,8 @@ export class MemoryStorage implements IStorage {
       revokedAt: null,
       revokedReason: null,
       lastActivityAt: now,
+      ipAddress: data.ipAddress || null,
+      userAgent: data.userAgent || null,
     };
     this.sessions.set(id, session);
     return session;
@@ -287,6 +295,8 @@ export class RedisStorage implements IStorage {
     isAdmin?: boolean;
     emailVerified?: boolean;
     expiresAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
   }): Promise<Session> {
     const id = randomBytes(32).toString("hex");
     const now = new Date();
@@ -304,6 +314,8 @@ export class RedisStorage implements IStorage {
       revokedAt: null,
       revokedReason: null,
       lastActivityAt: now,
+      ipAddress: data.ipAddress || null,
+      userAgent: data.userAgent || null,
     };
 
     if (!this.isRedisAvailable()) {
@@ -2457,6 +2469,165 @@ export const dbStorage = {
           eq(emailVerificationTokens.verified, false)
         )
       )
+      .returning();
+    return result.length;
+  },
+
+  // ============================================
+  // Login Attempts & Account Lockout
+  // ============================================
+
+  // Record a login attempt
+  async recordLoginAttempt(data: {
+    email: string;
+    ipAddress: string;
+    userAgent?: string;
+    success: boolean;
+    failureReason?: string;
+  }): Promise<void> {
+    await db.insert(loginAttempts).values({
+      email: data.email.toLowerCase(),
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent || null,
+      success: data.success,
+      failureReason: data.failureReason || null,
+    });
+  },
+
+  // Get recent failed login attempts for an email (within last 15 minutes)
+  async getRecentFailedAttempts(email: string, windowMinutes: number = 15): Promise<number> {
+    const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(loginAttempts)
+      .where(
+        and(
+          eq(loginAttempts.email, email.toLowerCase()),
+          eq(loginAttempts.success, false),
+          sql`${loginAttempts.attemptedAt} > ${windowStart}`
+        )
+      );
+    return Number(result[0]?.count || 0);
+  },
+
+  // Check if account is currently locked
+  async getAccountLockout(email: string): Promise<AccountLockout | undefined> {
+    const [lockout] = await db
+      .select()
+      .from(accountLockouts)
+      .where(
+        and(
+          eq(accountLockouts.email, email.toLowerCase()),
+          sql`${accountLockouts.lockedUntil} > NOW()`
+        )
+      )
+      .orderBy(desc(accountLockouts.lockedAt))
+      .limit(1);
+    return lockout;
+  },
+
+  // Create or update account lockout
+  async createAccountLockout(email: string, failedAttempts: number, lockoutMinutes: number, ipAddress?: string): Promise<AccountLockout> {
+    const lockedUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+
+    // Delete any existing lockouts for this email
+    await db.delete(accountLockouts).where(eq(accountLockouts.email, email.toLowerCase()));
+
+    // Create new lockout
+    const [lockout] = await db
+      .insert(accountLockouts)
+      .values({
+        email: email.toLowerCase(),
+        lockedUntil,
+        failedAttempts,
+        lastFailedAt: new Date(),
+        ipAddress: ipAddress || null,
+      })
+      .returning();
+    return lockout;
+  },
+
+  // Clear account lockout (e.g., after successful login or admin unlock)
+  async clearAccountLockout(email: string): Promise<void> {
+    await db.delete(accountLockouts).where(eq(accountLockouts.email, email.toLowerCase()));
+  },
+
+  // Cleanup old login attempts (older than 30 days)
+  async cleanupOldLoginAttempts(daysOld: number = 30): Promise<number> {
+    const cutoff = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
+    const result = await db
+      .delete(loginAttempts)
+      .where(sql`${loginAttempts.attemptedAt} < ${cutoff}`)
+      .returning();
+    return result.length;
+  },
+
+  // Cleanup expired lockouts
+  async cleanupExpiredLockouts(): Promise<number> {
+    const result = await db
+      .delete(accountLockouts)
+      .where(sql`${accountLockouts.lockedUntil} < NOW()`)
+      .returning();
+    return result.length;
+  },
+
+  // ============================================
+  // User Audit Logs
+  // ============================================
+
+  // Create an audit log entry
+  async createUserAuditLog(data: {
+    auth0UserId: string;
+    email: string;
+    action: string;
+    targetType?: string;
+    targetId?: string;
+    details?: Record<string, unknown>;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<UserAuditLog> {
+    const [auditLog] = await db
+      .insert(userAuditLogs)
+      .values({
+        auth0UserId: data.auth0UserId,
+        email: data.email.toLowerCase(),
+        action: data.action,
+        targetType: data.targetType || null,
+        targetId: data.targetId || null,
+        details: data.details || null,
+        ipAddress: data.ipAddress || null,
+        userAgent: data.userAgent || null,
+      })
+      .returning();
+    return auditLog;
+  },
+
+  // Get audit logs for a user
+  async getUserAuditLogs(auth0UserId: string, limit: number = 100): Promise<UserAuditLog[]> {
+    return db
+      .select()
+      .from(userAuditLogs)
+      .where(eq(userAuditLogs.auth0UserId, auth0UserId))
+      .orderBy(desc(userAuditLogs.createdAt))
+      .limit(limit);
+  },
+
+  // Get audit logs by action type
+  async getAuditLogsByAction(action: string, limit: number = 100): Promise<UserAuditLog[]> {
+    return db
+      .select()
+      .from(userAuditLogs)
+      .where(eq(userAuditLogs.action, action))
+      .orderBy(desc(userAuditLogs.createdAt))
+      .limit(limit);
+  },
+
+  // Cleanup old audit logs (keep for 1 year by default)
+  async cleanupOldAuditLogs(daysOld: number = 365): Promise<number> {
+    const cutoff = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
+    const result = await db
+      .delete(userAuditLogs)
+      .where(sql`${userAuditLogs.createdAt} < ${cutoff}`)
       .returning();
     return result.length;
   },

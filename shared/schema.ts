@@ -37,6 +37,9 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   revokedAt: timestamp("revoked_at"),
   revokedReason: text("revoked_reason"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  lastActiveAt: timestamp("last_active_at"),
 });
 
 export const userFlags = pgTable("user_flags", {
@@ -393,6 +396,15 @@ export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSc
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type InsertEmailVerificationToken = z.infer<typeof insertEmailVerificationTokenSchema>;
 
+// Password requirements validation schema - used for registration and password changes
+export const passwordRequirementsSchema = z.string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(128, 'Password must be 128 characters or less')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -400,7 +412,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordRequirementsSchema,
   name: z.string().min(1, 'Name is required').optional(),
   recaptchaToken: z.string().optional(),
 });
@@ -451,6 +463,7 @@ export const SESSION_REVOKE_REASONS = {
   USER_DELETED: 'USER_DELETED',
   FORCE_LOGOUT: 'FORCE_LOGOUT',
   NEW_LOGIN: 'NEW_LOGIN',
+  SECURITY_VIOLATION: 'SECURITY_VIOLATION',
 } as const;
 
 export type SessionRevokeReason = typeof SESSION_REVOKE_REASONS[keyof typeof SESSION_REVOKE_REASONS];
@@ -594,3 +607,43 @@ export const updatePromoCodeSchema = createPromoCodeSchema.partial().omit({ code
 
 export type CreatePromoCodeInput = z.infer<typeof createPromoCodeSchema>;
 export type UpdatePromoCodeInput = z.infer<typeof updatePromoCodeSchema>;
+
+// Login attempts - tracks failed logins for account lockout
+export const loginAttempts = pgTable("login_attempts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  success: boolean("success").notNull().default(false),
+  failureReason: text("failure_reason"), // invalid_password, account_locked, 2fa_failed, etc.
+  attemptedAt: timestamp("attempted_at").defaultNow().notNull(),
+});
+
+// Account lockouts - temporary lockouts after failed login attempts
+export const accountLockouts = pgTable("account_lockouts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: text("email").notNull(),
+  lockedAt: timestamp("locked_at").defaultNow().notNull(),
+  lockedUntil: timestamp("locked_until").notNull(),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lastFailedAt: timestamp("last_failed_at"),
+  ipAddress: text("ip_address"),
+});
+
+// User audit logs - tracks sensitive user actions for security
+export const userAuditLogs = pgTable("user_audit_logs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  email: text("email").notNull(),
+  action: text("action").notNull(), // login, logout, password_change, 2fa_enable, 2fa_disable, server_delete, etc.
+  targetType: text("target_type"), // server, account, 2fa, session, etc.
+  targetId: text("target_id"),
+  details: jsonb("details"), // Additional details about the action
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type AccountLockout = typeof accountLockouts.$inferSelect;
+export type UserAuditLog = typeof userAuditLogs.$inferSelect;
