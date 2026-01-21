@@ -868,6 +868,40 @@ export async function registerRoutes(
   })();
 
   // Auth endpoints (public)
+
+  // Check if email is available for registration
+  app.post('/api/auth/check-email', loginRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Check if user exists in Auth0
+      try {
+        const existingUser = await auth0Client.getUserByEmail(email);
+        if (existingUser) {
+          return res.json({ available: false, exists: true });
+        }
+        return res.json({ available: true, exists: false });
+      } catch (checkError: any) {
+        // If Auth0 check fails, return error state
+        log(`Email availability check failed for ${email}: ${checkError.message}`, 'auth');
+        return res.status(503).json({ error: 'Unable to verify email availability' });
+      }
+    } catch (error: any) {
+      log(`Email check error: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to check email availability' });
+    }
+  });
+
   app.post('/api/auth/register', loginRateLimiter, async (req, res) => {
     try {
       // Check if registration is disabled (database setting takes precedence)

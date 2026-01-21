@@ -176,6 +176,53 @@ export default function RegisterPage() {
   const [honeypot, setHoneypot] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Email availability checking
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
+  const emailCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced email availability check
+  useEffect(() => {
+    // Clear any pending check
+    if (emailCheckTimeoutRef.current) {
+      clearTimeout(emailCheckTimeoutRef.current);
+    }
+
+    // Reset status if email is empty or invalid format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      setEmailStatus('idle');
+      return;
+    }
+
+    // Debounce the check (500ms after user stops typing)
+    setEmailStatus('checking');
+    emailCheckTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+          setEmailStatus('error');
+          return;
+        }
+
+        const data = await response.json();
+        setEmailStatus(data.available ? 'available' : 'taken');
+      } catch (err) {
+        setEmailStatus('error');
+      }
+    }, 500);
+
+    return () => {
+      if (emailCheckTimeoutRef.current) {
+        clearTimeout(emailCheckTimeoutRef.current);
+      }
+    };
+  }, [email]);
+
   const { data: recaptchaConfig } = useQuery({
     queryKey: ['recaptcha-config'],
     queryFn: async () => {
@@ -626,13 +673,44 @@ export default function RegisterPage() {
                             id="email"
                             type="email"
                             placeholder="you@example.com"
-                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className={`pl-12 pr-12 h-12 bg-[#161b22]/50 text-white placeholder:text-[#525252] focus:ring-primary/20 rounded-xl ${
+                              emailStatus === 'taken'
+                                ? 'border-red-500/50 focus:border-red-500/50'
+                                : emailStatus === 'available'
+                                  ? 'border-green-500/50 focus:border-green-500/50'
+                                  : 'border-white/10 focus:border-primary/50'
+                            }`}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             autoComplete="email"
                             data-testid="input-email"
                           />
+                          {/* Email status indicator in input */}
+                          {emailStatus === 'checking' && (
+                            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#737373] animate-spin" />
+                          )}
+                          {emailStatus === 'available' && (
+                            <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                          )}
+                          {emailStatus === 'taken' && (
+                            <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
+                          )}
                         </div>
+                        {/* Email availability feedback */}
+                        {emailStatus === 'available' && (
+                          <p className="text-xs text-green-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Email is available
+                          </p>
+                        )}
+                        {emailStatus === 'taken' && (
+                          <p className="text-xs text-red-400">
+                            This email is already registered.{' '}
+                            <Link href="/login" className="underline hover:text-red-300">Sign in</Link>
+                            {' '}or{' '}
+                            <Link href="/forgot-password" className="underline hover:text-red-300">reset your password</Link>
+                          </p>
+                        )}
                       </div>
 
                       {/* Password */}
