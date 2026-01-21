@@ -67,7 +67,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
       transition={{ duration: 0.4, ease: "easeOut" }}
       className="w-full max-w-md mx-auto"
     >
-      <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+      <div className="bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20">
         <div className="text-center mb-8">
           <motion.div
             initial={{ scale: 0 }}
@@ -80,7 +80,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
           <h2 className="text-2xl font-bold text-white mb-2">
             Welcome to OzVPS!
           </h2>
-          <p className="text-slate-400">
+          <p className="text-[#a6a6a6]">
             Setting up your account...
           </p>
         </div>
@@ -99,7 +99,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
                 delay: index * 0.1,
                 ease: "easeOut"
               }}
-              className="flex items-center gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/50"
+              className="flex items-center gap-4 p-4 rounded-xl bg-[#161b22]/50 border border-white/10"
             >
               <div className={`
                 flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300
@@ -107,7 +107,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
                   ? 'bg-green-500/20 border-green-500/50'
                   : index === currentIndex
                     ? 'bg-primary/20 border-primary/50'
-                    : 'bg-slate-800 border-slate-700'
+                    : 'bg-[#161b22] border-white/10'
                 } border
               `}>
                 {item.completed ? (
@@ -121,12 +121,12 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
                 ) : index === currentIndex ? (
                   <Loader2 className="w-4 h-4 text-primary animate-spin" />
                 ) : (
-                  <div className="w-2 h-2 rounded-full bg-slate-600" />
+                  <div className="w-2 h-2 rounded-full bg-[#525252]" />
                 )}
               </div>
               <span className={`
                 text-sm font-medium transition-colors duration-300
-                ${item.completed ? 'text-white' : 'text-slate-500'}
+                ${item.completed ? 'text-white' : 'text-[#737373]'}
               `}>
                 {item.label}
               </span>
@@ -140,7 +140,7 @@ function OnboardingChecklist({ onComplete }: { onComplete: () => void }) {
           transition={{ delay: 0.5 }}
           className="mt-8"
         >
-          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-2 bg-[#161b22] rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
               initial={{ width: "0%" }}
@@ -422,7 +422,7 @@ export default function RegisterPage() {
   const strength = passwordStrength();
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
       {/* Left Side - Branded Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Gradient Overlay */}
@@ -458,7 +458,7 @@ export default function RegisterPage() {
                 Start Your<br />
                 <span className="text-primary">Cloud Journey</span>
               </h1>
-              <p className="text-xl text-slate-400 leading-relaxed max-w-md">
+              <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                 Join thousands of developers and businesses who trust OzVPS for reliable cloud infrastructure.
               </p>
             </div>
@@ -471,7 +471,7 @@ export default function RegisterPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Instant Deployment</h3>
-                  <p className="text-sm text-slate-500">Servers ready in under 60 seconds</p>
+                  <p className="text-sm text-[#737373]">Servers ready in under 60 seconds</p>
                 </div>
               </div>
 
@@ -481,7 +481,7 @@ export default function RegisterPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Australian Infrastructure</h3>
-                  <p className="text-sm text-slate-500">Low latency, local data sovereignty</p>
+                  <p className="text-sm text-[#737373]">Low latency, local data sovereignty</p>
                 </div>
               </div>
 
@@ -491,14 +491,14 @@ export default function RegisterPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Enterprise Security</h3>
-                  <p className="text-sm text-slate-500">DDoS protection included</p>
+                  <p className="text-sm text-[#737373]">DDoS protection included</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-sm text-slate-600">
+          <div className="text-sm text-[#525252]">
             © {new Date().getFullYear()} OzVPS. All rights reserved.
           </div>
         </div>
@@ -543,7 +543,7 @@ export default function RegisterPage() {
                 <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
                   <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
                   <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
-                  <p className="text-slate-400 mb-4">
+                  <p className="text-[#a6a6a6] mb-4">
                     {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
                   </p>
                   <Button
@@ -558,19 +558,19 @@ export default function RegisterPage() {
               )}
 
               {/* Form Card */}
-              <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold text-white mb-2">
                     Create your account
                   </h1>
-                  <p className="text-slate-400">
+                  <p className="text-[#a6a6a6]">
                     {isDatabaseDown ? "Registration is temporarily unavailable" : "Get started with OzVPS cloud servers"}
                   </p>
                 </div>
 
                 {isDatabaseDown ? (
-                  <div className="text-center py-8 text-slate-500">
+                  <div className="text-center py-8 text-[#737373]">
                     Please wait while we restore the service...
                   </div>
                 ) : registrationEnabled === false ? (
@@ -582,12 +582,12 @@ export default function RegisterPage() {
                       <h2 className="text-xl font-semibold text-white mb-2">
                         Registration Temporarily Closed
                       </h2>
-                      <p className="text-slate-400 text-sm">
+                      <p className="text-[#a6a6a6] text-sm">
                         New account registration is currently disabled. Please contact support or check back later.
                       </p>
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-400 text-sm">
+                      <p className="text-[#a6a6a6] text-sm">
                         Already have an account?{" "}
                         <Link href="/login" className="text-primary hover:text-primary/80 font-semibold" data-testid="link-login-disabled">
                           Sign in
@@ -600,14 +600,14 @@ export default function RegisterPage() {
                     <form onSubmit={handleSubmit} className="space-y-4">
                       {/* Name */}
                       <div className="space-y-2">
-                        <Label htmlFor="name" className="text-sm font-medium text-slate-300">Full Name</Label>
+                        <Label htmlFor="name" className="text-sm font-medium text-[#ebebeb]">Full Name</Label>
                         <div className="relative">
-                          <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                          <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="name"
                             type="text"
                             placeholder="John Doe"
-                            className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             autoComplete="name"
@@ -619,14 +619,14 @@ export default function RegisterPage() {
 
                       {/* Email */}
                       <div className="space-y-2">
-                        <Label htmlFor="email" className="text-sm font-medium text-slate-300">Email</Label>
+                        <Label htmlFor="email" className="text-sm font-medium text-[#ebebeb]">Email</Label>
                         <div className="relative">
-                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="email"
                             type="email"
                             placeholder="you@example.com"
-                            className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             autoComplete="email"
@@ -637,14 +637,14 @@ export default function RegisterPage() {
 
                       {/* Password */}
                       <div className="space-y-2">
-                        <Label htmlFor="password" className="text-sm font-medium text-slate-300">Password</Label>
+                        <Label htmlFor="password" className="text-sm font-medium text-[#ebebeb]">Password</Label>
                         <div className="relative">
-                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="password"
                             type="password"
                             placeholder="Create a password"
-                            className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             autoComplete="new-password"
@@ -653,10 +653,10 @@ export default function RegisterPage() {
                         </div>
                         {strength && (
                           <div className="space-y-1.5 pt-1">
-                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-[#161b22] rounded-full overflow-hidden">
                               <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300`} />
                             </div>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-[#737373]">
                               Password strength: <span className={strength.textColor}>{strength.label}</span>
                             </p>
                           </div>
@@ -665,14 +665,14 @@ export default function RegisterPage() {
 
                       {/* Confirm Password */}
                       <div className="space-y-2">
-                        <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-300">Confirm Password</Label>
+                        <Label htmlFor="confirmPassword" className="text-sm font-medium text-[#ebebeb]">Confirm Password</Label>
                         <div className="relative">
-                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="confirmPassword"
                             type="password"
                             placeholder="Confirm your password"
-                            className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             autoComplete="new-password"
@@ -692,7 +692,7 @@ export default function RegisterPage() {
                         <div className="flex flex-col items-center py-2" data-testid="recaptcha-container">
                           <div ref={recaptchaRef} />
                           {!recaptchaLoaded && (
-                            <div className="flex items-center justify-center p-4 text-slate-400 text-sm">
+                            <div className="flex items-center justify-center p-4 text-[#a6a6a6] text-sm">
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
                               Loading verification...
                             </div>
@@ -719,12 +719,12 @@ export default function RegisterPage() {
                           id="terms"
                           checked={termsAccepted}
                           onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                          className="mt-0.5 border-slate-600 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                          className="mt-0.5 border-white/15 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                           data-testid="checkbox-terms"
                         />
                         <Label
                           htmlFor="terms"
-                          className="text-sm text-slate-400 font-normal leading-relaxed cursor-pointer"
+                          className="text-sm text-[#a6a6a6] font-normal leading-relaxed cursor-pointer"
                         >
                           I agree to the{" "}
                           <a
@@ -771,13 +771,13 @@ export default function RegisterPage() {
 
                       {/* reCAPTCHA Notice */}
                       {recaptchaEnabled && (
-                        <p className="text-xs text-slate-500 text-center">
+                        <p className="text-xs text-[#737373] text-center">
                           Protected by reCAPTCHA.{' '}
-                          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors">
+                          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
                             Privacy
                           </a>
                           {' '}·{' '}
-                          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors">
+                          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
                             Terms
                           </a>
                         </p>
@@ -790,14 +790,14 @@ export default function RegisterPage() {
               {/* Footer Links */}
               {!isDatabaseDown && registrationEnabled !== false && (
                 <div className="mt-8 text-center space-y-4">
-                  <p className="text-slate-400">
+                  <p className="text-[#a6a6a6]">
                     Already have an account?{' '}
                     <Link href="/login" className="text-primary hover:text-primary/80 font-semibold transition-colors" data-testid="link-login">
                       Sign in
                     </Link>
                   </p>
-                  <p className="text-sm text-slate-600">
-                    <a href="https://ozvps.com.au" className="hover:text-slate-400 transition-colors flex items-center justify-center gap-2" data-testid="link-back-to-website">
+                  <p className="text-sm text-[#525252]">
+                    <a href="https://ozvps.com.au" className="hover:text-[#a6a6a6] transition-colors flex items-center justify-center gap-2" data-testid="link-back-to-website">
                       <ArrowLeft className="h-4 w-4" />
                       Back to ozvps.com.au
                     </a>

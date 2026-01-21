@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
       {/* Left Side - Branded Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Gradient Overlay */}
@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
                 Secure Account<br />
                 <span className="text-primary">Recovery</span>
               </h1>
-              <p className="text-xl text-slate-400 leading-relaxed max-w-md">
+              <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                 We'll help you regain access to your account quickly and securely.
               </p>
             </div>
@@ -92,7 +92,7 @@ export default function ForgotPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Instant Delivery</h3>
-                  <p className="text-sm text-slate-500">Reset link sent immediately</p>
+                  <p className="text-sm text-[#737373]">Reset link sent immediately</p>
                 </div>
               </div>
 
@@ -102,7 +102,7 @@ export default function ForgotPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Secure Process</h3>
-                  <p className="text-sm text-slate-500">Encrypted and time-limited links</p>
+                  <p className="text-sm text-[#737373]">Encrypted and time-limited links</p>
                 </div>
               </div>
 
@@ -112,14 +112,14 @@ export default function ForgotPasswordPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">Keep Your Servers</h3>
-                  <p className="text-sm text-slate-500">All your data remains safe</p>
+                  <p className="text-sm text-[#737373]">All your data remains safe</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-sm text-slate-600">
+          <div className="text-sm text-[#525252]">
             © {new Date().getFullYear()} OzVPS. All rights reserved.
           </div>
         </div>
@@ -144,7 +144,7 @@ export default function ForgotPasswordPage() {
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
-              <p className="text-slate-400 mb-4">
+              <p className="text-[#a6a6a6] mb-4">
                 {healthErrorMessage || "We're experiencing technical difficulties. Please try again in a few minutes."}
               </p>
               <Button
@@ -159,11 +159,11 @@ export default function ForgotPasswordPage() {
           )}
 
           {/* Form Card */}
-          <div className={`bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
             {isDatabaseDown ? (
               <div className="text-center py-8">
                 <h1 className="text-2xl font-bold text-white mb-2">Password Reset Unavailable</h1>
-                <p className="text-slate-500">Please wait while we restore the service...</p>
+                <p className="text-[#737373]">Please wait while we restore the service...</p>
               </div>
             ) : submitted ? (
               <div className="text-center py-4">
@@ -171,16 +171,16 @@ export default function ForgotPasswordPage() {
                   <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-3">Check your email</h2>
-                <p className="text-slate-400 mb-4">
+                <p className="text-[#a6a6a6] mb-4">
                   If an account exists with <span className="text-white font-medium">{email}</span>, you'll receive a password reset link shortly.
                 </p>
-                <p className="text-sm text-slate-500 mb-8 pb-4 border-b border-slate-800">
+                <p className="text-sm text-[#737373] mb-8 pb-4 border-b border-white/10">
                   The link will expire in 30 minutes. Check your spam folder if you don't see it.
                 </p>
                 <div className="space-y-3">
                   <Button
                     variant="outline"
-                    className="w-full h-12 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800"
+                    className="w-full h-12 rounded-xl border-white/10 text-[#ebebeb] hover:bg-[#161b22]"
                     onClick={() => {
                       setSubmitted(false);
                       setEmail("");
@@ -198,7 +198,7 @@ export default function ForgotPasswordPage() {
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold text-white mb-2">Reset your password</h1>
-                  <p className="text-slate-400">
+                  <p className="text-[#a6a6a6]">
                     Enter your email and we'll send you a reset link
                   </p>
                 </div>
@@ -212,16 +212,16 @@ export default function ForgotPasswordPage() {
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-medium text-slate-300">
+                    <Label htmlFor="email" className="text-sm font-medium text-[#ebebeb]">
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                       <Input
                         id="email"
                         type="email"
                         placeholder="you@example.com"
-                        className="pl-12 h-12 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                        className="pl-12 h-12 bg-[#161b22]/50 border-white/10/50 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         autoComplete="email"
@@ -253,14 +253,14 @@ export default function ForgotPasswordPage() {
           {/* Footer Links */}
           {!isDatabaseDown && !submitted && (
             <div className="mt-8 text-center space-y-4">
-              <p className="text-slate-400">
+              <p className="text-[#a6a6a6]">
                 Remember your password?{' '}
                 <Link href="/login" className="text-primary hover:text-primary/80 font-semibold transition-colors">
                   Sign in
                 </Link>
               </p>
-              <p className="text-sm text-slate-600">
-                <a href="https://ozvps.com.au" className="hover:text-slate-400 transition-colors flex items-center justify-center gap-2">
+              <p className="text-sm text-[#525252]">
+                <a href="https://ozvps.com.au" className="hover:text-[#a6a6a6] transition-colors flex items-center justify-center gap-2">
                   <ArrowLeft className="h-4 w-4" />
                   Back to ozvps.com.au
                 </a>
