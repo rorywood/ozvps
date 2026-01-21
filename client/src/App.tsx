@@ -11,6 +11,7 @@ import { DevBanner } from "@/components/dev-banner";
 import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import ErrorPage from "@/pages/error";
+import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import ServerList from "@/pages/server-list";
 import ServerDetail from "@/pages/server-detail";
@@ -148,9 +149,7 @@ function Router() {
         <Pricing />
       </Route>
       <Route path="/">
-        <AuthGuard>
-          <Redirect to="/dashboard" />
-        </AuthGuard>
+        <Home />
       </Route>
       <Route path="/dashboard">
         <AuthGuard>
