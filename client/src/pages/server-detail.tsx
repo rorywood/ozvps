@@ -406,9 +406,19 @@ export default function ServerDetail() {
   }, [reinstallTask.status, serverId, queryClient]);
 
   // Track server boot to disable password reset for 60 seconds (guest agent needs time)
+  // Only trigger when transitioning from a known "off" state to "running", not on initial page load
   const prevServerStatus = useRef<string | null>(null);
   useEffect(() => {
-    if (server?.status === 'running' && prevServerStatus.current !== 'running') {
+    const currentStatus = server?.status || null;
+    const prevStatus = prevServerStatus.current;
+
+    // Only trigger timer when:
+    // 1. Server is now running AND
+    // 2. Previous status was a known "off" state (not null which means page just loaded)
+    const wasOff = prevStatus === 'stopped' || prevStatus === 'starting' || prevStatus === 'stopping';
+    const isNowRunning = currentStatus === 'running';
+
+    if (isNowRunning && wasOff) {
       setServerBootedAt(Date.now());
       setIsPasswordResetDisabled(true);
 
@@ -416,9 +426,11 @@ export default function ServerDetail() {
         setIsPasswordResetDisabled(false);
       }, 60 * 1000);
 
+      prevServerStatus.current = currentStatus;
       return () => clearTimeout(timer);
     }
-    prevServerStatus.current = server?.status || null;
+
+    prevServerStatus.current = currentStatus;
   }, [server?.status]);
 
   const { markPending, clearPending, getDisplayStatus } = usePowerActions();

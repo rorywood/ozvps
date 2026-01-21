@@ -391,7 +391,12 @@ function PromoCodeModal({
 }) {
   const [code, setCode] = useState(promo?.code || "");
   const [discountType, setDiscountType] = useState<"percentage" | "fixed">(promo?.discountType || "percentage");
-  const [discountValue, setDiscountValue] = useState(promo?.discountValue?.toString() || "");
+  // For fixed discounts, convert cents to dollars for display
+  const [discountValue, setDiscountValue] = useState(
+    promo?.discountValue
+      ? (promo.discountType === "fixed" ? (promo.discountValue / 100).toString() : promo.discountValue.toString())
+      : ""
+  );
   const [appliesTo, setAppliesTo] = useState<"all" | "specific">(promo?.appliesTo || "all");
   const [maxUsesTotal, setMaxUsesTotal] = useState(promo?.maxUsesTotal?.toString() || "");
   const [maxUsesPerUser, setMaxUsesPerUser] = useState(promo?.maxUsesPerUser?.toString() || "1");
@@ -403,10 +408,15 @@ function PromoCodeModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // For fixed discounts, convert dollars to cents for storage
+    const valueToStore = discountType === "fixed"
+      ? Math.round(parseFloat(discountValue) * 100) // dollars to cents
+      : parseFloat(discountValue); // percentage stays as-is
+
     const data: CreatePromoCodeInput = {
       code: code.toUpperCase(),
       discountType,
-      discountValue: parseFloat(discountValue),
+      discountValue: valueToStore,
       appliesTo,
       maxUsesTotal: maxUsesTotal ? parseInt(maxUsesTotal) : null,
       maxUsesPerUser: maxUsesPerUser ? parseInt(maxUsesPerUser) : 1,
@@ -462,23 +472,24 @@ function PromoCodeModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {discountType === "percentage" ? "Percentage *" : "Amount (cents) *"}
+                {discountType === "percentage" ? "Percentage *" : "Amount (AUD) *"}
               </label>
               <input
                 type="number"
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
-                placeholder={discountType === "percentage" ? "e.g., 20" : "e.g., 500"}
+                placeholder={discountType === "percentage" ? "e.g., 20" : "e.g., 5.00"}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 required
-                min={1}
+                min={discountType === "percentage" ? 1 : 0.01}
                 max={discountType === "percentage" ? 100 : undefined}
+                step={discountType === "percentage" ? 1 : 0.01}
               />
               {discountType === "percentage" && (
                 <p className="text-xs text-gray-500 mt-1">1-100</p>
               )}
               {discountType === "fixed" && (
-                <p className="text-xs text-gray-500 mt-1">In cents (500 = $5.00)</p>
+                <p className="text-xs text-gray-500 mt-1">Enter dollar amount (e.g., 5 for $5.00)</p>
               )}
             </div>
           </div>
