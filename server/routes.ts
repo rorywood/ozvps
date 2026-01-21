@@ -947,6 +947,17 @@ export async function registerRoutes(
         await auth0Client.updateUserName(auth0UserId, name);
       }
 
+      // IMPORTANT: Set email_verified=true in Auth0 to PREVENT Auth0 from sending its own verification email
+      // We handle email verification ourselves with our custom system
+      // The user's actual verification status is tracked in our database (emailVerificationTokens table)
+      try {
+        await auth0Client.updateUser(auth0UserId, { email_verified: true });
+        log(`Disabled Auth0 verification email for ${email} (set email_verified=true)`, 'auth');
+      } catch (verifyErr: any) {
+        // Non-fatal - user can still register, we just might get duplicate emails
+        log(`Warning: Could not disable Auth0 verification email for ${email}: ${verifyErr.message}`, 'auth');
+      }
+
       // Create or find existing Stripe customer and wallet for the new user
       try {
         const stripe = await getUncachableStripeClient();

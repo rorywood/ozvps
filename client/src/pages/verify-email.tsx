@@ -39,6 +39,10 @@ export default function VerifyEmailPage() {
             setVerifyState('success');
             // Refresh auth state after verification
             queryClient.invalidateQueries({ queryKey: ['auth'] });
+            // Auto-redirect to dashboard after 2 seconds
+            setTimeout(() => {
+              navigate('/');
+            }, 2000);
           } else {
             setVerifyState('error');
             setVerifyError(data.error || 'Failed to verify email');
@@ -49,7 +53,7 @@ export default function VerifyEmailPage() {
           setVerifyError('Failed to connect to server. Please try again.');
         });
     }
-  }, [token, verifyState, queryClient]);
+  }, [token, verifyState, queryClient, navigate]);
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -156,11 +160,14 @@ export default function VerifyEmailPage() {
                     <h2 className="text-xl font-semibold text-foreground mb-3">
                       Email Verified!
                     </h2>
-                    <p className="text-muted-foreground mb-6">
+                    <p className="text-muted-foreground mb-4">
                       Your email has been successfully verified. You can now access all features of OzVPS.
                     </p>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Redirecting to dashboard...
+                    </p>
                     <Button onClick={() => navigate('/')} className="w-full">
-                      Go to Dashboard
+                      Go to Dashboard Now
                     </Button>
                   </>
                 ) : (

@@ -1601,11 +1601,24 @@ export class VirtFusionClient {
 
   async deleteUserById(userId: number): Promise<boolean> {
     try {
-      log(`Deleting VirtFusion user ${userId}`, 'virtfusion');
+      log(`Deleting VirtFusion user by ID ${userId}`, 'virtfusion');
+      // First get the user to find their extRelationId
+      const user = await this.getUserById(userId);
+      if (!user) {
+        log(`VirtFusion user ${userId} not found, may already be deleted`, 'virtfusion');
+        return true;
+      }
+
+      // Use the byExtRelation endpoint with relStr=true for proper deletion
+      if (user.extRelationId) {
+        return await this.deleteUserByExtRelationId(user.extRelationId);
+      }
+
+      // Fallback to direct ID deletion if no extRelationId
       await this.request(`/users/${userId}`, {
         method: 'DELETE',
       });
-      log(`Successfully deleted VirtFusion user ${userId}`, 'virtfusion');
+      log(`Successfully deleted VirtFusion user ${userId} via direct ID`, 'virtfusion');
       return true;
     } catch (error: any) {
       if (error.message?.includes('404')) {
@@ -1613,6 +1626,25 @@ export class VirtFusionClient {
         return true;
       }
       log(`Failed to delete VirtFusion user ${userId}: ${error}`, 'virtfusion');
+      return false;
+    }
+  }
+
+  async deleteUserByExtRelationId(extRelationId: string): Promise<boolean> {
+    try {
+      log(`Deleting VirtFusion user by extRelationId ${extRelationId}`, 'virtfusion');
+      // According to VirtFusion API: DELETE /users/{extRelationId}/byExtRelation?relStr=true
+      await this.request(`/users/${extRelationId}/byExtRelation?relStr=true`, {
+        method: 'DELETE',
+      });
+      log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId}`, 'virtfusion');
+      return true;
+    } catch (error: any) {
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        log(`VirtFusion user with extRelationId ${extRelationId} already deleted or not found`, 'virtfusion');
+        return true;
+      }
+      log(`Failed to delete VirtFusion user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
       return false;
     }
   }
