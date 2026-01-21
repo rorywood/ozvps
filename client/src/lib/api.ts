@@ -514,6 +514,7 @@ class ApiClient {
   // Two-Factor Authentication
   async get2FAStatus(): Promise<{
     enabled: boolean;
+    method: 'totp' | 'email';
     verifiedAt: string | null;
     lastUsedAt: string | null;
   }> {
@@ -583,6 +584,48 @@ class ApiClient {
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to generate backup codes');
+    }
+    return response.json();
+  }
+
+  // Email 2FA
+  async setupEmail2FA(): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/email/setup`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to setup email 2FA');
+    }
+    return response.json();
+  }
+
+  async enableEmail2FA(code: string): Promise<{
+    success: boolean;
+    backupCodes: string[];
+    message: string;
+  }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/email/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to enable email 2FA');
+    }
+    return response.json();
+  }
+
+  async sendEmail2FACode(email: string, auth0UserId: string): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/email/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, auth0UserId }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to send verification code');
     }
     return response.json();
   }

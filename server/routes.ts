@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
@@ -1227,8 +1227,8 @@ export async function registerRoutes(
 
       // Check reCAPTCHA if enabled
       // Check if this is a 2FA verification step (user already passed reCAPTCHA on initial login)
-      const { totpToken, backupCode } = req.body;
-      const is2FAStep = !!(totpToken || backupCode);
+      const { totpToken, backupCode, emailOtpToken } = req.body;
+      const is2FAStep = !!(totpToken || backupCode || emailOtpToken);
 
       // Only check reCAPTCHA on initial login, not on 2FA verification step
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
@@ -1316,33 +1316,55 @@ export async function registerRoutes(
       // Check if 2FA is enabled for this user
       const tfa = await dbStorage.getTwoFactorAuth(auth0Result.user.user_id);
       if (tfa?.enabled) {
-        // 2FA required - check if token was provided (totpToken/backupCode already extracted above)
-        if (!totpToken && !backupCode) {
+        // 2FA required - check if token was provided (totpToken/backupCode/emailOtpToken already extracted above)
+        if (!totpToken && !backupCode && !emailOtpToken) {
           // Return 2FA required status - client should prompt for code
-          log(`2FA required for user: ${email}`, 'auth');
+          log(`2FA required for user: ${email} (method: ${tfa.method})`, 'auth');
           return res.status(200).json({
             requires2FA: true,
+            twoFAMethod: tfa.method || 'totp',
+            auth0UserId: auth0Result.user.user_id,
             message: 'Two-factor authentication required',
           });
         }
 
         let tfaValid = false;
 
-        // Decrypt the secret for TOTP verification
-        let plaintextSecret: string;
-        try {
-          plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-          log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
-        } catch (decryptError: any) {
-          log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
-          return res.status(500).json({ error: 'Authentication error. Please contact support.' });
-        }
+        // Handle email 2FA separately from TOTP
+        if (tfa.method === 'email' && emailOtpToken) {
+          // Verify email OTP
+          if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
+            return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
+          }
 
-        // Try TOTP token first
-        if (totpToken) {
-          log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
-          tfaValid = totpVerify(totpToken, plaintextSecret);
-          log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
+          if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
+            return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+          }
+
+          if (tfa.emailOtpCode === emailOtpToken) {
+            tfaValid = true;
+            // Clear the used code
+            await dbStorage.clearEmailOtpCode(auth0Result.user.user_id);
+            log(`Email 2FA verified for user: ${email}`, 'security');
+          }
+        } else if (tfa.method === 'totp' || totpToken) {
+          // TOTP verification
+          // Decrypt the secret for TOTP verification
+          let plaintextSecret: string;
+          try {
+            plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+            log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
+          } catch (decryptError: any) {
+            log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
+            return res.status(500).json({ error: 'Authentication error. Please contact support.' });
+          }
+
+          // Try TOTP token first
+          if (totpToken) {
+            log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
+            tfaValid = totpVerify(totpToken, plaintextSecret);
+            log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
+          }
         }
 
         // If TOTP failed, try backup code
@@ -1687,6 +1709,7 @@ export async function registerRoutes(
       let accountBlockedReason: string | null = null;
       let accountSuspended = false;
       let accountSuspendedReason: string | null = null;
+      let profilePictureUrl: string | null = null;
       if (session.auth0UserId) {
         // Read directly from database (not cache) for most up-to-date status
         const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId);
@@ -1704,6 +1727,10 @@ export async function registerRoutes(
           accountSuspended = true;
           accountSuspendedReason = userFlags.suspendedReason || null;
         }
+
+        // Get profile picture from wallet
+        const wallet = await dbStorage.getWallet(session.auth0UserId);
+        profilePictureUrl = wallet?.profilePictureUrl || null;
       }
 
       res.json({
@@ -1719,6 +1746,7 @@ export async function registerRoutes(
           accountBlockedReason,
           accountSuspended,
           accountSuspendedReason,
+          profilePictureUrl,
         },
       });
     } catch (error: any) {
@@ -3236,6 +3264,7 @@ export async function registerRoutes(
 
       res.json({
         enabled: tfa?.enabled || false,
+        method: tfa?.method || 'totp',
         verifiedAt: tfa?.verifiedAt || null,
         lastUsedAt: tfa?.lastUsedAt || null,
       });
@@ -3479,6 +3508,138 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error generating backup codes: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate backup codes' });
+    }
+  });
+
+  // Email 2FA: Setup (creates record with email method)
+  app.post('/api/user/2fa/email/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      // Check if 2FA already exists
+      let tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (tfa?.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled. Disable it first to change methods.' });
+      }
+
+      // Create or update 2FA record for email method
+      if (tfa) {
+        await dbStorage.setTwoFactorMethod(session.auth0UserId, 'email');
+      } else {
+        tfa = await dbStorage.createEmailTwoFactorAuth(session.auth0UserId);
+      }
+
+      // Generate and send a verification code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await dbStorage.setEmailOtpCode(session.auth0UserId, code, expiresAt);
+      const emailResult = await sendTwoFactorCodeEmail(session.email, code, 10);
+
+      if (!emailResult.success) {
+        return res.status(500).json({ error: 'Failed to send verification email' });
+      }
+
+      log(`Email 2FA setup initiated for ${session.email}`, 'security');
+      res.json({ success: true, message: 'Verification code sent to your email' });
+    } catch (error: any) {
+      log(`Error setting up email 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to setup email 2FA' });
+    }
+  });
+
+  // Email 2FA: Enable (verify code and enable)
+  app.post('/api/user/2fa/email/enable', authMiddleware, mfaRateLimiter, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const { code } = req.body;
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Verification code is required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
+      if (!tfa) {
+        return res.status(400).json({ error: 'Please setup email 2FA first' });
+      }
+
+      if (tfa.enabled) {
+        return res.status(400).json({ error: '2FA is already enabled' });
+      }
+
+      // Verify the code
+      if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
+        return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
+      }
+
+      if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
+        return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+      }
+
+      if (tfa.emailOtpCode !== code) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      // Generate backup codes
+      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
+
+      // Enable 2FA with email method
+      await dbStorage.updateTwoFactorAuth(session.auth0UserId, {
+        enabled: true,
+        method: 'email',
+        backupCodes: JSON.stringify(hashedBackupCodes),
+        verifiedAt: new Date(),
+        emailOtpCode: null,
+        emailOtpExpiresAt: null,
+      });
+
+      log(`Email 2FA enabled for ${session.email}`, 'security');
+      res.json({
+        success: true,
+        backupCodes,
+        message: 'Email 2FA is now enabled. Save your backup codes!',
+      });
+    } catch (error: any) {
+      log(`Error enabling email 2FA: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to enable email 2FA' });
+    }
+  });
+
+  // Email 2FA: Send code during login (public, but rate limited)
+  app.post('/api/user/2fa/email/send', mfaRateLimiter, async (req, res) => {
+    try {
+      const { email, auth0UserId } = req.body;
+      if (!email || !auth0UserId) {
+        return res.status(400).json({ error: 'Email and user ID are required' });
+      }
+
+      const tfa = await dbStorage.getTwoFactorAuth(auth0UserId);
+      if (!tfa?.enabled || tfa.method !== 'email') {
+        return res.status(400).json({ error: 'Email 2FA is not enabled for this account' });
+      }
+
+      // Generate and send code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
+      const emailResult = await sendTwoFactorCodeEmail(email, code, 10);
+
+      if (!emailResult.success) {
+        return res.status(500).json({ error: 'Failed to send verification email' });
+      }
+
+      log(`Email 2FA code sent to ${email}`, 'security');
+      res.json({ success: true, message: 'Verification code sent' });
+    } catch (error: any) {
+      log(`Error sending 2FA email: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send verification code' });
     }
   });
 

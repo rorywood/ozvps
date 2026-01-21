@@ -45,7 +45,7 @@ export default function Account() {
   const [isEditing, setIsEditing] = useState(false);
 
   // 2FA State
-  const [twoFAStep, setTwoFAStep] = useState<'idle' | 'setup' | 'verify' | 'backup'>('idle');
+  const [twoFAStep, setTwoFAStep] = useState<'idle' | 'choose-method' | 'setup' | 'email-setup' | 'email-verify' | 'verify' | 'backup'>('idle');
   const [twoFASecret, setTwoFASecret] = useState("");
   const [twoFAQRCode, setTwoFAQRCode] = useState("");
   const [twoFAToken, setTwoFAToken] = useState("");
@@ -55,6 +55,7 @@ export default function Account() {
   const [disablePassword, setDisablePassword] = useState("");
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<'totp' | 'email'>('totp');
 
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['userProfile'],
@@ -153,6 +154,46 @@ export default function Account() {
     }
   });
 
+  // Email 2FA Mutations
+  const setupEmail2FAMutation = useMutation({
+    mutationFn: () => api.setupEmail2FA(),
+    onSuccess: (data) => {
+      setTwoFAStep('email-verify');
+      toast({
+        title: "Code Sent",
+        description: data.message || "A verification code has been sent to your email.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Setup Failed",
+        description: error.message || "Failed to start email 2FA setup.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const enableEmail2FAMutation = useMutation({
+    mutationFn: (code: string) => api.enableEmail2FA(code),
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setTwoFAStep('backup');
+      setTwoFAToken("");
+      queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      toast({
+        title: "2FA Enabled",
+        description: "Email two-factor authentication is now active on your account.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid code. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedCode(text);
@@ -183,6 +224,7 @@ export default function Account() {
     onSuccess: (data) => {
       setProfilePictureUrl(data.profilePictureUrl);
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       toast({
         title: "Profile Picture Updated",
         description: "Your profile picture has been uploaded successfully.",
@@ -202,6 +244,7 @@ export default function Account() {
     onSuccess: () => {
       setProfilePictureUrl(null);
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       toast({
         title: "Profile Picture Removed",
         description: "Your profile picture has been removed.",
@@ -615,12 +658,18 @@ export default function Account() {
                   ? 'bg-green-500/10 text-green-500 border-green-500/20'
                   : 'bg-orange-500/10 text-orange-500 border-orange-500/20'
               }`}>
-                <Smartphone className="h-5 w-5" />
+                {twoFAStatus?.method === 'email' ? (
+                  <Mail className="h-5 w-5" />
+                ) : (
+                  <Smartphone className="h-5 w-5" />
+                )}
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">Two-Factor Authentication</h3>
                 <p className="text-sm text-muted-foreground">
-                  {twoFAStatus?.enabled ? 'Enabled - Your account is protected' : 'Add an extra layer of security'}
+                  {twoFAStatus?.enabled
+                    ? `Enabled via ${twoFAStatus.method === 'email' ? 'Email' : 'Authenticator App'}`
+                    : 'Add an extra layer of security'}
                 </p>
               </div>
               {twoFAStatus?.enabled && (
@@ -636,30 +685,158 @@ export default function Account() {
                 <Loader2 className="h-6 w-6 text-primary animate-spin" />
               </div>
             ) : twoFAStep === 'idle' && !twoFAStatus?.enabled ? (
-              // Not enabled - Show setup button
+              // Not enabled - Show method selection
               <div className="space-y-4">
-                <div className="bg-muted/30 rounded-lg p-4 border border-border">
-                  <h4 className="font-medium text-foreground mb-2">How it works:</h4>
-                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Download an authenticator app (Google Authenticator, Authy, etc.)</li>
-                    <li>Scan the QR code with your app</li>
-                    <li>Enter the 6-digit code to verify</li>
-                    <li>Save your backup codes securely</li>
-                  </ol>
+                <p className="text-sm text-muted-foreground">
+                  Choose how you'd like to receive verification codes:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedMethod('totp');
+                      setTwoFAStep('choose-method');
+                    }}
+                    className="flex flex-col items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <Smartphone className="h-6 w-6" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-medium text-foreground">Authenticator App</p>
+                      <p className="text-xs text-muted-foreground">Google Authenticator, Authy, etc.</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedMethod('email');
+                      setTwoFAStep('choose-method');
+                    }}
+                    className="flex flex-col items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <Mail className="h-6 w-6" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-medium text-foreground">Email Code</p>
+                      <p className="text-xs text-muted-foreground">Receive codes via email</p>
+                    </div>
+                  </button>
                 </div>
-                <Button
-                  onClick={() => setup2FAMutation.mutate()}
-                  disabled={setup2FAMutation.isPending}
-                  className="w-full bg-primary hover:bg-primary/90"
-                  data-testid="button-setup-2fa"
+              </div>
+            ) : twoFAStep === 'choose-method' ? (
+              // Method selected - Show setup info and button
+              <div className="space-y-4">
+                {selectedMethod === 'totp' ? (
+                  <div className="bg-muted/30 rounded-lg p-4 border border-border">
+                    <h4 className="font-medium text-foreground mb-2">How it works:</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                      <li>Download an authenticator app (Google Authenticator, Authy, etc.)</li>
+                      <li>Scan the QR code with your app</li>
+                      <li>Enter the 6-digit code to verify</li>
+                      <li>Save your backup codes securely</li>
+                    </ol>
+                  </div>
+                ) : (
+                  <div className="bg-muted/30 rounded-lg p-4 border border-border">
+                    <h4 className="font-medium text-foreground mb-2">How it works:</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                      <li>We'll send a 6-digit code to your email</li>
+                      <li>Enter the code to verify your email</li>
+                      <li>On each login, you'll receive a new code via email</li>
+                      <li>Save your backup codes securely</li>
+                    </ol>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setTwoFAStep('idle')}
+                    className="flex-1 border-border hover:bg-muted/50"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (selectedMethod === 'totp') {
+                        setup2FAMutation.mutate();
+                      } else {
+                        setupEmail2FAMutation.mutate();
+                      }
+                    }}
+                    disabled={setup2FAMutation.isPending || setupEmail2FAMutation.isPending}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-setup-2fa"
+                  >
+                    {(setup2FAMutation.isPending || setupEmail2FAMutation.isPending) ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : selectedMethod === 'totp' ? (
+                      <QrCode className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-2" />
+                    )}
+                    Continue Setup
+                  </Button>
+                </div>
+              </div>
+            ) : twoFAStep === 'email-verify' ? (
+              // Email 2FA verification step
+              <div className="space-y-6">
+                <div className="flex flex-col items-center text-center">
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4">
+                    <Mail className="h-8 w-8" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    We've sent a verification code to your email address.
+                    Enter the code below to enable email 2FA.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Enter verification code</Label>
+                  <Input
+                    value={twoFAToken}
+                    onChange={(e) => setTwoFAToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className="bg-card/30 border-border text-foreground text-center text-2xl tracking-widest font-mono"
+                    maxLength={6}
+                    data-testid="input-email-2fa-token"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTwoFAStep('idle');
+                      setTwoFAToken("");
+                    }}
+                    className="flex-1 border-border hover:bg-muted/50"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => enableEmail2FAMutation.mutate(twoFAToken)}
+                    disabled={twoFAToken.length !== 6 || enableEmail2FAMutation.isPending}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-verify-email-2fa"
+                  >
+                    {enableEmail2FAMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Verify & Enable
+                  </Button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setupEmail2FAMutation.mutate()}
+                  disabled={setupEmail2FAMutation.isPending}
+                  className="w-full text-sm text-primary hover:text-primary/80 transition-colors"
                 >
-                  {setup2FAMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <QrCode className="h-4 w-4 mr-2" />
-                  )}
-                  Set Up Two-Factor Authentication
-                </Button>
+                  {setupEmail2FAMutation.isPending ? "Sending..." : "Resend verification code"}
+                </button>
               </div>
             ) : twoFAStep === 'setup' ? (
               // Setup step - Show QR code
@@ -804,7 +981,13 @@ export default function Account() {
               // Already enabled - Show management options
               <div className="space-y-4">
                 <div className="bg-muted/30 rounded-lg p-4 border border-border">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Method</p>
+                      <p className="font-medium text-foreground">
+                        {twoFAStatus.method === 'email' ? 'Email' : 'Authenticator App'}
+                      </p>
+                    </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Last used</p>
                       <p className="font-medium text-foreground">

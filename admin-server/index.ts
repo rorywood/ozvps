@@ -7,7 +7,7 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { connectRedis, disconnectRedis } from "../server/redis";
 import { runAutoMigrations } from "../server/db";
-import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
+// import { ipWhitelistMiddleware } from "./middleware/ip-whitelist"; // TEMPORARILY DISABLED
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
 import { registerAuthRoutes } from "./routes/auth";
@@ -118,13 +118,14 @@ app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(cookieParser());
 
-// IP whitelist check - applies to all routes except health
-app.use((req, res, next) => {
-  if (req.path === '/api/health' || req.path === '/health') {
-    return next();
-  }
-  return ipWhitelistMiddleware(req, res, next);
-});
+// IP whitelist check - TEMPORARILY DISABLED
+// TODO: Re-enable IP whitelist when ready
+// app.use((req, res, next) => {
+//   if (req.path === '/api/health' || req.path === '/health') {
+//     return next();
+//   }
+//   return ipWhitelistMiddleware(req, res, next);
+// });
 
 // Request logging
 app.use((req, res, next) => {

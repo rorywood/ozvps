@@ -225,8 +225,11 @@ export const invoices = pgTable("invoices", {
 export const twoFactorAuth = pgTable("two_factor_auth", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   auth0UserId: text("auth0_user_id").notNull().unique(),
-  secret: text("secret").notNull(), // Base32 encoded TOTP secret
+  secret: text("secret").notNull(), // Base32 encoded TOTP secret (or placeholder for email 2FA)
   enabled: boolean("enabled").default(false).notNull(),
+  method: text("method").default("totp").notNull(), // 'totp' or 'email'
+  emailOtpCode: text("email_otp_code"), // Current email OTP code (hashed)
+  emailOtpExpiresAt: timestamp("email_otp_expires_at"), // When the email OTP expires
   backupCodes: text("backup_codes"), // JSON array of hashed backup codes
   verifiedAt: timestamp("verified_at"), // When 2FA was first verified/enabled
   lastUsedAt: timestamp("last_used_at"), // Last time 2FA was used for login

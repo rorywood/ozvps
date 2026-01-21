@@ -48,6 +48,10 @@ export default function LoginPage() {
   const [twoFAToken, setTwoFAToken] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [savedRecaptchaToken, setSavedRecaptchaToken] = useState<string | undefined>(undefined);
+  const [twoFAMethod, setTwoFAMethod] = useState<'totp' | 'email'>('totp');
+  const [auth0UserId, setAuth0UserId] = useState<string>("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
 
   const [showUserNotFound, setShowUserNotFound] = useState(false);
 
@@ -205,6 +209,9 @@ export default function LoginPage() {
     onSuccess: (data) => {
       if (data.requires2FA) {
         setRequires2FA(true);
+        setTwoFAMethod(data.twoFAMethod || 'totp');
+        setAuth0UserId(data.auth0UserId || '');
+        setEmailCodeSent(false);
         setError("");
         setIsSubmitting(false);
         return;
@@ -315,6 +322,36 @@ export default function LoginPage() {
     setTwoFAToken("");
     setUseBackupCode(false);
     setError("");
+    setTwoFAMethod('totp');
+    setAuth0UserId('');
+    setEmailCodeSent(false);
+  };
+
+  const handleSendEmailCode = async () => {
+    if (!auth0UserId || !email) {
+      setError("Unable to send verification code. Please try again.");
+      return;
+    }
+
+    setSendingEmailCode(true);
+    setError("");
+
+    try {
+      const result = await api.sendEmail2FACode(email, auth0UserId);
+      if (result.success) {
+        setEmailCodeSent(true);
+        toast({
+          title: "Code Sent",
+          description: "A verification code has been sent to your email.",
+        });
+      } else {
+        setError(result.message || "Failed to send verification code.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to send verification code.");
+    } finally {
+      setSendingEmailCode(false);
+    }
   };
 
   return (
@@ -599,7 +636,11 @@ export default function LoginPage() {
               <form onSubmit={handle2FASubmit} className="space-y-6">
                 {/* 2FA Info */}
                 <div className="flex items-start gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                  <Smartphone className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  {twoFAMethod === 'email' ? (
+                    <Mail className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Smartphone className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  )}
                   <div className="flex-1">
                     <p className="text-base font-semibold text-white mb-1">
                       {useBackupCode ? "Use a backup code" : "Verify your identity"}
@@ -607,7 +648,11 @@ export default function LoginPage() {
                     <p className="text-sm text-slate-400">
                       {useBackupCode
                         ? "Enter one of your backup codes"
-                        : "Enter the 6-digit code from your authenticator app"}
+                        : twoFAMethod === 'email'
+                          ? emailCodeSent
+                            ? "Enter the 6-digit code sent to your email"
+                            : "Click below to receive a verification code via email"
+                          : "Enter the 6-digit code from your authenticator app"}
                     </p>
                   </div>
                 </div>
@@ -620,51 +665,94 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* 2FA Code Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="twofa-code" className="text-sm font-medium text-slate-300">
-                    {useBackupCode ? "Backup Code" : "Verification Code"}
-                  </Label>
-                  <Input
-                    id="twofa-code"
-                    type="text"
-                    placeholder={useBackupCode ? "XXXXXXXX" : "000000"}
-                    className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-600 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
-                    value={twoFAToken}
-                    onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    maxLength={useBackupCode ? 8 : 6}
-                    autoFocus
-                    autoComplete="one-time-code"
-                    data-testid="input-2fa-code"
-                  />
-                </div>
+                {/* Email 2FA - Send Code Button (shown when email method and code not sent yet) */}
+                {twoFAMethod === 'email' && !emailCodeSent && !useBackupCode && (
+                  <Button
+                    type="button"
+                    onClick={handleSendEmailCode}
+                    disabled={sendingEmailCode}
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90"
+                  >
+                    {sendingEmailCode ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-5 w-5 mr-2" />
+                        Send verification code
+                      </>
+                    )}
+                  </Button>
+                )}
 
-                {/* Verify Button */}
-                <Button
-                  type="submit"
-                  className="w-full h-12 text-base font-semibold rounded-xl"
-                  disabled={isSubmitting || loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
-                  data-testid="button-verify-2fa"
-                >
-                  {(isSubmitting || loginMutation.isPending) ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    "Verify and continue"
-                  )}
-                </Button>
+                {/* 2FA Code Input (shown for TOTP, backup codes, or after email code sent) */}
+                {(twoFAMethod === 'totp' || useBackupCode || emailCodeSent) && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="twofa-code" className="text-sm font-medium text-slate-300">
+                        {useBackupCode ? "Backup Code" : "Verification Code"}
+                      </Label>
+                      <Input
+                        id="twofa-code"
+                        type="text"
+                        placeholder={useBackupCode ? "XXXXXXXX" : "000000"}
+                        className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-600 focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                        value={twoFAToken}
+                        onChange={(e) => setTwoFAToken(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        maxLength={useBackupCode ? 8 : 6}
+                        autoFocus
+                        autoComplete="one-time-code"
+                        data-testid="input-2fa-code"
+                      />
+                    </div>
+
+                    {/* Verify Button */}
+                    <Button
+                      type="submit"
+                      className="w-full h-12 text-base font-semibold rounded-xl"
+                      disabled={isSubmitting || loginMutation.isPending || (useBackupCode ? twoFAToken.length < 8 : twoFAToken.length !== 6)}
+                      data-testid="button-verify-2fa"
+                    >
+                      {(isSubmitting || loginMutation.isPending) ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify and continue"
+                      )}
+                    </Button>
+                  </>
+                )}
 
                 {/* 2FA Options */}
                 <div className="flex flex-col gap-3 pt-4 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setUseBackupCode(!useBackupCode)}
+                    onClick={() => {
+                      setUseBackupCode(!useBackupCode);
+                      setTwoFAToken("");
+                    }}
                     className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
                   >
-                    {useBackupCode ? "Use authenticator app instead" : "Use a backup code instead"}
+                    {useBackupCode
+                      ? twoFAMethod === 'email'
+                        ? "Use email code instead"
+                        : "Use authenticator app instead"
+                      : "Use a backup code instead"}
                   </button>
+                  {twoFAMethod === 'email' && emailCodeSent && !useBackupCode && (
+                    <button
+                      type="button"
+                      onClick={handleSendEmailCode}
+                      disabled={sendingEmailCode}
+                      className="text-sm text-slate-400 hover:text-white font-medium transition-colors"
+                    >
+                      {sendingEmailCode ? "Sending..." : "Resend verification code"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleBack2FA}
