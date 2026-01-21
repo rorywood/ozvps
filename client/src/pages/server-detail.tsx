@@ -260,15 +260,13 @@ export default function ServerDetail() {
     retry: 2, // Retry failed requests twice before giving up
     retryDelay: 1000, // 1 second between retries
     refetchInterval: (query) => {
-      // During provisioning/setup, poll aggressively (1 second)
-      // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
-      // If server needs setup or is provisioning, poll faster
+      // During provisioning/setup, poll faster
       const data = query.state.data;
       if (data?.needsSetup || data?.status === 'provisioning') {
-        return 1000; // REDUCED from 500ms to 1s to be less aggressive
+        return 3000; // 3 seconds during provisioning
       }
-      // Normal operation: poll every 2 seconds for real-time updates
-      return 2000; // REDUCED from 1s to 2s for better performance
+      // Normal operation: 10 second refresh to reduce API load
+      return 10000;
     },
   });
 
@@ -318,7 +316,7 @@ export default function ServerDetail() {
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 1000, // Poll every 1 second for deletion progress
+    refetchInterval: 5000, // Poll every 5 seconds for deletion progress
   });
 
   // Power action pending state - declared here so liveStats can use it
@@ -330,7 +328,7 @@ export default function ServerDetail() {
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && (server?.status === 'running' || !!powerActionPending),
-    refetchInterval: 1000, // Poll every 1 second for real-time stats
+    refetchInterval: 5000, // Poll every 5 seconds for stats
   });
 
   // Console lock hook - must be after server query

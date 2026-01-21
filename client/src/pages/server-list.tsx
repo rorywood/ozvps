@@ -74,7 +74,7 @@ export default function ServerList() {
   const { data: dashboardData, isLoading, isError } = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: () => api.getDashboardOverview(),
-    refetchInterval: 1000, // 1 second refresh for real-time updates
+    refetchInterval: 10000, // 10 second refresh to reduce API load
   });
 
   const servers = dashboardData?.servers || [];

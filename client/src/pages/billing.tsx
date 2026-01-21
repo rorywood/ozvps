@@ -701,7 +701,7 @@ export default function BillingPage() {
   const { data: walletData, isLoading: loadingWallet } = useQuery<{ wallet: Wallet }>({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
-    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates for better UX
+    refetchInterval: 30000, // 30 second refresh to reduce API load
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
@@ -724,7 +724,7 @@ export default function BillingPage() {
     queryKey: ['transactions'],
     queryFn: () => api.getTransactions(),
     enabled: stripeConfigured,
-    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates
+    refetchInterval: 30000, // 30 second refresh to reduce API load
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
@@ -733,7 +733,7 @@ export default function BillingPage() {
     queryKey: ['invoices'],
     queryFn: () => api.getInvoices(),
     enabled: stripeConfigured,
-    refetchInterval: 3000, // Auto-refresh every 3 seconds for real-time updates
+    refetchInterval: 30000, // 30 second refresh to reduce API load
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });

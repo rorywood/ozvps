@@ -751,6 +751,16 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
+  // Strict rate limiter for password resets - 3 per hour per user
+  const passwordResetRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 3, // 3 password resets per hour
+    message: { error: 'Too many password reset requests. Please wait before trying again (limit: 3 per hour).' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   const promoValidationRateLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 10, // 10 promo validation requests per minute
@@ -2582,7 +2592,7 @@ export async function registerRoutes(
 
   // Reset server password - security-sensitive endpoint with ownership verification
   // Password is sent via email for security - never shown in UI
-  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
+  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, passwordResetRateLimiter, async (req, res) => {
     try {
       // Check if user account is blocked or suspended
       const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
