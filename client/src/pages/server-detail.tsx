@@ -1943,7 +1943,15 @@ export default function ServerDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
-                    <span className="text-lg font-bold text-foreground" data-testid="text-disk-percent">
+                    <span
+                      className={cn(
+                        "text-lg font-bold",
+                        liveStats && liveStats.disk_usage >= 90 ? "text-red-500" :
+                        liveStats && liveStats.disk_usage >= 75 ? "text-amber-500" :
+                        "text-foreground"
+                      )}
+                      data-testid="text-disk-percent"
+                    >
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : consoleLock.isLocked ? (
@@ -1959,10 +1967,14 @@ export default function ServerDetail() {
                   )}
                 </div>
                 <div className="w-full bg-muted rounded-full h-1.5">
-                  <div 
+                  <div
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked
+                        ? liveStats && liveStats.disk_usage >= 90 ? "bg-red-500" :
+                          liveStats && liveStats.disk_usage >= 75 ? "bg-amber-500" :
+                          "bg-blue-500"
+                        : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
                     data-testid="progress-disk"
@@ -1970,8 +1982,8 @@ export default function ServerDetail() {
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span data-testid="text-disk-used">
-                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb 
-                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` 
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb
+                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB`
                       : '—'}
                   </span>
                 </div>
