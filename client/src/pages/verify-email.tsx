@@ -96,7 +96,7 @@ export default function VerifyEmailPage() {
   const resendMutation = useMutation({
     mutationFn: () => api.resendVerificationEmail(),
     onSuccess: () => {
-      setResendCooldown(60); // 60 second cooldown
+      setResendCooldown(20); // 20 second cooldown
     },
   });
 

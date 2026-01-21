@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Mail, Loader2, CheckCircle2, X } from "lucide-react";
+import { AlertCircle, Mail, Loader2, CheckCircle2, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 export function EmailVerificationBanner() {
   const [dismissed, setDismissed] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Countdown timer for resend cooldown
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   // Check auth status
   const { data: authData } = useQuery({
@@ -34,6 +43,7 @@ export function EmailVerificationBanner() {
       return response.json();
     },
     onSuccess: () => {
+      setCooldown(20); // 20 second cooldown
       toast.success('Verification email sent! Please check your inbox.');
     },
     onError: (error: Error) => {
@@ -72,7 +82,7 @@ export function EmailVerificationBanner() {
               size="sm"
               variant="outline"
               onClick={() => resendMutation.mutate()}
-              disabled={resendMutation.isPending || resendMutation.isSuccess}
+              disabled={resendMutation.isPending || cooldown > 0}
               className="border-warning/50 text-warning hover:bg-warning/20"
             >
               {resendMutation.isPending ? (
@@ -80,10 +90,10 @@ export function EmailVerificationBanner() {
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Sending...
                 </>
-              ) : resendMutation.isSuccess ? (
+              ) : cooldown > 0 ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Email Sent
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Resend in {cooldown}s
                 </>
               ) : (
                 <>
@@ -92,7 +102,7 @@ export function EmailVerificationBanner() {
                 </>
               )}
             </Button>
-            {resendMutation.isSuccess && (
+            {(resendMutation.isSuccess || cooldown > 0) && (
               <span className="text-xs text-muted-foreground">
                 Check your inbox and spam folder
               </span>
