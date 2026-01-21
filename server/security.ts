@@ -18,7 +18,7 @@ const PROGRESSIVE_DELAY_BASE_MS = 1000;
 // IP-based rate limiting for distributed attacks
 const IP_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const IP_MAX_ATTEMPTS = 20; // Max attempts per IP in window
-const IP_LOCKOUT_DURATION_MS = 10 * 1000; // 10 seconds
+const IP_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes - prevents brute force retry
 
 // Email+IP combo has stricter limits
 const COMBO_MAX_ATTEMPTS = 3;
