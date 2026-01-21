@@ -34,7 +34,12 @@ export function registerUsersRoutes(router: Router) {
             auth0UserId: user.user_id,
             email: user.email,
             name: user.name || null,
-            emailVerified: user.email_verified,
+            // Auth0's email_verified (from their click on verification link)
+            emailVerifiedAuth0: user.email_verified ?? false,
+            // Admin override (manual verification)
+            emailVerifiedOverride: flags?.emailVerifiedOverride ?? false,
+            // Combined: user is considered verified if either is true
+            emailVerified: (user.email_verified ?? false) || (flags?.emailVerifiedOverride ?? false),
             virtFusionUserId: user.app_metadata?.virtfusion_user_id || null,
             isAdmin: user.app_metadata?.is_admin || false,
             wallet: wallet || null,
@@ -87,7 +92,12 @@ export function registerUsersRoutes(router: Router) {
             auth0UserId: user.user_id,
             email: user.email,
             name: user.name || null,
-            emailVerified: user.email_verified,
+            // Auth0's email_verified (from their click on verification link)
+            emailVerifiedAuth0: user.email_verified ?? false,
+            // Admin override (manual verification)
+            emailVerifiedOverride: flags?.emailVerifiedOverride ?? false,
+            // Combined: user is considered verified if either is true
+            emailVerified: (user.email_verified ?? false) || (flags?.emailVerifiedOverride ?? false),
             virtFusionUserId: user.app_metadata?.virtfusion_user_id || null,
             isAdmin: user.app_metadata?.is_admin || false,
             wallet: wallet || null,
@@ -142,7 +152,12 @@ export function registerUsersRoutes(router: Router) {
           auth0UserId: auth0User.user_id,
           email: auth0User.email,
           name: auth0User.name || null,
-          emailVerified: auth0User.email_verified,
+          // Auth0's email_verified (from their click on verification link)
+          emailVerifiedAuth0: auth0User.email_verified ?? false,
+          // Admin override (manual verification)
+          emailVerifiedOverride: flags?.emailVerifiedOverride ?? false,
+          // Combined: user is considered verified if either is true
+          emailVerified: (auth0User.email_verified ?? false) || (flags?.emailVerifiedOverride ?? false),
           virtFusionUserId: auth0User.app_metadata?.virtfusion_user_id || null,
           isAdmin: auth0User.app_metadata?.is_admin || false,
           wallet: wallet || null,

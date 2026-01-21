@@ -5654,7 +5654,7 @@ export async function registerRoutes(
         );
 
         if (!promoValidation.valid) {
-          return res.status(400).json({ error: promoValidation.error || 'Invalid promo code' });
+          return res.status(400).json({ error: (promoValidation as any).error || 'Invalid promo code' });
         }
 
         finalPriceCents = promoValidation.finalPriceCents!;

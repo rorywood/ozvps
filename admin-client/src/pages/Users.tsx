@@ -207,6 +207,18 @@ export default function Users() {
                         </div>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-gray-400">Email (Auth0)</span>
+                            <span className={`font-medium ${userDetails.user.emailVerifiedAuth0 ? "text-green-500" : "text-red-400"}`}>
+                              {userDetails.user.emailVerifiedAuth0 ? "Verified" : "Not Verified"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-gray-400">Email (Override)</span>
+                            <span className={`font-medium ${userDetails.user.emailVerifiedOverride ? "text-yellow-500" : "text-gray-400"}`}>
+                              {userDetails.user.emailVerifiedOverride ? "Yes" : "No"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">2FA Status</span>
                             <span className={`font-medium ${userDetails.user.twoFactorEnabled ? "text-green-500" : "text-gray-400"}`}>
                               {userDetails.user.twoFactorEnabled ? "Enabled" : "Disabled"}
@@ -245,10 +257,16 @@ export default function Users() {
                           <Ban className="h-4 w-4" />
                           {userDetails.user.blocked ? "Unsuspend Account" : "Suspend Account"}
                         </button>
-                        {userDetails.user.emailVerified ? (
+                        {/* Email Verification Status */}
+                        {userDetails.user.emailVerifiedAuth0 ? (
                           <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg">
                             <CheckCircle className="h-4 w-4" />
                             Email Verified
+                          </div>
+                        ) : userDetails.user.emailVerifiedOverride ? (
+                          <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 rounded-lg">
+                            <CheckCircle className="h-4 w-4" />
+                            Manually Verified
                           </div>
                         ) : (
                           <button
