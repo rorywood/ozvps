@@ -302,15 +302,24 @@ export async function runBillingJob(): Promise<void> {
       log(`Processing overdue server ${billing.virtfusionServerId}: status=${billing.status}, nextBillAt=${billing.nextBillAt?.toISOString()}`, 'billing');
 
       // For servers that are still 'active' or 'paid' (caught by B2), try to charge first
-      // If charge succeeds, skip suspension
+      // If charge succeeds AND nextBillAt is updated to the future, skip suspension
       if (billing.status === 'active' || billing.status === 'paid') {
         log(`Server ${billing.virtfusionServerId} is 7+ days overdue but status is '${billing.status}', attempting charge first`, 'billing');
         const charged = await chargeServer(billing);
         if (charged) {
-          log(`Server ${billing.virtfusionServerId} charge succeeded, skipping suspension`, 'billing');
-          continue;
+          // Re-fetch the billing record to check if nextBillAt was actually updated
+          const [updatedBilling] = await db.select().from(serverBilling)
+            .where(eq(serverBilling.id, billing.id));
+
+          if (updatedBilling && updatedBilling.nextBillAt && updatedBilling.nextBillAt > sevenDaysAgo) {
+            log(`Server ${billing.virtfusionServerId} charge succeeded and nextBillAt updated to ${updatedBilling.nextBillAt.toISOString()}, skipping suspension`, 'billing');
+            continue;
+          }
+          // Charge returned true (idempotency) but nextBillAt is still overdue - this means
+          // the admin manually set the date for testing. Proceed to suspend.
+          log(`Server ${billing.virtfusionServerId} charge returned success but nextBillAt still overdue (${updatedBilling?.nextBillAt?.toISOString()}), proceeding to suspend`, 'billing');
         }
-        // Charge failed, mark as unpaid before suspending
+        // Charge failed or nextBillAt still overdue, mark as unpaid before suspending
         await db.update(serverBilling)
           .set({
             status: 'unpaid',

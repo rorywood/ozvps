@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
-import { userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth } from "../../shared/schema";
+import { userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth, serverBilling } from "../../shared/schema";
 import { eq, desc, like, or, sql } from "drizzle-orm";
 import { dbStorage } from "../../server/storage";
 import { auth0Client } from "../../server/auth0";
@@ -242,6 +242,38 @@ export function registerUsersRoutes(router: Router) {
           .update(sessions)
           .set({ revokedAt: new Date(), revokedReason: "USER_BLOCKED" })
           .where(eq(sessions.auth0UserId, auth0UserId));
+
+        // Also suspend all user's servers in VirtFusion
+        const userServers = await db
+          .select()
+          .from(serverBilling)
+          .where(eq(serverBilling.auth0UserId, auth0UserId));
+
+        let suspendedCount = 0;
+        for (const server of userServers) {
+          if (server.status !== 'suspended' && server.status !== 'cancelled') {
+            try {
+              await virtfusionClient.suspendServer(server.virtfusionServerId);
+              await db
+                .update(serverBilling)
+                .set({
+                  status: 'suspended',
+                  adminSuspended: true,
+                  adminSuspendedAt: new Date(),
+                  adminSuspendedReason: reason || 'User account suspended',
+                  updatedAt: new Date(),
+                })
+                .where(eq(serverBilling.id, server.id));
+              suspendedCount++;
+              console.log(`[admin-users] Suspended server ${server.virtfusionServerId} for blocked user ${auth0User.email}`);
+            } catch (err: any) {
+              console.log(`[admin-users] Failed to suspend server ${server.virtfusionServerId}: ${err.message}`);
+            }
+          }
+        }
+        if (suspendedCount > 0) {
+          console.log(`[admin-users] Suspended ${suspendedCount} servers for blocked user ${auth0User.email}`);
+        }
       }
 
       // Audit log
