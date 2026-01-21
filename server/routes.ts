@@ -2630,7 +2630,16 @@ export async function registerRoutes(
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
-      
+
+      // Check if server is overdue on payment - block deletion to prevent abuse
+      const billingStatus = await getServerBillingStatus(serverId, session.auth0UserId!, server.uuid);
+      if (billingStatus && (billingStatus.status === 'unpaid' || billingStatus.status === 'suspended')) {
+        return res.status(403).json({
+          error: 'Cannot delete server with outstanding payment. Please pay the overdue balance first.',
+          code: 'PAYMENT_REQUIRED'
+        });
+      }
+
       // Check if server is already cancelled
       const existing = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
       if (existing) {
