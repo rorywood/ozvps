@@ -84,8 +84,11 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
   const ramPercentage = server.plan.specs.ram
     ? (server.stats.ram_usage / server.plan.specs.ram) * 100
     : 0;
-  const diskPercentage = server.plan.specs.disk
-    ? (server.stats.disk_usage / server.plan.specs.disk) * 100
+  // disk_usage is already a percentage from the API
+  const diskPercentage = server.stats.disk_usage || 0;
+  // Calculate actual disk used in GB from percentage
+  const diskUsedGb = server.plan.specs.disk
+    ? (diskPercentage / 100) * server.plan.specs.disk
     : 0;
 
   return (
@@ -174,7 +177,7 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
         />
         <ResourceBar
           label="Storage"
-          value={server.stats.disk_usage}
+          value={diskUsedGb}
           max={server.plan.specs.disk}
           unit="GB"
         />
