@@ -1619,34 +1619,54 @@ export class VirtFusionClient {
       let deleteAttempted = false;
       let lastError: string | null = null;
 
-      // Method 1: Try direct DELETE /users/{id}
+      // Method 1: Try DELETE /users/{id}/byId (same pattern as updateUserById)
       try {
-        await this.request(`/users/${userId}`, {
+        await this.request(`/users/${userId}/byId`, {
           method: 'DELETE',
         });
         deleteAttempted = true;
-        log(`Direct DELETE /users/${userId} completed`, 'virtfusion');
-      } catch (directError: any) {
-        lastError = directError.message;
-        log(`Direct ID deletion failed for ${userId}: ${directError.message}`, 'virtfusion');
+        log(`DELETE /users/${userId}/byId completed`, 'virtfusion');
+      } catch (byIdError: any) {
+        lastError = byIdError.message;
+        log(`DELETE /users/${userId}/byId failed: ${byIdError.message}`, 'virtfusion');
 
-        // If 404 after first check, might have been deleted by another process
-        if (directError.message?.includes('404')) {
+        if (byIdError.message?.includes('404')) {
           return true;
         }
       }
 
-      // Method 2: Try delete by extRelationId if user has one
+      // Method 2: Try direct DELETE /users/{id}
+      if (!deleteAttempted) {
+        try {
+          await this.request(`/users/${userId}`, {
+            method: 'DELETE',
+          });
+          deleteAttempted = true;
+          log(`Direct DELETE /users/${userId} completed`, 'virtfusion');
+        } catch (directError: any) {
+          lastError = directError.message;
+          log(`Direct DELETE /users/${userId} failed: ${directError.message}`, 'virtfusion');
+
+          if (directError.message?.includes('404')) {
+            return true;
+          }
+        }
+      }
+
+      // Method 3: Try delete by extRelationId if user has one
       if (!deleteAttempted && userBefore.extRelationId) {
         try {
+          log(`Trying delete by extRelationId: ${userBefore.extRelationId}`, 'virtfusion');
           const deleted = await this.deleteUserByExtRelationId(userBefore.extRelationId);
           if (deleted) {
             deleteAttempted = true;
             log(`Delete by extRelationId completed for user ${userId}`, 'virtfusion');
+          } else {
+            log(`Delete by extRelationId returned false for user ${userId}`, 'virtfusion');
           }
         } catch (extError: any) {
           lastError = extError.message;
-          log(`Delete by extRelationId also failed for ${userId}: ${extError.message}`, 'virtfusion');
+          log(`Delete by extRelationId failed for ${userId}: ${extError.message}`, 'virtfusion');
         }
       }
 
