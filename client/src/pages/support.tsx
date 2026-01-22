@@ -30,7 +30,19 @@ import {
   Timer,
   Search,
   Server,
+  HelpCircle,
+  Zap,
+  CreditCard,
+  Shield,
+  Gauge,
+  RefreshCw,
 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
@@ -55,6 +67,73 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: 
   resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
   closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
 };
+
+// FAQ Data
+const FAQ_ITEMS = [
+  {
+    question: "How do I reset my server password?",
+    answer: "Go to your server's detail page, click on the 'Settings' tab, and use the 'Reset Root Password' option. A new password will be generated and emailed to you. Note: This requires a server reboot.",
+    icon: RefreshCw,
+  },
+  {
+    question: "Why is my server suspended?",
+    answer: "Servers can be suspended for overdue payments, bandwidth overage, or Terms of Service violations. Check your billing page for payment status. If your bandwidth is exceeded, the server will be shaped to 1Mbps until the next billing cycle.",
+    icon: AlertCircle,
+  },
+  {
+    question: "How do I add funds to my wallet?",
+    answer: "Go to the Billing page and click 'Add Funds'. You can add any amount from $5 to $500 using a credit/debit card. Funds are added instantly and used for server renewals.",
+    icon: CreditCard,
+  },
+  {
+    question: "What happens when I run out of bandwidth?",
+    answer: "When you reach your bandwidth limit, your server's network speed is shaped (throttled) to 1Mbps for both upload and download. The limit resets on your server's billing date each month.",
+    icon: Gauge,
+  },
+  {
+    question: "How do I upgrade or downgrade my server?",
+    answer: "Currently, plan changes require creating a new server with the desired plan. Contact support if you need help migrating your data to a new server.",
+    icon: Zap,
+  },
+  {
+    question: "Is DDoS protection included?",
+    answer: "Yes! All OzVPS servers include enterprise-grade DDoS protection at no extra cost. Our infrastructure automatically detects and mitigates attacks.",
+    icon: Shield,
+  },
+];
+
+
+// FAQ Section
+function FAQSection() {
+  return (
+    <div className="rounded-xl bg-card border border-border overflow-hidden mb-6">
+      <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <HelpCircle className="h-4 w-4 text-primary" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Frequently Asked Questions</h2>
+          <p className="text-xs text-muted-foreground">Quick answers to common questions</p>
+        </div>
+      </div>
+      <Accordion type="single" collapsible className="px-4">
+        {FAQ_ITEMS.map((item, index) => (
+          <AccordionItem key={index} value={`item-${index}`} className="border-b border-border/50 last:border-0">
+            <AccordionTrigger className="py-4 hover:no-underline group">
+              <div className="flex items-center gap-3 text-left">
+                <item.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                <span className="font-medium text-sm">{item.question}</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pb-4 pl-7 text-sm text-muted-foreground">
+              {item.answer}
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   const config = STATUS_CONFIG[status];
@@ -374,19 +453,27 @@ export default function SupportPage() {
     <AppShell>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Support</h1>
-            <p className="text-muted-foreground mt-1">
-              Get help with your account or servers
-            </p>
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <MessageSquare className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Support Center</h1>
+              <p className="text-muted-foreground">
+                Get help with your account or servers
+              </p>
+            </div>
           </div>
-          <Button onClick={() => setShowNewTicketForm(!showNewTicketForm)}>
+          <Button onClick={() => setShowNewTicketForm(!showNewTicketForm)} size="lg">
             <Plus className="mr-2 h-4 w-4" />
             {showNewTicketForm ? "Cancel" : "New Ticket"}
           </Button>
         </div>
 
-        {/* Inline collapsible form - DO style */}
+        {/* FAQ Section - hidden when creating new ticket */}
+        {!showNewTicketForm && <FAQSection />}
+
+        {/* Inline collapsible form */}
         <NewTicketForm isOpen={showNewTicketForm} onToggle={() => setShowNewTicketForm(!showNewTicketForm)} />
 
         {/* Action needed alert */}

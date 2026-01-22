@@ -148,7 +148,10 @@ class Auth0Client {
 
   async createUser(email: string, password: string, name?: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
     try {
-      // Use the dbconnections/signup endpoint which doesn't require Management API access
+      // Use the dbconnections/signup endpoint
+      // NOTE: Auth0's automatic verification emails must be DISABLED in the Auth0 dashboard:
+      // Auth0 Dashboard → Authentication → Database → Username-Password-Authentication → Settings
+      // Set "Verification Email" to disabled or "Never"
       const response = await fetch(`${this.baseUrl}/dbconnections/signup`, {
         method: 'POST',
         headers: {
@@ -166,7 +169,7 @@ class Auth0Client {
       if (!response.ok) {
         const error = await response.json() as any;
         log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
-        
+
         if (error.code === 'invalid_signup' || error.description?.includes('already exists')) {
           // SECURITY: Generic message to prevent email enumeration
           return { success: false, error: 'Unable to create account. Please try a different email or log in if you already have an account.' };
@@ -178,14 +181,14 @@ class Auth0Client {
       }
 
       const userData = await response.json() as any;
-      
+
       return {
         success: true,
         user: {
           user_id: userData._id || `auth0|${userData._id}`,
           email: userData.email,
           name: name || email.split('@')[0],
-          email_verified: false,
+          email_verified: false, // New users start unverified - our system tracks this
         },
       };
     } catch (error: any) {
@@ -244,10 +247,14 @@ class Auth0Client {
       );
 
       if (!response.ok) {
-        if (response.status !== 404) {
-          log(`Failed to get Auth0 user by ID: ${response.status}`, 'auth0');
+        if (response.status === 404) {
+          // User genuinely doesn't exist
+          return null;
         }
-        return null;
+        // Other errors should be thrown so callers can handle them appropriately
+        const errorText = await response.text().catch(() => 'Unknown error');
+        log(`Failed to get Auth0 user by ID: ${response.status} - ${errorText}`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status}`);
       }
 
       const user = await response.json() as any;
@@ -260,7 +267,8 @@ class Auth0Client {
       };
     } catch (error: any) {
       log(`Auth0 get user by ID error: ${error.message}`, 'auth0');
-      return null;
+      // Re-throw so callers know this is an API failure, not "user not found"
+      throw error;
     }
   }
 

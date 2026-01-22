@@ -326,7 +326,8 @@ export class VirtFusionClient {
 
   async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`);
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${encodedExtRelationId}/byExtRelation`);
       return data.data;
     } catch (error) {
       log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
@@ -453,7 +454,8 @@ export class VirtFusionClient {
 
   async updateUser(extRelationId: string, updates: VirtFusionUserUpdateRequest): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`, {
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${encodedExtRelationId}/byExtRelation`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       });
@@ -466,7 +468,8 @@ export class VirtFusionClient {
 
   async resetUserPassword(extRelationId: string, newPassword: string): Promise<boolean> {
     try {
-      await this.request(`/users/${extRelationId}/byExtRelation/resetPassword`, {
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      await this.request(`/users/${encodedExtRelationId}/byExtRelation/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ password: newPassword }),
       });
@@ -732,21 +735,27 @@ export class VirtFusionClient {
       }
       
       // Get disk usage from remoteState.disk object
-      // The disk data looks like: {"vda":{"capacity":"16106127360","physical":"12897910784",...}}
+      // The disk data looks like: {"vda":{"capacity":"16106127360","physical":"12897910784","allocation":"...",...}}
+      // Note: "physical" is the disk IMAGE size on host (thin provisioning), not actual VM filesystem usage
+      // VirtFusion may provide "allocation" or filesystem-level stats - let's check for those
       let diskUsage = 0;
       let diskUsedBytes = 0;
       let diskTotalBytes = 0;
       const disk = remoteState.disk || {};
-      
+
+      // Log disk structure for debugging (temporarily)
+      log(`Disk data for server ${serverId}: ${JSON.stringify(disk)}`, 'virtfusion');
+
       // Disk is an object with disk names as keys (e.g., "vda", "sda")
       const diskKeys = Object.keys(disk);
       for (const key of diskKeys) {
         const diskData = disk[key];
-        if (diskData && diskData.capacity && diskData.physical) {
+        if (diskData && diskData.capacity) {
           const capacity = parseInt(diskData.capacity, 10) || 0;
-          const physical = parseInt(diskData.physical, 10) || 0;
+          // Try to get actual filesystem usage first (allocation), fall back to physical (image size)
+          const used = parseInt(diskData.allocation, 10) || parseInt(diskData.physical, 10) || 0;
           diskTotalBytes += capacity;
-          diskUsedBytes += physical;
+          diskUsedBytes += used;
         }
       }
       
@@ -1602,49 +1611,133 @@ export class VirtFusionClient {
   async deleteUserById(userId: number): Promise<boolean> {
     try {
       log(`Deleting VirtFusion user by ID ${userId}`, 'virtfusion');
-      // First get the user to find their extRelationId
-      const user = await this.getUserById(userId);
-      if (!user) {
-        log(`VirtFusion user ${userId} not found, may already be deleted`, 'virtfusion');
-        return true;
+
+      // First check if user exists
+      const userBefore = await this.getUserById(userId);
+      if (!userBefore) {
+        log(`VirtFusion user ${userId} not found - nothing to delete`, 'virtfusion');
+        return true; // Already gone
       }
 
-      // Use the byExtRelation endpoint with relStr=true for proper deletion
-      if (user.extRelationId) {
-        return await this.deleteUserByExtRelationId(user.extRelationId);
+      log(`Found VirtFusion user to delete: id=${userBefore.id}, extRelationId=${userBefore.extRelationId}, email=${userBefore.email}`, 'virtfusion');
+
+      // Try multiple deletion methods since VirtFusion API can be inconsistent
+      let deleteAttempted = false;
+      let lastError: string | null = null;
+
+      // Method 1: Try DELETE /users/{id}/byId (same pattern as updateUserById)
+      try {
+        await this.request(`/users/${userId}/byId`, {
+          method: 'DELETE',
+        });
+        deleteAttempted = true;
+        log(`DELETE /users/${userId}/byId completed`, 'virtfusion');
+      } catch (byIdError: any) {
+        lastError = byIdError.message;
+        log(`DELETE /users/${userId}/byId failed: ${byIdError.message}`, 'virtfusion');
+
+        if (byIdError.message?.includes('404')) {
+          return true;
+        }
       }
 
-      // Fallback to direct ID deletion if no extRelationId
-      await this.request(`/users/${userId}`, {
-        method: 'DELETE',
-      });
-      log(`Successfully deleted VirtFusion user ${userId} via direct ID`, 'virtfusion');
+      // Method 2: Try direct DELETE /users/{id}
+      if (!deleteAttempted) {
+        try {
+          await this.request(`/users/${userId}`, {
+            method: 'DELETE',
+          });
+          deleteAttempted = true;
+          log(`Direct DELETE /users/${userId} completed`, 'virtfusion');
+        } catch (directError: any) {
+          lastError = directError.message;
+          log(`Direct DELETE /users/${userId} failed: ${directError.message}`, 'virtfusion');
+
+          if (directError.message?.includes('404')) {
+            return true;
+          }
+        }
+      }
+
+      // Method 3: Try delete by extRelationId if user has one
+      if (!deleteAttempted && userBefore.extRelationId) {
+        try {
+          log(`Trying delete by extRelationId: ${userBefore.extRelationId}`, 'virtfusion');
+          const deleted = await this.deleteUserByExtRelationId(userBefore.extRelationId);
+          if (deleted) {
+            deleteAttempted = true;
+            log(`Delete by extRelationId completed for user ${userId}`, 'virtfusion');
+          } else {
+            log(`Delete by extRelationId returned false for user ${userId}`, 'virtfusion');
+          }
+        } catch (extError: any) {
+          lastError = extError.message;
+          log(`Delete by extRelationId failed for ${userId}: ${extError.message}`, 'virtfusion');
+        }
+      }
+
+      // Verify deletion by checking if user still exists
+      const userAfter = await this.getUserById(userId);
+      if (userAfter) {
+        log(`FAILED: VirtFusion user ${userId} still exists after deletion attempts! Email: ${userAfter.email}`, 'virtfusion');
+        return false;
+      }
+
+      log(`Verified: VirtFusion user ${userId} successfully deleted`, 'virtfusion');
       return true;
     } catch (error: any) {
       if (error.message?.includes('404')) {
         log(`VirtFusion user ${userId} already deleted or not found`, 'virtfusion');
         return true;
       }
-      log(`Failed to delete VirtFusion user ${userId}: ${error}`, 'virtfusion');
+      log(`Failed to delete VirtFusion user ${userId}: ${error.message}`, 'virtfusion');
       return false;
     }
   }
 
   async deleteUserByExtRelationId(extRelationId: string): Promise<boolean> {
     try {
-      log(`Deleting VirtFusion user by extRelationId ${extRelationId}`, 'virtfusion');
-      // According to VirtFusion API: DELETE /users/{extRelationId}/byExtRelation?relStr=true
-      await this.request(`/users/${extRelationId}/byExtRelation?relStr=true`, {
-        method: 'DELETE',
-      });
-      log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId}`, 'virtfusion');
-      return true;
+      log(`Deleting VirtFusion user by extRelationId: ${extRelationId}`, 'virtfusion');
+      // URL-encode the extRelationId since it may contain special characters
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+
+      // Try with relStr=true first (for string extRelationIds)
+      try {
+        await this.request(`/users/${encodedExtRelationId}/byExtRelation?relStr=true`, {
+          method: 'DELETE',
+        });
+        log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId} (relStr=true)`, 'virtfusion');
+        return true;
+      } catch (err1: any) {
+        log(`Delete with relStr=true failed: ${err1.message}`, 'virtfusion');
+
+        // If 404, user already deleted
+        if (err1.message?.includes('404')) {
+          log(`VirtFusion user with extRelationId ${extRelationId} already deleted`, 'virtfusion');
+          return true;
+        }
+
+        // Try without relStr parameter (for numeric extRelationIds)
+        try {
+          await this.request(`/users/${encodedExtRelationId}/byExtRelation`, {
+            method: 'DELETE',
+          });
+          log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId} (no relStr)`, 'virtfusion');
+          return true;
+        } catch (err2: any) {
+          log(`Delete without relStr also failed: ${err2.message}`, 'virtfusion');
+          if (err2.message?.includes('404')) {
+            return true;
+          }
+          throw err2;
+        }
+      }
     } catch (error: any) {
       if (error.message?.includes('404') || error.message?.includes('not found')) {
         log(`VirtFusion user with extRelationId ${extRelationId} already deleted or not found`, 'virtfusion');
         return true;
       }
-      log(`Failed to delete VirtFusion user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
+      log(`Failed to delete VirtFusion user by extRelationId ${extRelationId}: ${error.message}`, 'virtfusion');
       return false;
     }
   }

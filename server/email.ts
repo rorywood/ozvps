@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { log } from './log';
+import { log } from './logger';
 
 // Resend API key from environment - NEVER hardcode API keys!
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -7,8 +7,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'OzVPS <noreply@ozvps.com.au>';
 
 // Validate Resend configuration
 if (!RESEND_API_KEY) {
-  console.warn('⚠️  WARNING: RESEND_API_KEY not configured. Password reset emails will fail.');
-  console.warn('   Set RESEND_API_KEY in your .env file');
+  log('RESEND_API_KEY not configured - password reset emails will fail', 'email', { level: 'warn' });
 }
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
@@ -1594,6 +1593,340 @@ This is an automated notification from OzVPS Support System.
 }
 
 /**
+ * Send ticket confirmation email to user
+ */
+export async function sendTicketConfirmationEmail(
+  to: string,
+  ticketId: number,
+  title: string,
+  category: string,
+  priority: string,
+  userName: string | null
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send ticket confirmation', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const ticketUrl = `${appUrl}/support/${ticketId}`;
+  const logoUrl = getLogoUrl();
+
+  // Category labels
+  const categoryLabels: Record<string, string> = {
+    sales: 'Sales',
+    accounts: 'Accounts',
+    support: 'Technical Support',
+    abuse: 'Abuse Report',
+  };
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      replyTo: `support+${ticketId}@ozvps.com.au`,
+      subject: `[Ticket #${ticketId}] ${title}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Ticket Confirmation</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 32px;">
+                    <!-- Header -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600; color: ${emailStyles.textDark};">
+                            We've Received Your Request
+                          </h1>
+                          <p style="margin: 0 0 24px 0; font-size: 14px; color: ${emailStyles.textMuted};">
+                            Hi${userName ? ` ${userName}` : ''}, your support ticket has been created
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Ticket Info -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 8px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Ticket Number</p>
+                                <p style="margin: 0; font-size: 18px; font-weight: 700; color: ${emailStyles.primaryColor};">#${ticketId}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Subject</p>
+                                <p style="margin: 0; font-size: 15px; font-weight: 600; color: ${emailStyles.textDark};">${title}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Category</p>
+                                <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark};">${categoryLabels[category] || category}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- What's Next -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                      <tr>
+                        <td>
+                          <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: ${emailStyles.textDark};">What happens next?</p>
+                          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: ${emailStyles.textMuted};">
+                            Our support team will review your request and respond as soon as possible.
+                            You'll receive an email notification when we reply. You can also check the status
+                            of your ticket anytime by clicking the button below.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center">
+                          <a href="${ticketUrl}" style="display: inline-block; padding: 14px 32px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 8px;">
+                            View Ticket
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 13px; color: ${emailStyles.textMuted};">
+                Need urgent help? Reply to this email or contact us at
+              </p>
+              <p style="margin: 0; font-size: 13px;">
+                <a href="mailto:support@ozvps.com.au" style="color: ${emailStyles.primaryColor}; text-decoration: none;">support@ozvps.com.au</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+    });
+
+    if (error) {
+      log(`Failed to send ticket confirmation: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Ticket confirmation sent for ticket #${ticketId} to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending ticket confirmation: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send ticket confirmation email to guest user (with access link)
+ */
+export async function sendGuestTicketConfirmationEmail(
+  to: string,
+  ticketId: number,
+  title: string,
+  accessToken: string,
+  userName: string | null
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send guest ticket confirmation', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const ticketUrl = `${appUrl}/support/guest/${accessToken}`;
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      replyTo: `support+${ticketId}@ozvps.com.au`,
+      subject: `[Ticket #${ticketId}] ${title}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Support Ticket Created</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 32px;">
+                    <!-- Header -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600; color: ${emailStyles.textDark};">
+                            We've Received Your Request
+                          </h1>
+                          <p style="margin: 0 0 24px 0; font-size: 14px; color: ${emailStyles.textMuted};">
+                            Hi${userName ? ` ${userName}` : ''}, your support ticket has been created
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Ticket Info -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 8px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Ticket Number</p>
+                                <p style="margin: 0; font-size: 18px; font-weight: 700; color: ${emailStyles.primaryColor};">#${ticketId}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Subject</p>
+                                <p style="margin: 0; font-size: 15px; font-weight: 600; color: ${emailStyles.textDark};">${title}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- What's Next -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                      <tr>
+                        <td>
+                          <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: ${emailStyles.textDark};">What happens next?</p>
+                          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: ${emailStyles.textMuted};">
+                            Our support team will review your request and respond as soon as possible.
+                            You'll receive an email notification when we reply. You can also reply directly
+                            to this email to add more information to your ticket.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center">
+                          <a href="${ticketUrl}" style="display: inline-block; padding: 14px 32px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 8px;">
+                            View Your Ticket
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Access Link Note -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 24px;">
+                      <tr>
+                        <td style="padding: 16px; background-color: ${emailStyles.bgLight}; border-radius: 8px; border-left: 3px solid ${emailStyles.warningColor};">
+                          <p style="margin: 0; font-size: 13px; color: ${emailStyles.textMuted};">
+                            <strong>Important:</strong> Keep this email safe. The link above is your unique access to view and update this ticket.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 13px; color: ${emailStyles.textMuted};">
+                Need urgent help? Reply to this email or contact us at
+              </p>
+              <p style="margin: 0; font-size: 13px;">
+                <a href="mailto:support@ozvps.com.au" style="color: ${emailStyles.primaryColor}; text-decoration: none;">support@ozvps.com.au</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+    });
+
+    if (error) {
+      log(`Failed to send guest ticket confirmation: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Guest ticket confirmation sent for ticket #${ticketId} to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending guest ticket confirmation: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send a two-factor authentication code via email
  */
 export async function sendTwoFactorCodeEmail(
@@ -1712,6 +2045,208 @@ If you didn't request this code, you can safely ignore this email.
     return { success: true, messageId: data?.id };
   } catch (err: any) {
     log(`Error sending 2FA code email: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send server password reset email
+ */
+export async function sendServerPasswordResetEmail(
+  to: string,
+  serverName: string,
+  serverIp: string,
+  username: string,
+  password: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send password reset email', 'email');
+    return {
+      success: false,
+      error: 'Email service not configured. Please contact administrator.'
+    };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Password Reset - ${serverName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Server Password Reset</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+
+                <!-- Header -->
+                <tr>
+                  <td style="padding: 24px 40px; background-color: ${emailStyles.primaryColor};">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Password Reset Complete</h1>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 32px 40px;">
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      The password for your server <strong style="color: ${emailStyles.textDark};">${serverName}</strong> has been reset. Your new credentials are below.
+                    </p>
+
+                    <!-- Server Info Box -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px; color: ${emailStyles.textLight}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 16px; font-weight: 600;">${serverName}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Credentials Section -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${emailStyles.borderColor}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px; background-color: ${emailStyles.bgLight}; border-bottom: 1px solid ${emailStyles.borderColor};">
+                          <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 14px; font-weight: 600;">New Login Credentials</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding: 12px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                                <p style="margin: 0 0 2px; color: ${emailStyles.textLight}; font-size: 12px;">IP Address</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 14px; font-family: monospace;">${serverIp}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 12px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                                <p style="margin: 0 0 2px; color: ${emailStyles.textLight}; font-size: 12px;">Username</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 14px; font-family: monospace;">${username}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 12px 20px; background-color: #fef9c3;">
+                                <p style="margin: 0 0 2px; color: ${emailStyles.textLight}; font-size: 12px;">New Password</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 14px; font-family: monospace; font-weight: 600;">${password}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Security Notice -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fef3c7; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5;">
+                            <strong>Security Tip:</strong> We recommend changing this password after your first login for maximum security.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center">
+                          <a href="${appUrl}/dashboard" style="display: inline-block; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 14px; font-weight: 500;">View Server</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 12px;">
+                This email was sent because a password reset was requested for your server.
+              </p>
+              <p style="margin: 0; color: ${emailStyles.textLight}; font-size: 12px;">
+                If you did not request this, please contact support immediately.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+Server Password Reset - ${serverName}
+
+Your server password has been reset. Here are your new credentials:
+
+Server: ${serverName}
+IP Address: ${serverIp}
+Username: ${username}
+Password: ${password}
+
+Security Tip: We recommend changing this password after your first login.
+
+If you did not request this password reset, please contact support immediately.
+
+View your server: ${appUrl}/dashboard
+
+---
+OzVPS - Australian VPS Hosting
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send password reset email for ${serverName}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Password reset email sent to ${to} for server ${serverName}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending password reset email: ${err.message}`, 'email');
     return { success: false, error: err.message };
   }
 }

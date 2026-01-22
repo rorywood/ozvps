@@ -7,7 +7,8 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { connectRedis, disconnectRedis } from "../server/redis";
 import { runAutoMigrations } from "../server/db";
-// import { ipWhitelistMiddleware } from "./middleware/ip-whitelist"; // TEMPORARILY DISABLED
+import { log } from "../server/logger";
+import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
 import { registerAuthRoutes } from "./routes/auth";
@@ -28,11 +29,6 @@ const httpServer = createServer(app);
 // WebSocket server for log streaming
 const wss = new WebSocketServer({ server: httpServer, path: "/ws/logs" });
 setupLogWebSocket(wss);
-
-function log(message: string, source = "admin") {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [${source}] ${message}`);
-}
 
 // Security headers
 app.use(helmet({
@@ -118,14 +114,14 @@ app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(cookieParser());
 
-// IP whitelist check - TEMPORARILY DISABLED
-// TODO: Re-enable IP whitelist when ready
-// app.use((req, res, next) => {
-//   if (req.path === '/api/health' || req.path === '/health') {
-//     return next();
-//   }
-//   return ipWhitelistMiddleware(req, res, next);
-// });
+// IP whitelist check - protects admin panel from unauthorized access
+app.use((req, res, next) => {
+  // Allow health checks without IP whitelist
+  if (req.path === '/api/health' || req.path === '/health') {
+    return next();
+  }
+  return ipWhitelistMiddleware(req, res, next);
+});
 
 // Request logging
 app.use((req, res, next) => {
@@ -133,7 +129,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (req.path.startsWith("/api")) {
-      log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`);
+      log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`, 'admin');
     }
   });
   next();
@@ -147,9 +143,9 @@ app.use((req, res, next) => {
   // Run database migrations
   try {
     await runAutoMigrations();
-    log('Database migrations complete', 'db');
+    log('Database migrations complete', 'admin-db');
   } catch (error: any) {
-    log(`Database migration warning: ${error.message}`, 'db');
+    log(`Database migration warning: ${error.message}`, 'admin-db', { level: 'warn' });
   }
 
   // Public routes (no auth required)
@@ -176,7 +172,7 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = status >= 500 ? "An unexpected error occurred" : err.message;
-    log(`Error: ${err.message}`, 'error');
+    log(`Error: ${err.message}`, 'admin', { level: 'error' });
     res.status(status).json({ error: message });
   });
 
@@ -192,8 +188,8 @@ app.use((req, res, next) => {
 
   const port = parseInt(process.env.ADMIN_PORT || "5001", 10);
   httpServer.listen({ port, host: "0.0.0.0" }, () => {
-    log(`Admin panel server running on port ${port}`);
-    log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    log(`Admin panel server running on port ${port}`, 'admin');
+    log(`Environment: ${process.env.NODE_ENV || 'development'}`, 'admin');
   });
 
   // Graceful shutdown

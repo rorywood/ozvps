@@ -28,6 +28,7 @@ import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
+import GuestTicket from "@/pages/guest-ticket";
 import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2, DatabaseIcon, RefreshCw } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
@@ -140,17 +141,16 @@ function Router() {
         {auth ? <Redirect to="/dashboard" /> : <ResetPassword />}
       </Route>
       <Route path="/verify-email">
-        <AuthGuard requireVerified={false}>
-          <VerifyEmail />
-        </AuthGuard>
+        <VerifyEmail />
+      </Route>
+      <Route path="/support/guest/:accessToken">
+        <GuestTicket />
       </Route>
       <Route path="/pricing">
         <Pricing />
       </Route>
       <Route path="/">
-        <AuthGuard>
-          <Redirect to="/dashboard" />
-        </AuthGuard>
+        <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard">
         <AuthGuard>

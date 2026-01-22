@@ -4,10 +4,7 @@ import { wallets, walletTransactions, serverBilling, serverCancellations, plans 
 import { eq, and, sql } from "drizzle-orm";
 import { runBillingJob, retryUnpaidServers } from "./billing";
 import { dbStorage } from "./storage";
-
-const log = (message: string, context = "billing") => {
-  console.log(`${new Date().toLocaleTimeString()} [${context}] ${message}`);
-};
+import { log } from "./logger";
 
 // Billing runs daily at 6pm AEST (8am UTC / 18:00 AEST)
 // AEST is UTC+10, so 6pm AEST = 8am UTC
@@ -31,16 +28,16 @@ export async function startBillingProcessor(stripe: Stripe | null) {
   const scheduleNextBillingRun = () => {
     const msUntilNextRun = getMillisecondsUntilBillingTime();
     const nextRunDate = new Date(Date.now() + msUntilNextRun);
-    log(`Next billing run scheduled for ${nextRunDate.toISOString()} (6pm AEST)`);
+    log(`Next billing run scheduled for ${nextRunDate.toISOString()} (6pm AEST)`, 'billing');
 
     setTimeout(async () => {
       try {
-        log("Starting daily billing run (6pm AEST)...");
+        log('Starting daily billing run (6pm AEST)...', 'billing');
         await runBillingJob();
         await processAutoTopups(stripe);
-        log("Daily billing run completed");
+        log('Daily billing run completed', 'billing');
       } catch (err: any) {
-        log(`Error in billing cycle: ${err.message}`, "billing-error");
+        log(`Error in billing cycle: ${err.message}`, 'billing', { level: 'error' });
       }
 
       // Schedule the next run
@@ -54,11 +51,11 @@ export async function startBillingProcessor(stripe: Stripe | null) {
     try {
       await processAutoTopups(stripe);
     } catch (err: any) {
-      log(`Error in quick billing check: ${err.message}`, "billing-error");
+      log(`Error in quick billing check: ${err.message}`, 'billing', { level: 'error' });
     }
   };
 
-  log("Starting billing processor - daily run at 6pm AEST, quick checks every 30 minutes");
+  log('Starting billing processor - daily run at 6pm AEST, quick checks every 30 minutes', 'billing');
   scheduleNextBillingRun();
 
   // Run quick check on startup, then every 30 minutes
@@ -137,13 +134,13 @@ async function processAutoTopups(stripe: Stripe | null) {
             reason: 'Automatic wallet top-up',
           },
         });
-        log(`Auto top-up successful for ${wallet.auth0UserId}: $${(wallet.autoTopupAmountCents / 100).toFixed(2)}`);
+        log(`Auto top-up successful for ${wallet.auth0UserId}: $${(wallet.autoTopupAmountCents / 100).toFixed(2)}`, 'billing');
 
         // Try to reactivate any unpaid/suspended servers after successful top-up
         await retryUnpaidServers(wallet.auth0UserId);
       }
     } catch (err: any) {
-      log(`Auto top-up failed for ${wallet.auth0UserId}: ${err.message}`, "billing-error");
+      log(`Auto top-up failed for ${wallet.auth0UserId}: ${err.message}`, 'billing', { level: 'error' });
     }
   }
 }

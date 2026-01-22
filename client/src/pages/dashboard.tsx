@@ -34,16 +34,16 @@ export default function Dashboard() {
     queryFn: () => api.getDashboardOverview(),
     staleTime: 0, // Always fetch fresh data for real-time status
     refetchInterval: (query) => {
-      // If any server needs setup or is provisioning, poll aggressively (500ms)
+      // If any server needs setup or is provisioning, poll faster
       const data = query.state.data;
       const hasProvisioningServers = data?.servers?.some((s: any) =>
         s.needsSetup || s.status === 'building' || s.status === 'provisioning'
       );
       if (hasProvisioningServers) {
-        return 500;
+        return 3000; // 3 seconds during provisioning
       }
-      // Normal operation: 1 second refresh for real-time updates
-      return 1000;
+      // Normal operation: 10 second refresh to reduce API load
+      return 10000;
     },
   });
 
@@ -60,14 +60,14 @@ export default function Dashboard() {
   const billingStatuses = dashboardData?.billingStatuses || {};
   const walletBalance = walletData?.wallet?.balanceCents || 0;
 
-  // Helper to calculate days overdue
+  // Helper to calculate days overdue (uses UTC to avoid timezone/DST issues)
   const getDaysOverdue = (nextBillAt?: string): number => {
     if (!nextBillAt) return 0;
     const billDate = new Date(nextBillAt);
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
-    const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+    const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const billDateUTC = Date.UTC(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+    const daysUntil = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
     return daysUntil < 0 ? Math.abs(daysUntil) : 0;
   };
 

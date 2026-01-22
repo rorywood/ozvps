@@ -176,9 +176,76 @@ export default function RegisterPage() {
   const [honeypot, setHoneypot] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Username ban checking
+  const isNameBanned = (n: string): boolean => /darius/i.test(n);
+
   // Email availability checking
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
   const emailCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Email typo detection
+  const [emailTypoSuggestion, setEmailTypoSuggestion] = useState<string | null>(null);
+
+  // Common email domain typos and their corrections
+  const EMAIL_TYPO_MAP: Record<string, string> = {
+    // Gmail typos
+    'gmai.com': 'gmail.com',
+    'gmial.com': 'gmail.com',
+    'gamil.com': 'gmail.com',
+    'gnail.com': 'gmail.com',
+    'gmail.co': 'gmail.com',
+    'gmail.cm': 'gmail.com',
+    'gmail.om': 'gmail.com',
+    'gmal.com': 'gmail.com',
+    'gmil.com': 'gmail.com',
+    'gmaill.com': 'gmail.com',
+    'gmaiil.com': 'gmail.com',
+    // Hotmail/Outlook typos
+    'hotmal.com': 'hotmail.com',
+    'hotmai.com': 'hotmail.com',
+    'hotmial.com': 'hotmail.com',
+    'hotmail.co': 'hotmail.com',
+    'hotmail.cm': 'hotmail.com',
+    'outlok.com': 'outlook.com',
+    'outloo.com': 'outlook.com',
+    'outlool.com': 'outlook.com',
+    'outlook.co': 'outlook.com',
+    'outlook.cm': 'outlook.com',
+    // Yahoo typos
+    'yaho.com': 'yahoo.com',
+    'yahooo.com': 'yahoo.com',
+    'yahoo.co': 'yahoo.com',
+    'yahoo.cm': 'yahoo.com',
+    'yhaoo.com': 'yahoo.com',
+    // iCloud typos
+    'icloud.co': 'icloud.com',
+    'icloud.cm': 'icloud.com',
+    'icoud.com': 'icloud.com',
+    'iclud.com': 'icloud.com',
+    // Proton typos
+    'protonmal.com': 'protonmail.com',
+    'protonmai.com': 'protonmail.com',
+    'protonmail.co': 'protonmail.com',
+    // Common Australian typos
+    'bigpond.co': 'bigpond.com',
+    'bigpond.cm': 'bigpond.com',
+    'bigpond.com.a': 'bigpond.com.au',
+    'optusnet.com.a': 'optusnet.com.au',
+  };
+
+  // Check for email domain typos
+  const checkEmailTypo = (emailValue: string): string | null => {
+    if (!emailValue || !emailValue.includes('@')) return null;
+    const domain = emailValue.split('@')[1]?.toLowerCase();
+    if (!domain) return null;
+
+    const correction = EMAIL_TYPO_MAP[domain];
+    if (correction) {
+      const localPart = emailValue.split('@')[0];
+      return `${localPart}@${correction}`;
+    }
+    return null;
+  };
 
   // Debounced email availability check
   useEffect(() => {
@@ -191,8 +258,13 @@ export default function RegisterPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
       setEmailStatus('idle');
+      setEmailTypoSuggestion(null);
       return;
     }
+
+    // Check for typos immediately
+    const typoSuggestion = checkEmailTypo(email);
+    setEmailTypoSuggestion(typoSuggestion);
 
     // Debounce the check (500ms after user stops typing)
     setEmailStatus('checking');
@@ -654,14 +726,27 @@ export default function RegisterPage() {
                             id="name"
                             type="text"
                             placeholder="John Doe"
-                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className={`pl-12 h-12 bg-[#161b22]/50 text-white placeholder:text-[#525252] focus:ring-primary/20 rounded-xl ${
+                              isNameBanned(name)
+                                ? 'border-red-500/50 focus:border-red-500/50'
+                                : 'border-white/10 focus:border-primary/50'
+                            }`}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             autoComplete="name"
                             required
                             data-testid="input-name"
                           />
+                          {isNameBanned(name) && (
+                            <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
+                          )}
                         </div>
+                        {isNameBanned(name) && (
+                          <p className="text-xs text-red-400 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            This name is banned and cannot be used to register an account with OzVPS
+                          </p>
+                        )}
                       </div>
 
                       {/* Email */}
@@ -710,6 +795,29 @@ export default function RegisterPage() {
                             {' '}or{' '}
                             <Link href="/forgot-password" className="underline hover:text-red-300">reset your password</Link>
                           </p>
+                        )}
+                        {emailTypoSuggestion && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 mt-1"
+                          >
+                            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span>
+                              Did you mean{' '}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEmail(emailTypoSuggestion);
+                                  setEmailTypoSuggestion(null);
+                                }}
+                                className="font-semibold underline underline-offset-2 hover:text-amber-300"
+                              >
+                                {emailTypoSuggestion}
+                              </button>
+                              ?
+                            </span>
+                          </motion.div>
                         )}
                       </div>
 
@@ -834,7 +942,7 @@ export default function RegisterPage() {
                       <Button
                         type="submit"
                         className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
-                        disabled={registerMutation.isPending}
+                        disabled={registerMutation.isPending || isNameBanned(name)}
                         data-testid="button-submit"
                       >
                         {registerMutation.isPending ? (

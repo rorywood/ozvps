@@ -7,14 +7,14 @@ import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
 import { Badge } from "./badge";
 
-// Helper to check if billing is due today, tomorrow, or overdue
+// Helper to check if billing is due today, tomorrow, or overdue (uses UTC to avoid timezone/DST issues)
 function getBillingDueStatus(nextBillAt?: string): 'overdue' | 'today' | 'tomorrow' | null {
   if (!nextBillAt) return null;
   const billDate = new Date(nextBillAt);
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const billDateStart = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
-  const daysUntil = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const billDateUTC = Date.UTC(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+  const daysUntil = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
   if (daysUntil < 0) return 'overdue';
   if (daysUntil === 0) return 'today';
   if (daysUntil === 1) return 'tomorrow';
@@ -84,8 +84,11 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
   const ramPercentage = server.plan.specs.ram
     ? (server.stats.ram_usage / server.plan.specs.ram) * 100
     : 0;
-  const diskPercentage = server.plan.specs.disk
-    ? (server.stats.disk_usage / server.plan.specs.disk) * 100
+  // disk_usage is already a percentage from the API
+  const diskPercentage = server.stats.disk_usage || 0;
+  // Calculate actual disk used in GB from percentage
+  const diskUsedGb = server.plan.specs.disk
+    ? (diskPercentage / 100) * server.plan.specs.disk
     : 0;
 
   return (
@@ -174,7 +177,7 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
         />
         <ResourceBar
           label="Storage"
-          value={server.stats.disk_usage}
+          value={diskUsedGb}
           max={server.plan.specs.disk}
           unit="GB"
         />

@@ -129,9 +129,16 @@ export function registerUsersRoutes(router: Router) {
       const { auth0UserId } = req.params;
 
       // Get user from Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Get local data
@@ -218,9 +225,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -283,9 +297,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error while checking user: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -360,9 +381,16 @@ export function registerUsersRoutes(router: Router) {
       const session = req.adminSession!;
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -410,9 +438,16 @@ export function registerUsersRoutes(router: Router) {
       const session = req.adminSession!;
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Resend verification email via Auth0
@@ -451,9 +486,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Get or create wallet
@@ -515,9 +557,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Verify VirtFusion user exists
@@ -669,7 +718,12 @@ export function registerUsersRoutes(router: Router) {
       try {
         const auth0User = await auth0Client.getUserById(auth0UserId);
         if (auth0User) {
-          virtFusionUserId = auth0User.app_metadata?.virtfusion_user_id || null;
+          // Ensure virtFusionUserId is a number (Auth0 might return it as string)
+          const vfId = auth0User.app_metadata?.virtfusion_user_id;
+          virtFusionUserId = vfId ? (typeof vfId === 'number' ? vfId : parseInt(vfId, 10)) : null;
+          if (virtFusionUserId !== null && isNaN(virtFusionUserId)) {
+            virtFusionUserId = null;
+          }
           userEmail = auth0User.email || null;
           console.log(`[admin-users] Found user: email=${userEmail}, virtFusionId=${virtFusionUserId}`);
         } else {
@@ -700,6 +754,7 @@ export function registerUsersRoutes(router: Router) {
       // 3. Delete VirtFusion user (servers should already be deleted)
       if (virtFusionUserId) {
         try {
+          console.log(`[admin-users] Attempting to delete VirtFusion user ID: ${virtFusionUserId} (type: ${typeof virtFusionUserId})`);
           const userDeleted = await virtfusionClient.deleteUserById(virtFusionUserId);
           results.virtfusionUserDeleted = userDeleted;
           if (!userDeleted) {
@@ -708,8 +763,11 @@ export function registerUsersRoutes(router: Router) {
           console.log(`[admin-users] VirtFusion user deletion: success=${userDeleted}`);
         } catch (err: any) {
           console.log(`[admin-users] VirtFusion user deletion failed: ${err.message}`);
+          console.log(`[admin-users] VirtFusion user deletion error stack: ${err.stack}`);
           results.errors.push(`VirtFusion user deletion failed: ${err.message}`);
         }
+      } else {
+        console.log(`[admin-users] No VirtFusion user ID found for ${auth0UserId}, skipping VirtFusion deletion`);
       }
 
       // 4. Delete Stripe customer

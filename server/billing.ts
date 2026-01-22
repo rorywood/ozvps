@@ -1,6 +1,6 @@
 import { db } from './db';
 import { serverBilling, billingLedger, wallets, walletTransactions, userFlags } from '../shared/schema';
-import { eq, and, lte, isNull, or, not, gte, lt } from 'drizzle-orm';
+import { eq, and, lte, isNull, or, not, gte, lt, sql } from 'drizzle-orm';
 import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
@@ -512,20 +512,42 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
         }
 
         if (!unsuspendSuccess) {
-          // All retries failed - revert billing status so it can be retried later
-          // Note: chargeServer already set status to 'paid', so we need to revert it
-          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Reverting billing status for retry.`, 'billing');
+          // All retries failed - refund the charge and revert billing status
+          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
 
+          const serverName = await getServerName(billing.virtfusionServerId);
+
+          // Refund the wallet - add back the charged amount
+          await db.update(wallets)
+            .set({
+              balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(wallets.auth0UserId, billing.auth0UserId));
+
+          // Record refund transaction
+          await db.insert(walletTransactions).values({
+            auth0UserId: billing.auth0UserId,
+            type: 'refund',
+            amountCents: billing.monthlyPriceCents,
+            metadata: {
+              serverId: billing.virtfusionServerId,
+              serverName,
+              reason: 'Server unsuspend failed after 3 attempts - auto refund',
+            },
+          });
+
+          // Revert billing status AND nextBillAt to prevent double-charging
+          // Use original nextBillAt so idempotency key matches if retried
           await db.update(serverBilling)
             .set({
               status: 'suspended',
+              nextBillAt: billing.nextBillAt, // Revert to original to preserve idempotency
               updatedAt: new Date(),
             })
             .where(eq(serverBilling.id, billing.id));
 
-          // Note: The charge has already been processed, but the server stays suspended.
-          // This allows the billing job to retry unsuspend on the next run.
-          // If unsuspend keeps failing, manual intervention will be needed.
+          log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
         }
       }
     } catch (error: any) {

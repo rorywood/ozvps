@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
-import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff, Trash2, AlertTriangle } from "lucide-react";
+import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff, Trash2, AlertTriangle, XCircle } from "lucide-react";
 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [purgeConfirmText, setPurgeConfirmText] = useState("");
+  const [purgeResults, setPurgeResults] = useState<any>(null);
+  const [showPurgeResults, setShowPurgeResults] = useState(false);
   const queryClient = useQueryClient();
 
   // List all users from Auth0
@@ -77,17 +79,23 @@ export default function Users() {
   const purgeMutation = useMutation({
     mutationFn: (auth0UserId: string) => usersApi.purgeUser(auth0UserId),
     onSuccess: (data) => {
-      if (data.success) {
-        toast.success("User completely purged from all systems");
-      } else {
-        toast.warning(`Purge completed with errors: ${data.results.errors.join(", ")}`);
-      }
       setShowPurgeConfirm(false);
       setPurgeConfirmText("");
+      setPurgeResults(data);
+      setShowPurgeResults(true);
+      if (data.success) {
+        toast.success("User purged successfully");
+      } else {
+        toast.warning("Purge completed with some errors");
+      }
       setSelectedUser(null);
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
     onError: (err: any) => {
+      setShowPurgeConfirm(false);
+      setPurgeConfirmText("");
+      setPurgeResults({ success: false, error: err.message || "Failed to purge user" });
+      setShowPurgeResults(true);
       toast.error(err.message || "Failed to purge user");
     },
   });
@@ -542,6 +550,98 @@ export default function Users() {
                     Purge User Forever
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purge Results Modal */}
+      {showPurgeResults && purgeResults && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-2 rounded-lg ${purgeResults.success ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                {purgeResults.success ? (
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                ) : (
+                  <XCircle className="h-6 w-6 text-red-500" />
+                )}
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                {purgeResults.success ? 'Purge Successful' : 'Purge Completed with Errors'}
+              </h3>
+            </div>
+
+            {purgeResults.error ? (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-red-600 dark:text-red-400 text-sm">{purgeResults.error}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    {purgeResults.results?.auth0Deleted ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className="text-gray-700 dark:text-gray-300">Auth0 Account</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {purgeResults.results?.virtfusionUserDeleted ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className="text-gray-700 dark:text-gray-300">VirtFusion User</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {purgeResults.results?.stripeCustomerDeleted ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className="text-gray-700 dark:text-gray-300">Stripe Customer</span>
+                  </div>
+                </div>
+
+                {purgeResults.results?.localRecordsDeleted && (
+                  <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Local Records Deleted:</p>
+                    <div className="grid grid-cols-2 gap-1 text-xs text-gray-600 dark:text-gray-300">
+                      {Object.entries(purgeResults.results.localRecordsDeleted).map(([key, value]) => (
+                        <div key={key} className="flex justify-between">
+                          <span>{key}:</span>
+                          <span className="font-mono">{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {purgeResults.results?.errors?.length > 0 && (
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <p className="text-xs font-medium text-red-500 mb-2">Errors:</p>
+                    <ul className="text-xs text-red-600 dark:text-red-400 list-disc list-inside space-y-1">
+                      {purgeResults.results.errors.map((err: string, i: number) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => {
+                  setShowPurgeResults(false);
+                  setPurgeResults(null);
+                }}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

@@ -180,8 +180,6 @@ export default function ServerDetail() {
   
   // Password reset state
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState<string | null>(null);
-  const [passwordCopied, setPasswordCopied] = useState(false);
 
   // Track if credentials were emailed (persists after reinstallTask.reset())
   const [credentialsWereEmailed, setCredentialsWereEmailed] = useState(() => {
@@ -262,15 +260,13 @@ export default function ServerDetail() {
     retry: 2, // Retry failed requests twice before giving up
     retryDelay: 1000, // 1 second between retries
     refetchInterval: (query) => {
-      // During provisioning/setup, poll aggressively (1 second)
-      // FIXED: Only check data.needsSetup (don't use reinstallTask which can be stale in closure)
-      // If server needs setup or is provisioning, poll faster
+      // During provisioning/setup, poll faster
       const data = query.state.data;
       if (data?.needsSetup || data?.status === 'provisioning') {
-        return 1000; // REDUCED from 500ms to 1s to be less aggressive
+        return 3000; // 3 seconds during provisioning
       }
-      // Normal operation: poll every 2 seconds for real-time updates
-      return 2000; // REDUCED from 1s to 2s for better performance
+      // Normal operation: 10 second refresh to reduce API load
+      return 10000;
     },
   });
 
@@ -320,7 +316,7 @@ export default function ServerDetail() {
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 1000, // Poll every 1 second for deletion progress
+    refetchInterval: 5000, // Poll every 5 seconds for deletion progress
   });
 
   // Power action pending state - declared here so liveStats can use it
@@ -332,7 +328,7 @@ export default function ServerDetail() {
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && (server?.status === 'running' || !!powerActionPending),
-    refetchInterval: 1000, // Poll every 1 second for real-time stats
+    refetchInterval: 5000, // Poll every 5 seconds for stats
   });
 
   // Console lock hook - must be after server query
@@ -625,16 +621,15 @@ export default function ServerDetail() {
     }
   });
   
-  // Password reset mutation
+  // Password reset mutation - password is sent via email for security
   const passwordResetMutation = useMutation({
     mutationFn: (id: string) => api.resetServerPassword(id),
     onSuccess: (response) => {
-      if (response.password) {
-        setNewPassword(response.password);
-        setPasswordCopied(false);
+      if (response.emailSent) {
+        setPasswordResetDialogOpen(false);
         toast({
           title: "Password Reset Successful",
-          description: "Your new server password has been generated. Please save it now.",
+          description: "Your new password has been sent to your email address.",
         });
       }
     },
@@ -1567,10 +1562,10 @@ export default function ServerDetail() {
                 ) : server.billing?.nextBillAt && (() => {
                   const nextBillDate = new Date(server.billing.nextBillAt);
                   const now = new Date();
-                  // Normalize to start of day in local timezone for accurate day count
-                  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                  const billDateStart = new Date(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
-                  const daysUntilBill = Math.round((billDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                  // Use UTC for consistent day calculation (avoids DST/timezone issues)
+                  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+                  const billDateUTC = Date.UTC(nextBillDate.getFullYear(), nextBillDate.getMonth(), nextBillDate.getDate());
+                  const daysUntilBill = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
                   const isOverdue = daysUntilBill < 0;
                   const isDueToday = daysUntilBill === 0;
                   const isDueTomorrow = daysUntilBill === 1;
@@ -1948,7 +1943,15 @@ export default function ServerDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
-                    <span className="text-lg font-bold text-foreground" data-testid="text-disk-percent">
+                    <span
+                      className={cn(
+                        "text-lg font-bold",
+                        liveStats && liveStats.disk_usage >= 85 ? "text-red-500" :
+                        liveStats && liveStats.disk_usage >= 60 ? "text-amber-500" :
+                        "text-foreground"
+                      )}
+                      data-testid="text-disk-percent"
+                    >
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
                     </span>
                   ) : consoleLock.isLocked ? (
@@ -1964,10 +1967,14 @@ export default function ServerDetail() {
                   )}
                 </div>
                 <div className="w-full bg-muted rounded-full h-1.5">
-                  <div 
+                  <div
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-500",
-                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? "bg-blue-500" : "bg-muted/30"
+                      server.status === 'running' && !powerActionPending && !consoleLock.isLocked
+                        ? liveStats && liveStats.disk_usage >= 85 ? "bg-red-500" :
+                          liveStats && liveStats.disk_usage >= 60 ? "bg-amber-500" :
+                          "bg-blue-500"
+                        : "bg-muted/30"
                     )}
                     style={{ width: server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? `${liveStats?.disk_usage || 0}%` : '0%' }}
                     data-testid="progress-disk"
@@ -1975,8 +1982,8 @@ export default function ServerDetail() {
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
                   <span data-testid="text-disk-used">
-                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb 
-                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB` 
+                    {server.status === 'running' && !powerActionPending && !consoleLock.isLocked && liveStats?.disk_used_gb
+                      ? `${liveStats.disk_used_gb} GB / ${liveStats.disk_total_gb} GB`
                       : '—'}
                   </span>
                 </div>
@@ -2054,12 +2061,12 @@ export default function ServerDetail() {
                       </div>
                     )}
                     {usagePercent >= 80 && usagePercent < 100 && (
-                      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0" />
                           <div className="flex-1">
-                            <p className="text-xs text-foreground font-semibold">Approaching Bandwidth Limit</p>
-                            <p className="text-[10px] text-muted-foreground">{usagePercent.toFixed(1)}% of allowance used</p>
+                            <p className="text-base text-foreground font-semibold">Approaching Bandwidth Limit</p>
+                            <p className="text-sm text-yellow-500 font-semibold">{usagePercent.toFixed(1)}% of allowance used</p>
                           </div>
                         </div>
                       </div>
@@ -2139,12 +2146,7 @@ export default function ServerDetail() {
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
                 <div className="space-y-4">
                   {networkInfo.interfaces.map((iface, index) => (
-                    <div key={index} className="p-4 bg-muted/50 rounded-lg border border-border">
-                      <div className="flex items-center gap-3 mb-4">
-                        <Network className="h-5 w-5 text-blue-400" />
-                        <span className="font-mono font-bold text-foreground">{iface.name}</span>
-                      </div>
-
+                    <div key={index} className="space-y-4">
                       {iface.ipv4.length > 0 && (
                         <div className="space-y-2">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
@@ -2765,139 +2767,75 @@ export default function ServerDetail() {
       {/* Provisioning dialog removed - now showing full-page view */}
 
       {/* Password Reset Dialog */}
-      <Dialog 
-        open={passwordResetDialogOpen} 
-        onOpenChange={(open) => {
-          if (!open) {
-            // Clear password when dialog closes
-            setNewPassword(null);
-            setPasswordCopied(false);
-          }
-          setPasswordResetDialogOpen(open);
-        }}
+      <Dialog
+        open={passwordResetDialogOpen}
+        onOpenChange={setPasswordResetDialogOpen}
       >
         <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <Key className="h-5 w-5 text-blue-400" />
-              {newPassword ? "New Password Generated" : "Reset Server Password"}
+              Reset Server Password
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {newPassword 
-                ? "Your new password has been generated. Copy it now - it will not be shown again."
-                : "This will generate a new root/administrator password for your server."
-              }
+              This will generate a new root/administrator password for your server.
             </DialogDescription>
           </DialogHeader>
-          
-          {newPassword ? (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-green-400 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-green-400">Password Reset Successful</div>
-                    <div className="text-sm text-green-400/80 mt-1">
-                      Your server password has been changed. Use the password below to log in.
-                    </div>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
+                <div>
+                  <div className="font-medium text-amber-400">Confirm Password Reset</div>
+                  <div className="text-sm text-amber-400/80">
+                    This will immediately change the root/administrator password on your server.
+                    Any existing SSH sessions may be affected.
                   </div>
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">New Password</label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 p-3 bg-muted rounded-md border border-border font-mono text-sm text-foreground break-all">
-                    {newPassword}
+            </div>
+
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Mail className="h-5 w-5 text-blue-400 mt-0.5" />
+                <div>
+                  <div className="font-medium text-blue-400">Password Sent Via Email</div>
+                  <div className="text-sm text-blue-400/80">
+                    For security, your new password will be sent to your email address and will not be displayed here.
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="shrink-0 border-border"
-                    onClick={() => {
-                      navigator.clipboard.writeText(newPassword);
-                      setPasswordCopied(true);
-                      toast({
-                        title: "Password Copied",
-                        description: "The password has been copied to your clipboard.",
-                      });
-                    }}
-                    data-testid="button-copy-password"
-                  >
-                    {passwordCopied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               </div>
-              
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-xs text-amber-400/80">
-                    This password will not be shown again. Make sure to save it in a secure location before closing this dialog.
-                  </p>
-                </div>
-              </div>
-              
-              <Button 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => {
-                  setPasswordResetDialogOpen(false);
-                  setNewPassword(null);
-                  setPasswordCopied(false);
-                }}
-                data-testid="button-done-password"
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-border"
+                onClick={() => setPasswordResetDialogOpen(false)}
+                data-testid="button-cancel-password-reset"
               >
-                Done
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => {
+                  if (serverId) {
+                    passwordResetMutation.mutate(serverId);
+                  }
+                }}
+                disabled={passwordResetMutation.isPending}
+                data-testid="button-confirm-password-reset"
+              >
+                {passwordResetMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Key className="h-4 w-4 mr-2" />
+                )}
+                Reset Password
               </Button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-amber-400">Confirm Password Reset</div>
-                    <div className="text-sm text-amber-400/80">
-                      This will immediately change the root/administrator password on your server. 
-                      Any existing SSH sessions may be affected.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1 border-border"
-                  onClick={() => setPasswordResetDialogOpen(false)}
-                  data-testid="button-cancel-password-reset"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => {
-                    if (serverId) {
-                      passwordResetMutation.mutate(serverId);
-                    }
-                  }}
-                  disabled={passwordResetMutation.isPending}
-                  data-testid="button-confirm-password-reset"
-                >
-                  {passwordResetMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Key className="h-4 w-4 mr-2" />
-                  )}
-                  Reset Password
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -14,17 +14,25 @@ import {
 } from "../middleware/admin-auth";
 import { generateCsrfToken, clearCsrfToken } from "../middleware/csrf";
 import { getClientIp } from "../middleware/ip-whitelist";
+import { log } from "../../server/logger";
 
 // HMAC secret for signing pending login tokens
-// Use SESSION_SECRET from env, or a fallback for development
-const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET || process.env.AUTH0_CLIENT_SECRET || "admin-panel-pending-token-secret";
+// SECURITY: Must use SESSION_SECRET in production - no fallbacks allowed
+const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET;
+if (!PENDING_TOKEN_SECRET || PENDING_TOKEN_SECRET.length < 32) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CRITICAL: SESSION_SECRET must be set and at least 32 characters in production');
+  }
+  console.warn('WARNING: SESSION_SECRET not set or too short - using insecure fallback for development only');
+}
+const EFFECTIVE_TOKEN_SECRET = PENDING_TOKEN_SECRET || 'dev-only-insecure-token-secret-do-not-use-in-prod';
 
 /**
  * Create a signed pending login token with HMAC
  */
 function createPendingLoginToken(data: { auth0UserId: string; email: string; name: string | null; exp: number }): string {
   const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
-  const signature = createHmac("sha256", PENDING_TOKEN_SECRET)
+  const signature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
     .update(payload)
     .digest("base64url");
   return `${payload}.${signature}`;
@@ -43,7 +51,7 @@ function verifyPendingLoginToken(token: string): { auth0UserId: string; email: s
     const [payload, signature] = parts;
 
     // Verify signature
-    const expectedSignature = createHmac("sha256", PENDING_TOKEN_SECRET)
+    const expectedSignature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
       .update(payload)
       .digest("base64url");
 
@@ -97,7 +105,7 @@ async function verifyAuth0Password(email: string, password: string): Promise<{ s
 
     if (!response.ok) {
       const error = await response.json();
-      console.log(`[admin-auth] Auth0 login failed for ${email}:`, error.error_description || error.error);
+      log(`Auth0 login failed: ${error.error_description || error.error}`, 'admin-auth', { level: 'warn' });
       return { success: false, error: error.error_description || "Invalid credentials" };
     }
 
@@ -112,7 +120,7 @@ async function verifyAuth0Password(email: string, password: string): Promise<{ s
 
     return { success: true, auth0UserId: payload.sub, name };
   } catch (error: any) {
-    console.log(`[admin-auth] Auth0 error:`, error.message);
+    log(`Auth0 error: ${error.message}`, 'admin-auth', { level: 'error' });
     return { success: false, error: "Authentication service error" };
   }
 }
@@ -172,7 +180,7 @@ export function registerAuthRoutes(app: Express) {
     // Check if user is an admin via Auth0 app_metadata
     const isAdmin = await isUserAdmin(auth0UserId);
     if (!isAdmin) {
-      console.log(`[admin-auth] Non-admin login attempt: ${email} (${auth0UserId})`);
+      log('Non-admin login attempt blocked', 'admin-auth', { level: 'warn' });
       return res.status(403).json({ error: "Access denied. Admin privileges required." });
     }
 
@@ -223,7 +231,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(401).json({ error: "Invalid or expired login token. Please start over." });
       }
 
-      console.log(`[admin-auth] Verifying 2FA for ${tokenData.email} (${tokenData.auth0UserId})`);
+      log('Verifying 2FA for admin login', 'admin-auth');
 
       // Get the user's 2FA secret
       const [tfa] = await db
@@ -232,19 +240,16 @@ export function registerAuthRoutes(app: Express) {
         .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
 
       if (!tfa) {
-        console.log(`[admin-auth] No 2FA record found for ${tokenData.auth0UserId}`);
+        log('No 2FA record found for admin user', 'admin-auth', { level: 'warn' });
         return res.status(403).json({ error: "2FA not enabled for this account" });
       }
-
-      console.log(`[admin-auth] Found 2FA record, verifying code...`);
 
       // Decrypt the secret if encrypted
       let plaintextSecret: string;
       try {
         plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-        console.log(`[admin-auth] Secret decrypted, length=${plaintextSecret.length}`);
       } catch (decryptError: any) {
-        console.error(`[admin-auth] Failed to decrypt 2FA secret:`, decryptError.message);
+        log(`Failed to decrypt 2FA secret: ${decryptError.message}`, 'admin-auth', { level: 'error' });
         return res.status(500).json({ error: "Authentication error" });
       }
 
@@ -269,22 +274,21 @@ export function registerAuthRoutes(app: Express) {
                   .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
                   .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
                 backupCodeUsed = true;
-                console.log(`[admin-auth] Backup code used for ${tokenData.email}`);
+                log('Backup code used for admin login', 'admin-auth');
                 break;
               }
             }
 
             if (!backupCodeUsed) {
-              console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
+              log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
               return res.status(401).json({ error: "Invalid 2FA code" });
             }
           } catch (backupError: any) {
-            console.log(`[admin-auth] Backup code check error: ${backupError.message}`);
-            console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
+            log(`Backup code check error: ${backupError.message}`, 'admin-auth', { level: 'warn' });
             return res.status(401).json({ error: "Invalid 2FA code" });
           }
         } else {
-          console.log(`[admin-auth] Invalid 2FA code for ${tokenData.email}`);
+          log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
           return res.status(401).json({ error: "Invalid 2FA code" });
         }
       } else {
@@ -295,7 +299,7 @@ export function registerAuthRoutes(app: Express) {
           .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
       }
 
-      console.log(`[admin-auth] 2FA verified for ${tokenData.email}`);
+      log('2FA verified for admin login', 'admin-auth');
 
       // 2FA verified - create admin session
       const clientIp = getClientIp(req);
@@ -319,7 +323,7 @@ export function registerAuthRoutes(app: Express) {
         maxAge: ADMIN_SESSION_EXPIRY,
       });
 
-      console.log(`[admin-auth] Admin login successful: ${tokenData.email} from ${clientIp}`);
+      log(`Admin login successful from ${clientIp}`, 'admin-auth');
 
       return res.json({
         success: true,
@@ -331,7 +335,7 @@ export function registerAuthRoutes(app: Express) {
         bootstrapMode: (req as any).bootstrapMode || false,
       });
     } catch (error: any) {
-      console.error(`[admin-auth] 2FA verification error:`, error);
+      log(`2FA verification error: ${error.message}`, 'admin-auth', { level: 'error' });
       return res.status(500).json({ error: "Internal server error" });
     }
   });
