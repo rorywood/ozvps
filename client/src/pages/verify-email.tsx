@@ -39,10 +39,10 @@ export default function VerifyEmailPage() {
             setVerifyState('success');
             // Refresh auth state after verification
             queryClient.invalidateQueries({ queryKey: ['auth'] });
-            // Auto-redirect to dashboard after 2 seconds
+            // Auto-redirect to dashboard after 5 seconds (give user time to read)
             setTimeout(() => {
               navigate('/');
-            }, 2000);
+            }, 5000);
           } else {
             setVerifyState('error');
             setVerifyError(data.error || 'Failed to verify email');
@@ -73,7 +73,12 @@ export default function VerifyEmailPage() {
   });
 
   // Redirect to dashboard if verified (check both meData and refreshed auth)
+  // BUT only if we're not already showing the token verification success page
   useEffect(() => {
+    // Don't redirect if we just verified via token - let that handler show the success message
+    if (verifyState === 'success' || verifyState === 'verifying') {
+      return;
+    }
     if (meData?.user?.emailVerified || meData?.emailVerified) {
       // Invalidate all auth queries to refresh the app state
       queryClient.invalidateQueries({ queryKey: ['auth'] });
@@ -82,7 +87,7 @@ export default function VerifyEmailPage() {
         navigate('/');
       }, 500);
     }
-  }, [meData, navigate, queryClient]);
+  }, [meData, navigate, queryClient, verifyState]);
 
   // Redirect to login if not authenticated (but NOT if we have a token - let verification complete first)
   useEffect(() => {
