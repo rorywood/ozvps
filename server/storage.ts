@@ -2238,7 +2238,8 @@ export const dbStorage = {
     return result.length > 0;
   },
 
-  // Increment promo code usage count (atomic)
+  // Increment promo code usage count (atomic with limit check)
+  // Prevents race conditions by only incrementing if limit not reached
   async incrementPromoCodeUsage(id: number): Promise<PromoCode | undefined> {
     const [updated] = await db
       .update(promoCodes)
@@ -2246,8 +2247,20 @@ export const dbStorage = {
         currentUses: sql`${promoCodes.currentUses} + 1`,
         updatedAt: new Date(),
       })
-      .where(eq(promoCodes.id, id))
+      .where(
+        and(
+          eq(promoCodes.id, id),
+          // Only increment if no limit OR current uses below limit
+          sql`(${promoCodes.maxUsesTotal} IS NULL OR ${promoCodes.currentUses} < ${promoCodes.maxUsesTotal})`
+        )
+      )
       .returning();
+
+    // If no rows updated, the limit was reached (race condition caught)
+    if (!updated) {
+      throw new Error('Promo code usage limit reached');
+    }
+
     return updated;
   },
 

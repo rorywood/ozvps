@@ -6307,6 +6307,35 @@ export async function registerRoutes(
 
       const order = deployResult.order;
 
+      // Record promo code usage IMMEDIATELY after wallet debit succeeds
+      // This must happen before provisioning to prevent unlimited reuse on failures
+      if (promoValidation?.valid && promoValidation.promoCode) {
+        try {
+          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
+          await dbStorage.recordPromoCodeUsage({
+            promoCodeId: promoValidation.promoCode.id,
+            auth0UserId,
+            deployOrderId: order.id,
+            discountAppliedCents: promoValidation.discountCents!,
+            originalPriceCents: plan.priceMonthly,
+            finalPriceCents: finalPriceCents,
+          });
+          log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
+        } catch (promoError: any) {
+          // If promo recording fails, refund and abort - can't let user get discount without tracking
+          log(`CRITICAL: Promo code usage recording failed, refunding and aborting: ${promoError.message}`, 'api');
+          await dbStorage.refundToWallet(auth0UserId, finalPriceCents, {
+            reason: 'promo_recording_failed',
+            orderId: order.id,
+          });
+          await dbStorage.updateDeployOrder(order.id, {
+            status: 'failed',
+            errorMessage: 'Failed to record promo code usage',
+          });
+          return res.status(500).json({ error: 'Failed to apply promo code. Your wallet has been refunded.' });
+        }
+      }
+
       // Update order to provisioning status
       await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
 
@@ -6351,7 +6380,8 @@ export async function registerRoutes(
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
 
         // Refund the wallet - server was never created
-        await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
+        // IMPORTANT: Refund finalPriceCents (what they actually paid), not plan.priceMonthly
+        await dbStorage.refundToWallet(auth0UserId, finalPriceCents, {
           reason: 'provisioning_failed',
           orderId: order.id,
         });
@@ -6405,23 +6435,7 @@ export async function registerRoutes(
         log(`Failed to create audit log: ${auditError.message}`, 'api');
       }
 
-      // Record promo code usage if one was applied (non-critical, log if it fails)
-      if (promoValidation?.valid && promoValidation.promoCode) {
-        try {
-          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
-          await dbStorage.recordPromoCodeUsage({
-            promoCodeId: promoValidation.promoCode.id,
-            auth0UserId,
-            deployOrderId: order.id,
-            discountAppliedCents: promoValidation.discountCents!,
-            originalPriceCents: plan.priceMonthly,
-            finalPriceCents: finalPriceCents,
-          });
-          log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
-        } catch (promoError: any) {
-          log(`Warning: Could not record promo code usage: ${promoError.message}`, 'api');
-        }
-      }
+      // Promo code usage is now recorded before provisioning (see above)
 
       // Always return success if server was provisioned
       res.json({
