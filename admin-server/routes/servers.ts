@@ -250,6 +250,80 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Install/Reinstall OS on server
+  router.post("/servers/:serverId/install-os", async (req: Request, res: Response) => {
+    try {
+      const serverId = parseInt(req.params.serverId, 10);
+      const { osId, hostname, sendCredentials = true } = req.body;
+      const session = req.adminSession!;
+
+      if (isNaN(serverId)) {
+        return res.status(400).json({ error: "Invalid server ID" });
+      }
+
+      if (!osId || typeof osId !== "number") {
+        return res.status(400).json({ error: "osId is required" });
+      }
+
+      console.log(`[admin-servers] Installing OS ${osId} on server ${serverId} by ${session.email}`);
+
+      // Get server details first to find the owner
+      const server = await virtfusionClient.getServer(String(serverId));
+      if (!server) {
+        return res.status(404).json({ error: "Server not found" });
+      }
+
+      // Reinstall the OS
+      const result = await virtfusionClient.reinstallServer(String(serverId), osId, hostname);
+
+      console.log(`[admin-servers] OS installation initiated: ${JSON.stringify(result)}`);
+
+      // Try to get owner email for credentials
+      if (sendCredentials && result.password) {
+        // Look up the billing record to get the user
+        const [billing] = await db
+          .select()
+          .from(serverBilling)
+          .where(eq(serverBilling.virtfusionServerId, String(serverId)));
+
+        if (billing) {
+          const [userMapping] = await db
+            .select()
+            .from(userMappings)
+            .where(eq(userMappings.auth0UserId, billing.auth0UserId));
+
+          if (userMapping) {
+            try {
+              await sendServerCredentialsEmail(
+                userMapping.email,
+                hostname || server.name || `Server ${serverId}`,
+                server.primaryIpAddress || result.primaryIp || "Same IP",
+                "root",
+                result.password,
+                result.osName
+              );
+              console.log(`[admin-servers] Credentials email sent to ${userMapping.email}`);
+            } catch (emailErr: any) {
+              console.log(`[admin-servers] Failed to send credentials email: ${emailErr.message}`);
+            }
+          }
+        }
+      }
+
+      await auditSuccess(req, "server.install-os", "server", String(serverId), { osId, hostname });
+
+      res.json({
+        success: true,
+        password: result.password,
+        osName: result.osName,
+      });
+    } catch (error: any) {
+      console.log(`[admin-servers] Install OS error: ${error.message}`);
+      await auditFailure(req, "server.install-os", "server", error.message, req.params.serverId);
+      res.status(500).json({ error: error.message || "Failed to install OS" });
+    }
+  });
+
   // Admin suspend (with custom message)
   router.post("/servers/:serverId/admin-suspend", async (req: Request, res: Response) => {
     try {

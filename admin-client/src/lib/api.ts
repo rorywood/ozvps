@@ -171,6 +171,12 @@ export const serversApi = {
 
   unsuspend: (serverId: number) => api.post(`/servers/${serverId}/unsuspend`),
 
+  installOs: (serverId: number, osId: number, hostname?: string, sendCredentials?: boolean) =>
+    api.post<{ success: boolean; password?: string; osName?: string }>(
+      `/servers/${serverId}/install-os`,
+      { osId, hostname, sendCredentials }
+    ),
+
   adminSuspend: (serverId: number, reason: string) =>
     api.post(`/servers/${serverId}/admin-suspend`, { reason }),
 
