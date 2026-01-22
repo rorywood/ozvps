@@ -30,12 +30,51 @@
 - `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page
 - `admin-server/routes/servers.ts` - Admin server management (provision, delete, suspend, transfer)
 - `admin-client/src/pages/ProvisionServer.tsx` - Admin provision server UI
+- `admin-server/middleware/ip-whitelist.ts` - Admin IP whitelist with TRUST_PROXY check
+- `admin-server/middleware/csrf.ts` - CSRF protection with token rotation
+- `client/src/hooks/use-system-health.ts` - System health check hook (isSystemDown flag)
 - `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-22 - Session 2)
+## Recent Session Work (2026-01-23)
 
 ### Completed This Session
+1. **System Health Check - Block Login When API Down**:
+   - Fixed health check to detect when VirtFusion API is disabled (was only checking database)
+   - Added `isSystemDown` flag that covers ALL failure scenarios (DB, VirtFusion, network errors)
+   - Login form now disabled while health check loading AND when system down
+   - Pre-flight health check in `api.login()` requires `status === 'ok'` explicitly
+   - Fixed VirtFusion health endpoint URL (was `/connect`, should be `/api/v1/connect`)
+   - Fixed VirtFusion connection check to treat ANY non-2xx as down (was only 500+)
+
+2. **Security Audit & Fixes** (comprehensive audit of admin + frontend):
+   - **CRITICAL: Path traversal vulnerability** in profile picture upload/delete
+     - Added validation to prevent `../` attacks in filenames
+     - Verifies resolved path stays within uploads directory
+   - **HIGH: X-Forwarded-For spoofing** in admin IP whitelist
+     - Now only trusts proxy headers when `TRUST_PROXY=true` env var set
+     - Validates IP format before using
+   - **MEDIUM: Error message disclosure** - 6 endpoints fixed
+     - VirtFusion errors no longer leak internal API details
+     - billing.ts, servers.ts, users.ts, health.ts now return generic messages
+   - **MEDIUM: Input validation** for `reason` parameters
+     - Added `sanitizeReason()` function (max 500 chars, trimmed)
+     - Applied to: block, suspend, wallet adjust, server delete, admin-suspend
+   - **MEDIUM: CSRF token rotation** - Added tracking infrastructure
+     - Tokens now track creation time in Redis/memory
+     - Support for 2-hour rotation checks
+
+### Security Audit Summary (for reference)
+**Secure practices found:**
+- CSRF double-submit pattern with timing-safe comparison
+- Stripe webhook signature verification
+- Session idle timeout (15 min)
+- 2FA mandatory for admin
+- Password/token redaction in logs
+- CSP/HSTS headers configured
+- No `dangerouslySetInnerHTML` in sensitive areas
+
+### Previous Session (2026-01-22 - Session 2)
 1. **Admin provision server fixes**:
    - Fixed VirtFusion user auto-creation using correct email (was using auth0UserId like `auth0|123456`)
    - Fixed hypervisor group ID (was 1, should be 2 for Brisbane)
@@ -166,6 +205,8 @@ git checkout claude/dev-l5488
 - [x] Promotional codes feature - DONE
 - [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
 - [x] Username ban "Darius" - DONE
+- [x] Security audit - DONE (path traversal, X-Forwarded-For, error disclosure, input validation)
+- [x] Block login when API down - DONE (health check now covers VirtFusion + database)
 
 ## Notes for Claude
 - User prefers direct, concise responses
