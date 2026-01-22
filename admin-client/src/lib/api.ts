@@ -186,6 +186,28 @@ export const serversApi = {
   listCancellations: () => api.get<{ cancellations: any[] }>("/cancellations"),
 
   revokeCancellation: (id: number) => api.post(`/cancellations/${id}/revoke`),
+
+  provision: (data: {
+    auth0UserId: string;
+    planId: number;
+    hostname: string;
+    osId?: number;
+    locationCode?: string;
+    freeServer?: boolean;
+    sendCredentials?: boolean;
+    notes?: string;
+  }) => api.post<{
+    success: boolean;
+    server: {
+      id: number;
+      name: string;
+      uuid?: string;
+      primaryIp?: string;
+      password?: string;
+      osName?: string;
+    };
+    billing: any;
+  }>("/servers/provision", data),
 };
 
 // Billing API
@@ -309,6 +331,11 @@ export const settingsApi = {
   getRegistration: () => api.get<{ enabled: boolean }>("/settings/registration"),
   updateRegistration: (enabled: boolean) =>
     api.put<{ enabled: boolean }>("/settings/registration", { enabled }),
+};
+
+// Plans API (local database)
+export const plansApi = {
+  list: () => api.get<{ plans: any[] }>("/plans"),
 };
 
 // VirtFusion API
