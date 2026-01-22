@@ -326,7 +326,8 @@ export class VirtFusionClient {
 
   async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`);
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${encodedExtRelationId}/byExtRelation`);
       return data.data;
     } catch (error) {
       log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
@@ -453,7 +454,8 @@ export class VirtFusionClient {
 
   async updateUser(extRelationId: string, updates: VirtFusionUserUpdateRequest): Promise<VirtFusionUser | null> {
     try {
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${extRelationId}/byExtRelation`, {
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      const data = await this.request<{ data: VirtFusionUser }>(`/users/${encodedExtRelationId}/byExtRelation`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       });
@@ -466,7 +468,8 @@ export class VirtFusionClient {
 
   async resetUserPassword(extRelationId: string, newPassword: string): Promise<boolean> {
     try {
-      await this.request(`/users/${extRelationId}/byExtRelation/resetPassword`, {
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
+      await this.request(`/users/${encodedExtRelationId}/byExtRelation/resetPassword`, {
         method: 'POST',
         body: JSON.stringify({ password: newPassword }),
       });
@@ -1633,8 +1636,10 @@ export class VirtFusionClient {
   async deleteUserByExtRelationId(extRelationId: string): Promise<boolean> {
     try {
       log(`Deleting VirtFusion user by extRelationId ${extRelationId}`, 'virtfusion');
+      // URL-encode the extRelationId since it may contain special characters like 'auth0|123'
+      const encodedExtRelationId = encodeURIComponent(extRelationId);
       // According to VirtFusion API: DELETE /users/{extRelationId}/byExtRelation?relStr=true
-      await this.request(`/users/${extRelationId}/byExtRelation?relStr=true`, {
+      await this.request(`/users/${encodedExtRelationId}/byExtRelation?relStr=true`, {
         method: 'DELETE',
       });
       log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId}`, 'virtfusion');
