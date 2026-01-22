@@ -1,11 +1,27 @@
 import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
-import { serverBilling, serverCancellations, userMappings } from "../../shared/schema";
+import { serverBilling, serverCancellations, userMappings, plans } from "../../shared/schema";
 import { eq, desc, and, like, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
+import { sendServerCredentialsEmail } from "../../server/email";
 
 export function registerServersRoutes(router: Router) {
+  // List all plans (for provisioning)
+  router.get("/plans", async (req: Request, res: Response) => {
+    try {
+      const allPlans = await db
+        .select()
+        .from(plans)
+        .orderBy(plans.priceMonthly);
+
+      res.json({ plans: allPlans });
+    } catch (error: any) {
+      console.log(`[admin-servers] List plans error: ${error.message}`);
+      res.status(500).json({ error: "Failed to list plans" });
+    }
+  });
+
   // List all servers (from VirtFusion)
   router.get("/servers", async (req: Request, res: Response) => {
     try {
@@ -460,6 +476,161 @@ export function registerServersRoutes(router: Router) {
     } catch (error: any) {
       console.log(`[admin-servers] Revoke cancellation error: ${error.message}`);
       res.status(500).json({ error: "Failed to revoke cancellation" });
+    }
+  });
+
+  // Admin provision server for a user
+  router.post("/servers/provision", async (req: Request, res: Response) => {
+    try {
+      const session = req.adminSession!;
+      const {
+        auth0UserId,
+        planId,
+        hostname,
+        osId,
+        locationCode = "BNE",
+        freeServer = false,
+        sendCredentials = true,
+        notes
+      } = req.body;
+
+      // Validate required fields
+      if (!auth0UserId || typeof auth0UserId !== "string") {
+        return res.status(400).json({ error: "auth0UserId is required" });
+      }
+      if (!planId || typeof planId !== "number") {
+        return res.status(400).json({ error: "planId is required" });
+      }
+      if (!hostname || typeof hostname !== "string" || hostname.length < 3) {
+        return res.status(400).json({ error: "hostname must be at least 3 characters" });
+      }
+
+      // Validate hostname format
+      const hostnameRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$/;
+      if (!hostnameRegex.test(hostname)) {
+        return res.status(400).json({ error: "Invalid hostname format" });
+      }
+
+      console.log(`[admin-servers] Provisioning server for ${auth0UserId}, plan ${planId}, hostname: ${hostname}`);
+
+      // Look up user mapping
+      const [userMapping] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (!userMapping) {
+        return res.status(400).json({ error: "User not found in VirtFusion mappings. User must log in first to be synced." });
+      }
+
+      // Look up plan
+      const [plan] = await db
+        .select()
+        .from(plans)
+        .where(eq(plans.id, planId));
+
+      if (!plan) {
+        return res.status(400).json({ error: "Plan not found" });
+      }
+
+      if (!plan.virtfusionPackageId) {
+        return res.status(400).json({ error: "Plan is not linked to a VirtFusion package" });
+      }
+
+      // Get hypervisor group for location
+      const LOCATION_CONFIG: Record<string, number> = {
+        BNE: parseInt(process.env.VIRTFUSION_HYPERVISOR_GROUP_BNE || "1"),
+      };
+      const hypervisorGroupId = LOCATION_CONFIG[locationCode] || LOCATION_CONFIG.BNE;
+
+      // extRelationId is the normalized email
+      const extRelationId = userMapping.email.toLowerCase().trim();
+
+      // Provision server via VirtFusion
+      let serverResult;
+      try {
+        serverResult = await virtfusionClient.provisionServer({
+          userId: userMapping.virtFusionUserId,
+          packageId: plan.virtfusionPackageId,
+          hostname,
+          extRelationId,
+          osId: osId || undefined,
+          hypervisorGroupId,
+        });
+      } catch (vfError: any) {
+        console.log(`[admin-servers] VirtFusion provisioning failed: ${vfError.message}`);
+        await auditFailure(req, "server.provision", "server", vfError.message, auth0UserId);
+        return res.status(500).json({ error: `VirtFusion error: ${vfError.message}` });
+      }
+
+      console.log(`[admin-servers] Server provisioned: ID=${serverResult.serverId}, IP=${serverResult.primaryIp}`);
+
+      // Create billing record
+      const now = new Date();
+      const nextBillAt = new Date(now);
+      nextBillAt.setMonth(nextBillAt.getMonth() + 1);
+
+      const [billingRecord] = await db
+        .insert(serverBilling)
+        .values({
+          auth0UserId,
+          virtfusionServerId: String(serverResult.serverId),
+          virtfusionServerUuid: serverResult.uuid || null,
+          planId: plan.id,
+          deployedAt: now,
+          monthlyPriceCents: freeServer ? 0 : plan.priceMonthly,
+          status: "active",
+          autoRenew: true,
+          nextBillAt,
+          freeServer,
+        })
+        .returning();
+
+      console.log(`[admin-servers] Billing record created: ${billingRecord.id}`);
+
+      // Send credentials email if requested and password available
+      if (sendCredentials && serverResult.password) {
+        try {
+          await sendServerCredentialsEmail(
+            userMapping.email,
+            hostname,
+            serverResult.primaryIp || "Pending",
+            "root",
+            serverResult.password,
+            serverResult.osName
+          );
+          console.log(`[admin-servers] Credentials email sent to ${userMapping.email}`);
+        } catch (emailErr: any) {
+          console.log(`[admin-servers] Failed to send credentials email: ${emailErr.message}`);
+          // Don't fail the request, just log
+        }
+      }
+
+      // Audit log
+      await auditSuccess(req, "server.provision", "server", String(serverResult.serverId), {
+        auth0UserId,
+        planId,
+        hostname,
+        freeServer,
+        notes,
+      });
+
+      res.status(201).json({
+        success: true,
+        server: {
+          id: serverResult.serverId,
+          name: serverResult.name,
+          uuid: serverResult.uuid,
+          primaryIp: serverResult.primaryIp,
+          password: serverResult.password,
+          osName: serverResult.osName,
+        },
+        billing: billingRecord,
+      });
+    } catch (error: any) {
+      console.log(`[admin-servers] Provision error: ${error.message}`);
+      await auditFailure(req, "server.provision", "server", error.message);
+      res.status(500).json({ error: "Failed to provision server" });
     }
   });
 }

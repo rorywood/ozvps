@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
 import Servers from "./pages/Servers";
+import ProvisionServer from "./pages/ProvisionServer";
 import Billing from "./pages/Billing";
 import Tickets from "./pages/Tickets";
 import Health from "./pages/Health";
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="users" element={<Users />} />
         <Route path="servers" element={<Servers />} />
+        <Route path="servers/provision" element={<ProvisionServer />} />
         <Route path="billing" element={<Billing />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="health" element={<Health />} />
