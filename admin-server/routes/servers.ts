@@ -723,12 +723,47 @@ export function registerServersRoutes(router: Router) {
         .from(userMappings)
         .where(eq(userMappings.auth0UserId, auth0UserId));
 
+      // Auto-create VirtFusion user if mapping doesn't exist
       if (!userMapping) {
-        return res.status(400).json({
-          error: "User not synced to VirtFusion yet.",
-          needsSync: true,
-          message: "Click 'Sync to VirtFusion' to create the user's VirtFusion account first."
-        });
+        console.log(`[admin-servers] No VirtFusion mapping for ${auth0UserId}, auto-creating...`);
+
+        // Get user's wallet to verify they exist
+        const [wallet] = await db
+          .select()
+          .from(wallets)
+          .where(eq(wallets.auth0UserId, auth0UserId));
+
+        if (!wallet) {
+          return res.status(400).json({ error: "User not found in system" });
+        }
+
+        // Create VirtFusion user (auth0UserId is the user's email)
+        const userEmail = auth0UserId;
+        const userName = userEmail.split('@')[0];
+
+        const vfUser = await virtfusionClient.findOrCreateUser(userEmail, userName);
+        if (!vfUser) {
+          return res.status(500).json({ error: "Failed to create VirtFusion user. Please try again." });
+        }
+
+        // Create the mapping
+        const [newMapping] = await db
+          .insert(userMappings)
+          .values({
+            auth0UserId,
+            email: userEmail,
+            virtFusionUserId: vfUser.id,
+          })
+          .returning();
+
+        // Update wallet with VirtFusion user ID
+        await db
+          .update(wallets)
+          .set({ virtFusionUserId: vfUser.id })
+          .where(eq(wallets.auth0UserId, auth0UserId));
+
+        userMapping = newMapping;
+        console.log(`[admin-servers] Auto-created VirtFusion user ${vfUser.id} for ${auth0UserId}`);
       }
 
       // Look up plan
