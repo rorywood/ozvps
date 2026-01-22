@@ -28,12 +28,25 @@
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
 - `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page
+- `admin-server/routes/servers.ts` - Admin server management (provision, delete, suspend, transfer)
+- `admin-client/src/pages/ProvisionServer.tsx` - Admin provision server UI
 - `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-22)
+## Recent Session Work (2026-01-22 - Session 2)
 
 ### Completed This Session
+1. **Admin provision server fixes**:
+   - Fixed VirtFusion user auto-creation using correct email (was using auth0UserId like `auth0|123456`)
+   - Fixed hypervisor group ID (was 1, should be 2 for Brisbane)
+   - Added location selector with country flags
+   - Fixed email "undefined server" issue - now fetches OS name from templates
+2. **Bandwidth limit exceeded text** - Made warning more prominent (larger text, icon, padding)
+3. **VirtFusion API error details** - Now shows actual validation errors instead of just "422 Unprocessable Content"
+4. **Admin delete process** - Now creates cancellation request (immediate mode, 5 min delay) instead of directly deleting, so servers show "deleting" status like client-side deletion
+5. **Ticket status email notifications** - Added null checks for guest tickets (no auth0UserId)
+
+### Previous Session (2026-01-22 - Session 1)
 1. **Email verification on different device** - Removed AuthGuard from /verify-email route, works without being logged in
 2. **Sign out button fix** - Fixed verify-email page logout button not ending session properly
 3. **Username ban "Darius"** - Server + client-side validation blocks registration with this name
@@ -77,7 +90,7 @@
 1. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
 2. **Disk usage investigation** - VirtFusion's `physical` field shows disk image size, not filesystem usage (may need different field)
 
-### Admin Panel (COMPLETED - 2026-01-19)
+### Admin Panel
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
 **Architecture:**
@@ -91,6 +104,14 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 2. Check `app_metadata.is_admin = true` in Auth0
 3. Mandatory 2FA verification
 4. IP whitelist (bootstrap mode: allow all if whitelist empty)
+
+**Admin Provision Server:**
+- Select user by search (email/name)
+- Auto-creates VirtFusion user if not synced
+- Select plan, hostname, OS, location (with flags)
+- Option for free server (no billing)
+- Sends credentials email to user
+- Location config in `admin-server/routes/servers.ts` (LOCATION_CONFIG)
 
 ### Previous Work (2026-01-19)
 - TypeScript cleanup, all errors fixed
