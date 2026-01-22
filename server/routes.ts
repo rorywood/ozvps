@@ -1923,10 +1923,19 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Verification link has expired. Please request a new one.' });
       }
 
-      // Mark email as verified in our database
+      // Mark email as verified in our database (emailVerificationTokens table)
       await dbStorage.markEmailVerified(token);
 
-      // Also mark as verified in Auth0
+      // CRITICAL: Set the email verified override in Redis/userFlags
+      // This is what /api/auth/me checks to determine verification status
+      try {
+        await storage.setEmailVerifiedOverride(verificationToken.auth0UserId, true, 'self-verified');
+        log(`Set email verified override for ${verificationToken.email}`, 'auth');
+      } catch (overrideError: any) {
+        log(`Failed to set email verified override: ${overrideError.message}`, 'auth');
+      }
+
+      // Also mark as verified in Auth0 (for consistency)
       try {
         await auth0Client.updateUser(verificationToken.auth0UserId, { email_verified: true });
         log(`Email verified in Auth0 for ${verificationToken.email}`, 'auth');
