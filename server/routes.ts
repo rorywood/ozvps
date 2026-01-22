@@ -20,6 +20,8 @@ import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDe
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendGuestTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
+import sharp from "sharp";
+import path from "path";
 
 // Helper to validate IP address format (prevents header injection)
 function isValidIp(ip: string): boolean {
@@ -193,6 +195,68 @@ function totpVerify(token: string, secret: string): boolean {
 
 function totpGenerateURI(email: string, secret: string, issuer: string = 'OzVPS'): string {
   return otplibGenerateURI({ issuer, label: email, secret, algorithm: 'sha1', digits: 6, period: 30 });
+}
+
+// Helper to add logo to QR code
+async function addLogoToQRCode(qrDataUrl: string): Promise<string> {
+  try {
+    // Convert data URL to buffer
+    const base64Data = qrDataUrl.replace(/^data:image\/png;base64,/, '');
+    const qrBuffer = Buffer.from(base64Data, 'base64');
+
+    // Get QR code dimensions
+    const qrMetadata = await sharp(qrBuffer).metadata();
+    const qrSize = qrMetadata.width || 200;
+
+    // Logo should be about 20% of QR code size
+    const logoSize = Math.floor(qrSize * 0.22);
+
+    // Load and resize the logo
+    const logoPath = path.join(process.cwd(), 'client', 'src', 'assets', 'logo.png');
+    const resizedLogo = await sharp(logoPath)
+      .resize(logoSize, logoSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .png()
+      .toBuffer();
+
+    // Create white background circle/square for logo
+    const padding = 8;
+    const bgSize = logoSize + padding * 2;
+    const whiteBg = await sharp({
+      create: {
+        width: bgSize,
+        height: bgSize,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
+    })
+      .composite([{
+        input: resizedLogo,
+        left: padding,
+        top: padding
+      }])
+      .png()
+      .toBuffer();
+
+    // Calculate center position
+    const left = Math.floor((qrSize - bgSize) / 2);
+    const top = Math.floor((qrSize - bgSize) / 2);
+
+    // Composite logo onto QR code
+    const finalBuffer = await sharp(qrBuffer)
+      .composite([{
+        input: whiteBg,
+        left,
+        top
+      }])
+      .png()
+      .toBuffer();
+
+    return `data:image/png;base64,${finalBuffer.toString('base64')}`;
+  } catch (error: any) {
+    log(`Failed to add logo to QR code: ${error.message}`, 'api');
+    // Return original QR code if logo addition fails
+    return qrDataUrl;
+  }
 }
 
 // Helper to verify reCAPTCHA v3 token with score threshold
@@ -3555,8 +3619,15 @@ export async function registerRoutes(
       try {
         otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
         log(`2FA setup: URI generated: ${otpAuthUrl.substring(0, 50)}...`, 'security');
-        qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
-        log(`2FA setup: QR code generated`, 'security');
+        // Generate QR code with higher error correction for logo overlay
+        const rawQrCode = await QRCode.toDataURL(otpAuthUrl, {
+          errorCorrectionLevel: 'H',
+          width: 300,
+          margin: 2
+        });
+        // Add OzVPS logo to center of QR code
+        qrCodeDataUrl = await addLogoToQRCode(rawQrCode);
+        log(`2FA setup: QR code generated with logo`, 'security');
       } catch (qrGenErr: any) {
         log(`2FA setup: Failed to generate QR code: ${qrGenErr.message}`, 'api');
         return res.status(500).json({ error: 'Failed to generate QR code' });

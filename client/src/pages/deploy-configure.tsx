@@ -53,6 +53,7 @@ interface TemplateGroup {
 }
 
 function formatCurrency(cents: number): string {
+  if (cents === 0) return "FREE!";
   return `$${(cents / 100).toFixed(2)}`;
 }
 
