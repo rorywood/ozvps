@@ -2443,7 +2443,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/vnc/enable', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/vnc/enable', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       // Check if user account is blocked or suspended
       const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
@@ -2470,7 +2470,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/servers/:id/vnc/disable', authMiddleware, async (req, res) => {
+  app.post('/api/servers/:id/vnc/disable', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       // Check if user account is blocked or suspended
       const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
@@ -2839,7 +2839,7 @@ export async function registerRoutes(
   });
 
   // Reactivate a suspended/unpaid server by paying the outstanding balance
-  app.post('/api/billing/servers/:serverId/reactivate', authMiddleware, async (req, res) => {
+  app.post('/api/billing/servers/:serverId/reactivate', authMiddleware, requireEmailVerified, async (req, res) => {
     try {
       const session = req.userSession!;
       const { serverId } = req.params;
