@@ -8,7 +8,7 @@ import { WebSocketServer } from "ws";
 import { connectRedis, disconnectRedis } from "../server/redis";
 import { runAutoMigrations } from "../server/db";
 import { log } from "../server/logger";
-// import { ipWhitelistMiddleware } from "./middleware/ip-whitelist"; // TEMPORARILY DISABLED
+import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
 import { registerAuthRoutes } from "./routes/auth";
