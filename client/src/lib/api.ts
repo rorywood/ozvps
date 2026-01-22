@@ -80,7 +80,8 @@ export async function secureFetch(url: string, options: RequestInit = {}, timeou
       const isAuthPage = currentPath === '/login' ||
                          currentPath === '/register' ||
                          currentPath === '/forgot-password' ||
-                         currentPath === '/reset-password';
+                         currentPath === '/reset-password' ||
+                         currentPath === '/verify-email';
 
       if (!isAuthPage) {
         let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
