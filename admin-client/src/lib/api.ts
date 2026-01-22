@@ -202,6 +202,7 @@ export const serversApi = {
 
   provision: (data: {
     auth0UserId: string;
+    email: string;
     planId: number;
     hostname: string;
     osId?: number;
