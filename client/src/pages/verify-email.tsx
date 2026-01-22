@@ -122,7 +122,8 @@ export default function VerifyEmailPage() {
   };
 
   // Show loading state (but don't wait for auth if we have a token)
-  if ((authLoading && !token) || (token && verifyState === 'verifying')) {
+  // Also show loading if token exists but verification hasn't completed yet (idle or verifying)
+  if ((authLoading && !token) || (token && (verifyState === 'idle' || verifyState === 'verifying'))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
         <div className="text-center">
@@ -133,8 +134,8 @@ export default function VerifyEmailPage() {
     );
   }
 
-  // Token verification result page
-  if (token) {
+  // Token verification result page (only show when we have a definitive result: success or error)
+  if (token && (verifyState === 'success' || verifyState === 'error')) {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
         {/* Background decoration */}
