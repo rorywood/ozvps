@@ -97,11 +97,12 @@ export default function VerifyEmailPage() {
   }, [authLoading, user, navigate, token]);
 
   // If already verified, redirect to dashboard
+  // BUT not if we just verified via token - let that success page show first
   useEffect(() => {
-    if (user?.emailVerified) {
+    if (user?.emailVerified && verifyState !== 'success') {
       navigate('/');
     }
-  }, [user, navigate]);
+  }, [user, navigate, verifyState]);
 
   const resendMutation = useMutation({
     mutationFn: () => api.resendVerificationEmail(),
