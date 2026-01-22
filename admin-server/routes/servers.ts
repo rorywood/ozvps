@@ -551,7 +551,7 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
-  // Delete server
+  // Delete server (creates cancellation request like client does)
   router.delete("/servers/:serverId", async (req: Request, res: Response) => {
     try {
       const serverId = parseInt(req.params.serverId, 10);
@@ -566,19 +566,20 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Must confirm deletion by setting confirm: 'DELETE'" });
       }
 
-      // Delete from VirtFusion
-      await virtfusionClient.deleteServer(String(serverId));
-
-      // Update billing record
-      await db
-        .update(serverBilling)
-        .set({ status: "cancelled", updatedAt: new Date() })
+      // Get server info from billing record
+      const [billingRecord] = await db
+        .select()
+        .from(serverBilling)
         .where(eq(serverBilling.virtfusionServerId, String(serverId)));
 
-      // Update any pending cancellation
-      await db
-        .update(serverCancellations)
-        .set({ status: "completed", completedAt: new Date() })
+      if (!billingRecord) {
+        return res.status(404).json({ error: "Server not found in billing records" });
+      }
+
+      // Check for existing pending cancellation
+      const [existingCancellation] = await db
+        .select()
+        .from(serverCancellations)
         .where(
           and(
             eq(serverCancellations.virtfusionServerId, String(serverId)),
@@ -586,12 +587,51 @@ export function registerServersRoutes(router: Router) {
           )
         );
 
+      if (existingCancellation) {
+        return res.status(400).json({ error: "Server already has a pending cancellation" });
+      }
+
+      // Get server name from VirtFusion
+      let serverName = `Server ${serverId}`;
+      try {
+        const server = await virtfusionClient.getServer(String(serverId), false);
+        if (server) {
+          serverName = server.name;
+        }
+      } catch (e) {
+        // Use default name if we can't fetch
+      }
+
+      // Create immediate cancellation (5 minutes from now)
+      const scheduledDeletionAt = new Date();
+      scheduledDeletionAt.setMinutes(scheduledDeletionAt.getMinutes() + 5);
+
+      const [cancellation] = await db
+        .insert(serverCancellations)
+        .values({
+          auth0UserId: billingRecord.auth0UserId,
+          virtfusionServerId: String(serverId),
+          serverName,
+          reason: reason ? `Admin: ${reason}` : `Admin deletion by ${session.email}`,
+          status: "pending",
+          scheduledDeletionAt,
+          mode: "immediate",
+        })
+        .returning();
+
       // Audit log
       await auditSuccess(req, "server.delete", "server", String(serverId), undefined, { reason });
 
-      console.log(`[admin-servers] Server ${serverId} deleted by ${session.email}: ${reason || "No reason"}`);
+      console.log(`[admin-servers] Cancellation created for server ${serverId} by ${session.email}, scheduled for ${scheduledDeletionAt.toISOString()}`);
 
-      res.json({ success: true });
+      res.json({
+        success: true,
+        cancellation: {
+          id: cancellation.id,
+          scheduledDeletionAt: cancellation.scheduledDeletionAt,
+          mode: cancellation.mode,
+        }
+      });
     } catch (error: any) {
       await auditFailure(req, "server.delete", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Delete error: ${error.message}`);
@@ -807,6 +847,20 @@ export function registerServersRoutes(router: Router) {
       }
       const hypervisorGroupId = location.hypervisorGroupId;
 
+      // Get OS template name if osId provided
+      let osName = "Linux";
+      if (osId) {
+        try {
+          const templatesData = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+          const template = templatesData.templates?.find((t: any) => t.id === osId);
+          if (template) {
+            osName = template.name || template.distro || "Linux";
+          }
+        } catch (e) {
+          console.log(`[admin-servers] Could not fetch OS template name: ${e}`);
+        }
+      }
+
       // extRelationId is the normalized email
       const extRelationId = userMapping.email.toLowerCase().trim();
 
@@ -861,7 +915,7 @@ export function registerServersRoutes(router: Router) {
             serverResult.primaryIp || "Pending",
             "root",
             serverResult.password,
-            serverResult.osName
+            osName
           );
           console.log(`[admin-servers] Credentials email sent to ${userMapping.email}`);
         } catch (emailErr: any) {
