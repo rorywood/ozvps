@@ -15,6 +15,20 @@ export function useSystemHealth() {
     queryKey: ["system", "health"],
     queryFn: async () => {
       const response = await fetch("/api/health");
+      if (!response.ok) {
+        // Non-2xx response - parse error if possible
+        try {
+          return response.json();
+        } catch {
+          // Couldn't parse JSON, treat as system error
+          return {
+            status: 'error' as const,
+            errorCode: 'SYSTEM_ERROR' as const,
+            message: 'System is temporarily unavailable',
+            services: { database: false, virtfusion: null }
+          };
+        }
+      }
       return response.json();
     },
     staleTime: 1000 * 10, // 10 seconds
@@ -23,7 +37,17 @@ export function useSystemHealth() {
   });
 
   const isHealthy = data?.status === 'ok';
-  const isDatabaseDown = data?.errorCode === 'DB_UNAVAILABLE' || data?.services?.database === false;
+
+  // System is down if:
+  // 1. Database explicitly marked as down
+  // 2. Health check failed entirely (error from react-query)
+  // 3. System error returned
+  const isDatabaseDown =
+    data?.errorCode === 'DB_UNAVAILABLE' ||
+    data?.errorCode === 'SYSTEM_ERROR' ||
+    data?.services?.database === false ||
+    (error !== null && !isLoading); // Health check failed completely
+
   const isVirtFusionDown = data?.errorCode === 'VF_API_UNAVAILABLE' || data?.services?.virtfusion === false;
 
   return {
@@ -34,7 +58,7 @@ export function useSystemHealth() {
     isHealthy,
     isDatabaseDown,
     isVirtFusionDown,
-    errorMessage: data?.message,
-    errorCode: data?.errorCode,
+    errorMessage: data?.message || (error ? 'System is temporarily unavailable' : undefined),
+    errorCode: data?.errorCode || (error ? 'SYSTEM_ERROR' : undefined),
   };
 }
