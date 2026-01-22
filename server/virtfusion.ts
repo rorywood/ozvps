@@ -308,7 +308,7 @@ export class VirtFusionClient {
    */
   async getConnectionStatus(): Promise<{ connected: boolean; errorType?: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/connect`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/connect`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.apiToken}`,
