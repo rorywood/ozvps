@@ -3,6 +3,7 @@ import { db } from "../../server/db";
 import { serverBilling, serverCancellations, userMappings, plans, wallets } from "../../shared/schema";
 import { eq, desc, and, like, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
+import { auth0Client } from "../../server/auth0";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 import { sendServerCredentialsEmail } from "../../server/email";
 
@@ -267,6 +268,34 @@ export function registerServersRoutes(router: Router) {
             name: ownerMapping.name,
             auth0UserId: ownerMapping.auth0UserId,
           };
+        }
+
+        // If name is not set, try to get from Auth0
+        if (owner && !owner.name) {
+          try {
+            const auth0User = await auth0Client.getUserById(billing.auth0UserId);
+            if (auth0User?.name) {
+              owner.name = auth0User.name;
+            }
+          } catch (err) {
+            // Auth0 lookup failed, continue with null name
+          }
+        }
+
+        // If no mapping found but we have auth0UserId, try Auth0 directly
+        if (!owner) {
+          try {
+            const auth0User = await auth0Client.getUserById(billing.auth0UserId);
+            if (auth0User) {
+              owner = {
+                email: auth0User.email,
+                name: auth0User.name || null,
+                auth0UserId: billing.auth0UserId,
+              };
+            }
+          } catch (err) {
+            // Auth0 lookup failed
+          }
         }
       }
 
