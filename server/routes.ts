@@ -211,10 +211,11 @@ async function addLogoToQRCode(qrDataUrl: string): Promise<string> {
     // Logo should be about 20% of QR code size
     const logoSize = Math.floor(qrSize * 0.22);
 
-    // Load and resize the logo
+    // Load and resize the logo (invert colors since logo is white, and we need dark on white bg)
     const logoPath = path.join(process.cwd(), 'client', 'src', 'assets', 'logo.png');
     const resizedLogo = await sharp(logoPath)
       .resize(logoSize, logoSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .negate({ alpha: false }) // Invert colors to make white logo dark
       .png()
       .toBuffer();
 
