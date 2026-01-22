@@ -2043,12 +2043,12 @@ export default function ServerDetail() {
                   <div className="space-y-2">
                     {/* Bandwidth Exceeded Warning */}
                     {usagePercent >= 100 && (
-                      <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                           <div className="flex-1">
-                            <p className="text-xs text-foreground font-semibold">Bandwidth Limit Exceeded</p>
-                            <p className="text-[10px] text-muted-foreground">Bandwidth has been shaped to 1Mbps Download and 1Mbps Upload.</p>
+                            <p className="text-sm text-foreground font-semibold">Bandwidth Limit Exceeded</p>
+                            <p className="text-xs text-muted-foreground">Bandwidth has been shaped to 1Mbps Download and 1Mbps Upload.</p>
                           </div>
                         </div>
                       </div>
