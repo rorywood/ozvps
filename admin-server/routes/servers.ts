@@ -45,24 +45,40 @@ export function registerServersRoutes(router: Router) {
 
       const templatesData = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
 
-      // Flatten the grouped templates
-      const templates: any[] = [];
+      // Return grouped templates with full data (like the client API does)
+      // Also flatten for convenience
+      const groups: any[] = [];
+      const flatTemplates: any[] = [];
+
       if (templatesData && Array.isArray(templatesData)) {
         for (const group of templatesData) {
+          const groupTemplates: any[] = [];
           if (group.templates && Array.isArray(group.templates)) {
             for (const t of group.templates) {
-              templates.push({
+              const template = {
                 id: t.id,
                 name: t.name,
+                version: t.version || null,
+                description: t.description || null,
+                distro: t.distro || group.name,
+                slug: t.slug || null,
                 group: group.name,
-              });
+              };
+              groupTemplates.push(template);
+              flatTemplates.push(template);
             }
+          }
+          if (groupTemplates.length > 0) {
+            groups.push({
+              name: group.name,
+              templates: groupTemplates,
+            });
           }
         }
       }
 
-      console.log(`[admin-servers] Found ${templates.length} templates for plan ${planId} (VF package ${plan.virtfusionPackageId})`);
-      res.json({ templates });
+      console.log(`[admin-servers] Found ${flatTemplates.length} templates in ${groups.length} groups for plan ${planId}`);
+      res.json({ templates: flatTemplates, groups });
     } catch (error: any) {
       console.log(`[admin-servers] Get plan templates error: ${error.message}`);
       res.status(500).json({ error: "Failed to get templates" });

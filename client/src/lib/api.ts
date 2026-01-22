@@ -35,11 +35,8 @@ export function clearCsrfToken(): void {
   // No-op: CSRF cookie is cleared by server on logout
 }
 
-// Default timeout for API requests (30 seconds)
-const DEFAULT_TIMEOUT = 30000;
-
 // Enhanced fetch that includes CSRF token for mutating requests
-export async function secureFetch(url: string, options: RequestInit = {}, timeout: number = DEFAULT_TIMEOUT): Promise<Response> {
+export async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
 
   // Add CSRF token for mutating requests
@@ -61,60 +58,42 @@ export async function secureFetch(url: string, options: RequestInit = {}, timeou
     };
   }
 
-  // Create AbortController for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const response = await fetch(url, options);
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+  // Handle 401 errors - trigger session error callback to redirect to login
+  // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
+  if (response.status === 401) {
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/login' ||
+                       currentPath === '/register' ||
+                       currentPath === '/forgot-password' ||
+                       currentPath === '/reset-password';
 
-    clearTimeout(timeoutId);
+    if (!isAuthPage) {
+      let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
+      try {
+        const clone = response.clone();
+        errorData = await clone.json();
+      } catch (e) {
+        // Failed to parse JSON, use default error
+      }
 
-    // Handle 401 errors - trigger session error callback to redirect to login
-    // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
-    if (response.status === 401) {
-      const currentPath = window.location.pathname;
-      const isAuthPage = currentPath === '/login' ||
-                         currentPath === '/register' ||
-                         currentPath === '/forgot-password' ||
-                         currentPath === '/reset-password' ||
-                         currentPath === '/verify-email';
+      // Don't logout for rate limiting errors
+      if (errorData.code === 'RATE_LIMITED') {
+        return response;
+      }
 
-      if (!isAuthPage) {
-        let errorData: SessionError = { error: 'Authentication required', code: 'UNAUTHORIZED' };
-        try {
-          const clone = response.clone();
-          errorData = await clone.json();
-        } catch (e) {
-          // Failed to parse JSON, use default error
-        }
-
-        // Don't logout for rate limiting errors
-        if (errorData.code === 'RATE_LIMITED') {
-          return response;
-        }
-
-        // Trigger session error callback (will redirect to login)
-        if (sessionErrorCallback) {
-          sessionErrorCallback({
-            error: errorData.error || 'Authentication required',
-            code: errorData.code || 'UNAUTHORIZED'
-          });
-        }
+      // Trigger session error callback (will redirect to login)
+      if (sessionErrorCallback) {
+        sessionErrorCallback({
+          error: errorData.error || 'Authentication required',
+          code: errorData.code || 'UNAUTHORIZED'
+        });
       }
     }
-
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timed out. Please check your internet connection and try again.');
-    }
-    throw error;
   }
+
+  return response;
 }
 
 export interface NetworkInterface {
@@ -290,7 +269,7 @@ class ApiClient {
   async getDashboardOverview(): Promise<{
     servers: Server[];
     cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: string; status: string }>;
-    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null; planName?: string | null }>;
+    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null }>;
     bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
   }> {
     const response = await secureFetch(`${this.baseUrl}/dashboard/overview`);
@@ -342,10 +321,11 @@ class ApiClient {
     return response.json();
   }
 
-  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; username?: string; error?: string; emailSent?: boolean }> {
+  async resetServerPassword(id: string, password: string): Promise<{ success: boolean; password?: string; username?: string; error?: string }> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
     });
     if (!response.ok) {
       const data = await response.json();
@@ -657,7 +637,7 @@ class ApiClient {
     recaptchaToken?: string,
     totpToken?: string,
     backupCode?: string
-  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; csrfToken?: string }> {
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string }> {
     const response = await secureFetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

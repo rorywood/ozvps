@@ -11,14 +11,14 @@ import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, passwordRequirementsSchema, type Ticket, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
-import { log } from './logger';
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
+import { log } from './log';
 import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendGuestTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail, sendTicketStatusEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import sharp from "sharp";
 import path from "path";
@@ -187,8 +187,8 @@ function totpVerify(token: string, secret: string): boolean {
     // Uses default window of 1 (±30 seconds) for time drift tolerance
     const result = otplibVerifySync({ token, secret });
     return result?.valid === true;
-  } catch (error: any) {
-    log(`TOTP verification error: ${error?.message || error}`, 'auth', { level: 'error' });
+  } catch (error) {
+    console.error('TOTP verification error:', error);
     return false;
   }
 }
@@ -513,34 +513,12 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
         await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
         res.clearCookie(SESSION_COOKIE);
-        res.clearCookie(CSRF_COOKIE);
-        return res.status(401).json({
+      res.clearCookie(CSRF_COOKIE);
+        return res.status(401).json({ 
           error: 'Your session expired due to inactivity. Please sign in again.',
           code: 'SESSION_IDLE_TIMEOUT'
         });
       }
-    }
-
-    // Session binding check - verify user agent matches to detect session hijacking
-    // Note: We check user agent but only log IP changes (not block) because IPs can change legitimately
-    const currentUserAgent = req.headers['user-agent'] || '';
-    const currentIp = getClientIp(req);
-
-    if (session.userAgent && currentUserAgent && session.userAgent !== currentUserAgent) {
-      // User agent mismatch is suspicious - likely session hijacking attempt
-      log(`Session binding violation - user agent mismatch for ${session.email}: stored="${session.userAgent?.substring(0, 50)}", current="${currentUserAgent.substring(0, 50)}"`, 'security');
-      await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.SECURITY_VIOLATION);
-      res.clearCookie(SESSION_COOKIE);
-      res.clearCookie(CSRF_COOKIE);
-      return res.status(401).json({
-        error: 'Session security violation detected. Please sign in again.',
-        code: 'SESSION_SECURITY_VIOLATION'
-      });
-    }
-
-    // Log IP changes for security monitoring (don't block as IPs change legitimately on mobile/VPN)
-    if (session.ipAddress && currentIp && session.ipAddress !== currentIp) {
-      log(`Session IP change for ${session.email}: ${session.ipAddress} -> ${currentIp}`, 'security');
     }
 
     // Update last activity timestamp
@@ -837,16 +815,6 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
-  // Strict rate limiter for password resets - 3 per hour per user
-  const passwordResetRateLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // 3 password resets per hour
-    message: { error: 'Too many password reset requests. Please wait before trying again (limit: 3 per hour).' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
-  });
-
   const promoValidationRateLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 10, // 10 promo validation requests per minute
@@ -1017,12 +985,6 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
-      // Block registration with banned usernames
-      if (name && /darius/i.test(name)) {
-        log(`Registration blocked: banned username "${name}" (contains Darius)`, 'security');
-        return res.status(400).json({ error: 'This username is not allowed.' });
-      }
-
       // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
@@ -1079,20 +1041,20 @@ export async function registerRoutes(
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
       
-      // Update user name in Auth0 profile if needed
+      // Update user name in Auth0 profile (dbconnections/signup doesn't store name properly)
       if (name) {
         await auth0Client.updateUserName(auth0UserId, name);
       }
 
-      // Set email_verified=true in Auth0 to suppress any automatic Auth0 verification emails
-      // Our ACTUAL verification status is tracked in our database (emailVerificationTokens table)
-      // This is a backup in case Auth0's automatic emails aren't disabled in dashboard
+      // IMPORTANT: Set email_verified=true in Auth0 to PREVENT Auth0 from sending its own verification email
+      // We handle email verification ourselves with our custom system
+      // The user's actual verification status is tracked in our database (emailVerificationTokens table)
       try {
         await auth0Client.updateUser(auth0UserId, { email_verified: true });
-        log(`Set Auth0 email_verified=true for ${email} to suppress Auth0 emails`, 'auth');
+        log(`Disabled Auth0 verification email for ${email} (set email_verified=true)`, 'auth');
       } catch (verifyErr: any) {
-        // Non-fatal - if this fails, user might get duplicate emails but can still register
-        log(`Warning: Could not set Auth0 email_verified for ${email}: ${verifyErr.message}`, 'auth');
+        // Non-fatal - user can still register, we just might get duplicate emails
+        log(`Warning: Could not disable Auth0 verification email for ${email}: ${verifyErr.message}`, 'auth');
       }
 
       // Create or find existing Stripe customer and wallet for the new user
@@ -1264,11 +1226,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Reset token is required' });
       }
 
-      // Validate password strength
-      const passwordValidation = passwordRequirementsSchema.safeParse(password);
-      if (!passwordValidation.success) {
-        const errorMessage = passwordValidation.error.errors[0]?.message || 'Invalid password';
-        return res.status(400).json({ error: errorMessage });
+      if (!password || typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
 
       // Get and validate token
@@ -1311,20 +1270,6 @@ export async function registerRoutes(
 
       // Revoke all existing sessions for security
       await storage.revokeSessionsByAuth0UserId(user.user_id, SESSION_REVOKE_REASONS.PASSWORD_CHANGED);
-
-      // Audit log: password reset
-      const clientIp = getClientIp(req);
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId: user.user_id,
-          email: resetToken.email,
-          action: 'PASSWORD_RESET',
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
-      }
 
       log(`Password successfully reset for ${resetToken.email}`, 'auth');
 
@@ -1522,12 +1467,7 @@ export async function registerRoutes(
 
         // If TOTP failed, try backup code
         if (!tfaValid && backupCode) {
-          let backupCodes: string[] = [];
-          try {
-            backupCodes = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
-          } catch (parseError) {
-            log(`Warning: Failed to parse backup codes for ${email}, treating as empty`, 'security');
-          }
+          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
 
           // Check each backup code with argon2 (or fallback to sha256 for legacy codes)
           for (let i = 0; i < backupCodes.length; i++) {
@@ -1648,24 +1588,15 @@ export async function registerRoutes(
         log(`Admin user logged in: ${email}`, 'auth');
       }
 
-      // Get email verification status from our database ONLY
-      // NOTE: We cannot trust Auth0's email_verified flag because we set it to true during
-      // registration to prevent Auth0 from sending duplicate verification emails.
-      // Check BOTH Redis override AND emailVerificationTokens table (for existing users)
-      const [redisOverride, dbVerified] = await Promise.all([
-        storage.getEmailVerifiedOverride(auth0UserIdPrefixed),
-        dbStorage.isEmailVerified(auth0UserIdPrefixed),
-      ]);
-      const emailVerified = redisOverride || dbVerified;
-      if (emailVerified) {
-        log(`User ${email} email verified (redis=${redisOverride}, db=${dbVerified})`, 'auth');
-        // Migrate to Redis if only in DB
-        if (dbVerified && !redisOverride) {
-          await storage.setEmailVerifiedOverride(auth0UserIdPrefixed, true, 'login-migration');
-        }
+      // Get email verification status - check both Auth0 and database override
+      const emailVerifiedFromAuth0 = auth0Result.user.email_verified === true;
+      const emailVerifiedOverride = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
+      const emailVerified = emailVerifiedFromAuth0 || emailVerifiedOverride;
+      if (emailVerifiedOverride && !emailVerifiedFromAuth0) {
+        log(`User ${email} email verified via database override`, 'auth');
       }
 
-      // Create local session with IP and user agent binding for security
+      // Create local session
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       const session = await storage.createSession({
         visitorId: 0,
@@ -1677,8 +1608,6 @@ export async function registerRoutes(
         isAdmin,
         emailVerified,
         expiresAt,
-        ipAddress: clientIp,
-        userAgent: req.headers['user-agent'] || undefined,
       });
 
       res.cookie(SESSION_COOKIE, session.id, {
@@ -1692,20 +1621,6 @@ export async function registerRoutes(
       // Set CSRF token cookie for double-submit pattern
       const csrfToken = generateCsrfToken();
       setCsrfCookie(res, csrfToken, expiresAt);
-
-      // Audit log: successful login
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId: auth0UserIdPrefixed,
-          email: email,
-          action: 'LOGIN_SUCCESS',
-          details: { twoFactorUsed: !!tfa?.enabled },
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
-      }
 
       res.json({
         user: {
@@ -1843,28 +1758,25 @@ export async function registerRoutes(
         });
       }
 
-      // Check Auth0 for updated admin status and our database for email verification
+      // Check Auth0 for updated admin status and email verification (refreshes every call)
       let isAdmin = session.isAdmin ?? false;
       let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          // Check OUR database for email verification - ignore Auth0's flag since we set it to true
-          // to suppress Auth0's automatic verification emails
-          // Check BOTH the Redis override AND the emailVerificationTokens table (for existing users)
-          const [redisOverride, dbVerified] = await Promise.all([
-            storage.getEmailVerifiedOverride(session.auth0UserId),
-            dbStorage.isEmailVerified(session.auth0UserId),
+          // Check database override for email verification first
+          log(`[/api/auth/me] Checking override for: ${session.auth0UserId}`, 'auth');
+          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
+          log(`[/api/auth/me] Override result: ${emailVerifiedOverride}`, 'auth');
+
+          const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
+            auth0Client.isUserAdmin(session.auth0UserId),
+            auth0Client.isEmailVerified(session.auth0UserId),
           ]);
-          const currentEmailVerified = redisOverride || dbVerified;
+          log(`[/api/auth/me] Auth0 emailVerified: ${currentEmailVerifiedFromAuth0}`, 'auth');
 
-          // If verified in DB but not in Redis, set the Redis override for future checks
-          if (dbVerified && !redisOverride) {
-            await storage.setEmailVerifiedOverride(session.auth0UserId, true, 'migration-from-db');
-            log(`Migrated email verified status to Redis for ${session.email}`, 'auth');
-          }
-
-          // Check Auth0 only for admin status
-          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
+          // Email is verified if EITHER Auth0 says so OR we have a database override
+          const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
+          log(`[/api/auth/me] Final emailVerified: ${currentEmailVerified}`, 'auth');
 
           const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
 
@@ -1875,7 +1787,7 @@ export async function registerRoutes(
           }
 
           if (currentEmailVerified !== emailVerified) {
-            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}`, 'auth');
+            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}${emailVerifiedOverride ? ' (override)' : ''}`, 'auth');
             emailVerified = currentEmailVerified;
             updates.emailVerified = currentEmailVerified;
           }
@@ -2012,19 +1924,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Verification link has expired. Please request a new one.' });
       }
 
-      // Mark email as verified in our database (emailVerificationTokens table)
+      // Mark email as verified in our database
       await dbStorage.markEmailVerified(token);
 
-      // CRITICAL: Set the email verified override in Redis/userFlags
-      // This is what /api/auth/me checks to determine verification status
-      try {
-        await storage.setEmailVerifiedOverride(verificationToken.auth0UserId, true, 'self-verified');
-        log(`Set email verified override for ${verificationToken.email}`, 'auth');
-      } catch (overrideError: any) {
-        log(`Failed to set email verified override: ${overrideError.message}`, 'auth');
-      }
-
-      // Also mark as verified in Auth0 (for consistency)
+      // Also mark as verified in Auth0
       try {
         await auth0Client.updateUser(verificationToken.auth0UserId, { email_verified: true });
         log(`Email verified in Auth0 for ${verificationToken.email}`, 'auth');
@@ -2033,16 +1936,8 @@ export async function registerRoutes(
         log(`Failed to update Auth0 email_verified: ${auth0Error.message}`, 'auth');
       }
 
-      // Update any existing sessions for this user to reflect verification
-      try {
-        await storage.updateSessionsByAuth0UserId(verificationToken.auth0UserId, { emailVerified: true });
-        log(`Updated sessions for ${verificationToken.email} to verified`, 'auth');
-      } catch (sessionError: any) {
-        log(`Failed to update sessions: ${sessionError.message}`, 'auth');
-      }
-
       log(`Email verified for ${verificationToken.email}`, 'auth');
-      res.json({ success: true, message: 'Email verified successfully!', redirectTo: '/dashboard' });
+      res.json({ success: true, message: 'Email verified successfully!' });
     } catch (error: any) {
       log(`Email verification error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to verify email' });
@@ -2750,11 +2645,24 @@ export async function registerRoutes(
   });
 
   // Reset server password - security-sensitive endpoint with ownership verification
-  // Password is sent via email for security - never shown in UI
-  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, passwordResetRateLimiter, async (req, res) => {
+  app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
+      const session = req.userSession!;
+      const { password } = req.body;
+
+      // Require password confirmation for security
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Account password is required to reset server password' });
+      }
+
+      // Verify password with Auth0
+      const authResult = await auth0Client.authenticateUser(session.email, password);
+      if (!authResult.success) {
+        return res.status(400).json({ error: 'Incorrect password. Please try again.' });
+      }
+
       // Check if user account is blocked or suspended
-      const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
+      const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId!);
       if (userFlags?.blocked) {
         return res.status(403).json({ error: 'Your account has been blocked. Please contact support for assistance.' });
       }
@@ -2762,7 +2670,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Your account has been suspended. Server controls are disabled.' });
       }
 
-      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, session.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
@@ -2772,7 +2680,7 @@ export async function registerRoutes(
       }
 
       // Block password reset if server has a pending cancellation
-      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
+      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, session.auth0UserId!);
       if (pendingCancellation) {
         return res.status(403).json({ error: 'Server is scheduled for deletion. Password reset is disabled.' });
       }
@@ -2784,28 +2692,8 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
 
-      // Get server details for the email
-      const serverName = server.name || `Server ${req.params.id}`;
-      const serverIp = server.primaryIp || server.ips?.[0]?.address || 'Check dashboard';
-      const username = result.username || 'root';
-      const userEmail = req.userSession!.email!;
-
-      // Send password via email
-      const emailResult = await sendServerPasswordResetEmail(
-        userEmail,
-        serverName,
-        serverIp,
-        username,
-        result.password
-      );
-
-      if (!emailResult.success) {
-        log(`Failed to send password reset email for server ${req.params.id}: ${emailResult.error}`, 'api');
-        return res.status(500).json({ error: 'Password was reset but email failed to send. Please contact support.' });
-      }
-
-      log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId} - sent via email`, 'api');
-      res.json({ success: true, emailSent: true });
+      log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
+      res.json({ success: true, password: result.password, username: result.username });
     } catch (error: any) {
       log(`Error resetting password for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to reset server password. Please try again or contact support.' });
@@ -3070,14 +2958,6 @@ export async function registerRoutes(
         });
       }
 
-      // Check if server is a free/complimentary server - block deletion, require support contact
-      if (billingStatus?.freeServer) {
-        return res.status(403).json({
-          error: 'This is a complimentary server. To cancel or delete it, please contact support at support@ozvps.com.au',
-          code: 'FREE_SERVER'
-        });
-      }
-
       // Check if server is already cancelled
       const existing = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
       if (existing) {
@@ -3103,26 +2983,9 @@ export async function registerRoutes(
         scheduledDeletionAt,
         mode,
       });
-
-      // Audit log: server cancellation requested
-      const clientIp = getClientIp(req);
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId: session.auth0UserId!,
-          email: session.email,
-          action: 'SERVER_CANCELLATION_REQUESTED',
-          targetType: 'server',
-          targetId: serverId,
-          details: { serverName: server.name, mode, scheduledDeletionAt: scheduledDeletionAt.toISOString() },
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
-      }
-
+      
       log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, mode=${mode}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
-
+      
       res.json({ success: true, cancellation });
     } catch (error: any) {
       log(`Error requesting cancellation for server ${req.params.id}: ${error.message}`, 'api');
@@ -3429,32 +3292,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Image too large. Maximum size is 10MB.' });
       }
 
-      // SECURITY: Validate file magic bytes match the claimed MIME type
-      // This prevents attackers from uploading malicious files with fake MIME headers
-      const magicBytes = {
-        jpeg: [0xFF, 0xD8, 0xFF],
-        jpg: [0xFF, 0xD8, 0xFF],
-        png: [0x89, 0x50, 0x4E, 0x47],
-        gif: [0x47, 0x49, 0x46, 0x38],
-        webp: [0x52, 0x49, 0x46, 0x46], // RIFF header, need to also check WEBP
-      };
-      const expectedMagic = magicBytes[extension as keyof typeof magicBytes];
-      if (!expectedMagic) {
-        return res.status(400).json({ error: 'Unsupported image format' });
-      }
-      const actualMagic = Array.from(buffer.slice(0, expectedMagic.length));
-      const magicMatches = expectedMagic.every((byte, i) => actualMagic[i] === byte);
-      // For WebP, also verify bytes 8-11 are 'WEBP'
-      if (extension === 'webp' && magicMatches) {
-        const webpMarker = buffer.slice(8, 12).toString('ascii');
-        if (webpMarker !== 'WEBP') {
-          return res.status(400).json({ error: 'Invalid WebP file' });
-        }
-      }
-      if (!magicMatches) {
-        return res.status(400).json({ error: 'File content does not match claimed image type' });
-      }
-
       // Create uploads directory if it doesn't exist
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -3693,20 +3530,6 @@ export async function registerRoutes(
       // Enable 2FA with backup codes
       await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
 
-      // Audit log: 2FA enabled
-      const clientIp = getClientIp(req);
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId: session.auth0UserId,
-          email: session.email,
-          action: '2FA_ENABLED',
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
-      }
-
       log(`2FA enabled for user ${session.email}`, 'security');
 
       res.json({
@@ -3754,21 +3577,6 @@ export async function registerRoutes(
       }
 
       await dbStorage.disableTwoFactorAuth(session.auth0UserId);
-
-      // Audit log: 2FA disabled
-      const clientIp = getClientIp(req);
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId: session.auth0UserId,
-          email: session.email,
-          action: '2FA_DISABLED',
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
-      }
-
       log(`2FA disabled for user ${session.email}`, 'security');
 
       res.json({ success: true, message: '2FA has been disabled' });
@@ -6452,35 +6260,6 @@ export async function registerRoutes(
 
       const order = deployResult.order;
 
-      // Record promo code usage IMMEDIATELY after wallet debit succeeds
-      // This must happen before provisioning to prevent unlimited reuse on failures
-      if (promoValidation?.valid && promoValidation.promoCode) {
-        try {
-          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
-          await dbStorage.recordPromoCodeUsage({
-            promoCodeId: promoValidation.promoCode.id,
-            auth0UserId,
-            deployOrderId: order.id,
-            discountAppliedCents: promoValidation.discountCents!,
-            originalPriceCents: plan.priceMonthly,
-            finalPriceCents: finalPriceCents,
-          });
-          log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
-        } catch (promoError: any) {
-          // If promo recording fails, refund and abort - can't let user get discount without tracking
-          log(`CRITICAL: Promo code usage recording failed, refunding and aborting: ${promoError.message}`, 'api');
-          await dbStorage.refundToWallet(auth0UserId, finalPriceCents, {
-            reason: 'promo_recording_failed',
-            orderId: order.id,
-          });
-          await dbStorage.updateDeployOrder(order.id, {
-            status: 'failed',
-            errorMessage: 'Failed to record promo code usage',
-          });
-          return res.status(500).json({ error: 'Failed to apply promo code. Your wallet has been refunded.' });
-        }
-      }
-
       // Update order to provisioning status
       await dbStorage.updateDeployOrder(order.id, { status: 'provisioning' });
 
@@ -6525,8 +6304,7 @@ export async function registerRoutes(
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
 
         // Refund the wallet - server was never created
-        // IMPORTANT: Refund finalPriceCents (what they actually paid), not plan.priceMonthly
-        await dbStorage.refundToWallet(auth0UserId, finalPriceCents, {
+        await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
           reason: 'provisioning_failed',
           orderId: order.id,
         });
@@ -6563,24 +6341,23 @@ export async function registerRoutes(
         log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
       }
 
-      // Audit log: server created
-      const clientIp = getClientIp(req);
-      try {
-        await dbStorage.createUserAuditLog({
-          auth0UserId,
-          email: req.userSession!.email,
-          action: 'SERVER_CREATED',
-          targetType: 'server',
-          targetId: serverResult.serverId.toString(),
-          details: { planCode: plan.code, hostname: serverHostname },
-          ipAddress: clientIp,
-          userAgent: req.headers['user-agent'] || undefined,
-        });
-      } catch (auditError: any) {
-        log(`Failed to create audit log: ${auditError.message}`, 'api');
+      // Record promo code usage if one was applied (non-critical, log if it fails)
+      if (promoValidation?.valid && promoValidation.promoCode) {
+        try {
+          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
+          await dbStorage.recordPromoCodeUsage({
+            promoCodeId: promoValidation.promoCode.id,
+            auth0UserId,
+            deployOrderId: order.id,
+            discountAppliedCents: promoValidation.discountCents!,
+            originalPriceCents: plan.priceMonthly,
+            finalPriceCents: finalPriceCents,
+          });
+          log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
+        } catch (promoError: any) {
+          log(`Warning: Could not record promo code usage: ${promoError.message}`, 'api');
+        }
       }
-
-      // Promo code usage is now recorded before provisioning (see above)
 
       // Always return success if server was provisioned
       res.json({
@@ -6766,312 +6543,6 @@ export async function registerRoutes(
   });
 
   // ==========================================
-  // RESEND INBOUND EMAIL WEBHOOK
-  // ==========================================
-
-  // Webhook to receive emails and create/update tickets
-  app.post('/api/hooks/resend-inbound', async (req, res) => {
-    try {
-      const { from, to, subject, text, html } = req.body;
-
-      log(`Resend inbound webhook received: from=${JSON.stringify(from)}, to=${JSON.stringify(to)}, subject=${subject}`, 'webhook');
-
-      if (!from || (!text && !html)) {
-        log('Resend inbound webhook: missing required fields', 'webhook');
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
-
-      // Get the sender's email address
-      const senderEmailRaw = typeof from === 'string' ? from : from?.address || from?.email;
-      if (!senderEmailRaw) {
-        log('Resend inbound webhook: could not parse sender email', 'webhook');
-        return res.status(400).json({ error: 'Could not parse sender email' });
-      }
-
-      // Clean the sender email (remove name if present, e.g., "John Doe <john@example.com>")
-      const emailMatch = senderEmailRaw.match(/<([^>]+)>/) || [null, senderEmailRaw];
-      const senderEmail = (emailMatch[1] || senderEmailRaw).toLowerCase().trim();
-
-      // Extract sender name if available
-      const nameMatch = senderEmailRaw.match(/^"?([^"<]+)"?\s*</);
-      const senderName = nameMatch ? nameMatch[1].trim() : null;
-
-      // Clean up the email content - remove quoted replies, signatures, etc.
-      let messageContent = text || '';
-      const replyPatterns = [
-        /\n\s*On .+wrote:\s*\n/i,
-        /\n\s*From:.+\n/i,
-        /\n\s*-{3,}Original Message-{3,}/i,
-        /\n\s*_{3,}\s*\n/,
-      ];
-      for (const pattern of replyPatterns) {
-        const match = messageContent.search(pattern);
-        if (match > 0) {
-          messageContent = messageContent.substring(0, match);
-          break;
-        }
-      }
-      // Remove quoted lines (starting with >)
-      messageContent = messageContent.replace(/^>.*$/gm, '').trim();
-
-      if (!messageContent) {
-        log('Resend inbound webhook: empty message content after cleanup', 'webhook');
-        return res.status(400).json({ error: 'Empty message content' });
-      }
-
-      // Check for ticket ID in subject line: [Ticket #123] or Re: Ticket #123 or similar
-      const subjectTicketMatch = subject?.match(/\[?Ticket\s*#?(\d+)\]?/i);
-
-      // Also check to address for support+{id}@ format
-      const toAddress = Array.isArray(to) ? to[0] : to;
-      const toAddressTicketMatch = toAddress?.match(/support\+(\d+)@/i);
-
-      const ticketId = subjectTicketMatch?.[1] || toAddressTicketMatch?.[1];
-
-      if (ticketId) {
-        // This is a reply to an existing ticket
-        const ticket = await dbStorage.getTicketById(parseInt(ticketId, 10));
-
-        if (!ticket) {
-          log(`Resend inbound webhook: ticket #${ticketId} not found`, 'webhook');
-          return res.status(404).json({ error: 'Ticket not found' });
-        }
-
-        // Get the ticket owner's email
-        const ticketUserEmail = await dbStorage.getTicketUserEmail(ticket);
-
-        // Check if sender is the ticket owner
-        const isTicketOwner = ticketUserEmail?.toLowerCase() === senderEmail;
-
-        // Check if sender is an admin (by looking up their auth0UserId)
-        const senderAuth0Id = await dbStorage.getAuth0UserIdByEmail(senderEmail);
-        let isAdmin = false;
-        if (senderAuth0Id) {
-          const userFlags = await dbStorage.getUserFlagsFromDb(senderAuth0Id);
-          // For admin check, we'd need to check app_metadata from Auth0, but for email replies
-          // we can check if they have admin sessions or just allow ticket owner replies
-        }
-
-        // For now, only allow ticket owner to reply via email
-        // Admins should reply through the admin panel (to avoid spoofing)
-        if (!isTicketOwner) {
-          log(`Resend inbound webhook: sender ${senderEmail} is not ticket #${ticketId} owner (${ticketUserEmail})`, 'webhook');
-          return res.status(403).json({ error: 'You can only reply to your own tickets' });
-        }
-
-        // Add the reply
-        await dbStorage.createTicketMessage({
-          ticketId: ticket.id,
-          authorType: 'user',
-          authorId: ticket.auth0UserId || 'guest',
-          authorEmail: senderEmail,
-          authorName: senderName,
-          message: messageContent,
-        });
-
-        // Update status to waiting_admin
-        await dbStorage.updateTicketStatus(ticket.id, 'waiting_admin');
-
-        log(`Resend inbound webhook: added reply to ticket #${ticket.id} from ${senderEmail}`, 'webhook');
-
-        // Send admin notification about the reply
-        sendAdminTicketNotificationEmail(
-          ticket.id,
-          `Re: ${ticket.title}`,
-          ticket.category,
-          ticket.priority,
-          messageContent,
-          senderEmail,
-          senderName
-        ).catch(err => {
-          log(`Failed to send admin notification for ticket reply #${ticket.id}: ${err.message}`, 'email');
-        });
-
-        return res.status(200).json({ success: true, action: 'reply', ticketId: ticket.id });
-      }
-
-      // No ticket ID found - create a new ticket
-      const emailSubject = subject?.trim() || 'Support Request via Email';
-
-      // Check if sender has an account
-      const senderAuth0Id = await dbStorage.getAuth0UserIdByEmail(senderEmail);
-
-      let newTicket: Ticket;
-      let accessToken: string | null = null;
-
-      if (senderAuth0Id) {
-        // User has an account - create ticket linked to their account
-        newTicket = await dbStorage.createTicket({
-          auth0UserId: senderAuth0Id,
-          title: emailSubject,
-          category: 'support',
-          priority: 'normal',
-        });
-        log(`Resend inbound webhook: created ticket #${newTicket.id} for registered user ${senderEmail}`, 'webhook');
-      } else {
-        // Guest user - create ticket with access token
-        accessToken = randomBytes(32).toString('hex');
-        newTicket = await dbStorage.createTicket({
-          auth0UserId: null,
-          guestEmail: senderEmail,
-          guestAccessToken: accessToken,
-          title: emailSubject,
-          category: 'support',
-          priority: 'normal',
-        });
-        log(`Resend inbound webhook: created guest ticket #${newTicket.id} for ${senderEmail}`, 'webhook');
-      }
-
-      // Add the initial message
-      await dbStorage.createTicketMessage({
-        ticketId: newTicket.id,
-        authorType: 'user',
-        authorId: senderAuth0Id || 'guest',
-        authorEmail: senderEmail,
-        authorName: senderName,
-        message: messageContent,
-      });
-
-      // Send confirmation email to user
-      if (senderAuth0Id) {
-        // Registered user - normal confirmation
-        sendTicketConfirmationEmail(
-          senderEmail,
-          newTicket.id,
-          emailSubject,
-          'support',
-          'normal',
-          senderName
-        ).catch(err => {
-          log(`Failed to send ticket confirmation for #${newTicket.id}: ${err.message}`, 'email');
-        });
-      } else {
-        // Guest user - send confirmation with access link
-        sendGuestTicketConfirmationEmail(
-          senderEmail,
-          newTicket.id,
-          emailSubject,
-          accessToken!,
-          senderName
-        ).catch(err => {
-          log(`Failed to send guest ticket confirmation for #${newTicket.id}: ${err.message}`, 'email');
-        });
-      }
-
-      // Send admin notification
-      sendAdminTicketNotificationEmail(
-        newTicket.id,
-        emailSubject,
-        'support',
-        'normal',
-        messageContent,
-        senderEmail,
-        senderName
-      ).catch(err => {
-        log(`Failed to send admin notification for ticket #${newTicket.id}: ${err.message}`, 'email');
-      });
-
-      return res.status(200).json({
-        success: true,
-        action: 'created',
-        ticketId: newTicket.id,
-        isGuest: !senderAuth0Id,
-      });
-    } catch (error: any) {
-      log(`Resend inbound webhook error: ${error.message}`, 'webhook');
-      res.status(500).json({ error: 'Failed to process inbound email' });
-    }
-  });
-
-  // ==========================================
-  // GUEST TICKET ACCESS (PUBLIC)
-  // ==========================================
-
-  // View a ticket using guest access token (no auth required)
-  app.get('/api/support/guest/:accessToken', async (req, res) => {
-    try {
-      const { accessToken } = req.params;
-
-      if (!accessToken || accessToken.length < 32) {
-        return res.status(400).json({ error: 'Invalid access token' });
-      }
-
-      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
-
-      if (!ticket) {
-        return res.status(404).json({ error: 'Ticket not found or access denied' });
-      }
-
-      // Get messages
-      const messages = await dbStorage.getTicketMessages(ticket.id);
-
-      res.json({ ticket, messages });
-    } catch (error: any) {
-      log(`Error fetching guest ticket: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch ticket' });
-    }
-  });
-
-  // Reply to a ticket using guest access token (no auth required)
-  app.post('/api/support/guest/:accessToken/messages', async (req, res) => {
-    try {
-      const { accessToken } = req.params;
-      const { message } = req.body;
-
-      if (!accessToken || accessToken.length < 32) {
-        return res.status(400).json({ error: 'Invalid access token' });
-      }
-
-      if (!message || typeof message !== 'string' || message.trim().length < 1) {
-        return res.status(400).json({ error: 'Message is required' });
-      }
-
-      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
-
-      if (!ticket) {
-        return res.status(404).json({ error: 'Ticket not found or access denied' });
-      }
-
-      // Check if ticket is closed
-      if (ticket.status === 'closed') {
-        return res.status(400).json({ error: 'Cannot reply to a closed ticket' });
-      }
-
-      // Add the message
-      const newMessage = await dbStorage.createTicketMessage({
-        ticketId: ticket.id,
-        authorType: 'user',
-        authorId: 'guest',
-        authorEmail: ticket.guestEmail || 'guest@unknown',
-        authorName: null,
-        message: message.trim(),
-      });
-
-      // Update ticket status to waiting_admin
-      await dbStorage.updateTicketStatus(ticket.id, 'waiting_admin');
-
-      // Send admin notification about the reply
-      sendAdminTicketNotificationEmail(
-        ticket.id,
-        `Re: ${ticket.title}`,
-        ticket.category,
-        ticket.priority,
-        message.trim(),
-        ticket.guestEmail || 'guest@unknown',
-        null
-      ).catch(err => {
-        log(`Failed to send admin notification for guest ticket reply #${ticket.id}: ${err.message}`, 'email');
-      });
-
-      log(`Guest reply added to ticket #${ticket.id}`, 'api');
-      res.status(201).json({ message: newMessage });
-    } catch (error: any) {
-      log(`Error adding guest ticket message: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to add reply' });
-    }
-  });
-
-  // ==========================================
   // SUPPORT TICKET ROUTES - USER FACING
   // ==========================================
 
@@ -7129,7 +6600,7 @@ export async function registerRoutes(
 
       const parseResult = createTicketSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
       }
 
       const { title, category, priority, description, virtfusionServerId } = parseResult.data;
@@ -7162,18 +6633,6 @@ export async function registerRoutes(
       });
 
       log(`Ticket #${ticket.id} created by ${req.userSession!.email}`, 'support');
-
-      // Send confirmation email to user (non-blocking)
-      sendTicketConfirmationEmail(
-        req.userSession!.email!,
-        ticket.id,
-        title,
-        category,
-        priority,
-        req.userSession!.name || null
-      ).catch(err => {
-        log(`Failed to send ticket confirmation for ticket #${ticket.id}: ${err.message}`, 'email');
-      });
 
       // Send admin notification email (non-blocking, don't fail if email fails)
       sendAdminTicketNotificationEmail(
@@ -7267,7 +6726,7 @@ export async function registerRoutes(
 
       const parseResult = ticketMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);
@@ -7515,7 +6974,7 @@ export async function registerRoutes(
       // Get user info from wallet (only for registered users)
       const wallet = ticket.auth0UserId ? await dbStorage.getWallet(ticket.auth0UserId) : null;
 
-      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : ticket.guestEmail ? { email: ticket.guestEmail, isGuest: true } : null });
+      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : null });
     } catch (error: any) {
       log(`Error fetching ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch ticket' });
@@ -7537,7 +6996,7 @@ export async function registerRoutes(
 
       const parseResult = ticketMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);
@@ -7577,7 +7036,7 @@ export async function registerRoutes(
 
       const parseResult = adminTicketUpdateSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
+        return res.status(400).json({ error: parseResult.error.errors[0].message });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);
