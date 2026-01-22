@@ -227,7 +227,27 @@ export class VirtFusionClient {
           }
         }
         
-        throw new Error(`VirtFusion API error: ${response.status} ${response.statusText}`);
+        // Try to extract a useful error message from the response
+        let errorMessage = response.statusText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.message) {
+            errorMessage = errorJson.message;
+          } else if (errorJson.error) {
+            errorMessage = errorJson.error;
+          } else if (errorJson.errors) {
+            // Handle validation errors array
+            errorMessage = Object.entries(errorJson.errors)
+              .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+              .join('; ');
+          }
+        } catch {
+          // If not JSON, use the raw error text (truncated)
+          if (errorText && errorText.length > 0) {
+            errorMessage = errorText.substring(0, 200);
+          }
+        }
+        throw new Error(`VirtFusion API error: ${response.status} - ${errorMessage}`);
       }
 
       // Handle empty responses (common for DELETE operations)
