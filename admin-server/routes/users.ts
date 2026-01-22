@@ -718,7 +718,12 @@ export function registerUsersRoutes(router: Router) {
       try {
         const auth0User = await auth0Client.getUserById(auth0UserId);
         if (auth0User) {
-          virtFusionUserId = auth0User.app_metadata?.virtfusion_user_id || null;
+          // Ensure virtFusionUserId is a number (Auth0 might return it as string)
+          const vfId = auth0User.app_metadata?.virtfusion_user_id;
+          virtFusionUserId = vfId ? (typeof vfId === 'number' ? vfId : parseInt(vfId, 10)) : null;
+          if (virtFusionUserId !== null && isNaN(virtFusionUserId)) {
+            virtFusionUserId = null;
+          }
           userEmail = auth0User.email || null;
           console.log(`[admin-users] Found user: email=${userEmail}, virtFusionId=${virtFusionUserId}`);
         } else {
@@ -749,6 +754,7 @@ export function registerUsersRoutes(router: Router) {
       // 3. Delete VirtFusion user (servers should already be deleted)
       if (virtFusionUserId) {
         try {
+          console.log(`[admin-users] Attempting to delete VirtFusion user ID: ${virtFusionUserId} (type: ${typeof virtFusionUserId})`);
           const userDeleted = await virtfusionClient.deleteUserById(virtFusionUserId);
           results.virtfusionUserDeleted = userDeleted;
           if (!userDeleted) {
@@ -757,8 +763,11 @@ export function registerUsersRoutes(router: Router) {
           console.log(`[admin-users] VirtFusion user deletion: success=${userDeleted}`);
         } catch (err: any) {
           console.log(`[admin-users] VirtFusion user deletion failed: ${err.message}`);
+          console.log(`[admin-users] VirtFusion user deletion error stack: ${err.stack}`);
           results.errors.push(`VirtFusion user deletion failed: ${err.message}`);
         }
+      } else {
+        console.log(`[admin-users] No VirtFusion user ID found for ${auth0UserId}, skipping VirtFusion deletion`);
       }
 
       // 4. Delete Stripe customer
