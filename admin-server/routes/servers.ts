@@ -331,7 +331,7 @@ export function registerServersRoutes(router: Router) {
       }
 
       // Delete from VirtFusion
-      await virtfusionClient.deleteServer(String(serverId));
+      await virtfusionClient.deleteServer(serverId);
 
       // Update billing record
       await db
