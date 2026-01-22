@@ -35,6 +35,7 @@ export default function ProvisionServer() {
 
   // Result state
   const [provisionResult, setProvisionResult] = useState<any>(null);
+  const [needsVirtFusionSync, setNeedsVirtFusionSync] = useState(false);
 
   // Fetch users for search
   const { data: usersData, isLoading: loadingUsers } = useQuery({
@@ -56,16 +57,35 @@ export default function ProvisionServer() {
     enabled: !!selectedPlan?.id,
   });
 
+  // Sync to VirtFusion mutation
+  const syncMutation = useMutation({
+    mutationFn: () => usersApi.syncToVirtFusion(selectedUser.auth0UserId),
+    onSuccess: () => {
+      toast.success("User synced to VirtFusion successfully!");
+      setNeedsVirtFusionSync(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to sync user to VirtFusion");
+    },
+  });
+
   // Provision mutation
   const provisionMutation = useMutation({
     mutationFn: serversApi.provision,
     onSuccess: (data) => {
       toast.success("Server provisioned successfully!");
       setProvisionResult(data);
+      setNeedsVirtFusionSync(false);
       queryClient.invalidateQueries({ queryKey: ["servers"] });
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to provision server");
+      // Check if the error indicates user needs VirtFusion sync
+      if (err.needsSync) {
+        setNeedsVirtFusionSync(true);
+        toast.error("User needs to be synced to VirtFusion first");
+      } else {
+        toast.error(err.message || "Failed to provision server");
+      }
     },
   });
 
@@ -239,17 +259,44 @@ export default function ProvisionServer() {
             </div>
 
             {selectedUser ? (
-              <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <div>
-                  <p className="font-medium">{selectedUser.name || selectedUser.email}</p>
-                  <p className="text-sm text-gray-400">{selectedUser.email}</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <div>
+                    <p className="font-medium">{selectedUser.name || selectedUser.email}</p>
+                    <p className="text-sm text-gray-400">{selectedUser.email}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedUser(null);
+                      setNeedsVirtFusionSync(false);
+                    }}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    Change
+                  </button>
                 </div>
-                <button
-                  onClick={() => setSelectedUser(null)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  Change
-                </button>
+
+                {needsVirtFusionSync && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p className="text-sm text-yellow-400 mb-2">
+                      This user hasn't logged in yet and needs to be synced to VirtFusion before provisioning.
+                    </p>
+                    <button
+                      onClick={() => syncMutation.mutate()}
+                      disabled={syncMutation.isPending}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500 text-black rounded font-medium text-sm hover:bg-yellow-400 transition-colors disabled:opacity-50"
+                    >
+                      {syncMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        "Sync to VirtFusion"
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
