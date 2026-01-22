@@ -42,13 +42,18 @@
    - Added auto-redirect after successful verification (2 second delay)
 6. **VirtFusion user deletion** - Fixed to use correct API endpoint: `DELETE /users/{extRelationId}/byExtRelation?relStr=true`
 
+### Completed (2026-01-22)
+1. **Security tables** - Added login_attempts, account_lockouts, user_audit_logs tables and session binding
+2. **Disk usage color thresholds** - Yellow at 60%, red at 85%
+3. **Server card disk display fix** - Was showing percentage as GB
+4. **Promotional codes feature** - Fully implemented:
+   - Admin UI at `/promo-codes` in admin panel
+   - Validation during deploy with rate limiting
+   - Discount application and usage tracking
+
 ### Pending Tasks
 1. **Admin suspend account bug** - "User not found" error when clicking suspend button in admin panel
-2. **Promotional codes feature** - Full implementation planned (see plan file: `modular-watching-island.md`)
-   - Database: `promoCodes` and `promoCodeUsage` tables
-   - Admin UI for creating/managing codes
-   - Client-side validation during deploy
-   - Discount application during server provisioning
+2. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
 
 ### Admin Panel (COMPLETED - 2026-01-19)
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
@@ -113,7 +118,8 @@ git checkout claude/dev-l5488
 
 ## TODO / Known Issues
 - [ ] Admin suspend account bug - "User not found" error
-- [ ] Promotional codes feature (plan file: `modular-watching-island.md`)
+- [ ] Security features - implement lockout logic and audit logging (tables ready)
+- [x] Promotional codes feature - DONE
 
 ## Notes for Claude
 - User prefers direct, concise responses
