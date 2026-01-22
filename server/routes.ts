@@ -3000,6 +3000,14 @@ export async function registerRoutes(
         });
       }
 
+      // Check if server is a free/complimentary server - block deletion, require support contact
+      if (billingStatus?.freeServer) {
+        return res.status(403).json({
+          error: 'This is a complimentary server. To cancel or delete it, please contact support at support@ozvps.com.au',
+          code: 'FREE_SERVER'
+        });
+      }
+
       // Check if server is already cancelled
       const existing = await dbStorage.getCancellationByServerId(serverId, session.auth0UserId!);
       if (existing) {
