@@ -14,26 +14,40 @@ export function useSystemHealth() {
   const { data, isLoading, error, refetch } = useQuery<SystemHealth>({
     queryKey: ["system", "health"],
     queryFn: async () => {
-      const response = await fetch("/api/health");
-      if (!response.ok) {
-        // Non-2xx response - parse error if possible
-        try {
-          return response.json();
-        } catch {
-          // Couldn't parse JSON, treat as system error
-          return {
-            status: 'error' as const,
-            errorCode: 'SYSTEM_ERROR' as const,
-            message: 'System is temporarily unavailable',
-            services: { database: false, virtfusion: null }
-          };
+      try {
+        const response = await fetch("/api/health", {
+          // Short timeout - if API is down, fail fast
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) {
+          // Non-2xx response - parse error if possible
+          try {
+            return await response.json();
+          } catch {
+            // Couldn't parse JSON, treat as system error
+            return {
+              status: 'error' as const,
+              errorCode: 'SYSTEM_ERROR' as const,
+              message: 'System is temporarily unavailable',
+              services: { database: false, virtfusion: null }
+            };
+          }
         }
+        return await response.json();
+      } catch (e) {
+        // Network error, timeout, or API completely unreachable
+        // Return error object instead of throwing so we can detect it
+        return {
+          status: 'error' as const,
+          errorCode: 'SYSTEM_ERROR' as const,
+          message: 'Unable to connect to server',
+          services: { database: false, virtfusion: null }
+        };
       }
-      return response.json();
     },
-    staleTime: 1000 * 10, // 10 seconds
-    refetchInterval: 1000 * 30, // Poll every 30 seconds
-    retry: 1, // Only retry once on failure
+    staleTime: 1000 * 5, // 5 seconds - check more frequently
+    refetchInterval: 1000 * 10, // Poll every 10 seconds when API might be down
+    retry: 0, // Don't retry - fail fast
   });
 
   const isHealthy = data?.status === 'ok';

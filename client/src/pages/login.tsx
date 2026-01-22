@@ -248,6 +248,12 @@ export default function LoginPage() {
 
     if (isSubmitting || loginMutation.isPending) return;
 
+    // Block login if system is down
+    if (isDatabaseDown) {
+      setError("System is temporarily unavailable. Please try again later.");
+      return;
+    }
+
     setError("");
     setIsSubmitting(true);
 
@@ -294,6 +300,12 @@ export default function LoginPage() {
     e.preventDefault();
 
     if (isSubmitting || loginMutation.isPending) return;
+
+    // Block if system is down
+    if (isDatabaseDown) {
+      setError("System is temporarily unavailable. Please try again later.");
+      return;
+    }
 
     setError("");
     setIsSubmitting(true);
