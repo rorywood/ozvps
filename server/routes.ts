@@ -1014,9 +1014,16 @@ export async function registerRoutes(
         await auth0Client.updateUserName(auth0UserId, name);
       }
 
-      // NOTE: email_verified is now set to true during user creation via Management API
-      // This prevents Auth0 from sending verification emails
-      // Our actual verification status is tracked in our database (emailVerificationTokens table)
+      // Set email_verified=true in Auth0 to suppress any automatic Auth0 verification emails
+      // Our ACTUAL verification status is tracked in our database (emailVerificationTokens table)
+      // This is a backup in case Auth0's automatic emails aren't disabled in dashboard
+      try {
+        await auth0Client.updateUser(auth0UserId, { email_verified: true });
+        log(`Set Auth0 email_verified=true for ${email} to suppress Auth0 emails`, 'auth');
+      } catch (verifyErr: any) {
+        // Non-fatal - if this fails, user might get duplicate emails but can still register
+        log(`Warning: Could not set Auth0 email_verified for ${email}: ${verifyErr.message}`, 'auth');
+      }
 
       // Create or find existing Stripe customer and wallet for the new user
       try {
