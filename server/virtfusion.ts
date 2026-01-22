@@ -1606,45 +1606,59 @@ export class VirtFusionClient {
     try {
       log(`Deleting VirtFusion user by ID ${userId}`, 'virtfusion');
 
+      // First check if user exists
+      const userBefore = await this.getUserById(userId);
+      if (!userBefore) {
+        log(`VirtFusion user ${userId} not found - nothing to delete`, 'virtfusion');
+        return true; // Already gone
+      }
+
+      log(`Found VirtFusion user to delete: id=${userBefore.id}, extRelationId=${userBefore.extRelationId}, email=${userBefore.email}`, 'virtfusion');
+
       // Try multiple deletion methods since VirtFusion API can be inconsistent
+      let deleteAttempted = false;
+      let lastError: string | null = null;
 
       // Method 1: Try direct DELETE /users/{id}
       try {
         await this.request(`/users/${userId}`, {
           method: 'DELETE',
         });
-        log(`Successfully deleted VirtFusion user ${userId} via direct ID`, 'virtfusion');
-        return true;
+        deleteAttempted = true;
+        log(`Direct DELETE /users/${userId} completed`, 'virtfusion');
       } catch (directError: any) {
+        lastError = directError.message;
         log(`Direct ID deletion failed for ${userId}: ${directError.message}`, 'virtfusion');
 
-        // If 404, user already deleted
+        // If 404 after first check, might have been deleted by another process
         if (directError.message?.includes('404')) {
-          log(`VirtFusion user ${userId} not found (already deleted)`, 'virtfusion');
           return true;
         }
+      }
 
-        // If 405 Method Not Allowed, try byExtRelation method
-        if (directError.message?.includes('405')) {
-          log(`Direct deletion not supported, trying byExtRelation method`, 'virtfusion');
+      // Method 2: Try delete by extRelationId if user has one
+      if (!deleteAttempted && userBefore.extRelationId) {
+        try {
+          const deleted = await this.deleteUserByExtRelationId(userBefore.extRelationId);
+          if (deleted) {
+            deleteAttempted = true;
+            log(`Delete by extRelationId completed for user ${userId}`, 'virtfusion');
+          }
+        } catch (extError: any) {
+          lastError = extError.message;
+          log(`Delete by extRelationId also failed for ${userId}: ${extError.message}`, 'virtfusion');
         }
       }
 
-      // Method 2: Get user first, then delete by extRelationId
-      const user = await this.getUserById(userId);
-      if (!user) {
-        log(`VirtFusion user ${userId} not found, may already be deleted`, 'virtfusion');
-        return true;
+      // Verify deletion by checking if user still exists
+      const userAfter = await this.getUserById(userId);
+      if (userAfter) {
+        log(`FAILED: VirtFusion user ${userId} still exists after deletion attempts! Email: ${userAfter.email}`, 'virtfusion');
+        return false;
       }
 
-      log(`Found VirtFusion user: id=${user.id}, extRelationId=${user.extRelationId}, email=${user.email}`, 'virtfusion');
-
-      if (user.extRelationId) {
-        return await this.deleteUserByExtRelationId(user.extRelationId);
-      }
-
-      log(`VirtFusion user ${userId} has no extRelationId, cannot delete via byExtRelation`, 'virtfusion');
-      return false;
+      log(`Verified: VirtFusion user ${userId} successfully deleted`, 'virtfusion');
+      return true;
     } catch (error: any) {
       if (error.message?.includes('404')) {
         log(`VirtFusion user ${userId} already deleted or not found`, 'virtfusion');
