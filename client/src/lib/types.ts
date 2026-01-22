@@ -53,6 +53,7 @@ export interface Server {
     freeServer?: boolean;
     adminSuspended?: boolean;
     adminSuspendedReason?: string | null;
+    planName?: string | null;
   } | null;
   created_at: string;
 }

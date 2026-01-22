@@ -289,7 +289,7 @@ class ApiClient {
   async getDashboardOverview(): Promise<{
     servers: Server[];
     cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: string; status: string }>;
-    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null }>;
+    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null; planName?: string | null }>;
     bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
   }> {
     const response = await secureFetch(`${this.baseUrl}/dashboard/overview`);
@@ -341,7 +341,7 @@ class ApiClient {
     return response.json();
   }
 
-  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; username?: string; error?: string }> {
+  async resetServerPassword(id: string): Promise<{ success: boolean; password?: string; username?: string; error?: string; emailSent?: boolean }> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -656,7 +656,7 @@ class ApiClient {
     recaptchaToken?: string,
     totpToken?: string,
     backupCode?: string
-  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string }> {
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; csrfToken?: string }> {
     const response = await secureFetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
