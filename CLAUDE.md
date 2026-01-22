@@ -46,14 +46,14 @@
 1. **Security tables** - Added login_attempts, account_lockouts, user_audit_logs tables and session binding
 2. **Disk usage color thresholds** - Yellow at 60%, red at 85%
 3. **Server card disk display fix** - Was showing percentage as GB
-4. **Promotional codes feature** - Fully implemented:
+4. **Admin suspend bug fix** - Was showing "User not found" for Auth0 API errors (rate limits, etc.)
+5. **Promotional codes feature** - Fully implemented:
    - Admin UI at `/promo-codes` in admin panel
    - Validation during deploy with rate limiting
    - Discount application and usage tracking
 
 ### Pending Tasks
-1. **Admin suspend account bug** - "User not found" error when clicking suspend button in admin panel
-2. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
+1. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
 
 ### Admin Panel (COMPLETED - 2026-01-19)
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
@@ -117,8 +117,8 @@ git checkout claude/dev-l5488
 ```
 
 ## TODO / Known Issues
-- [ ] Admin suspend account bug - "User not found" error
 - [ ] Security features - implement lockout logic and audit logging (tables ready)
+- [x] Admin suspend account bug - FIXED (was returning "User not found" for Auth0 API errors)
 - [x] Promotional codes feature - DONE
 
 ## Notes for Claude
