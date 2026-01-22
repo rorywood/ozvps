@@ -2146,12 +2146,7 @@ export default function ServerDetail() {
               {networkInfo?.interfaces && networkInfo.interfaces.length > 0 ? (
                 <div className="space-y-4">
                   {networkInfo.interfaces.map((iface, index) => (
-                    <div key={index} className="p-4 bg-muted/50 rounded-lg border border-border">
-                      <div className="flex items-center gap-3 mb-4">
-                        <Network className="h-5 w-5 text-blue-400" />
-                        <span className="font-mono font-bold text-foreground">{iface.name}</span>
-                      </div>
-
+                    <div key={index} className="space-y-4">
                       {iface.ipv4.length > 0 && (
                         <div className="space-y-2">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IPv4 Addresses</div>
