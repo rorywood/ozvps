@@ -1581,10 +1581,18 @@ export async function registerRoutes(
       // Get email verification status from our database ONLY
       // NOTE: We cannot trust Auth0's email_verified flag because we set it to true during
       // registration to prevent Auth0 from sending duplicate verification emails.
-      // Our actual verification status is tracked in emailVerificationTokens table.
-      const emailVerified = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
+      // Check BOTH Redis override AND emailVerificationTokens table (for existing users)
+      const [redisOverride, dbVerified] = await Promise.all([
+        storage.getEmailVerifiedOverride(auth0UserIdPrefixed),
+        dbStorage.isEmailVerified(auth0UserIdPrefixed),
+      ]);
+      const emailVerified = redisOverride || dbVerified;
       if (emailVerified) {
-        log(`User ${email} email verified via database`, 'auth');
+        log(`User ${email} email verified (redis=${redisOverride}, db=${dbVerified})`, 'auth');
+        // Migrate to Redis if only in DB
+        if (dbVerified && !redisOverride) {
+          await storage.setEmailVerifiedOverride(auth0UserIdPrefixed, true, 'login-migration');
+        }
       }
 
       // Create local session with IP and user agent binding for security
