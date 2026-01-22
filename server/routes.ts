@@ -1772,7 +1772,18 @@ export async function registerRoutes(
         try {
           // Check OUR database for email verification - ignore Auth0's flag since we set it to true
           // to suppress Auth0's automatic verification emails
-          const currentEmailVerified = await storage.getEmailVerifiedOverride(session.auth0UserId);
+          // Check BOTH the Redis override AND the emailVerificationTokens table (for existing users)
+          const [redisOverride, dbVerified] = await Promise.all([
+            storage.getEmailVerifiedOverride(session.auth0UserId),
+            dbStorage.isEmailVerified(session.auth0UserId),
+          ]);
+          const currentEmailVerified = redisOverride || dbVerified;
+
+          // If verified in DB but not in Redis, set the Redis override for future checks
+          if (dbVerified && !redisOverride) {
+            await storage.setEmailVerifiedOverride(session.auth0UserId, true, 'migration-from-db');
+            log(`Migrated email verified status to Redis for ${session.email}`, 'auth');
+          }
 
           // Check Auth0 only for admin status
           const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
