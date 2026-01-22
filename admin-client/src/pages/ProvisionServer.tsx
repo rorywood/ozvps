@@ -110,6 +110,7 @@ export default function ProvisionServer() {
 
     provisionMutation.mutate({
       auth0UserId: selectedUser.auth0UserId,
+      email: selectedUser.email,
       planId: selectedPlan.id,
       hostname,
       osId: selectedOs,

@@ -689,6 +689,7 @@ export function registerServersRoutes(router: Router) {
       const session = req.adminSession!;
       const {
         auth0UserId,
+        email,
         planId,
         hostname,
         osId,
@@ -701,6 +702,9 @@ export function registerServersRoutes(router: Router) {
       // Validate required fields
       if (!auth0UserId || typeof auth0UserId !== "string") {
         return res.status(400).json({ error: "auth0UserId is required" });
+      }
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "email is required" });
       }
       if (!planId || typeof planId !== "number") {
         return res.status(400).json({ error: "planId is required" });
@@ -737,8 +741,8 @@ export function registerServersRoutes(router: Router) {
           return res.status(400).json({ error: "User not found in system" });
         }
 
-        // Create VirtFusion user (auth0UserId is the user's email)
-        const userEmail = auth0UserId;
+        // Create VirtFusion user using the provided email
+        const userEmail = email;
         const userName = userEmail.split('@')[0];
 
         const vfUser = await virtfusionClient.findOrCreateUser(userEmail, userName);
