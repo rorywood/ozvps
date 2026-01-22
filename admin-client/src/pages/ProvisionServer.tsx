@@ -19,6 +19,7 @@ import {
   Copy,
 } from "lucide-react";
 import { Link } from "wouter";
+import { getOsLogoUrl, FALLBACK_LOGO } from "../lib/os-logos";
 
 export default function ProvisionServer() {
   const queryClient = useQueryClient();
@@ -102,12 +103,16 @@ export default function ProvisionServer() {
       toast.error("Please enter a valid hostname (at least 3 characters)");
       return;
     }
+    if (!selectedOs) {
+      toast.error("Please select an operating system");
+      return;
+    }
 
     provisionMutation.mutate({
       auth0UserId: selectedUser.auth0UserId,
       planId: selectedPlan.id,
       hostname,
-      osId: selectedOs || undefined,
+      osId: selectedOs,
       freeServer,
       sendCredentials,
       notes: notes || undefined,
@@ -431,43 +436,77 @@ export default function ProvisionServer() {
               <div className="flex justify-center py-4">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
-            ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                <button
-                  onClick={() => setSelectedOs(null)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                    selectedOs === null
-                      ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                  }`}
-                >
-                  <p className="font-medium">No OS (Install Later)</p>
-                  <p className="text-sm text-gray-400">Server will be created without an operating system</p>
-                </button>
-
-                {templatesData?.templates && templatesData.templates.length > 0 ? (
-                  templatesData.templates.map((template: any) => (
-                    <button
-                      key={template.id}
-                      onClick={() => setSelectedOs(template.id)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                        selectedOs === template.id
-                          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                      }`}
-                    >
-                      <p className="font-medium">{template.name}</p>
-                      {template.group && (
-                        <p className="text-sm text-gray-400">{template.group}</p>
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400 text-center py-2">
-                    No OS templates available for this plan. You can install an OS later.
-                  </p>
-                )}
+            ) : templatesData?.groups && templatesData.groups.length > 0 ? (
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                {templatesData.groups.map((group: any) => (
+                  <div key={group.name}>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">{group.name}</h3>
+                    <div className="space-y-2">
+                      {group.templates.map((template: any) => (
+                        <button
+                          key={template.id}
+                          onClick={() => setSelectedOs(template.id)}
+                          className={`w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3 ${
+                            selectedOs === template.id
+                              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                          }`}
+                        >
+                          <img
+                            src={getOsLogoUrl({ id: template.id, name: template.name, group: template.group, distro: template.distro })}
+                            alt={template.name}
+                            className="h-8 w-8 object-contain"
+                            onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{template.name}</p>
+                            {template.version && (
+                              <p className="text-sm text-gray-400">{template.version}</p>
+                            )}
+                          </div>
+                          {selectedOs === template.id && (
+                            <Check className="h-5 w-5 text-[var(--color-primary)]" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
+            ) : templatesData?.templates && templatesData.templates.length > 0 ? (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                {templatesData.templates.map((template: any) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedOs(template.id)}
+                    className={`w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3 ${
+                      selectedOs === template.id
+                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                    }`}
+                  >
+                    <img
+                      src={getOsLogoUrl({ id: template.id, name: template.name, group: template.group, distro: template.distro })}
+                      alt={template.name}
+                      className="h-8 w-8 object-contain"
+                      onError={(e) => { e.currentTarget.src = FALLBACK_LOGO; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{template.name}</p>
+                      {template.version && (
+                        <p className="text-sm text-gray-400">{template.version}</p>
+                      )}
+                    </div>
+                    {selectedOs === template.id && (
+                      <Check className="h-5 w-5 text-[var(--color-primary)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-red-400 text-center py-4">
+                No OS templates available for this plan. Cannot provision without an OS.
+              </p>
             )}
           </div>
 
@@ -549,8 +588,10 @@ export default function ProvisionServer() {
                 <span className="text-gray-400">Operating System</span>
                 <span>
                   {selectedOs
-                    ? templatesData?.templates?.find((t: any) => t.id === selectedOs)?.name
-                    : "None (Install Later)"}
+                    ? (templatesData?.templates?.find((t: any) => t.id === selectedOs)?.name ||
+                       templatesData?.groups?.flatMap((g: any) => g.templates).find((t: any) => t.id === selectedOs)?.name ||
+                       "Selected")
+                    : <span className="text-gray-400 italic">Not selected</span>}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -567,7 +608,7 @@ export default function ProvisionServer() {
 
             <button
               onClick={handleProvision}
-              disabled={!selectedUser || !selectedPlan || !hostname || provisionMutation.isPending}
+              disabled={!selectedUser || !selectedPlan || !hostname || !selectedOs || provisionMutation.isPending}
               className="w-full mt-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {provisionMutation.isPending ? (
