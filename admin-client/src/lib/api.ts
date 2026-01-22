@@ -200,8 +200,6 @@ export const billingApi = {
 
   updateRecord: (id: number, data: any) => api.put(`/billing/records/${id}`, data),
 
-  deleteRecord: (id: number) => api.delete(`/billing/records/${id}`, { confirm: "DELETE" }),
-
   suspendRecord: (id: number, reason?: string) => api.post(`/billing/records/${id}/suspend`, { reason }),
 
   unsuspendRecord: (id: number) => api.post(`/billing/records/${id}/unsuspend`),

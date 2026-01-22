@@ -330,43 +330,6 @@ export function registerBillingRoutes(router: Router) {
     }
   });
 
-  // Delete billing record (for orphaned records)
-  router.delete("/billing/records/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      const session = req.adminSession!;
-      const { confirm } = req.body;
-
-      if (isNaN(id)) {
-        return res.status(400).json({ error: "Invalid ID" });
-      }
-
-      if (confirm !== "DELETE") {
-        return res.status(400).json({ error: "Confirmation required" });
-      }
-
-      const [billing] = await db.select().from(serverBilling).where(eq(serverBilling.id, id));
-
-      if (!billing) {
-        return res.status(404).json({ error: "Billing record not found" });
-      }
-
-      // Delete the billing record
-      await db.delete(serverBilling).where(eq(serverBilling.id, id));
-
-      // Audit log
-      await auditSuccess(req, "billing.delete", "billing", String(id), billing.virtfusionServerId);
-
-      console.log(`[admin-billing] Billing record ${id} (server ${billing.virtfusionServerId}) deleted by ${session.email}`);
-
-      res.json({ success: true });
-    } catch (error: any) {
-      await auditFailure(req, "billing.delete", "billing", error.message, req.params.id);
-      console.log(`[admin-billing] Delete record error: ${error.message}`);
-      res.status(500).json({ error: "Failed to delete billing record" });
-    }
-  });
-
   // Clean up orphaned billing records
   router.post("/billing/cleanup-orphaned", async (req: Request, res: Response) => {
     try {

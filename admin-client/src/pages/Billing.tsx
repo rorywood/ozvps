@@ -38,17 +38,6 @@ export default function Billing() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const deleteRecordMutation = useMutation({
-    mutationFn: (id: number) => billingApi.deleteRecord(id),
-    onSuccess: () => {
-      toast.success("Billing record deleted");
-      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
-      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
-      setSelectedRecord(null);
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
   const suspendMutation = useMutation({
     mutationFn: (id: number) => billingApi.suspendRecord(id, "Admin manual suspension"),
     onSuccess: () => {
@@ -266,18 +255,6 @@ export default function Billing() {
                     Suspend Server
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    if (confirm(`Delete billing record for server ${selectedRecord.billing.virtfusionServerId}? This cannot be undone.`)) {
-                      deleteRecordMutation.mutate(selectedRecord.billing.id);
-                    }
-                  }}
-                  disabled={deleteRecordMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Record
-                </button>
               </div>
             </div>
           </div>
