@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
-import { serverBilling, serverCancellations, userMappings, plans } from "../../shared/schema";
+import { serverBilling, serverCancellations, userMappings, plans, wallets } from "../../shared/schema";
 import { eq, desc, and, like, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
@@ -66,6 +66,73 @@ export function registerServersRoutes(router: Router) {
     } catch (error: any) {
       console.log(`[admin-servers] Get plan templates error: ${error.message}`);
       res.status(500).json({ error: "Failed to get templates" });
+    }
+  });
+
+  // Sync a user to VirtFusion (create VirtFusion account if needed)
+  router.post("/users/:auth0UserId/sync-virtfusion", async (req: Request, res: Response) => {
+    try {
+      const { auth0UserId } = req.params;
+      const session = req.adminSession!;
+
+      // Check if user exists in our system
+      const [wallet] = await db
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      if (!wallet) {
+        return res.status(404).json({ error: "User not found in system" });
+      }
+
+      // Check if already synced
+      const [existingMapping] = await db
+        .select()
+        .from(userMappings)
+        .where(eq(userMappings.auth0UserId, auth0UserId));
+
+      if (existingMapping) {
+        return res.json({
+          success: true,
+          message: "User already synced to VirtFusion",
+          virtFusionUserId: existingMapping.virtFusionUserId
+        });
+      }
+
+      // Create VirtFusion user
+      const userEmail = auth0UserId;
+      const userName = userEmail.split('@')[0];
+
+      const vfUser = await virtfusionClient.findOrCreateUser(userEmail, userName);
+      if (!vfUser) {
+        return res.status(500).json({ error: "Failed to create VirtFusion user" });
+      }
+
+      // Create the mapping
+      await db
+        .insert(userMappings)
+        .values({
+          auth0UserId,
+          email: userEmail,
+          virtFusionUserId: vfUser.id,
+        });
+
+      // Update wallet with VirtFusion user ID
+      await db
+        .update(wallets)
+        .set({ virtFusionUserId: vfUser.id })
+        .where(eq(wallets.auth0UserId, auth0UserId));
+
+      console.log(`[admin-servers] ${session.email} synced user ${auth0UserId} to VirtFusion (ID: ${vfUser.id})`);
+
+      res.json({
+        success: true,
+        message: "User synced to VirtFusion successfully",
+        virtFusionUserId: vfUser.id
+      });
+    } catch (error: any) {
+      console.log(`[admin-servers] Sync to VirtFusion error: ${error.message}`);
+      res.status(500).json({ error: "Failed to sync user to VirtFusion" });
     }
   });
 
@@ -635,13 +702,17 @@ export function registerServersRoutes(router: Router) {
       console.log(`[admin-servers] Provisioning server for ${auth0UserId}, plan ${planId}, hostname: ${hostname}`);
 
       // Look up user mapping
-      const [userMapping] = await db
+      let [userMapping] = await db
         .select()
         .from(userMappings)
         .where(eq(userMappings.auth0UserId, auth0UserId));
 
       if (!userMapping) {
-        return res.status(400).json({ error: "User not found in VirtFusion mappings. User must log in first to be synced." });
+        return res.status(400).json({
+          error: "User not synced to VirtFusion yet.",
+          needsSync: true,
+          message: "Click 'Sync to VirtFusion' to create the user's VirtFusion account first."
+        });
       }
 
       // Look up plan

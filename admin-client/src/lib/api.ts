@@ -137,6 +137,13 @@ export const usersApi = {
         errors: string[];
       };
     }>(`/users/${encodeURIComponent(auth0UserId)}/purge`, { confirm: "PURGE" }),
+
+  syncToVirtFusion: (auth0UserId: string) =>
+    api.post<{
+      success: boolean;
+      message: string;
+      virtFusionUserId?: number;
+    }>(`/users/${encodeURIComponent(auth0UserId)}/sync-virtfusion`),
 };
 
 // Servers API
