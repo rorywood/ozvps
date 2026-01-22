@@ -129,9 +129,16 @@ export function registerUsersRoutes(router: Router) {
       const { auth0UserId } = req.params;
 
       // Get user from Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Get local data
@@ -218,9 +225,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -283,9 +297,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error while checking user: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -360,9 +381,16 @@ export function registerUsersRoutes(router: Router) {
       const session = req.adminSession!;
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Update or create user flags
@@ -410,9 +438,16 @@ export function registerUsersRoutes(router: Router) {
       const session = req.adminSession!;
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Resend verification email via Auth0
@@ -451,9 +486,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Get or create wallet
@@ -515,9 +557,16 @@ export function registerUsersRoutes(router: Router) {
       }
 
       // Check user exists in Auth0
-      const auth0User = await auth0Client.getUserById(auth0UserId);
+      let auth0User;
+      try {
+        auth0User = await auth0Client.getUserById(auth0UserId);
+      } catch (auth0Error: any) {
+        console.log(`[admin-users] Auth0 API error: ${auth0Error.message}`);
+        return res.status(503).json({ error: "Auth0 service unavailable. Please try again." });
+      }
+
       if (!auth0User) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "User not found in Auth0" });
       }
 
       // Verify VirtFusion user exists

@@ -244,10 +244,14 @@ class Auth0Client {
       );
 
       if (!response.ok) {
-        if (response.status !== 404) {
-          log(`Failed to get Auth0 user by ID: ${response.status}`, 'auth0');
+        if (response.status === 404) {
+          // User genuinely doesn't exist
+          return null;
         }
-        return null;
+        // Other errors should be thrown so callers can handle them appropriately
+        const errorText = await response.text().catch(() => 'Unknown error');
+        log(`Failed to get Auth0 user by ID: ${response.status} - ${errorText}`, 'auth0');
+        throw new Error(`Auth0 API error: ${response.status}`);
       }
 
       const user = await response.json() as any;
@@ -260,7 +264,8 @@ class Auth0Client {
       };
     } catch (error: any) {
       log(`Auth0 get user by ID error: ${error.message}`, 'auth0');
-      return null;
+      // Re-throw so callers know this is an API failure, not "user not found"
+      throw error;
     }
   }
 
