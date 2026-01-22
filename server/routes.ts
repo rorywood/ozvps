@@ -1452,7 +1452,12 @@ export async function registerRoutes(
 
         // If TOTP failed, try backup code
         if (!tfaValid && backupCode) {
-          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+          let backupCodes: string[] = [];
+          try {
+            backupCodes = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+          } catch (parseError) {
+            log(`Warning: Failed to parse backup codes for ${email}, treating as empty`, 'security');
+          }
 
           // Check each backup code with argon2 (or fallback to sha256 for legacy codes)
           for (let i = 0; i < backupCodes.length; i++) {
@@ -3315,6 +3320,32 @@ export async function registerRoutes(
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (buffer.length > maxSize) {
         return res.status(400).json({ error: 'Image too large. Maximum size is 10MB.' });
+      }
+
+      // SECURITY: Validate file magic bytes match the claimed MIME type
+      // This prevents attackers from uploading malicious files with fake MIME headers
+      const magicBytes = {
+        jpeg: [0xFF, 0xD8, 0xFF],
+        jpg: [0xFF, 0xD8, 0xFF],
+        png: [0x89, 0x50, 0x4E, 0x47],
+        gif: [0x47, 0x49, 0x46, 0x38],
+        webp: [0x52, 0x49, 0x46, 0x46], // RIFF header, need to also check WEBP
+      };
+      const expectedMagic = magicBytes[extension as keyof typeof magicBytes];
+      if (!expectedMagic) {
+        return res.status(400).json({ error: 'Unsupported image format' });
+      }
+      const actualMagic = Array.from(buffer.slice(0, expectedMagic.length));
+      const magicMatches = expectedMagic.every((byte, i) => actualMagic[i] === byte);
+      // For WebP, also verify bytes 8-11 are 'WEBP'
+      if (extension === 'webp' && magicMatches) {
+        const webpMarker = buffer.slice(8, 12).toString('ascii');
+        if (webpMarker !== 'WEBP') {
+          return res.status(400).json({ error: 'Invalid WebP file' });
+        }
+      }
+      if (!magicMatches) {
+        return res.status(400).json({ error: 'File content does not match claimed image type' });
       }
 
       // Create uploads directory if it doesn't exist
@@ -6678,7 +6709,7 @@ export async function registerRoutes(
 
       const parseResult = createTicketSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0].message });
+        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
       }
 
       const { title, category, priority, description, virtfusionServerId } = parseResult.data;
@@ -6804,7 +6835,7 @@ export async function registerRoutes(
 
       const parseResult = ticketMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0].message });
+        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);
@@ -7074,7 +7105,7 @@ export async function registerRoutes(
 
       const parseResult = ticketMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0].message });
+        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);
@@ -7114,7 +7145,7 @@ export async function registerRoutes(
 
       const parseResult = adminTicketUpdateSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors[0].message });
+        return res.status(400).json({ error: parseResult.error.errors[0]?.message || 'Invalid request data' });
       }
 
       const ticket = await dbStorage.getTicketById(ticketId);

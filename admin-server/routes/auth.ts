@@ -17,15 +17,22 @@ import { getClientIp } from "../middleware/ip-whitelist";
 import { log } from "../../server/logger";
 
 // HMAC secret for signing pending login tokens
-// Use SESSION_SECRET from env, or a fallback for development
-const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET || process.env.AUTH0_CLIENT_SECRET || "admin-panel-pending-token-secret";
+// SECURITY: Must use SESSION_SECRET in production - no fallbacks allowed
+const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET;
+if (!PENDING_TOKEN_SECRET || PENDING_TOKEN_SECRET.length < 32) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CRITICAL: SESSION_SECRET must be set and at least 32 characters in production');
+  }
+  console.warn('WARNING: SESSION_SECRET not set or too short - using insecure fallback for development only');
+}
+const EFFECTIVE_TOKEN_SECRET = PENDING_TOKEN_SECRET || 'dev-only-insecure-token-secret-do-not-use-in-prod';
 
 /**
  * Create a signed pending login token with HMAC
  */
 function createPendingLoginToken(data: { auth0UserId: string; email: string; name: string | null; exp: number }): string {
   const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
-  const signature = createHmac("sha256", PENDING_TOKEN_SECRET)
+  const signature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
     .update(payload)
     .digest("base64url");
   return `${payload}.${signature}`;
@@ -44,7 +51,7 @@ function verifyPendingLoginToken(token: string): { auth0UserId: string; email: s
     const [payload, signature] = parts;
 
     // Verify signature
-    const expectedSignature = createHmac("sha256", PENDING_TOKEN_SECRET)
+    const expectedSignature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
       .update(payload)
       .digest("base64url");
 

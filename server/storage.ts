@@ -1691,15 +1691,46 @@ export const dbStorage = {
     // Format: INV-YYYYMM-XXXXX where XXXXX is a sequential number
     const now = new Date();
     const prefix = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-    
-    // Get the count of invoices this month to generate sequential number
+
+    // Get the MAX invoice number this month (safer than COUNT for race conditions)
+    // Extract the numeric suffix and find the highest one
     const [result] = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        maxNum: sql<number>`COALESCE(MAX(CAST(SUBSTRING(${invoices.invoiceNumber} FROM '\\d+$') AS INTEGER)), 0)`
+      })
       .from(invoices)
       .where(sql`${invoices.invoiceNumber} LIKE ${prefix + '%'}`);
-    
-    const nextNum = (result?.count || 0) + 1;
+
+    const nextNum = (result?.maxNum || 0) + 1;
     return `${prefix}-${String(nextNum).padStart(5, '0')}`;
+  },
+
+  // Create invoice with automatic retry on duplicate invoice number (handles race conditions)
+  async createInvoiceWithNumber(data: Omit<InsertInvoice, 'invoiceNumber'>): Promise<Invoice> {
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const invoiceNumber = await this.generateInvoiceNumber();
+        const [invoice] = await db
+          .insert(invoices)
+          .values({ ...data, invoiceNumber } as typeof invoices.$inferInsert)
+          .returning();
+        return invoice;
+      } catch (error: any) {
+        // Check if it's a unique constraint violation on invoice_number
+        const isUniqueViolation = error.code === '23505' &&
+          (error.constraint?.includes('invoice_number') || error.detail?.includes('invoice_number'));
+
+        if (isUniqueViolation && attempt < MAX_RETRIES - 1) {
+          // Retry with a new number
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('Failed to generate unique invoice number after multiple attempts');
   },
 
   async updateInvoicePdfPath(id: number, pdfPath: string): Promise<Invoice | undefined> {
