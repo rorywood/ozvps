@@ -637,7 +637,24 @@ class ApiClient {
     recaptchaToken?: string,
     totpToken?: string,
     backupCode?: string
-  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string }> {
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string }> {
+    // Pre-flight check: verify API is reachable before attempting login
+    try {
+      const healthCheck = await fetch('/api/health', {
+        signal: AbortSignal.timeout(3000),
+      });
+      const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
+      if (healthData.status === 'error' || healthData.errorCode) {
+        throw new Error('System is temporarily unavailable. Please try again later.');
+      }
+    } catch (e: any) {
+      if (e.message?.includes('temporarily unavailable')) {
+        throw e;
+      }
+      // Network error or timeout - API is unreachable
+      throw new Error('Unable to connect to server. Please check your connection and try again.');
+    }
+
     const response = await secureFetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -658,6 +675,22 @@ class ApiClient {
   }
 
   async register(email: string, password: string, name?: string): Promise<{ user: { id: number; email: string; name: string }; csrfToken?: string }> {
+    // Pre-flight check: verify API is reachable before attempting registration
+    try {
+      const healthCheck = await fetch('/api/health', {
+        signal: AbortSignal.timeout(3000),
+      });
+      const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
+      if (healthData.status === 'error' || healthData.errorCode) {
+        throw new Error('System is temporarily unavailable. Please try again later.');
+      }
+    } catch (e: any) {
+      if (e.message?.includes('temporarily unavailable')) {
+        throw e;
+      }
+      throw new Error('Unable to connect to server. Please check your connection and try again.');
+    }
+
     const response = await secureFetch(`${this.baseUrl}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
