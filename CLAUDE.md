@@ -17,32 +17,43 @@
 | Development | dev.ozvps.com.au | `claude/dev-l5488` | Different server |
 
 ## Key Files
-- `scripts/ozvps` - Control panel CLI (v4.1.0, git-based updates)
+- `scripts/ozvps` - Control panel CLI (v4.2.0, git-based updates with auto db:push)
 - `scripts/ozvps-install.sh` - Fresh install script (git clone based)
 - `server/routes.ts` - All API endpoints (49 admin routes with `requireAdmin` middleware)
 - `server/index.ts` - Express setup, rate limiters, middleware
 - `server/virtfusion.ts` - VirtFusion API client with stale cache fallback
 - `server/cancellation-processor.ts` - Server cancellation with orphan cleanup
 - `server/webhookHandlers.ts` - Stripe webhook processing
+- `server/email.ts` - All email templates (ticket confirmation, guest ticket, admin notification, etc.)
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
+- `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page
+- `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-21)
+## Recent Session Work (2026-01-22)
 
 ### Completed This Session
-1. **Plan name on server cards** - Added plan name display to dashboard, servers page, and server detail sidebar
-2. **Admin ticket email notifications** - Sends email to `ADMIN_NOTIFICATION_EMAIL` when new support ticket submitted
-3. **Admin ticket management** - Added status/priority/category dropdowns, reopen/close/delete functionality
-4. **Profile picture upload** - Base64 image upload to account settings (10MB limit, stored in `/uploads/profile-pictures/`)
-   - Added `profilePictureUrl` field to wallets table
-   - Fixed body size limit issue (was 100KB, now 15MB for this endpoint)
-5. **Email verification fixes**:
-   - Fixed duplicate emails (Auth0 + custom) - now sets `email_verified=true` in Auth0 immediately to suppress Auth0's email
-   - Added auto-redirect after successful verification (2 second delay)
-6. **VirtFusion user deletion** - Fixed to use correct API endpoint: `DELETE /users/{extRelationId}/byExtRelation?relStr=true`
+1. **Email verification on different device** - Removed AuthGuard from /verify-email route, works without being logged in
+2. **Sign out button fix** - Fixed verify-email page logout button not ending session properly
+3. **Username ban "Darius"** - Server + client-side validation blocks registration with this name
+4. **Bandwidth warning visibility** - Made "Approaching Bandwidth Limit" warning larger and more readable
+5. **Support page improvements** - Added collapsible FAQ section with common questions, hides when creating ticket
+6. **Ticket confirmation emails** - Sends email to user when they create a support ticket
+7. **Full email support system** - Complete inbound email handling:
+   - Webhook at `/api/hooks/resend-inbound` receives emails to support@ozvps.com.au
+   - Creates new tickets from email (links to account if user exists)
+   - Guest tickets for non-users with unique access tokens
+   - Email replies add to existing tickets (parses [Ticket #123] in subject)
+   - Reply-to address `support+{id}@ozvps.com.au` for threading
+8. **Guest ticket viewing** - Public page at `/support/guest/:accessToken` for non-users to view/reply to tickets
 
-### Completed (2026-01-22)
+### Resend Inbound Email Setup
+- MX record: `ozvps.com.au` → `inbound-smtp.ap-northeast-1.amazonaws.com` (priority 10)
+- Webhook URL: `https://app.ozvps.com.au/api/hooks/resend-inbound`
+- Reply-to format: `support+{ticketId}@ozvps.com.au`
+
+### Previous Session (2026-01-22)
 1. **Security tables** - Added login_attempts, account_lockouts, user_audit_logs tables and session binding
 2. **Disk usage color thresholds** - Yellow at 60%, red at 85%
 3. **Server card disk display fix** - Was showing percentage as GB
@@ -52,13 +63,19 @@
    - Promo usage tracking - now records before provisioning, aborts if fails
    - Promo race condition - atomic increment with limit check
    - Unsuspend failure - now refunds if VirtFusion unsuspend fails
-6. **Promotional codes feature** - Fully implemented:
-   - Admin UI at `/promo-codes` in admin panel
-   - Validation during deploy with rate limiting
-   - Discount application and usage tracking
+6. **Promotional codes feature** - Fully implemented
+
+### Previous Session (2026-01-21)
+1. **Plan name on server cards** - Added plan name display to dashboard, servers page, and server detail sidebar
+2. **Admin ticket email notifications** - Sends email to `ADMIN_NOTIFICATION_EMAIL` when new support ticket submitted
+3. **Admin ticket management** - Added status/priority/category dropdowns, reopen/close/delete functionality
+4. **Profile picture upload** - Base64 image upload to account settings
+5. **Email verification fixes** - Fixed duplicate emails, added auto-redirect after verification
+6. **VirtFusion user deletion** - Fixed to use correct API endpoint
 
 ### Pending Tasks
 1. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
+2. **Disk usage investigation** - VirtFusion's `physical` field shows disk image size, not filesystem usage (may need different field)
 
 ### Admin Panel (COMPLETED - 2026-01-19)
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
@@ -123,8 +140,11 @@ git checkout claude/dev-l5488
 
 ## TODO / Known Issues
 - [ ] Security features - implement lockout logic and audit logging (tables ready)
+- [ ] Disk usage - VirtFusion returns disk image size, not actual filesystem usage (need to investigate)
 - [x] Admin suspend account bug - FIXED (was returning "User not found" for Auth0 API errors)
 - [x] Promotional codes feature - DONE
+- [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
+- [x] Username ban "Darius" - DONE
 
 ## Notes for Claude
 - User prefers direct, concise responses
