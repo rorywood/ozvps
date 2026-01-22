@@ -2647,8 +2647,22 @@ export async function registerRoutes(
   // Reset server password - security-sensitive endpoint with ownership verification
   app.post('/api/servers/:id/reset-password', authMiddleware, requireEmailVerified, serverActionRateLimiter, async (req, res) => {
     try {
+      const session = req.userSession!;
+      const { password } = req.body;
+
+      // Require password confirmation for security
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Account password is required to reset server password' });
+      }
+
+      // Verify password with Auth0
+      const authResult = await auth0Client.authenticateUser(session.email, password);
+      if (!authResult.success) {
+        return res.status(400).json({ error: 'Incorrect password. Please try again.' });
+      }
+
       // Check if user account is blocked or suspended
-      const userFlags = await dbStorage.getUserFlagsFromDb(req.userSession!.auth0UserId!);
+      const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId!);
       if (userFlags?.blocked) {
         return res.status(403).json({ error: 'Your account has been blocked. Please contact support for assistance.' });
       }
@@ -2656,7 +2670,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Your account has been suspended. Server controls are disabled.' });
       }
 
-      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, session.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
@@ -2664,9 +2678,9 @@ export async function registerRoutes(
       if (server.suspended) {
         return res.status(403).json({ error: 'Server is suspended. Password reset is disabled.' });
       }
-      
+
       // Block password reset if server has a pending cancellation
-      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
+      const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, session.auth0UserId!);
       if (pendingCancellation) {
         return res.status(403).json({ error: 'Server is scheduled for deletion. Password reset is disabled.' });
       }

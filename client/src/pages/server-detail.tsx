@@ -182,6 +182,8 @@ export default function ServerDetail() {
   const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [resetAccountPassword, setResetAccountPassword] = useState("");
+  const [resetPasswordError, setResetPasswordError] = useState("");
 
   // Track if credentials were emailed (persists after reinstallTask.reset())
   const [credentialsWereEmailed, setCredentialsWereEmailed] = useState(() => {
@@ -627,11 +629,13 @@ export default function ServerDetail() {
   
   // Password reset mutation
   const passwordResetMutation = useMutation({
-    mutationFn: (id: string) => api.resetServerPassword(id),
+    mutationFn: ({ id, password }: { id: string; password: string }) => api.resetServerPassword(id, password),
     onSuccess: (response) => {
       if (response.password) {
         setNewPassword(response.password);
         setPasswordCopied(false);
+        setResetAccountPassword("");
+        setResetPasswordError("");
         toast({
           title: "Password Reset Successful",
           description: "Your new server password has been generated. Please save it now.",
@@ -639,12 +643,19 @@ export default function ServerDetail() {
       }
     },
     onError: (error: any) => {
-      setPasswordResetDialogOpen(false);
-      toast({
-        title: "Password Reset Failed",
-        description: error.message || "Failed to reset server password. Please try again.",
-        variant: "destructive",
-      });
+      // Show password error in the dialog instead of closing it
+      if (error.message?.toLowerCase().includes('password')) {
+        setResetPasswordError(error.message);
+      } else {
+        setPasswordResetDialogOpen(false);
+        setResetAccountPassword("");
+        setResetPasswordError("");
+        toast({
+          title: "Password Reset Failed",
+          description: error.message || "Failed to reset server password. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   });
 
@@ -2765,13 +2776,15 @@ export default function ServerDetail() {
       {/* Provisioning dialog removed - now showing full-page view */}
 
       {/* Password Reset Dialog */}
-      <Dialog 
-        open={passwordResetDialogOpen} 
+      <Dialog
+        open={passwordResetDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
-            // Clear password when dialog closes
+            // Clear state when dialog closes
             setNewPassword(null);
             setPasswordCopied(false);
+            setResetAccountPassword("");
+            setResetPasswordError("");
           }
           setPasswordResetDialogOpen(open);
         }}
@@ -2862,18 +2875,43 @@ export default function ServerDetail() {
                   <div>
                     <div className="font-medium text-amber-400">Confirm Password Reset</div>
                     <div className="text-sm text-amber-400/80">
-                      This will immediately change the root/administrator password on your server. 
-                      Any existing SSH sessions may be affected.
+                      This will immediately change the root/administrator password on your server.
+                      Enter your account password to confirm.
                     </div>
                   </div>
                 </div>
               </div>
-              
+
+              <div className="space-y-2">
+                <Label htmlFor="reset-account-password" className="text-foreground">Account Password</Label>
+                <Input
+                  id="reset-account-password"
+                  type="password"
+                  placeholder="Enter your account password"
+                  value={resetAccountPassword}
+                  onChange={(e) => {
+                    setResetAccountPassword(e.target.value);
+                    setResetPasswordError("");
+                  }}
+                  className={cn(
+                    "bg-background border-border text-foreground",
+                    resetPasswordError && "border-red-500"
+                  )}
+                />
+                {resetPasswordError && (
+                  <p className="text-sm text-red-500">{resetPasswordError}</p>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <Button
                   variant="outline"
                   className="flex-1 border-border"
-                  onClick={() => setPasswordResetDialogOpen(false)}
+                  onClick={() => {
+                    setPasswordResetDialogOpen(false);
+                    setResetAccountPassword("");
+                    setResetPasswordError("");
+                  }}
                   data-testid="button-cancel-password-reset"
                 >
                   Cancel
@@ -2881,11 +2919,11 @@ export default function ServerDetail() {
                 <Button
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={() => {
-                    if (serverId) {
-                      passwordResetMutation.mutate(serverId);
+                    if (serverId && resetAccountPassword) {
+                      passwordResetMutation.mutate({ id: serverId, password: resetAccountPassword });
                     }
                   }}
-                  disabled={passwordResetMutation.isPending}
+                  disabled={passwordResetMutation.isPending || !resetAccountPassword}
                   data-testid="button-confirm-password-reset"
                 >
                   {passwordResetMutation.isPending ? (
