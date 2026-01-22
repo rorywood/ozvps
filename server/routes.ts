@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
@@ -6785,6 +6785,18 @@ export async function registerRoutes(
       });
 
       log(`Ticket #${ticket.id} created by ${req.userSession!.email}`, 'support');
+
+      // Send confirmation email to user (non-blocking)
+      sendTicketConfirmationEmail(
+        req.userSession!.email!,
+        ticket.id,
+        title,
+        category,
+        priority,
+        req.userSession!.name || null
+      ).catch(err => {
+        log(`Failed to send ticket confirmation for ticket #${ticket.id}: ${err.message}`, 'email');
+      });
 
       // Send admin notification email (non-blocking, don't fail if email fails)
       sendAdminTicketNotificationEmail(
