@@ -735,21 +735,27 @@ export class VirtFusionClient {
       }
       
       // Get disk usage from remoteState.disk object
-      // The disk data looks like: {"vda":{"capacity":"16106127360","physical":"12897910784",...}}
+      // The disk data looks like: {"vda":{"capacity":"16106127360","physical":"12897910784","allocation":"...",...}}
+      // Note: "physical" is the disk IMAGE size on host (thin provisioning), not actual VM filesystem usage
+      // VirtFusion may provide "allocation" or filesystem-level stats - let's check for those
       let diskUsage = 0;
       let diskUsedBytes = 0;
       let diskTotalBytes = 0;
       const disk = remoteState.disk || {};
-      
+
+      // Log disk structure for debugging (temporarily)
+      log(`Disk data for server ${serverId}: ${JSON.stringify(disk)}`, 'virtfusion');
+
       // Disk is an object with disk names as keys (e.g., "vda", "sda")
       const diskKeys = Object.keys(disk);
       for (const key of diskKeys) {
         const diskData = disk[key];
-        if (diskData && diskData.capacity && diskData.physical) {
+        if (diskData && diskData.capacity) {
           const capacity = parseInt(diskData.capacity, 10) || 0;
-          const physical = parseInt(diskData.physical, 10) || 0;
+          // Try to get actual filesystem usage first (allocation), fall back to physical (image size)
+          const used = parseInt(diskData.allocation, 10) || parseInt(diskData.physical, 10) || 0;
           diskTotalBytes += capacity;
-          diskUsedBytes += physical;
+          diskUsedBytes += used;
         }
       }
       
