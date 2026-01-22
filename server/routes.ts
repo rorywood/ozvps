@@ -1765,25 +1765,17 @@ export async function registerRoutes(
         });
       }
 
-      // Check Auth0 for updated admin status and email verification (refreshes every call)
+      // Check Auth0 for updated admin status and our database for email verification
       let isAdmin = session.isAdmin ?? false;
       let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          // Check database override for email verification first
-          log(`[/api/auth/me] Checking override for: ${session.auth0UserId}`, 'auth');
-          const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
-          log(`[/api/auth/me] Override result: ${emailVerifiedOverride}`, 'auth');
+          // Check OUR database for email verification - ignore Auth0's flag since we set it to true
+          // to suppress Auth0's automatic verification emails
+          const currentEmailVerified = await storage.getEmailVerifiedOverride(session.auth0UserId);
 
-          const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
-            auth0Client.isUserAdmin(session.auth0UserId),
-            auth0Client.isEmailVerified(session.auth0UserId),
-          ]);
-          log(`[/api/auth/me] Auth0 emailVerified: ${currentEmailVerifiedFromAuth0}`, 'auth');
-
-          // Email is verified if EITHER Auth0 says so OR we have a database override
-          const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
-          log(`[/api/auth/me] Final emailVerified: ${currentEmailVerified}`, 'auth');
+          // Check Auth0 only for admin status
+          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
 
           const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
 
@@ -1794,7 +1786,7 @@ export async function registerRoutes(
           }
 
           if (currentEmailVerified !== emailVerified) {
-            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}${emailVerifiedOverride ? ' (override)' : ''}`, 'auth');
+            log(`Email verification status changed for ${session.email}: ${emailVerified} -> ${currentEmailVerified}`, 'auth');
             emailVerified = currentEmailVerified;
             updates.emailVerified = currentEmailVerified;
           }
