@@ -342,6 +342,7 @@ export const settingsApi = {
 // Plans API (local database)
 export const plansApi = {
   list: () => api.get<{ plans: any[] }>("/plans"),
+  getTemplates: (planId: number) => api.get<{ templates: any[] }>(`/plans/${planId}/templates`),
 };
 
 // VirtFusion API

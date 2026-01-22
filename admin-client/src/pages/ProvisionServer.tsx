@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { serversApi, usersApi, plansApi, virtfusionApi } from "../lib/api";
+import { serversApi, usersApi, plansApi } from "../lib/api";
 import { toast } from "sonner";
 import {
   Server,
@@ -51,9 +51,9 @@ export default function ProvisionServer() {
 
   // Fetch OS templates for selected plan
   const { data: templatesData, isLoading: loadingTemplates } = useQuery({
-    queryKey: ["templates", selectedPlan?.virtfusionPackageId],
-    queryFn: () => virtfusionApi.getPackageTemplates(selectedPlan.virtfusionPackageId),
-    enabled: !!selectedPlan?.virtfusionPackageId,
+    queryKey: ["plan-templates", selectedPlan?.id],
+    queryFn: () => plansApi.getTemplates(selectedPlan.id),
+    enabled: !!selectedPlan?.id,
   });
 
   // Provision mutation
@@ -385,7 +385,7 @@ export default function ProvisionServer() {
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                 <button
                   onClick={() => setSelectedOs(null)}
                   className={`w-full text-left p-3 rounded-lg border transition-colors ${
@@ -398,22 +398,28 @@ export default function ProvisionServer() {
                   <p className="text-sm text-gray-400">Server will be created without an operating system</p>
                 </button>
 
-                {templatesData?.templates?.map((template: any) => (
-                  <button
-                    key={template.id}
-                    onClick={() => setSelectedOs(template.id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      selectedOs === template.id
-                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                    }`}
-                  >
-                    <p className="font-medium">{template.name}</p>
-                    {template.description && (
-                      <p className="text-sm text-gray-400">{template.description}</p>
-                    )}
-                  </button>
-                ))}
+                {templatesData?.templates && templatesData.templates.length > 0 ? (
+                  templatesData.templates.map((template: any) => (
+                    <button
+                      key={template.id}
+                      onClick={() => setSelectedOs(template.id)}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        selectedOs === template.id
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                      }`}
+                    >
+                      <p className="font-medium">{template.name}</p>
+                      {template.group && (
+                        <p className="text-sm text-gray-400">{template.group}</p>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-2">
+                    No OS templates available for this plan. You can install an OS later.
+                  </p>
+                )}
               </div>
             )}
           </div>
