@@ -33,23 +33,33 @@ export function invalidateWhitelistCache() {
 }
 
 export function getClientIp(req: Request): string {
-  // Check X-Forwarded-For header (set by nginx/load balancer)
-  const forwardedFor = req.headers["x-forwarded-for"];
-  if (forwardedFor) {
-    const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    // First IP is the original client
-    const clientIp = ips.split(",")[0].trim();
-    return normalizeIp(clientIp);
+  // SECURITY: Only trust proxy headers when explicitly configured
+  // This prevents IP spoofing via X-Forwarded-For when not behind a trusted proxy
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  if (trustProxy) {
+    // Check X-Forwarded-For header (set by nginx/load balancer)
+    const forwardedFor = req.headers["x-forwarded-for"];
+    if (forwardedFor) {
+      const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+      // First IP is the original client - validate it's a proper IP
+      const clientIp = ips.split(",")[0].trim();
+      if (clientIp && isIpv4(clientIp)) {
+        return normalizeIp(clientIp);
+      }
+    }
+
+    // Check X-Real-IP header (nginx)
+    const realIp = req.headers["x-real-ip"];
+    if (realIp) {
+      const ip = Array.isArray(realIp) ? realIp[0] : realIp;
+      if (ip && isIpv4(ip)) {
+        return normalizeIp(ip);
+      }
+    }
   }
 
-  // Check X-Real-IP header (nginx)
-  const realIp = req.headers["x-real-ip"];
-  if (realIp) {
-    const ip = Array.isArray(realIp) ? realIp[0] : realIp;
-    return normalizeIp(ip);
-  }
-
-  // Fall back to socket address
+  // Direct connection or untrusted proxy - use socket address
   return normalizeIp(req.socket.remoteAddress || "unknown");
 }
 

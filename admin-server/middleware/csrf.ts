@@ -4,9 +4,13 @@ import { redisClient } from "../../server/redis";
 
 const CSRF_TOKEN_EXPIRY = 8 * 60 * 60; // 8 hours in seconds (match session expiry)
 const CSRF_TOKEN_PREFIX = "admin:csrf:";
+const CSRF_TOKEN_ROTATION_INTERVAL = 2 * 60 * 60; // Rotate token every 2 hours for security
 
 // Fallback in-memory storage (used when Redis is unavailable)
 const memoryFallback = new Map<string, { token: string; createdAt: number }>();
+
+// Track token creation times for rotation (Redis stores this separately)
+const tokenCreationTimes = new Map<string, number>();
 
 // Safe string comparison that works with esbuild
 function safeCompare(a: string, b: string): boolean {
@@ -33,21 +37,58 @@ function isRedisAvailable(): boolean {
 
 export async function generateCsrfToken(sessionId: string): Promise<string> {
   const token = randomBytes(32).toString("hex");
+  const now = Date.now();
 
   if (isRedisAvailable()) {
     try {
       await redisClient!.set(`${CSRF_TOKEN_PREFIX}${sessionId}`, token, {
         EX: CSRF_TOKEN_EXPIRY,
       });
+      // Store creation time for rotation tracking
+      await redisClient!.set(`${CSRF_TOKEN_PREFIX}${sessionId}:created`, String(now), {
+        EX: CSRF_TOKEN_EXPIRY,
+      });
     } catch (err) {
       console.error("[csrf] Redis error, falling back to memory:", (err as Error).message);
-      memoryFallback.set(sessionId, { token, createdAt: Date.now() });
+      memoryFallback.set(sessionId, { token, createdAt: now });
     }
   } else {
-    memoryFallback.set(sessionId, { token, createdAt: Date.now() });
+    memoryFallback.set(sessionId, { token, createdAt: now });
   }
 
+  tokenCreationTimes.set(sessionId, now);
   return token;
+}
+
+// Check if token should be rotated (called during session validation)
+export async function shouldRotateToken(sessionId: string): Promise<boolean> {
+  const now = Date.now();
+  let createdAt: number | null = null;
+
+  // Try memory first (fastest)
+  if (tokenCreationTimes.has(sessionId)) {
+    createdAt = tokenCreationTimes.get(sessionId)!;
+  } else if (isRedisAvailable()) {
+    try {
+      const stored = await redisClient!.get(`${CSRF_TOKEN_PREFIX}${sessionId}:created`);
+      if (stored) {
+        createdAt = parseInt(stored, 10);
+        tokenCreationTimes.set(sessionId, createdAt); // Cache locally
+      }
+    } catch (err) {
+      // Ignore errors, just don't rotate
+    }
+  } else {
+    const stored = memoryFallback.get(sessionId);
+    if (stored) {
+      createdAt = stored.createdAt;
+    }
+  }
+
+  if (!createdAt) return false;
+
+  // Rotate if older than rotation interval
+  return (now - createdAt) > CSRF_TOKEN_ROTATION_INTERVAL * 1000;
 }
 
 export async function validateCsrfToken(sessionId: string, token: string): Promise<boolean> {

@@ -12,6 +12,15 @@ import { virtfusionClient } from "../../server/virtfusion";
 import { getUncachableStripeClient } from "../../server/stripeClient";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 
+// SECURITY: Validate and sanitize reason strings to prevent DoS and injection
+const MAX_REASON_LENGTH = 500;
+function sanitizeReason(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null || reason === '') return undefined;
+  if (typeof reason !== 'string') return undefined;
+  // Trim and limit length
+  return reason.trim().slice(0, MAX_REASON_LENGTH);
+}
+
 export function registerUsersRoutes(router: Router) {
   // List all users from Auth0 (paginated)
   router.get("/users", async (req: Request, res: Response) => {
@@ -217,7 +226,8 @@ export function registerUsersRoutes(router: Router) {
   router.post("/users/:auth0UserId/block", async (req: Request, res: Response) => {
     try {
       const { auth0UserId } = req.params;
-      const { blocked, reason } = req.body;
+      const { blocked } = req.body;
+      const reason = sanitizeReason(req.body.reason);
       const session = req.adminSession!;
 
       if (typeof blocked !== "boolean") {
@@ -289,7 +299,8 @@ export function registerUsersRoutes(router: Router) {
   router.post("/users/:auth0UserId/suspend", async (req: Request, res: Response) => {
     try {
       const { auth0UserId } = req.params;
-      const { suspended, reason } = req.body;
+      const { suspended } = req.body;
+      const reason = sanitizeReason(req.body.reason);
       const session = req.adminSession!;
 
       if (typeof suspended !== "boolean") {
@@ -474,7 +485,8 @@ export function registerUsersRoutes(router: Router) {
   router.post("/users/:auth0UserId/wallet/adjust", async (req: Request, res: Response) => {
     try {
       const { auth0UserId } = req.params;
-      const { amountCents, description, reason } = req.body;
+      const { amountCents, description } = req.body;
+      const reason = sanitizeReason(req.body.reason);
       const session = req.adminSession!;
 
       if (!amountCents || typeof amountCents !== "number") {
@@ -886,7 +898,8 @@ export function registerUsersRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "user.purge", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Purge error: ${error.message}`);
-      res.status(500).json({ error: "Failed to purge user", details: error.message });
+      // SECURITY: Don't expose internal error details
+      res.status(500).json({ error: "Failed to purge user. Please check server logs for details." });
     }
   });
 }

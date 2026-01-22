@@ -7,6 +7,14 @@ import { runBillingJob } from "../../server/billing";
 import { auth0Client } from "../../server/auth0";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 
+// SECURITY: Validate and sanitize reason strings
+const MAX_REASON_LENGTH = 500;
+function sanitizeReason(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null || reason === '') return undefined;
+  if (typeof reason !== 'string') return undefined;
+  return reason.trim().slice(0, MAX_REASON_LENGTH);
+}
+
 export function registerBillingRoutes(router: Router) {
   // List all billing records
   router.get("/billing/records", async (req: Request, res: Response) => {
@@ -201,7 +209,8 @@ export function registerBillingRoutes(router: Router) {
           console.log(`[admin-billing] Server ${currentBilling.virtfusionServerId} suspended in VirtFusion by ${session.email}`);
         } catch (vfError: any) {
           console.log(`[admin-billing] Failed to suspend server ${currentBilling.virtfusionServerId} in VirtFusion: ${vfError.message}`);
-          return res.status(500).json({ error: `Failed to suspend server in VirtFusion: ${vfError.message}` });
+          // SECURITY: Don't expose internal error details to client
+          return res.status(500).json({ error: 'Failed to suspend server. Please check server logs for details.' });
         }
       }
 
@@ -233,7 +242,7 @@ export function registerBillingRoutes(router: Router) {
     try {
       const id = parseInt(req.params.id, 10);
       const session = req.adminSession!;
-      const { reason } = req.body;
+      const reason = sanitizeReason(req.body.reason);
 
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid ID" });
@@ -273,7 +282,8 @@ export function registerBillingRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "billing.suspend", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Suspend error: ${error.message}`);
-      res.status(500).json({ error: `Failed to suspend server: ${error.message}` });
+      // SECURITY: Don't expose internal error details
+      res.status(500).json({ error: 'Failed to suspend server. Please check server logs for details.' });
     }
   });
 

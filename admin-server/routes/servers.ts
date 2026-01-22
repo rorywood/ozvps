@@ -7,6 +7,14 @@ import { auth0Client } from "../../server/auth0";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 import { sendServerCredentialsEmail } from "../../server/email";
 
+// SECURITY: Validate and sanitize reason strings
+const MAX_REASON_LENGTH = 500;
+function sanitizeReason(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null || reason === '') return undefined;
+  if (typeof reason !== 'string') return undefined;
+  return reason.trim().slice(0, MAX_REASON_LENGTH);
+}
+
 export function registerServersRoutes(router: Router) {
   // List all plans (for provisioning)
   router.get("/plans", async (req: Request, res: Response) => {
@@ -386,7 +394,7 @@ export function registerServersRoutes(router: Router) {
   router.post("/servers/:serverId/suspend", async (req: Request, res: Response) => {
     try {
       const serverId = parseInt(req.params.serverId, 10);
-      const { reason } = req.body;
+      const reason = sanitizeReason(req.body.reason);
       const session = req.adminSession!;
 
       if (isNaN(serverId)) {
@@ -495,7 +503,8 @@ export function registerServersRoutes(router: Router) {
     } catch (error: any) {
       console.log(`[admin-servers] Install OS error: ${error.message}`);
       await auditFailure(req, "server.install-os", "server", error.message, req.params.serverId);
-      res.status(500).json({ error: error.message || "Failed to install OS" });
+      // SECURITY: Don't expose internal error details
+      res.status(500).json({ error: "Failed to install OS. Please check server logs for details." });
     }
   });
 
@@ -503,7 +512,7 @@ export function registerServersRoutes(router: Router) {
   router.post("/servers/:serverId/admin-suspend", async (req: Request, res: Response) => {
     try {
       const serverId = parseInt(req.params.serverId, 10);
-      const { reason } = req.body;
+      const reason = sanitizeReason(req.body.reason);
       const session = req.adminSession!;
 
       if (isNaN(serverId)) {
@@ -584,7 +593,8 @@ export function registerServersRoutes(router: Router) {
   router.delete("/servers/:serverId", async (req: Request, res: Response) => {
     try {
       const serverId = parseInt(req.params.serverId, 10);
-      const { reason, confirm } = req.body;
+      const reason = sanitizeReason(req.body.reason);
+      const { confirm } = req.body;
       const session = req.adminSession!;
 
       if (isNaN(serverId)) {
@@ -907,7 +917,8 @@ export function registerServersRoutes(router: Router) {
       } catch (vfError: any) {
         console.log(`[admin-servers] VirtFusion provisioning failed: ${vfError.message}`);
         await auditFailure(req, "server.provision", "server", vfError.message, auth0UserId);
-        return res.status(500).json({ error: `VirtFusion error: ${vfError.message}` });
+        // SECURITY: Don't expose internal VirtFusion error details
+        return res.status(500).json({ error: 'Server provisioning failed. Please check server logs for details.' });
       }
 
       console.log(`[admin-servers] Server provisioned: ID=${serverResult.serverId}, IP=${serverResult.primaryIp}`);

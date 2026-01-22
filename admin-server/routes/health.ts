@@ -387,7 +387,9 @@ export function registerHealthRoutes(app: Express) {
       console.log(`[admin-health] Service ${service} ${action}ed`);
       res.json(result);
     } else {
-      res.status(500).json({ error: result.message });
+      console.log(`[admin-health] Service control failed: ${result.message}`);
+      // SECURITY: Don't expose internal error details (could contain stderr)
+      res.status(500).json({ error: `Failed to ${action} ${service}. Please check server logs.` });
     }
   });
 

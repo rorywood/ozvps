@@ -3308,11 +3308,17 @@ export async function registerRoutes(
       const wallet = await dbStorage.getWallet(session.auth0UserId!);
       if (wallet?.profilePictureUrl) {
         const oldFilename = wallet.profilePictureUrl.replace('/uploads/profile-pictures/', '');
-        const oldFilepath = path.join(uploadsDir, oldFilename);
-        try {
-          await fs.unlink(oldFilepath);
-        } catch {
-          // Ignore if old file doesn't exist
+        // SECURITY: Validate filename to prevent path traversal
+        if (oldFilename && !oldFilename.includes('..') && !oldFilename.includes('/') && !oldFilename.includes('\\') && !path.isAbsolute(oldFilename)) {
+          const oldFilepath = path.join(uploadsDir, oldFilename);
+          // Double-check the resolved path is within uploads directory
+          if (oldFilepath.startsWith(uploadsDir)) {
+            try {
+              await fs.unlink(oldFilepath);
+            } catch {
+              // Ignore if old file doesn't exist
+            }
+          }
         }
       }
 
@@ -3343,11 +3349,17 @@ export async function registerRoutes(
         const path = await import('path');
         const uploadsDir = path.join(process.cwd(), 'uploads', 'profile-pictures');
         const filename = wallet.profilePictureUrl.replace('/uploads/profile-pictures/', '');
-        const filepath = path.join(uploadsDir, filename);
-        try {
-          await fs.unlink(filepath);
-        } catch {
-          // Ignore if file doesn't exist
+        // SECURITY: Validate filename to prevent path traversal
+        if (filename && !filename.includes('..') && !filename.includes('/') && !filename.includes('\\') && !path.isAbsolute(filename)) {
+          const filepath = path.join(uploadsDir, filename);
+          // Double-check the resolved path is within uploads directory
+          if (filepath.startsWith(uploadsDir)) {
+            try {
+              await fs.unlink(filepath);
+            } catch {
+              // Ignore if file doesn't exist
+            }
+          }
         }
       }
 
