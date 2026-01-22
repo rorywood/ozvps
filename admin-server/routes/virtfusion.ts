@@ -141,8 +141,24 @@ export function registerVirtFusionRoutes(router: Router) {
         return res.status(400).json({ error: "Invalid package ID" });
       }
 
-      const templates = await virtfusionClient.getPackageTemplates(id);
-      res.json({ templates: templates.data || templates });
+      const templatesData = await virtfusionClient.getOsTemplatesForPackage(id);
+      // The data is returned grouped by OS family, flatten it for the admin panel
+      const templates: any[] = [];
+      if (templatesData && Array.isArray(templatesData)) {
+        for (const group of templatesData) {
+          if (group.templates && Array.isArray(group.templates)) {
+            for (const t of group.templates) {
+              templates.push({
+                id: t.id,
+                name: t.name,
+                description: t.description || group.name,
+                group: group.name,
+              });
+            }
+          }
+        }
+      }
+      res.json({ templates });
     } catch (error: any) {
       console.log(`[admin-vf] Get templates error: ${error.message}`);
       res.status(500).json({ error: "Failed to get package templates" });

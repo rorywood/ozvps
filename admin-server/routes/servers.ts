@@ -22,6 +22,53 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Get OS templates for a plan (for provisioning)
+  router.get("/plans/:id/templates", async (req: Request, res: Response) => {
+    try {
+      const planId = parseInt(req.params.id, 10);
+      if (isNaN(planId)) {
+        return res.status(400).json({ error: "Invalid plan ID" });
+      }
+
+      const [plan] = await db
+        .select()
+        .from(plans)
+        .where(eq(plans.id, planId));
+
+      if (!plan) {
+        return res.status(404).json({ error: "Plan not found" });
+      }
+
+      if (!plan.virtfusionPackageId) {
+        return res.json({ templates: [] });
+      }
+
+      const templatesData = await virtfusionClient.getOsTemplatesForPackage(plan.virtfusionPackageId);
+
+      // Flatten the grouped templates
+      const templates: any[] = [];
+      if (templatesData && Array.isArray(templatesData)) {
+        for (const group of templatesData) {
+          if (group.templates && Array.isArray(group.templates)) {
+            for (const t of group.templates) {
+              templates.push({
+                id: t.id,
+                name: t.name,
+                group: group.name,
+              });
+            }
+          }
+        }
+      }
+
+      console.log(`[admin-servers] Found ${templates.length} templates for plan ${planId} (VF package ${plan.virtfusionPackageId})`);
+      res.json({ templates });
+    } catch (error: any) {
+      console.log(`[admin-servers] Get plan templates error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get templates" });
+    }
+  });
+
   // List all servers (from VirtFusion)
   router.get("/servers", async (req: Request, res: Response) => {
     try {
