@@ -47,7 +47,12 @@
 2. **Disk usage color thresholds** - Yellow at 60%, red at 85%
 3. **Server card disk display fix** - Was showing percentage as GB
 4. **Admin suspend bug fix** - Was showing "User not found" for Auth0 API errors (rate limits, etc.)
-5. **Promotional codes feature** - Fully implemented:
+5. **CRITICAL: Billing bug fixes**:
+   - Promo refund mismatch - was refunding full price instead of discounted (FREE MONEY BUG!)
+   - Promo usage tracking - now records before provisioning, aborts if fails
+   - Promo race condition - atomic increment with limit check
+   - Unsuspend failure - now refunds if VirtFusion unsuspend fails
+6. **Promotional codes feature** - Fully implemented:
    - Admin UI at `/promo-codes` in admin panel
    - Validation during deploy with rate limiting
    - Discount application and usage tracking
