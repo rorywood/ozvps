@@ -165,12 +165,26 @@ export default function VerifyEmailPage() {
                     <h2 className="text-xl font-semibold text-foreground mb-3">
                       Email Verified!
                     </h2>
-                    <p className="text-muted-foreground mb-6">
+                    <p className="text-muted-foreground mb-4">
                       Your email has been successfully verified. You can now access all features of OzVPS.
                     </p>
-                    <Button onClick={handleContinueToDashboard} className="w-full" size="lg">
-                      Continue to Dashboard
-                    </Button>
+                    {user ? (
+                      <Button onClick={handleContinueToDashboard} className="w-full" size="lg">
+                        Continue to Dashboard
+                      </Button>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                          <p className="text-sm text-muted-foreground">
+                            You can close this page and return to the browser where you signed up.
+                            It will automatically redirect to your dashboard.
+                          </p>
+                        </div>
+                        <Button onClick={() => navigate('/login')} variant="outline" className="w-full">
+                          Or sign in here
+                        </Button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
