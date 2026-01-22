@@ -52,17 +52,24 @@ export function useSystemHealth() {
 
   const isHealthy = data?.status === 'ok';
 
-  // System is down if:
-  // 1. Database explicitly marked as down
-  // 2. Health check failed entirely (error from react-query)
-  // 3. System error returned
+  // Database is down
   const isDatabaseDown =
     data?.errorCode === 'DB_UNAVAILABLE' ||
-    data?.errorCode === 'SYSTEM_ERROR' ||
-    data?.services?.database === false ||
-    (error !== null && !isLoading); // Health check failed completely
+    data?.services?.database === false;
 
-  const isVirtFusionDown = data?.errorCode === 'VF_API_UNAVAILABLE' || data?.services?.virtfusion === false;
+  // VirtFusion is down
+  const isVirtFusionDown =
+    data?.errorCode === 'VF_API_UNAVAILABLE' ||
+    data?.services?.virtfusion === false;
+
+  // System is unavailable if ANY critical service is down
+  // This should block login/registration
+  const isSystemDown =
+    data?.status === 'error' ||  // Any error status
+    isDatabaseDown ||
+    isVirtFusionDown ||
+    data?.errorCode === 'SYSTEM_ERROR' ||
+    (error !== null && !isLoading); // Health check failed completely
 
   return {
     health: data,
@@ -72,6 +79,7 @@ export function useSystemHealth() {
     isHealthy,
     isDatabaseDown,
     isVirtFusionDown,
+    isSystemDown,  // Use this to block login - covers ALL failure scenarios
     errorMessage: data?.message || (error ? 'System is temporarily unavailable' : undefined),
     errorCode: data?.errorCode || (error ? 'SYSTEM_ERROR' : undefined),
   };

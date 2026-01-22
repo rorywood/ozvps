@@ -27,11 +27,11 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  // Check system health (database connectivity)
-  const { isDatabaseDown, isLoading: healthLoading, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
+  // Check system health (database + VirtFusion connectivity)
+  const { isSystemDown, isLoading: healthLoading, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
 
   // Block ALL interactions until we know the system is healthy
-  const systemUnavailable = isDatabaseDown || healthLoading;
+  const systemUnavailable = isSystemDown || healthLoading;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -478,7 +478,7 @@ export default function LoginPage() {
           )}
 
           {/* System Unavailable Banner */}
-          {isDatabaseDown && !healthLoading && (
+          {isSystemDown && !healthLoading && (
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>

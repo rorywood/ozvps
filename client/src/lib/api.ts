@@ -638,17 +638,18 @@ class ApiClient {
     totpToken?: string,
     backupCode?: string
   ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string }> {
-    // Pre-flight check: verify API is reachable before attempting login
+    // Pre-flight check: verify API is reachable and all services are healthy
     try {
       const healthCheck = await fetch('/api/health', {
         signal: AbortSignal.timeout(3000),
       });
       const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
-      if (healthData.status === 'error' || healthData.errorCode) {
-        throw new Error('System is temporarily unavailable. Please try again later.');
+      // Block if status is not 'ok' OR any errorCode is present
+      if (healthData.status !== 'ok' || healthData.errorCode) {
+        throw new Error(healthData.message || 'System is temporarily unavailable. Please try again later.');
       }
     } catch (e: any) {
-      if (e.message?.includes('temporarily unavailable')) {
+      if (e.message?.includes('temporarily unavailable') || e.message?.includes('unavailable')) {
         throw e;
       }
       // Network error or timeout - API is unreachable
@@ -675,17 +676,18 @@ class ApiClient {
   }
 
   async register(email: string, password: string, name?: string): Promise<{ user: { id: number; email: string; name: string }; csrfToken?: string }> {
-    // Pre-flight check: verify API is reachable before attempting registration
+    // Pre-flight check: verify API is reachable and all services are healthy
     try {
       const healthCheck = await fetch('/api/health', {
         signal: AbortSignal.timeout(3000),
       });
       const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
-      if (healthData.status === 'error' || healthData.errorCode) {
-        throw new Error('System is temporarily unavailable. Please try again later.');
+      // Block if status is not 'ok' OR any errorCode is present
+      if (healthData.status !== 'ok' || healthData.errorCode) {
+        throw new Error(healthData.message || 'System is temporarily unavailable. Please try again later.');
       }
     } catch (e: any) {
-      if (e.message?.includes('temporarily unavailable')) {
+      if (e.message?.includes('temporarily unavailable') || e.message?.includes('unavailable')) {
         throw e;
       }
       throw new Error('Unable to connect to server. Please check your connection and try again.');
