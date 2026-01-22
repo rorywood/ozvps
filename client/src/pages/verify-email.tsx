@@ -63,19 +63,24 @@ export default function VerifyEmailPage() {
     }
   }, [resendCooldown]);
 
-  // Polling to check if email has been verified
-  const { data: meData } = useQuery({
-    queryKey: ['auth', 'me'],
+  // Polling to check if email has been verified - poll regardless of current state
+  const { data: meData, refetch: refetchMe } = useQuery({
+    queryKey: ['auth', 'me', 'verification-poll'],
     queryFn: () => api.getMe(),
-    refetchInterval: 5000, // Check every 5 seconds
-    enabled: !!user && !user.emailVerified,
+    refetchInterval: 3000, // Check every 3 seconds
+    enabled: !!user, // Poll as long as user is logged in
+    staleTime: 0, // Always fetch fresh
   });
 
-  // Redirect to dashboard if verified
+  // Redirect to dashboard if verified (check both meData and refreshed auth)
   useEffect(() => {
-    if (meData?.user?.emailVerified) {
+    if (meData?.user?.emailVerified || meData?.emailVerified) {
+      // Invalidate all auth queries to refresh the app state
       queryClient.invalidateQueries({ queryKey: ['auth'] });
-      navigate('/');
+      // Small delay to ensure state updates, then redirect
+      setTimeout(() => {
+        navigate('/');
+      }, 500);
     }
   }, [meData, navigate, queryClient]);
 
@@ -164,10 +169,10 @@ export default function VerifyEmailPage() {
                       Your email has been successfully verified. You can now access all features of OzVPS.
                     </p>
                     <p className="text-sm text-muted-foreground mb-6">
-                      Redirecting to dashboard...
+                      You can close this tab and return to the original window, or click below to continue.
                     </p>
                     <Button onClick={() => navigate('/')} className="w-full">
-                      Go to Dashboard Now
+                      Continue to Dashboard
                     </Button>
                   </>
                 ) : (
