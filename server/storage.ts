@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, loginAttempts, accountLockouts, userAuditLogs, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage, type LoginAttempt, type AccountLockout, type UserAuditLog } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, loginAttempts, accountLockouts, userAuditLogs, sessions, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage, type LoginAttempt, type AccountLockout, type UserAuditLog } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -1819,6 +1819,51 @@ export const dbStorage = {
   async getTicketById(id: number): Promise<Ticket | undefined> {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
     return ticket;
+  },
+
+  // Get a ticket by guest access token
+  async getTicketByAccessToken(accessToken: string): Promise<Ticket | undefined> {
+    const [ticket] = await db.select().from(tickets).where(eq(tickets.guestAccessToken, accessToken));
+    return ticket;
+  },
+
+  // Find auth0UserId by email (looks up from most recent session)
+  async getAuth0UserIdByEmail(email: string): Promise<string | undefined> {
+    const [session] = await db
+      .select({ auth0UserId: sessions.auth0UserId })
+      .from(sessions)
+      .where(eq(sessions.email, email.toLowerCase()))
+      .orderBy(desc(sessions.createdAt))
+      .limit(1);
+    return session?.auth0UserId || undefined;
+  },
+
+  // Get user email from ticket (either from auth0 session or guest email)
+  async getTicketUserEmail(ticket: Ticket): Promise<string | undefined> {
+    if (ticket.guestEmail) {
+      return ticket.guestEmail;
+    }
+    if (ticket.auth0UserId) {
+      // Get from most recent session
+      const [session] = await db
+        .select({ email: sessions.email })
+        .from(sessions)
+        .where(eq(sessions.auth0UserId, ticket.auth0UserId))
+        .orderBy(desc(sessions.createdAt))
+        .limit(1);
+      return session?.email;
+    }
+    return undefined;
+  },
+
+  // Update ticket status
+  async updateTicketStatus(id: number, status: TicketStatus): Promise<Ticket | undefined> {
+    const [updated] = await db
+      .update(tickets)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(tickets.id, id))
+      .returning();
+    return updated;
   },
 
   // Get tickets for a user

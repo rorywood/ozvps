@@ -11,14 +11,14 @@ import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
-import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, passwordRequirementsSchema, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
+import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, passwordRequirementsSchema, type Ticket, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from './logger';
 import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendGuestTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 
 // Helper to validate IP address format (prevents header injection)
@@ -6695,6 +6695,312 @@ export async function registerRoutes(
   });
 
   // ==========================================
+  // RESEND INBOUND EMAIL WEBHOOK
+  // ==========================================
+
+  // Webhook to receive emails and create/update tickets
+  app.post('/api/hooks/resend-inbound', async (req, res) => {
+    try {
+      const { from, to, subject, text, html } = req.body;
+
+      log(`Resend inbound webhook received: from=${JSON.stringify(from)}, to=${JSON.stringify(to)}, subject=${subject}`, 'webhook');
+
+      if (!from || (!text && !html)) {
+        log('Resend inbound webhook: missing required fields', 'webhook');
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Get the sender's email address
+      const senderEmailRaw = typeof from === 'string' ? from : from?.address || from?.email;
+      if (!senderEmailRaw) {
+        log('Resend inbound webhook: could not parse sender email', 'webhook');
+        return res.status(400).json({ error: 'Could not parse sender email' });
+      }
+
+      // Clean the sender email (remove name if present, e.g., "John Doe <john@example.com>")
+      const emailMatch = senderEmailRaw.match(/<([^>]+)>/) || [null, senderEmailRaw];
+      const senderEmail = (emailMatch[1] || senderEmailRaw).toLowerCase().trim();
+
+      // Extract sender name if available
+      const nameMatch = senderEmailRaw.match(/^"?([^"<]+)"?\s*</);
+      const senderName = nameMatch ? nameMatch[1].trim() : null;
+
+      // Clean up the email content - remove quoted replies, signatures, etc.
+      let messageContent = text || '';
+      const replyPatterns = [
+        /\n\s*On .+wrote:\s*\n/i,
+        /\n\s*From:.+\n/i,
+        /\n\s*-{3,}Original Message-{3,}/i,
+        /\n\s*_{3,}\s*\n/,
+      ];
+      for (const pattern of replyPatterns) {
+        const match = messageContent.search(pattern);
+        if (match > 0) {
+          messageContent = messageContent.substring(0, match);
+          break;
+        }
+      }
+      // Remove quoted lines (starting with >)
+      messageContent = messageContent.replace(/^>.*$/gm, '').trim();
+
+      if (!messageContent) {
+        log('Resend inbound webhook: empty message content after cleanup', 'webhook');
+        return res.status(400).json({ error: 'Empty message content' });
+      }
+
+      // Check for ticket ID in subject line: [Ticket #123] or Re: Ticket #123 or similar
+      const subjectTicketMatch = subject?.match(/\[?Ticket\s*#?(\d+)\]?/i);
+
+      // Also check to address for support+{id}@ format
+      const toAddress = Array.isArray(to) ? to[0] : to;
+      const toAddressTicketMatch = toAddress?.match(/support\+(\d+)@/i);
+
+      const ticketId = subjectTicketMatch?.[1] || toAddressTicketMatch?.[1];
+
+      if (ticketId) {
+        // This is a reply to an existing ticket
+        const ticket = await dbStorage.getTicketById(parseInt(ticketId, 10));
+
+        if (!ticket) {
+          log(`Resend inbound webhook: ticket #${ticketId} not found`, 'webhook');
+          return res.status(404).json({ error: 'Ticket not found' });
+        }
+
+        // Get the ticket owner's email
+        const ticketUserEmail = await dbStorage.getTicketUserEmail(ticket);
+
+        // Check if sender is the ticket owner
+        const isTicketOwner = ticketUserEmail?.toLowerCase() === senderEmail;
+
+        // Check if sender is an admin (by looking up their auth0UserId)
+        const senderAuth0Id = await dbStorage.getAuth0UserIdByEmail(senderEmail);
+        let isAdmin = false;
+        if (senderAuth0Id) {
+          const userFlags = await dbStorage.getUserFlagsFromDb(senderAuth0Id);
+          // For admin check, we'd need to check app_metadata from Auth0, but for email replies
+          // we can check if they have admin sessions or just allow ticket owner replies
+        }
+
+        // For now, only allow ticket owner to reply via email
+        // Admins should reply through the admin panel (to avoid spoofing)
+        if (!isTicketOwner) {
+          log(`Resend inbound webhook: sender ${senderEmail} is not ticket #${ticketId} owner (${ticketUserEmail})`, 'webhook');
+          return res.status(403).json({ error: 'You can only reply to your own tickets' });
+        }
+
+        // Add the reply
+        await dbStorage.createTicketMessage({
+          ticketId: ticket.id,
+          authorType: 'user',
+          authorId: ticket.auth0UserId || 'guest',
+          authorEmail: senderEmail,
+          authorName: senderName,
+          message: messageContent,
+        });
+
+        // Update status to waiting_admin
+        await dbStorage.updateTicketStatus(ticket.id, 'waiting_admin');
+
+        log(`Resend inbound webhook: added reply to ticket #${ticket.id} from ${senderEmail}`, 'webhook');
+
+        // Send admin notification about the reply
+        sendAdminTicketNotificationEmail(
+          ticket.id,
+          `Re: ${ticket.title}`,
+          ticket.category,
+          ticket.priority,
+          messageContent,
+          senderEmail,
+          senderName
+        ).catch(err => {
+          log(`Failed to send admin notification for ticket reply #${ticket.id}: ${err.message}`, 'email');
+        });
+
+        return res.status(200).json({ success: true, action: 'reply', ticketId: ticket.id });
+      }
+
+      // No ticket ID found - create a new ticket
+      const emailSubject = subject?.trim() || 'Support Request via Email';
+
+      // Check if sender has an account
+      const senderAuth0Id = await dbStorage.getAuth0UserIdByEmail(senderEmail);
+
+      let newTicket: Ticket;
+      let accessToken: string | null = null;
+
+      if (senderAuth0Id) {
+        // User has an account - create ticket linked to their account
+        newTicket = await dbStorage.createTicket({
+          auth0UserId: senderAuth0Id,
+          title: emailSubject,
+          category: 'support',
+          priority: 'normal',
+        });
+        log(`Resend inbound webhook: created ticket #${newTicket.id} for registered user ${senderEmail}`, 'webhook');
+      } else {
+        // Guest user - create ticket with access token
+        accessToken = randomBytes(32).toString('hex');
+        newTicket = await dbStorage.createTicket({
+          auth0UserId: null,
+          guestEmail: senderEmail,
+          guestAccessToken: accessToken,
+          title: emailSubject,
+          category: 'support',
+          priority: 'normal',
+        });
+        log(`Resend inbound webhook: created guest ticket #${newTicket.id} for ${senderEmail}`, 'webhook');
+      }
+
+      // Add the initial message
+      await dbStorage.createTicketMessage({
+        ticketId: newTicket.id,
+        authorType: 'user',
+        authorId: senderAuth0Id || 'guest',
+        authorEmail: senderEmail,
+        authorName: senderName,
+        message: messageContent,
+      });
+
+      // Send confirmation email to user
+      if (senderAuth0Id) {
+        // Registered user - normal confirmation
+        sendTicketConfirmationEmail(
+          senderEmail,
+          newTicket.id,
+          emailSubject,
+          'support',
+          'normal',
+          senderName
+        ).catch(err => {
+          log(`Failed to send ticket confirmation for #${newTicket.id}: ${err.message}`, 'email');
+        });
+      } else {
+        // Guest user - send confirmation with access link
+        sendGuestTicketConfirmationEmail(
+          senderEmail,
+          newTicket.id,
+          emailSubject,
+          accessToken!,
+          senderName
+        ).catch(err => {
+          log(`Failed to send guest ticket confirmation for #${newTicket.id}: ${err.message}`, 'email');
+        });
+      }
+
+      // Send admin notification
+      sendAdminTicketNotificationEmail(
+        newTicket.id,
+        emailSubject,
+        'support',
+        'normal',
+        messageContent,
+        senderEmail,
+        senderName
+      ).catch(err => {
+        log(`Failed to send admin notification for ticket #${newTicket.id}: ${err.message}`, 'email');
+      });
+
+      return res.status(200).json({
+        success: true,
+        action: 'created',
+        ticketId: newTicket.id,
+        isGuest: !senderAuth0Id,
+      });
+    } catch (error: any) {
+      log(`Resend inbound webhook error: ${error.message}`, 'webhook');
+      res.status(500).json({ error: 'Failed to process inbound email' });
+    }
+  });
+
+  // ==========================================
+  // GUEST TICKET ACCESS (PUBLIC)
+  // ==========================================
+
+  // View a ticket using guest access token (no auth required)
+  app.get('/api/support/guest/:accessToken', async (req, res) => {
+    try {
+      const { accessToken } = req.params;
+
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found or access denied' });
+      }
+
+      // Get messages
+      const messages = await dbStorage.getTicketMessages(ticket.id);
+
+      res.json({ ticket, messages });
+    } catch (error: any) {
+      log(`Error fetching guest ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a ticket using guest access token (no auth required)
+  app.post('/api/support/guest/:accessToken/messages', async (req, res) => {
+    try {
+      const { accessToken } = req.params;
+      const { message } = req.body;
+
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      if (!message || typeof message !== 'string' || message.trim().length < 1) {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found or access denied' });
+      }
+
+      // Check if ticket is closed
+      if (ticket.status === 'closed') {
+        return res.status(400).json({ error: 'Cannot reply to a closed ticket' });
+      }
+
+      // Add the message
+      const newMessage = await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: 'guest',
+        authorEmail: ticket.guestEmail || 'guest@unknown',
+        authorName: null,
+        message: message.trim(),
+      });
+
+      // Update ticket status to waiting_admin
+      await dbStorage.updateTicketStatus(ticket.id, 'waiting_admin');
+
+      // Send admin notification about the reply
+      sendAdminTicketNotificationEmail(
+        ticket.id,
+        `Re: ${ticket.title}`,
+        ticket.category,
+        ticket.priority,
+        message.trim(),
+        ticket.guestEmail || 'guest@unknown',
+        null
+      ).catch(err => {
+        log(`Failed to send admin notification for guest ticket reply #${ticket.id}: ${err.message}`, 'email');
+      });
+
+      log(`Guest reply added to ticket #${ticket.id}`, 'api');
+      res.status(201).json({ message: newMessage });
+    } catch (error: any) {
+      log(`Error adding guest ticket message: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to add reply' });
+    }
+  });
+
+  // ==========================================
   // SUPPORT TICKET ROUTES - USER FACING
   // ==========================================
 
@@ -7135,10 +7441,10 @@ export async function registerRoutes(
         }
       }
 
-      // Get user info from wallet
-      const wallet = await dbStorage.getWallet(ticket.auth0UserId);
+      // Get user info from wallet (only for registered users)
+      const wallet = ticket.auth0UserId ? await dbStorage.getWallet(ticket.auth0UserId) : null;
 
-      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : null });
+      res.json({ ticket, messages, server, user: wallet ? { email: ticket.auth0UserId } : ticket.guestEmail ? { email: ticket.guestEmail, isGuest: true } : null });
     } catch (error: any) {
       log(`Error fetching ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch ticket' });

@@ -31,6 +31,7 @@ import {
   Search,
   Server,
   HelpCircle,
+  Zap,
   CreditCard,
   Shield,
   Gauge,
