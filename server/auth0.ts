@@ -148,44 +148,50 @@ class Auth0Client {
 
   async createUser(email: string, password: string, name?: string): Promise<{ success: boolean; user?: Auth0User; error?: string }> {
     try {
-      // Use the dbconnections/signup endpoint which doesn't require Management API access
-      const response = await fetch(`${this.baseUrl}/dbconnections/signup`, {
+      // Use the Management API to create users with email_verified: true
+      // This prevents Auth0 from sending its own verification emails
+      // We handle email verification ourselves with our custom system
+      const managementToken = await this.getManagementToken();
+
+      const response = await fetch(`${this.baseUrl}/api/v2/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${managementToken}`,
         },
         body: JSON.stringify({
-          client_id: AUTH0_CLIENT_ID,
           email,
           password,
           connection: 'Username-Password-Authentication',
           name: name || email.split('@')[0],
+          email_verified: true, // Prevents Auth0 from sending verification emails
+          verify_email: false,  // Explicitly disable verification email
         }),
       });
 
       if (!response.ok) {
         const error = await response.json() as any;
         log(`Auth0 user creation failed for ${email}: ${JSON.stringify(error)}`, 'auth0');
-        
-        if (error.code === 'invalid_signup' || error.description?.includes('already exists')) {
+
+        if (error.statusCode === 409 || error.message?.includes('already exists')) {
           // SECURITY: Generic message to prevent email enumeration
           return { success: false, error: 'Unable to create account. Please try a different email or log in if you already have an account.' };
         }
-        if (error.code === 'password_strength_error' || error.name === 'PasswordStrengthError') {
-          return { success: false, error: 'Password is too weak. Please use a stronger password.' };
+        if (error.code === 'password_strength_error' || error.message?.includes('PasswordStrengthError') || error.message?.includes('password')) {
+          return { success: false, error: 'Password is too weak. Please use a stronger password with at least 8 characters, including uppercase, lowercase, numbers, and symbols.' };
         }
-        return { success: false, error: error.description || error.message || 'Failed to create account' };
+        return { success: false, error: error.message || error.description || 'Failed to create account' };
       }
 
       const userData = await response.json() as any;
-      
+
       return {
         success: true,
         user: {
-          user_id: userData._id || `auth0|${userData._id}`,
+          user_id: userData.user_id,
           email: userData.email,
           name: name || email.split('@')[0],
-          email_verified: false,
+          email_verified: true, // We set this to true in Auth0, but our system tracks real verification
         },
       };
     } catch (error: any) {

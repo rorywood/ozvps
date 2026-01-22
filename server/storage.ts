@@ -63,6 +63,7 @@ export interface IStorage {
   revokeIdleSessions(auth0UserId: string, idleTimeoutMs: number, reason: SessionRevokeReason): Promise<void>;
   updateSessionActivity(sessionId: string): Promise<void>;
   updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void>;
+  updateSessionsByAuth0UserId(auth0UserId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void>;
   getUserFlags(auth0UserId: string): Promise<UserFlags | undefined>;
   setUserBlocked(auth0UserId: string, blocked: boolean, reason?: string): Promise<void>;
   setEmailVerifiedOverride(auth0UserId: string, verified: boolean, adminEmail: string): Promise<void>;
@@ -214,6 +215,23 @@ export class MemoryStorage implements IStorage {
         session.emailVerified = updates.emailVerified;
       }
     }
+  }
+
+  async updateSessionsByAuth0UserId(auth0UserId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
+    const now = new Date();
+    this.sessions.forEach((session) => {
+      if (session.auth0UserId === auth0UserId && !session.revokedAt && new Date(session.expiresAt) > now) {
+        if (updates.isAdmin !== undefined) {
+          session.isAdmin = updates.isAdmin;
+        }
+        if (updates.name !== undefined) {
+          session.name = updates.name;
+        }
+        if (updates.emailVerified !== undefined) {
+          session.emailVerified = updates.emailVerified;
+        }
+      }
+    });
   }
 
   async getUserFlags(auth0UserId: string): Promise<UserFlags | undefined> {
@@ -579,6 +597,53 @@ export class RedisStorage implements IStorage {
     } catch (error: any) {
       log(`Redis error in updateSession: ${error.message}`, 'storage');
       return this.memoryFallback.updateSession(sessionId, updates);
+    }
+  }
+
+  async updateSessionsByAuth0UserId(auth0UserId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {
+    if (!this.isRedisAvailable()) {
+      return this.memoryFallback.updateSessionsByAuth0UserId(auth0UserId, updates);
+    }
+
+    try {
+      // Scan for all session keys and update matching ones
+      const keys = await this.redisClient.keys(this.sessionKey('*'));
+      const now = new Date();
+
+      for (const key of keys) {
+        const data = await this.redisClient.get(key);
+        if (!data) continue;
+
+        const session: Session = JSON.parse(data);
+        session.expiresAt = new Date(session.expiresAt);
+        if (session.lastActivityAt) {
+          session.lastActivityAt = new Date(session.lastActivityAt);
+        }
+
+        if (
+          session.auth0UserId === auth0UserId &&
+          !session.revokedAt &&
+          session.expiresAt > now
+        ) {
+          if (updates.isAdmin !== undefined) {
+            session.isAdmin = updates.isAdmin;
+          }
+          if (updates.name !== undefined) {
+            session.name = updates.name;
+          }
+          if (updates.emailVerified !== undefined) {
+            session.emailVerified = updates.emailVerified;
+          }
+
+          const ttlSeconds = Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000);
+          if (ttlSeconds > 0) {
+            await this.redisClient.setEx(key, ttlSeconds, JSON.stringify(session));
+          }
+        }
+      }
+    } catch (error: any) {
+      log(`Redis error in updateSessionsByAuth0UserId: ${error.message}`, 'storage');
+      return this.memoryFallback.updateSessionsByAuth0UserId(auth0UserId, updates);
     }
   }
 

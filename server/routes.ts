@@ -1009,21 +1009,14 @@ export async function registerRoutes(
       await auth0Client.setVirtFusionUserId(auth0UserId, virtFusionUser.id);
       log(`Stored VirtFusion user ${virtFusionUser.id} in Auth0 metadata for ${auth0UserId}`, 'auth');
       
-      // Update user name in Auth0 profile (dbconnections/signup doesn't store name properly)
+      // Update user name in Auth0 profile if needed
       if (name) {
         await auth0Client.updateUserName(auth0UserId, name);
       }
 
-      // IMPORTANT: Set email_verified=true in Auth0 to PREVENT Auth0 from sending its own verification email
-      // We handle email verification ourselves with our custom system
-      // The user's actual verification status is tracked in our database (emailVerificationTokens table)
-      try {
-        await auth0Client.updateUser(auth0UserId, { email_verified: true });
-        log(`Disabled Auth0 verification email for ${email} (set email_verified=true)`, 'auth');
-      } catch (verifyErr: any) {
-        // Non-fatal - user can still register, we just might get duplicate emails
-        log(`Warning: Could not disable Auth0 verification email for ${email}: ${verifyErr.message}`, 'auth');
-      }
+      // NOTE: email_verified is now set to true during user creation via Management API
+      // This prevents Auth0 from sending verification emails
+      // Our actual verification status is tracked in our database (emailVerificationTokens table)
 
       // Create or find existing Stripe customer and wallet for the new user
       try {
@@ -1578,12 +1571,13 @@ export async function registerRoutes(
         log(`Admin user logged in: ${email}`, 'auth');
       }
 
-      // Get email verification status - check both Auth0 and database override
-      const emailVerifiedFromAuth0 = auth0Result.user.email_verified === true;
-      const emailVerifiedOverride = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
-      const emailVerified = emailVerifiedFromAuth0 || emailVerifiedOverride;
-      if (emailVerifiedOverride && !emailVerifiedFromAuth0) {
-        log(`User ${email} email verified via database override`, 'auth');
+      // Get email verification status from our database ONLY
+      // NOTE: We cannot trust Auth0's email_verified flag because we set it to true during
+      // registration to prevent Auth0 from sending duplicate verification emails.
+      // Our actual verification status is tracked in emailVerificationTokens table.
+      const emailVerified = await storage.getEmailVerifiedOverride(auth0UserIdPrefixed);
+      if (emailVerified) {
+        log(`User ${email} email verified via database`, 'auth');
       }
 
       // Create local session with IP and user agent binding for security
@@ -1942,8 +1936,16 @@ export async function registerRoutes(
         log(`Failed to update Auth0 email_verified: ${auth0Error.message}`, 'auth');
       }
 
+      // Update any existing sessions for this user to reflect verification
+      try {
+        await storage.updateSessionsByAuth0UserId(verificationToken.auth0UserId, { emailVerified: true });
+        log(`Updated sessions for ${verificationToken.email} to verified`, 'auth');
+      } catch (sessionError: any) {
+        log(`Failed to update sessions: ${sessionError.message}`, 'auth');
+      }
+
       log(`Email verified for ${verificationToken.email}`, 'auth');
-      res.json({ success: true, message: 'Email verified successfully!' });
+      res.json({ success: true, message: 'Email verified successfully!', redirectTo: '/dashboard' });
     } catch (error: any) {
       log(`Email verification error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to verify email' });

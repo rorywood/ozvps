@@ -19,7 +19,7 @@ export function registerWhitelistRoutes(router: Router) {
   router.post("/whitelist", async (req: Request, res: Response) => {
     const parsed = addIpWhitelistSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0].message });
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
     }
 
     const { ipAddress, cidr, label, expiresAt } = parsed.data;

@@ -136,7 +136,7 @@ export function registerTicketsRoutes(router: Router) {
 
       const parsed = ticketMessageSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.errors[0].message });
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
       const { message } = parsed.data;
@@ -195,7 +195,7 @@ export function registerTicketsRoutes(router: Router) {
 
       const parsed = adminTicketUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.errors[0].message });
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
       const updateData: Record<string, any> = { updatedAt: new Date() };
