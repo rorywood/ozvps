@@ -176,6 +176,9 @@ export default function RegisterPage() {
   const [honeypot, setHoneypot] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Username ban checking
+  const isNameBanned = (n: string): boolean => /darius/i.test(n);
+
   // Email availability checking
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
   const emailCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -723,14 +726,27 @@ export default function RegisterPage() {
                             id="name"
                             type="text"
                             placeholder="John Doe"
-                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className={`pl-12 h-12 bg-[#161b22]/50 text-white placeholder:text-[#525252] focus:ring-primary/20 rounded-xl ${
+                              isNameBanned(name)
+                                ? 'border-red-500/50 focus:border-red-500/50'
+                                : 'border-white/10 focus:border-primary/50'
+                            }`}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             autoComplete="name"
                             required
                             data-testid="input-name"
                           />
+                          {isNameBanned(name) && (
+                            <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
+                          )}
                         </div>
+                        {isNameBanned(name) && (
+                          <p className="text-xs text-red-400 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            This name is banned and cannot be used to register an account with OzVPS
+                          </p>
+                        )}
                       </div>
 
                       {/* Email */}
@@ -926,7 +942,7 @@ export default function RegisterPage() {
                       <Button
                         type="submit"
                         className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
-                        disabled={registerMutation.isPending}
+                        disabled={registerMutation.isPending || isNameBanned(name)}
                         data-testid="button-submit"
                       >
                         {registerMutation.isPending ? (

@@ -140,9 +140,7 @@ function Router() {
         {auth ? <Redirect to="/dashboard" /> : <ResetPassword />}
       </Route>
       <Route path="/verify-email">
-        <AuthGuard requireVerified={false}>
-          <VerifyEmail />
-        </AuthGuard>
+        <VerifyEmail />
       </Route>
       <Route path="/pricing">
         <Pricing />

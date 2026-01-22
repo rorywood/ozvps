@@ -105,9 +105,10 @@ export default function VerifyEmailPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+  const handleLogout = () => {
+    // logout() triggers window.location.href = '/login' in onSuccess
+    // Don't navigate manually as it interferes with the mutation
+    logout();
   };
 
   const handleContinueToDashboard = () => {

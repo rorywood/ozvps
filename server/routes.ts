@@ -953,6 +953,12 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
+      // Block registration with banned usernames
+      if (name && /darius/i.test(name)) {
+        log(`Registration blocked: banned username "${name}" (contains Darius)`, 'security');
+        return res.status(400).json({ error: 'This username is not allowed.' });
+      }
+
       // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {

@@ -2061,12 +2061,12 @@ export default function ServerDetail() {
                       </div>
                     )}
                     {usagePercent >= 80 && usagePercent < 100 && (
-                      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 p-3">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
                           <div className="flex-1">
-                            <p className="text-xs text-foreground font-semibold">Approaching Bandwidth Limit</p>
-                            <p className="text-[10px] text-muted-foreground">{usagePercent.toFixed(1)}% of allowance used</p>
+                            <p className="text-sm text-foreground font-semibold">Approaching Bandwidth Limit</p>
+                            <p className="text-xs text-yellow-500/80 font-medium">{usagePercent.toFixed(1)}% of allowance used</p>
                           </div>
                         </div>
                       </div>
