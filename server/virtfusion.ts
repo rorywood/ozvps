@@ -1605,51 +1605,99 @@ export class VirtFusionClient {
   async deleteUserById(userId: number): Promise<boolean> {
     try {
       log(`Deleting VirtFusion user by ID ${userId}`, 'virtfusion');
-      // First get the user to find their extRelationId
+
+      // Try multiple deletion methods since VirtFusion API can be inconsistent
+
+      // Method 1: Try direct DELETE /users/{id}
+      try {
+        await this.request(`/users/${userId}`, {
+          method: 'DELETE',
+        });
+        log(`Successfully deleted VirtFusion user ${userId} via direct ID`, 'virtfusion');
+        return true;
+      } catch (directError: any) {
+        log(`Direct ID deletion failed for ${userId}: ${directError.message}`, 'virtfusion');
+
+        // If 404, user already deleted
+        if (directError.message?.includes('404')) {
+          log(`VirtFusion user ${userId} not found (already deleted)`, 'virtfusion');
+          return true;
+        }
+
+        // If 405 Method Not Allowed, try byExtRelation method
+        if (directError.message?.includes('405')) {
+          log(`Direct deletion not supported, trying byExtRelation method`, 'virtfusion');
+        }
+      }
+
+      // Method 2: Get user first, then delete by extRelationId
       const user = await this.getUserById(userId);
       if (!user) {
         log(`VirtFusion user ${userId} not found, may already be deleted`, 'virtfusion');
         return true;
       }
 
-      // Use the byExtRelation endpoint with relStr=true for proper deletion
+      log(`Found VirtFusion user: id=${user.id}, extRelationId=${user.extRelationId}, email=${user.email}`, 'virtfusion');
+
       if (user.extRelationId) {
         return await this.deleteUserByExtRelationId(user.extRelationId);
       }
 
-      // Fallback to direct ID deletion if no extRelationId
-      await this.request(`/users/${userId}`, {
-        method: 'DELETE',
-      });
-      log(`Successfully deleted VirtFusion user ${userId} via direct ID`, 'virtfusion');
-      return true;
+      log(`VirtFusion user ${userId} has no extRelationId, cannot delete via byExtRelation`, 'virtfusion');
+      return false;
     } catch (error: any) {
       if (error.message?.includes('404')) {
         log(`VirtFusion user ${userId} already deleted or not found`, 'virtfusion');
         return true;
       }
-      log(`Failed to delete VirtFusion user ${userId}: ${error}`, 'virtfusion');
+      log(`Failed to delete VirtFusion user ${userId}: ${error.message}`, 'virtfusion');
       return false;
     }
   }
 
   async deleteUserByExtRelationId(extRelationId: string): Promise<boolean> {
     try {
-      log(`Deleting VirtFusion user by extRelationId ${extRelationId}`, 'virtfusion');
-      // URL-encode the extRelationId since it may contain special characters like 'auth0|123'
+      log(`Deleting VirtFusion user by extRelationId: ${extRelationId}`, 'virtfusion');
+      // URL-encode the extRelationId since it may contain special characters
       const encodedExtRelationId = encodeURIComponent(extRelationId);
-      // According to VirtFusion API: DELETE /users/{extRelationId}/byExtRelation?relStr=true
-      await this.request(`/users/${encodedExtRelationId}/byExtRelation?relStr=true`, {
-        method: 'DELETE',
-      });
-      log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId}`, 'virtfusion');
-      return true;
+
+      // Try with relStr=true first (for string extRelationIds)
+      try {
+        await this.request(`/users/${encodedExtRelationId}/byExtRelation?relStr=true`, {
+          method: 'DELETE',
+        });
+        log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId} (relStr=true)`, 'virtfusion');
+        return true;
+      } catch (err1: any) {
+        log(`Delete with relStr=true failed: ${err1.message}`, 'virtfusion');
+
+        // If 404, user already deleted
+        if (err1.message?.includes('404')) {
+          log(`VirtFusion user with extRelationId ${extRelationId} already deleted`, 'virtfusion');
+          return true;
+        }
+
+        // Try without relStr parameter (for numeric extRelationIds)
+        try {
+          await this.request(`/users/${encodedExtRelationId}/byExtRelation`, {
+            method: 'DELETE',
+          });
+          log(`Successfully deleted VirtFusion user with extRelationId ${extRelationId} (no relStr)`, 'virtfusion');
+          return true;
+        } catch (err2: any) {
+          log(`Delete without relStr also failed: ${err2.message}`, 'virtfusion');
+          if (err2.message?.includes('404')) {
+            return true;
+          }
+          throw err2;
+        }
+      }
     } catch (error: any) {
       if (error.message?.includes('404') || error.message?.includes('not found')) {
         log(`VirtFusion user with extRelationId ${extRelationId} already deleted or not found`, 'virtfusion');
         return true;
       }
-      log(`Failed to delete VirtFusion user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
+      log(`Failed to delete VirtFusion user by extRelationId ${extRelationId}: ${error.message}`, 'virtfusion');
       return false;
     }
   }
