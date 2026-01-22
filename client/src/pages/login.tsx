@@ -30,6 +30,9 @@ export default function LoginPage() {
   // Check system health (database connectivity)
   const { isDatabaseDown, isLoading: healthLoading, refetch: refetchHealth, errorMessage: healthErrorMessage } = useSystemHealth();
 
+  // Block ALL interactions until we know the system is healthy
+  const systemUnavailable = isDatabaseDown || healthLoading;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -248,8 +251,8 @@ export default function LoginPage() {
 
     if (isSubmitting || loginMutation.isPending) return;
 
-    // Block login if system is down
-    if (isDatabaseDown) {
+    // Block login if system is down or still checking
+    if (systemUnavailable) {
       setError("System is temporarily unavailable. Please try again later.");
       return;
     }
@@ -301,8 +304,8 @@ export default function LoginPage() {
 
     if (isSubmitting || loginMutation.isPending) return;
 
-    // Block if system is down
-    if (isDatabaseDown) {
+    // Block if system is down or still checking
+    if (systemUnavailable) {
       setError("System is temporarily unavailable. Please try again later.");
       return;
     }
@@ -464,8 +467,18 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* Database Unavailable Banner */}
-          {isDatabaseDown && (
+          {/* Health Check Loading */}
+          {healthLoading && (
+            <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
+                <span className="text-blue-400">Checking system status...</span>
+              </div>
+            </div>
+          )}
+
+          {/* System Unavailable Banner */}
+          {isDatabaseDown && !healthLoading && (
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-red-400 mb-2">System Temporarily Unavailable</h2>
@@ -484,7 +497,7 @@ export default function LoginPage() {
           )}
 
           {/* Form Card */}
-          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${systemUnavailable ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-2xl font-bold text-white mb-2">
@@ -495,7 +508,7 @@ export default function LoginPage() {
                   ? useBackupCode
                     ? "Enter your backup code to continue"
                     : "Enter your authentication code"
-                  : isDatabaseDown
+                  : systemUnavailable
                     ? "Sign in is temporarily unavailable"
                     : "Sign in to access your dashboard"
                 }
@@ -606,7 +619,7 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
-                    disabled={isSubmitting || loginMutation.isPending || isDatabaseDown}
+                    disabled={isSubmitting || loginMutation.isPending || systemUnavailable}
                     data-testid="button-submit"
                   >
                     {(isSubmitting || loginMutation.isPending) ? (
