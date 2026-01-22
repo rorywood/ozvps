@@ -316,26 +316,15 @@ export class VirtFusionClient {
         },
       });
 
-      // Any successful response means API is working
-      // Don't check for specific status codes or license issues
+      // Only consider API "connected" if we get a 2xx response
       if (response.ok) {
         return { connected: true };
       }
 
-      // Even 401/403 means API is responding, just auth issues
-      // This is fine for health check purposes
-      if (response.status === 401 || response.status === 403) {
-        log('VirtFusion API responding but auth issue detected', 'virtfusion');
-        return { connected: true }; // API is up, just config issue
-      }
-
-      // Only consider 5xx errors as API being down
-      if (response.status >= 500) {
-        return { connected: false, errorType: 'api_error' };
-      }
-
-      // For any other status, consider API as available
-      return { connected: true };
+      // Any non-2xx response means something is wrong
+      // Log the status for debugging
+      log(`VirtFusion API returned status ${response.status}`, 'virtfusion');
+      return { connected: false, errorType: `http_${response.status}` };
     } catch (error: any) {
       if (error.name === 'AbortError' || error.message?.includes('timeout')) {
         return { connected: false, errorType: 'timeout' };
