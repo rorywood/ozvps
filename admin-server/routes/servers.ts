@@ -784,9 +784,10 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Plan is not linked to a VirtFusion package" });
       }
 
-      // Get hypervisor group for location
+      // Get hypervisor group for location (must match main server config)
+      // hypervisorGroupId = the group ID from VirtFusion /compute/hypervisors response
       const LOCATION_CONFIG: Record<string, number> = {
-        BNE: parseInt(process.env.VIRTFUSION_HYPERVISOR_GROUP_BNE || "1"),
+        BNE: 2,  // "Brisbane Node" group - same as main server
       };
       const hypervisorGroupId = LOCATION_CONFIG[locationCode] || LOCATION_CONFIG.BNE;
 
