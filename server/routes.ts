@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendGuestTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTicketConfirmationEmail, sendGuestTicketConfirmationEmail, sendTwoFactorCodeEmail, sendServerPasswordResetEmail, sendTicketStatusEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import sharp from "sharp";
 import path from "path";
@@ -7608,6 +7608,20 @@ export async function registerRoutes(
 
       const updatedTicket = await dbStorage.updateTicket(ticketId, updates);
       log(`Ticket #${ticketId} updated by admin ${req.userSession!.email}: ${JSON.stringify(updates)}`, 'support');
+
+      // Send email notification if status changed to resolved or closed
+      if (ticket.auth0UserId) {
+        if (updates.status === 'resolved' && ticket.status !== 'resolved') {
+          sendTicketStatusEmail(ticket.auth0UserId, ticketId, ticket.title, 'resolved').catch(err => {
+            log(`Failed to send resolved notification for ticket #${ticketId}: ${err.message}`, 'email');
+          });
+        } else if (updates.status === 'closed' && ticket.status !== 'closed') {
+          sendTicketStatusEmail(ticket.auth0UserId, ticketId, ticket.title, 'closed').catch(err => {
+            log(`Failed to send closed notification for ticket #${ticketId}: ${err.message}`, 'email');
+          });
+        }
+      }
+
       res.json({ ticket: updatedTicket });
     } catch (error: any) {
       log(`Error updating ticket: ${error.message}`, 'api');
@@ -7630,6 +7644,14 @@ export async function registerRoutes(
 
       const updatedTicket = await dbStorage.closeTicket(ticketId);
       log(`Ticket #${ticketId} closed by admin ${req.userSession!.email}`, 'support');
+
+      // Send email notification to user (only for registered users)
+      if (ticket.auth0UserId) {
+        sendTicketStatusEmail(ticket.auth0UserId, ticketId, ticket.title, 'closed').catch(err => {
+          log(`Failed to send closed notification for ticket #${ticketId}: ${err.message}`, 'email');
+        });
+      }
+
       res.json({ ticket: updatedTicket });
     } catch (error: any) {
       log(`Error closing ticket: ${error.message}`, 'api');
