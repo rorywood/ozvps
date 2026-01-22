@@ -23,7 +23,6 @@ import {
   Plus,
   Clock,
   ChevronRight,
-  ChevronDown,
   Loader2,
   AlertCircle,
   CheckCircle2,
@@ -31,10 +30,7 @@ import {
   Timer,
   Search,
   Server,
-  BookOpen,
   HelpCircle,
-  Mail,
-  Zap,
   CreditCard,
   Shield,
   Gauge,
@@ -105,55 +101,6 @@ const FAQ_ITEMS = [
   },
 ];
 
-// Quick Help Cards
-function QuickHelpSection() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-      <a
-        href="https://ozvps.com.au/docs"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/50 hover:bg-muted/30 transition-all group"
-      >
-        <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-          <BookOpen className="h-5 w-5 text-blue-400" />
-        </div>
-        <div>
-          <p className="font-medium text-foreground">Documentation</p>
-          <p className="text-xs text-muted-foreground">Guides & tutorials</p>
-        </div>
-      </a>
-
-      <a
-        href="https://status.ozvps.com.au"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/50 hover:bg-muted/30 transition-all group"
-      >
-        <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-          <Zap className="h-5 w-5 text-green-400" />
-        </div>
-        <div>
-          <p className="font-medium text-foreground">System Status</p>
-          <p className="text-xs text-muted-foreground">Check service health</p>
-        </div>
-      </a>
-
-      <a
-        href="mailto:support@ozvps.com.au"
-        className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/50 hover:bg-muted/30 transition-all group"
-      >
-        <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-          <Mail className="h-5 w-5 text-purple-400" />
-        </div>
-        <div>
-          <p className="font-medium text-foreground">Email Support</p>
-          <p className="text-xs text-muted-foreground">support@ozvps.com.au</p>
-        </div>
-      </a>
-    </div>
-  );
-}
 
 // FAQ Section
 function FAQSection() {
@@ -522,11 +469,8 @@ export default function SupportPage() {
           </Button>
         </div>
 
-        {/* Quick Help Cards */}
-        <QuickHelpSection />
-
-        {/* FAQ Section */}
-        <FAQSection />
+        {/* FAQ Section - hidden when creating new ticket */}
+        {!showNewTicketForm && <FAQSection />}
 
         {/* Inline collapsible form */}
         <NewTicketForm isOpen={showNewTicketForm} onToggle={() => setShowNewTicketForm(!showNewTicketForm)} />
