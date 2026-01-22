@@ -84,12 +84,12 @@ export default function VerifyEmailPage() {
     }
   }, [meData, navigate, queryClient]);
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated (but NOT if we have a token - let verification complete first)
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !token) {
       navigate('/login');
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, navigate, token]);
 
   // If already verified, redirect to dashboard
   useEffect(() => {
@@ -116,8 +116,8 @@ export default function VerifyEmailPage() {
     navigate('/login');
   };
 
-  // Show loading state
-  if (authLoading || (token && verifyState === 'verifying')) {
+  // Show loading state (but don't wait for auth if we have a token)
+  if ((authLoading && !token) || (token && verifyState === 'verifying')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
         <div className="text-center">
@@ -169,10 +169,10 @@ export default function VerifyEmailPage() {
                       Your email has been successfully verified. You can now access all features of OzVPS.
                     </p>
                     <p className="text-sm text-muted-foreground mb-6">
-                      You can close this tab and return to the original window, or click below to continue.
+                      Redirecting to dashboard in a moment...
                     </p>
                     <Button onClick={() => navigate('/')} className="w-full">
-                      Continue to Dashboard
+                      Continue to Dashboard Now
                     </Button>
                   </>
                 ) : (
