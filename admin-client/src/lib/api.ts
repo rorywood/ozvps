@@ -200,6 +200,17 @@ export const serversApi = {
 
   revokeCancellation: (id: number) => api.post(`/cancellations/${id}/revoke`),
 
+  getLocations: () => api.get<{
+    locations: Array<{
+      code: string;
+      name: string;
+      country: string;
+      countryCode: string;
+      hypervisorGroupId: number;
+      enabled: boolean;
+    }>;
+  }>("/locations"),
+
   provision: (data: {
     auth0UserId: string;
     email: string;

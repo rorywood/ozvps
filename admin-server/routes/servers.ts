@@ -85,6 +85,22 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Location to hypervisor GROUP mapping (must match main server config)
+  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
+    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },
+    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },
+  };
+
+  // Get available locations
+  router.get("/locations", async (req: Request, res: Response) => {
+    res.json({
+      locations: Object.entries(LOCATION_CONFIG).map(([code, config]) => ({
+        code,
+        ...config,
+      })),
+    });
+  });
+
   // Sync a user to VirtFusion (create VirtFusion account if needed)
   router.post("/users/:auth0UserId/sync-virtfusion", async (req: Request, res: Response) => {
     try {
@@ -784,12 +800,12 @@ export function registerServersRoutes(router: Router) {
         return res.status(400).json({ error: "Plan is not linked to a VirtFusion package" });
       }
 
-      // Get hypervisor group for location (must match main server config)
-      // hypervisorGroupId = the group ID from VirtFusion /compute/hypervisors response
-      const LOCATION_CONFIG: Record<string, number> = {
-        BNE: 2,  // "Brisbane Node" group - same as main server
-      };
-      const hypervisorGroupId = LOCATION_CONFIG[locationCode] || LOCATION_CONFIG.BNE;
+      // Get hypervisor group for location
+      const location = LOCATION_CONFIG[locationCode] || LOCATION_CONFIG['BNE'];
+      if (!location) {
+        return res.status(400).json({ error: "Invalid location" });
+      }
+      const hypervisorGroupId = location.hypervisorGroupId;
 
       // extRelationId is the normalized email
       const extRelationId = userMapping.email.toLowerCase().trim();

@@ -17,6 +17,7 @@ import {
   Loader2,
   ArrowLeft,
   Copy,
+  MapPin,
 } from "lucide-react";
 import { Link } from "wouter";
 import { getOsLogoUrl, FALLBACK_LOGO } from "../lib/os-logos";
@@ -30,6 +31,7 @@ export default function ProvisionServer() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [hostname, setHostname] = useState("");
   const [selectedOs, setSelectedOs] = useState<number | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<string>("BNE");
   const [freeServer, setFreeServer] = useState(false);
   const [sendCredentials, setSendCredentials] = useState(true);
   const [notes, setNotes] = useState("");
@@ -56,6 +58,12 @@ export default function ProvisionServer() {
     queryKey: ["plan-templates", selectedPlan?.id],
     queryFn: () => plansApi.getTemplates(selectedPlan.id),
     enabled: !!selectedPlan?.id,
+  });
+
+  // Fetch locations
+  const { data: locationsData } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => serversApi.getLocations(),
   });
 
   // Sync to VirtFusion mutation
@@ -114,6 +122,7 @@ export default function ProvisionServer() {
       planId: selectedPlan.id,
       hostname,
       osId: selectedOs,
+      locationCode: selectedLocation,
       freeServer,
       sendCredentials,
       notes: notes || undefined,
@@ -130,6 +139,7 @@ export default function ProvisionServer() {
     setSelectedPlan(null);
     setHostname("");
     setSelectedOs(null);
+    setSelectedLocation("BNE");
     setFreeServer(false);
     setSendCredentials(true);
     setNotes("");
@@ -420,6 +430,46 @@ export default function ProvisionServer() {
               Only lowercase letters, numbers, and hyphens allowed
             </p>
           </div>
+
+          {/* Location Selection */}
+          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin className="h-5 w-5 text-[var(--color-primary)]" />
+              <h2 className="text-lg font-semibold">Location</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {locationsData?.locations?.map((location: any) => (
+                <button
+                  key={location.code}
+                  onClick={() => location.enabled && setSelectedLocation(location.code)}
+                  disabled={!location.enabled}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    selectedLocation === location.code
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                      : location.enabled
+                      ? "border-gray-200 dark:border-gray-700 hover:border-[var(--color-primary)]/50"
+                      : "border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={`https://flagcdn.com/w40/${location.countryCode.toLowerCase()}.png`}
+                      alt={location.country}
+                      className="w-8 h-6 object-cover rounded"
+                    />
+                    <div>
+                      <div className="font-semibold">{location.name}</div>
+                      <div className="text-xs text-gray-400">{location.country}</div>
+                    </div>
+                  </div>
+                  {!location.enabled && (
+                    <span className="text-xs text-yellow-500 mt-2 block">Coming Soon</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Right Column - OS & Options */}
@@ -583,6 +633,21 @@ export default function ProvisionServer() {
                 <span className="text-gray-400">Hostname</span>
                 <span className="font-mono">
                   {hostname || <span className="text-gray-400">Not entered</span>}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Location</span>
+                <span className="flex items-center gap-2">
+                  {locationsData?.locations?.find((l: any) => l.code === selectedLocation) && (
+                    <>
+                      <img
+                        src={`https://flagcdn.com/w20/${locationsData.locations.find((l: any) => l.code === selectedLocation)?.countryCode.toLowerCase()}.png`}
+                        alt=""
+                        className="w-5 h-3.5 object-cover rounded-sm"
+                      />
+                      {locationsData.locations.find((l: any) => l.code === selectedLocation)?.name}
+                    </>
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
