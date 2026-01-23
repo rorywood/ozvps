@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon, CheckCircle2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -44,6 +44,7 @@ export default function LoginPage() {
   const widgetIdRef = useRef<number | null>(null);
   const [honeypot, setHoneypot] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   const { toast } = useToast();
 
   // 2FA State
@@ -220,17 +221,13 @@ export default function LoginPage() {
         return;
       }
 
-      const displayName = formatDisplayName(data.user?.name, data.user?.email);
-      toast({
-        title: `Welcome back, ${displayName}!`,
-        description: "Login successful. Redirecting to your dashboard...",
-        duration: 3000,
-      });
+      setLoginSuccess(true);
+      setIsSubmitting(false);
 
       setTimeout(() => {
         queryClient.clear();
         setLocation("/");
-      }, 1500);
+      }, 1200);
     },
     onError: (err: any) => {
       setIsSubmitting(false);
@@ -609,11 +606,20 @@ export default function LoginPage() {
                 <div className="space-y-3 pt-2">
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all"
-                    disabled={isSubmitting || loginMutation.isPending || systemUnavailable}
+                    className={`w-full h-12 text-base font-semibold rounded-xl transition-all ${
+                      loginSuccess
+                        ? 'bg-emerald-500 hover:bg-emerald-500 cursor-default'
+                        : 'bg-primary hover:bg-primary/90'
+                    }`}
+                    disabled={isSubmitting || loginMutation.isPending || systemUnavailable || loginSuccess}
                     data-testid="button-submit"
                   >
-                    {(isSubmitting || loginMutation.isPending) ? (
+                    {loginSuccess ? (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 mr-2" />
+                        Login Successful
+                      </>
+                    ) : (isSubmitting || loginMutation.isPending) ? (
                       <>
                         <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                         Signing in...
