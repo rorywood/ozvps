@@ -223,7 +223,8 @@ export default function LoginPage() {
       const displayName = formatDisplayName(data.user?.name, data.user?.email);
       toast({
         title: `Welcome back, ${displayName}!`,
-        description: "Redirecting to your dashboard...",
+        description: "Login successful. Redirecting to your dashboard...",
+        duration: 3000,
       });
 
       setTimeout(() => {
@@ -466,16 +467,6 @@ export default function LoginPage() {
               />
             </Link>
           </div>
-
-          {/* Health Check Loading */}
-          {healthLoading && (
-            <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 text-center">
-              <div className="flex items-center justify-center gap-3">
-                <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
-                <span className="text-blue-400">Checking system status...</span>
-              </div>
-            </div>
-          )}
 
           {/* System Unavailable Banner */}
           {isSystemDown && !healthLoading && (
