@@ -134,6 +134,13 @@ function isIpWhitelisted(clientIp: string, entries: typeof adminIpWhitelist.$inf
 }
 
 export async function ipWhitelistMiddleware(req: Request, res: Response, next: NextFunction) {
+  // TEMPORARY: Allow disabling whitelist via environment variable
+  // Set DISABLE_ADMIN_IP_WHITELIST=true to bypass IP checking
+  if (process.env.DISABLE_ADMIN_IP_WHITELIST === 'true') {
+    (req as any).bootstrapMode = true;
+    return next();
+  }
+
   const clientIp = getClientIp(req);
   const entries = await getWhitelistEntries();
 
