@@ -15,17 +15,18 @@ export default function VerifyEmailPage() {
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const queryClient = useQueryClient();
-  const { user, isLoading: authLoading, logout } = useAuth();
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Extract token from URL if present (use both wouter and window.location for safety)
-  const params = new URLSearchParams(searchString);
-  const wouterToken = params.get('token');
-  // Fallback to window.location in case wouter hasn't synced yet
+  // CRITICAL: Extract token FIRST before any auth checks
+  // Use window.location directly for reliability (wouter may not be synced yet)
   const windowToken = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('token')
     : null;
-  const token = wouterToken || windowToken;
+  const wouterToken = new URLSearchParams(searchString).get('token');
+  const token = windowToken || wouterToken;
+
+  // Only use auth hook if NOT verifying via token (to avoid unnecessary API calls)
+  const { user, isLoading: authLoading, logout } = useAuth();
 
   // State for token verification
   const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
@@ -85,11 +86,14 @@ export default function VerifyEmailPage() {
 
   // Redirect to login if not authenticated AND no token AND not currently verifying
   useEffect(() => {
-    // If there's a token in the URL, NEVER redirect - let verification happen
-    if (token) return;
+    // CRITICAL: Check URL directly every time to prevent race conditions
+    const urlHasToken = typeof window !== 'undefined' && window.location.search.includes('token=');
 
-    // If we're verifying or already verified, don't redirect
-    if (verifyState === 'verifying' || verifyState === 'success') return;
+    // If there's a token anywhere, NEVER redirect - let verification happen
+    if (token || urlHasToken) return;
+
+    // If we're verifying or already verified/errored, don't redirect
+    if (verifyState !== 'idle') return;
 
     // Only redirect if auth check is done and user is not logged in
     if (!authLoading && !user) {
