@@ -227,6 +227,7 @@ git checkout claude/dev-l5488
 - User gets frustrated with repeated issues - triple-check fixes
 - The `.ozvps-branch` file on servers determines which branch to pull from
 - Email templates must be white/light themed (dark mode breaks emails)
+- **ALWAYS `git pull origin main` before starting work** - Sync latest from remote to avoid overwriting changes made elsewhere
 - **LOCKED - DO NOT MODIFY WITHOUT ASKING:**
   - Login page (`client/src/pages/login.tsx`)
   - Register page (`client/src/pages/register.tsx`)
