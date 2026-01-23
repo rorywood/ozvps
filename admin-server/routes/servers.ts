@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../../server/db";
-import { serverBilling, serverCancellations, userMappings, plans, wallets } from "../../shared/schema";
+import { serverBilling, serverCancellations, userMappings, plans, wallets, walletTransactions } from "../../shared/schema";
 import { eq, desc, and, like, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
 import { auth0Client } from "../../server/auth0";
@@ -945,6 +945,25 @@ export function registerServersRoutes(router: Router) {
         .returning();
 
       console.log(`[admin-servers] Billing record created: ${billingRecord.id}`);
+
+      // Create wallet transaction record for audit trail
+      await db.insert(walletTransactions).values({
+        auth0UserId,
+        type: 'admin_adjustment',
+        amountCents: 0, // No immediate charge - billing starts on next cycle
+        metadata: {
+          action: 'admin_deployed_server',
+          hostname,
+          serverId: serverResult.serverId,
+          planId: plan.id,
+          planName: plan.name,
+          freeServer,
+          monthlyPrice: freeServer ? 0 : plan.priceMonthly,
+          adminEmail: session.email,
+          notes: notes || null,
+        },
+      });
+      console.log(`[admin-servers] Wallet transaction recorded for ${auth0UserId}`);
 
       // Send credentials email if requested and password available
       if (sendCredentials && serverResult.password) {

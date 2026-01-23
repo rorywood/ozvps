@@ -131,6 +131,10 @@ function getTransactionIcon(type: string, metadata?: any, amountCents?: number) 
 
 function getTransactionType(type: string, metadata?: any, amountCents?: number): string {
   if (type === 'admin_adjustment') {
+    // Check for specific admin actions
+    if (metadata?.action === 'admin_deployed_server') {
+      return metadata?.freeServer ? 'Admin Deployed Server (Free)' : 'Admin Deployed Server';
+    }
     return amountCents !== undefined && amountCents >= 0 ? 'Admin Credit' : 'Admin Debit';
   }
   if (type === 'credit') {
@@ -1589,7 +1593,14 @@ export default function BillingPage() {
                                     )}
                                   </div>
                                   {/* Show admin reason for admin adjustments */}
-                                  {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
+                                  {tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, any>).action === 'admin_deployed_server' ? (
+                                    <div className="text-sm text-muted-foreground mt-0.5">
+                                      <span className="text-primary">Server:</span> {(tx.metadata as Record<string, any>).hostname}
+                                      {(tx.metadata as Record<string, any>).planName && (
+                                        <> · {(tx.metadata as Record<string, any>).planName}</>
+                                      )}
+                                    </div>
+                                  ) : tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
                                     <div className="text-sm text-muted-foreground mt-0.5">
                                       <span className="text-primary">Reason:</span> {(tx.metadata as Record<string, string>).reason}
                                     </div>
