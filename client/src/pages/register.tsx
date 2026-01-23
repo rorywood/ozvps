@@ -521,7 +521,8 @@ export default function RegisterPage() {
   };
 
   const handleChecklistComplete = () => {
-    setLocation("/dashboard");
+    // Redirect to verify-email page - users must verify before accessing the app
+    setLocation("/verify-email");
   };
 
   const passwordStrength = () => {
