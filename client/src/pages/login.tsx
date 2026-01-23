@@ -467,17 +467,7 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* Health Check Loading */}
-          {healthLoading && (
-            <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 text-center">
-              <div className="flex items-center justify-center gap-3">
-                <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
-                <span className="text-blue-400">Checking system status...</span>
-              </div>
-            </div>
-          )}
-
-          {/* System Unavailable Banner */}
+          {/* System Unavailable Banner - only show if system is actually down, not during initial check */}
           {isSystemDown && !healthLoading && (
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
