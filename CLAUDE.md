@@ -235,3 +235,9 @@ git checkout claude/dev-l5488
   - Auth API (`client/src/lib/api.ts` - getAuthUser, getCurrentUser)
   - Auth hooks (`client/src/hooks/use-auth.ts`)
   - Server auth routes (`server/routes.ts` - /api/auth/* endpoints)
+  - **Billing system (CRITICAL - money involved):**
+    - Stripe webhooks (`server/webhookHandlers.ts`)
+    - Billing routes (`server/routes.ts` - /api/billing/*, /api/wallet/*)
+    - Admin billing routes (`admin-server/routes/billing.ts`)
+    - Promo codes (`server/routes.ts` - promo code logic, `admin-server/routes/promo-codes.ts`)
+    - Wallet/payment logic in storage (`server/storage.ts` - wallet functions)
