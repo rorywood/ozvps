@@ -221,15 +221,15 @@ export default function LoginPage() {
       }
 
       const displayName = formatDisplayName(data.user?.name, data.user?.email);
-      queryClient.clear();
       toast({
         title: `Welcome back, ${displayName}!`,
         description: "Redirecting to your dashboard...",
       });
 
       setTimeout(() => {
+        queryClient.clear();
         setLocation("/");
-      }, 500);
+      }, 1500);
     },
     onError: (err: any) => {
       setIsSubmitting(false);
@@ -467,7 +467,17 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* System Unavailable Banner - only show if system is actually down, not during initial check */}
+          {/* Health Check Loading */}
+          {healthLoading && (
+            <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
+                <span className="text-blue-400">Checking system status...</span>
+              </div>
+            </div>
+          )}
+
+          {/* System Unavailable Banner */}
           {isSystemDown && !healthLoading && (
             <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
               <DatabaseIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />

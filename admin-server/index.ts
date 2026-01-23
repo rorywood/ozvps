@@ -114,14 +114,14 @@ app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(cookieParser());
 
-// IP whitelist check - protects admin panel from unauthorized access
-app.use((req, res, next) => {
-  // Allow health checks without IP whitelist
-  if (req.path === '/api/health' || req.path === '/health') {
-    return next();
-  }
-  return ipWhitelistMiddleware(req, res, next);
-});
+// IP whitelist check - TEMPORARILY DISABLED
+// To re-enable, uncomment the middleware below
+// app.use((req, res, next) => {
+//   if (req.path === '/api/health' || req.path === '/health') {
+//     return next();
+//   }
+//   return ipWhitelistMiddleware(req, res, next);
+// });
 
 // Request logging
 app.use((req, res, next) => {
