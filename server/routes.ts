@@ -1760,25 +1760,21 @@ export async function registerRoutes(
         });
       }
 
-      // Check Auth0 for updated admin status and email verification (refreshes every call)
+      // Check for updated admin status and email verification (refreshes every call)
       let isAdmin = session.isAdmin ?? false;
       let emailVerified = session.emailVerified ?? false;
       if (session.auth0UserId) {
         try {
-          // Check database override for email verification first
-          log(`[/api/auth/me] Checking override for: ${session.auth0UserId}`, 'auth');
+          // Check our database for email verification (NOT Auth0 - we set Auth0 to true during registration to prevent their emails)
+          const dbEmailVerified = await dbStorage.isEmailVerified(session.auth0UserId);
           const emailVerifiedOverride = await storage.getEmailVerifiedOverride(session.auth0UserId);
-          log(`[/api/auth/me] Override result: ${emailVerifiedOverride}`, 'auth');
 
-          const [currentAdminStatus, currentEmailVerifiedFromAuth0] = await Promise.all([
-            auth0Client.isUserAdmin(session.auth0UserId),
-            auth0Client.isEmailVerified(session.auth0UserId),
-          ]);
-          log(`[/api/auth/me] Auth0 emailVerified: ${currentEmailVerifiedFromAuth0}`, 'auth');
+          // Get admin status from Auth0
+          const currentAdminStatus = await auth0Client.isUserAdmin(session.auth0UserId);
 
-          // Email is verified if EITHER Auth0 says so OR we have a database override
-          const currentEmailVerified = currentEmailVerifiedFromAuth0 || emailVerifiedOverride;
-          log(`[/api/auth/me] Final emailVerified: ${currentEmailVerified}`, 'auth');
+          // Email is verified if our database says so OR admin override
+          const currentEmailVerified = dbEmailVerified || emailVerifiedOverride;
+          log(`[/api/auth/me] DB verified: ${dbEmailVerified}, Override: ${emailVerifiedOverride}, Final: ${currentEmailVerified}`, 'auth');
 
           const updates: Partial<{isAdmin: boolean; emailVerified: boolean}> = {};
 
