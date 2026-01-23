@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Mail, Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle } from "lucide-react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -9,55 +9,140 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 
-export default function VerifyEmailPage() {
-  useDocumentTitle("Verify Your Email - OzVPS");
-
-  const [, navigate] = useLocation();
-  const searchString = useSearch();
-  const queryClient = useQueryClient();
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // CRITICAL: Extract token FIRST before any auth checks
-  // Use window.location directly for reliability (wouter may not be synced yet)
-  const windowToken = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('token')
-    : null;
-  const wouterToken = new URLSearchParams(searchString).get('token');
-  const token = windowToken || wouterToken;
-
-  // Only use auth hook if NOT verifying via token (to avoid unnecessary API calls)
-  const { user, isLoading: authLoading, logout } = useAuth();
-
-  // State for token verification
-  const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
+// Standalone component for token verification - NO AUTH REQUIRED
+function TokenVerification({ token }: { token: string }) {
+  const [verifyState, setVerifyState] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [verifyError, setVerifyError] = useState<string | null>(null);
-
-  // Track if we've started verification to prevent re-runs
   const verificationStarted = useRef(false);
 
-  // Handle token verification on mount - ONLY ONCE
   useEffect(() => {
-    if (token && !verificationStarted.current) {
+    if (!verificationStarted.current) {
       verificationStarted.current = true;
-      setVerifyState('verifying');
 
       fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)
         .then(async (res) => {
           const data = await res.json();
           if (res.ok) {
             setVerifyState('success');
-            // Don't auto-redirect - let user click the button
           } else {
             setVerifyState('error');
             setVerifyError(data.error || 'Failed to verify email');
           }
         })
-        .catch((err) => {
+        .catch(() => {
           setVerifyState('error');
           setVerifyError('Failed to connect to server. Please try again.');
         });
     }
   }, [token]);
+
+  if (verifyState === 'verifying') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Verifying your email...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
+      <div className="fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-radial from-primary/5 via-transparent to-transparent" />
+        <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-radial from-blue-500/5 via-transparent to-transparent" />
+      </div>
+
+      <div className="flex-1 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
+        >
+          <div className="text-center mb-8">
+            <img
+              src={logo}
+              alt="OzVPS"
+              className="h-12 w-auto dark:invert-0 invert mx-auto mb-4 drop-shadow-lg"
+            />
+          </div>
+
+          <div className="bg-card/50 backdrop-blur-sm border border-border rounded-2xl p-8 shadow-xl">
+            <div className="text-center">
+              {verifyState === 'success' ? (
+                <>
+                  <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground mb-3">
+                    Email Verified!
+                  </h2>
+                  <p className="text-muted-foreground mb-6">
+                    Your email has been successfully verified. You can now access all features of OzVPS.
+                  </p>
+                  <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                    <p className="text-sm text-muted-foreground">
+                      You can close this page and return to the browser where you signed up.
+                      It will automatically redirect to your dashboard.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <XCircle className="h-10 w-10 text-red-500" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground mb-3">
+                    Verification Failed
+                  </h2>
+                  <p className="text-muted-foreground mb-6">
+                    {verifyError || 'The verification link is invalid or has expired.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Please sign in and request a new verification email.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      <footer className="py-6 text-center text-sm text-muted-foreground">
+        <p>&copy; {new Date().getFullYear()} OzVPS. All rights reserved.</p>
+      </footer>
+    </div>
+  );
+}
+
+// Main component - checks for token first
+export default function VerifyEmailPage() {
+  useDocumentTitle("Verify Your Email - OzVPS");
+
+  // Check for token IMMEDIATELY using window.location (most reliable)
+  const hasToken = typeof window !== 'undefined' && window.location.search.includes('token=');
+  const token = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('token')
+    : null;
+
+  // If there's a token, render the standalone verification component
+  // This happens BEFORE any auth hooks are called
+  if (hasToken && token) {
+    return <TokenVerification token={token} />;
+  }
+
+  // No token - render the "waiting for verification" UI (requires auth)
+  return <WaitingForVerification />;
+}
+
+// Component for logged-in users waiting for verification
+function WaitingForVerification() {
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const { user, isLoading: authLoading, logout } = useAuth();
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -67,46 +152,36 @@ export default function VerifyEmailPage() {
     }
   }, [resendCooldown]);
 
-  // Polling to check if email has been verified (only when NOT processing a token)
+  // Polling to check if email has been verified
   const { data: meData } = useQuery({
     queryKey: ['auth', 'me', 'verification-poll'],
     queryFn: () => api.getMe(),
     refetchInterval: 3000,
-    enabled: !!user && !token, // Only poll when logged in AND not verifying via token
+    enabled: !!user,
     staleTime: 0,
   });
 
-  // Redirect to dashboard if verified via polling (not token verification)
+  // Redirect to dashboard if verified via polling
   useEffect(() => {
-    if (!token && (meData?.user?.emailVerified || meData?.emailVerified)) {
+    if (meData?.user?.emailVerified || meData?.emailVerified) {
       queryClient.invalidateQueries({ queryKey: ['auth'] });
       setTimeout(() => navigate('/'), 500);
     }
-  }, [meData, navigate, queryClient, token]);
+  }, [meData, navigate, queryClient]);
 
-  // Redirect to login if not authenticated AND no token AND not currently verifying
+  // Redirect to login if not authenticated
   useEffect(() => {
-    // CRITICAL: Check URL directly every time to prevent race conditions
-    const urlHasToken = typeof window !== 'undefined' && window.location.search.includes('token=');
-
-    // If there's a token anywhere, NEVER redirect - let verification happen
-    if (token || urlHasToken) return;
-
-    // If we're verifying or already verified/errored, don't redirect
-    if (verifyState !== 'idle') return;
-
-    // Only redirect if auth check is done and user is not logged in
     if (!authLoading && !user) {
       navigate('/login');
     }
-  }, [authLoading, user, navigate, token, verifyState]);
+  }, [authLoading, user, navigate]);
 
-  // If already verified AND no token, redirect to dashboard
+  // If already verified, redirect to dashboard
   useEffect(() => {
-    if (!token && user?.emailVerified) {
+    if (user?.emailVerified) {
       navigate('/');
     }
-  }, [user, navigate, token]);
+  }, [user, navigate]);
 
   const resendMutation = useMutation({
     mutationFn: () => api.resendVerificationEmail(),
@@ -122,123 +197,8 @@ export default function VerifyEmailPage() {
   };
 
   const handleLogout = () => {
-    // logout() triggers window.location.href = '/login' in onSuccess
-    // Don't navigate manually as it interferes with the mutation
     logout();
   };
-
-  const handleContinueToDashboard = () => {
-    // Refresh auth state then navigate
-    queryClient.invalidateQueries({ queryKey: ['auth'] });
-    navigate('/');
-  };
-
-  // ============================================
-  // TOKEN VERIFICATION FLOW (when ?token= is present)
-  // ============================================
-  if (token) {
-    // Show loading while verifying
-    if (verifyState === 'idle' || verifyState === 'verifying') {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
-          <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Verifying your email...</p>
-          </div>
-        </div>
-      );
-    }
-
-    // Show success or error result
-    return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
-        <div className="fixed inset-0 -z-10 overflow-hidden">
-          <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-radial from-primary/5 via-transparent to-transparent" />
-          <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-radial from-blue-500/5 via-transparent to-transparent" />
-        </div>
-
-        <div className="flex-1 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="w-full max-w-md"
-          >
-            <div className="text-center mb-8">
-              <img
-                src={logo}
-                alt="OzVPS"
-                className="h-12 w-auto dark:invert-0 invert mx-auto mb-4 drop-shadow-lg"
-              />
-            </div>
-
-            <div className="bg-card/50 backdrop-blur-sm border border-border rounded-2xl p-8 shadow-xl">
-              <div className="text-center">
-                {verifyState === 'success' ? (
-                  <>
-                    <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <CheckCircle2 className="h-10 w-10 text-emerald-500" />
-                    </div>
-                    <h2 className="text-xl font-semibold text-foreground mb-3">
-                      Email Verified!
-                    </h2>
-                    <p className="text-muted-foreground mb-4">
-                      Your email has been successfully verified. You can now access all features of OzVPS.
-                    </p>
-                    {user ? (
-                      <Button onClick={handleContinueToDashboard} className="w-full" size="lg">
-                        Continue to Dashboard
-                      </Button>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="p-4 bg-muted/50 rounded-lg border border-border">
-                          <p className="text-sm text-muted-foreground">
-                            You can close this page and return to the browser where you signed up.
-                            It will automatically redirect to your dashboard.
-                          </p>
-                        </div>
-                        <Button onClick={() => navigate('/login')} variant="outline" className="w-full">
-                          Or sign in here
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <XCircle className="h-10 w-10 text-red-500" />
-                    </div>
-                    <h2 className="text-xl font-semibold text-foreground mb-3">
-                      Verification Failed
-                    </h2>
-                    <p className="text-muted-foreground mb-6">
-                      {verifyError || 'The verification link is invalid or has expired.'}
-                    </p>
-                    <div className="space-y-3">
-                      <Button onClick={() => navigate('/login')} className="w-full">
-                        Go to Login
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Sign in to request a new verification email
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        <footer className="py-6 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} OzVPS. All rights reserved.</p>
-        </footer>
-      </div>
-    );
-  }
-
-  // ============================================
-  // WAITING FOR VERIFICATION FLOW (no token, user logged in)
-  // ============================================
 
   // Show loading while checking auth
   if (authLoading) {
