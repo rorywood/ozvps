@@ -90,7 +90,7 @@ function AuthGuard({ children, requireVerified = true }: { children: React.React
   }
 
   // Redirect unverified users to verify-email page (unless already there or verification not required)
-  if (requireVerified && auth.emailVerified === false && location !== '/verify-email') {
+  if (requireVerified && !auth.emailVerified && location !== '/verify-email') {
     return <Redirect to="/verify-email" />;
   }
 

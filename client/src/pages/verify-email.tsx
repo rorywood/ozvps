@@ -18,9 +18,14 @@ export default function VerifyEmailPage() {
   const { user, isLoading: authLoading, logout } = useAuth();
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Extract token from URL if present
+  // Extract token from URL if present (use both wouter and window.location for safety)
   const params = new URLSearchParams(searchString);
-  const token = params.get('token');
+  const wouterToken = params.get('token');
+  // Fallback to window.location in case wouter hasn't synced yet
+  const windowToken = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('token')
+    : null;
+  const token = wouterToken || windowToken;
 
   // State for token verification
   const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
@@ -78,12 +83,19 @@ export default function VerifyEmailPage() {
     }
   }, [meData, navigate, queryClient, token]);
 
-  // Redirect to login if not authenticated AND no token
+  // Redirect to login if not authenticated AND no token AND not currently verifying
   useEffect(() => {
-    if (!authLoading && !user && !token) {
+    // If there's a token in the URL, NEVER redirect - let verification happen
+    if (token) return;
+
+    // If we're verifying or already verified, don't redirect
+    if (verifyState === 'verifying' || verifyState === 'success') return;
+
+    // Only redirect if auth check is done and user is not logged in
+    if (!authLoading && !user) {
       navigate('/login');
     }
-  }, [authLoading, user, navigate, token]);
+  }, [authLoading, user, navigate, token, verifyState]);
 
   // If already verified AND no token, redirect to dashboard
   useEffect(() => {
