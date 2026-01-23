@@ -11,7 +11,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   bootstrapMode: boolean;
-  login: (email: string, password: string) => Promise<{ requires2FA?: boolean; pendingLoginToken?: string; requires2FASetup?: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success?: boolean; user?: User; csrfToken?: string; bootstrapMode?: boolean; requires2FA?: boolean; pendingLoginToken?: string; requires2FASetup?: boolean; error?: string }>;
   verify2FA: (pendingLoginToken: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
@@ -49,6 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const result = await authApi.login(email, password);
+
+    // Handle direct login success (when 2FA is bypassed)
+    if (result.success && result.user) {
+      setUser(result.user);
+      if (result.csrfToken) {
+        setCsrfToken(result.csrfToken);
+      }
+      setBootstrapMode(result.bootstrapMode || false);
+    }
+
     return result;
   };
 

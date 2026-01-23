@@ -28,7 +28,11 @@ export default function Login() {
         return;
       }
 
-      if (result.requires2FA && result.pendingLoginToken) {
+      if (result.success) {
+        // Direct login success (2FA bypassed) - auth context will update and redirect
+        toast.success("Authenticated");
+        return;
+      } else if (result.requires2FA && result.pendingLoginToken) {
         setPendingLoginToken(result.pendingLoginToken);
       } else if (result.error) {
         setError(result.error);
