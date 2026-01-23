@@ -721,7 +721,9 @@ class ApiClient {
     email: string;
     emailVerified?: boolean;
   } | null> {
-    const response = await secureFetch(`${this.baseUrl}/auth/me`);
+    // Use regular fetch (not secureFetch) to avoid triggering session error redirect
+    // This function is expected to return null when not authenticated
+    const response = await fetch(`${this.baseUrl}/auth/me`, { credentials: 'include' });
     if (!response.ok) return null;
     const data = await response.json();
     // Flatten user data for easier access
