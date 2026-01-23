@@ -187,6 +187,46 @@ export function registerAuthRoutes(app: Express) {
     // Get name from Auth0 (already fetched during password verification)
     const userName = authResult.name || email.split('@')[0];
 
+    // TEMPORARY: Allow bypassing 2FA via environment variable for recovery
+    // Set ADMIN_BYPASS_2FA=true in .env to skip 2FA (remove after re-enabling 2FA!)
+    if (process.env.ADMIN_BYPASS_2FA === 'true') {
+      log('WARNING: 2FA bypassed via ADMIN_BYPASS_2FA env var', 'admin-auth', { level: 'warn' });
+
+      // Create session directly without 2FA
+      const clientIp = getClientIp(req);
+      const userAgent = req.headers["user-agent"] || null;
+      const sessionId = await createAdminSession(
+        auth0UserId,
+        email,
+        userName,
+        clientIp,
+        userAgent
+      );
+
+      // Generate CSRF token
+      const csrfToken = await generateCsrfToken(sessionId);
+
+      // Set session cookie
+      res.cookie("admin_session", sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: ADMIN_SESSION_EXPIRY,
+      });
+
+      log(`Admin login successful (2FA bypassed) from ${clientIp}`, 'admin-auth');
+
+      return res.json({
+        success: true,
+        user: {
+          email,
+          name: userName,
+        },
+        csrfToken,
+        bootstrapMode: (req as any).bootstrapMode || false,
+      });
+    }
+
     // Check if 2FA is enabled (this is the only thing we need from the database)
     const [tfa] = await db
       .select()
