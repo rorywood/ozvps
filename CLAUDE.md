@@ -36,9 +36,22 @@
 - `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-23)
+## Recent Session Work (2026-01-23 - Session 2)
 
 ### Completed This Session
+1. **Login button success state** - Button turns green with "Login Successful" instead of toast
+2. **Admin 2FA bypass** - Added `ADMIN_BYPASS_2FA=true` env var for recovery when 2FA app lost
+3. **Email verification complete overhaul**:
+   - Fixed: Users now MUST verify email before accessing dashboard
+   - Fixed: Verification works on different device (phone) without login
+   - Fixed: Auto-redirect on original device when verified elsewhere
+   - Root cause: `getAuthUser()` was using `secureFetch` which auto-redirected on 401
+   - Solution: Use regular `fetch` for auth checks, `secureFetch` only for authenticated actions
+4. **Admin IP whitelist disabled** (temporary) - Commented out in `admin-server/index.ts`
+
+### Previous Session (2026-01-23)
+
+### Completed That Session
 1. **System Health Check - Block Login When API Down**:
    - Fixed health check to detect when VirtFusion API is disabled (was only checking database)
    - Added `isSystemDown` flag that covers ALL failure scenarios (DB, VirtFusion, network errors)
@@ -214,3 +227,10 @@ git checkout claude/dev-l5488
 - User gets frustrated with repeated issues - triple-check fixes
 - The `.ozvps-branch` file on servers determines which branch to pull from
 - Email templates must be white/light themed (dark mode breaks emails)
+- **LOCKED - DO NOT MODIFY WITHOUT ASKING:**
+  - Login page (`client/src/pages/login.tsx`)
+  - Register page (`client/src/pages/register.tsx`)
+  - Email verification (`client/src/pages/verify-email.tsx`)
+  - Auth API (`client/src/lib/api.ts` - getAuthUser, getCurrentUser)
+  - Auth hooks (`client/src/hooks/use-auth.ts`)
+  - Server auth routes (`server/routes.ts` - /api/auth/* endpoints)
