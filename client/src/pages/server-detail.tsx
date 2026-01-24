@@ -1509,6 +1509,10 @@ export default function ServerDetail() {
                             : `${server.plan.specs.traffic} GB Bandwidth`}
                       </span>
                     </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Gauge className="h-4 w-4" />
+                      <span>{trafficData?.network?.portSpeed || 1000} Mbps Port</span>
+                    </div>
                   </div>
                 </div>
 
