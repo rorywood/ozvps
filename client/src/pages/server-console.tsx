@@ -15,8 +15,14 @@ function buildNoVncUrl(wsUrl: string, password: string): string {
   const url = new URL(wsUrl);
   const host = url.hostname;
   const port = url.port || (url.protocol === 'wss:' ? '443' : '80');
-  const path = url.pathname.replace(/^\//, ''); // Remove leading slash
   const encrypt = url.protocol === 'wss:' ? '1' : '0';
+
+  // Path needs to include query string if present (e.g., /websockify?token=xyz)
+  // Remove leading slash as noVNC adds it
+  let path = url.pathname.replace(/^\//, '');
+  if (url.search) {
+    path += url.search; // Append ?token=... etc
+  }
 
   // Use hash fragment for password (more secure - not sent to server in logs)
   const queryParams = new URLSearchParams({
@@ -72,7 +78,9 @@ export default function ServerConsole() {
   // Redirect to noVNC when we have the console data
   useEffect(() => {
     if (consoleData?.embedded && consoleData?.vnc?.wsUrl && !redirected) {
+      console.log('VNC wsUrl from API:', consoleData.vnc.wsUrl);
       const noVncUrl = buildNoVncUrl(consoleData.vnc.wsUrl, consoleData.vnc.password);
+      console.log('noVNC redirect URL:', noVncUrl);
       setRedirected(true);
       window.location.href = noVncUrl;
     }
