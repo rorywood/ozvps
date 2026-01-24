@@ -372,7 +372,7 @@ export default function DeployConfigurePage() {
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <HardDrive className="h-3.5 w-3.5" />
-                      <span>{plan.storageGb} GB SSD</span>
+                      <span>{plan.storageGb} GB Storage</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <ArrowUpDown className="h-3.5 w-3.5" />

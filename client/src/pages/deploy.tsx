@@ -621,7 +621,7 @@ export default function DeployPage() {
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>SSD disk space for your files and databases</p>
+                                <p>Fast disk space for your files and databases</p>
                               </TooltipContent>
                             </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{plan.storageGb} GB</span>
@@ -819,7 +819,7 @@ export default function DeployPage() {
                       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                         <div>{selectedPlan.vcpu} vCPU</div>
                         <div>{formatRAM(selectedPlan.ramMb)} RAM</div>
-                        <div>{selectedPlan.storageGb} GB SSD</div>
+                        <div>{selectedPlan.storageGb} GB Storage</div>
                         <div>{formatTransfer(selectedPlan.transferGb)} Bandwidth</div>
                       </div>
                     )}

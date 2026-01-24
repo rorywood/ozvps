@@ -1421,7 +1421,11 @@ export async function registerRoutes(
       }
 
       // Check if 2FA is enabled for this user
-      const tfa = await dbStorage.getTwoFactorAuth(auth0Result.user.user_id);
+      // Normalize the auth0 user ID to ensure consistent prefix format
+      const auth0UserIdFor2FA = auth0Result.user.user_id.startsWith('auth0|')
+        ? auth0Result.user.user_id
+        : `auth0|${auth0Result.user.user_id}`;
+      const tfa = await dbStorage.getTwoFactorAuth(auth0UserIdFor2FA);
       if (tfa?.enabled) {
         // 2FA required - check if token was provided (totpToken/backupCode/emailOtpToken already extracted above)
         if (!totpToken && !backupCode && !emailOtpToken) {
@@ -1430,7 +1434,7 @@ export async function registerRoutes(
           return res.status(200).json({
             requires2FA: true,
             twoFAMethod: tfa.method || 'totp',
-            auth0UserId: auth0Result.user.user_id,
+            auth0UserId: auth0UserIdFor2FA,
             message: 'Two-factor authentication required',
           });
         }
@@ -1451,7 +1455,7 @@ export async function registerRoutes(
           if (tfa.emailOtpCode === emailOtpToken) {
             tfaValid = true;
             // Clear the used code
-            await dbStorage.clearEmailOtpCode(auth0Result.user.user_id);
+            await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
             log(`Email 2FA verified for user: ${email}`, 'security');
           }
         } else if (tfa.method === 'totp' || totpToken) {
@@ -1487,7 +1491,7 @@ export async function registerRoutes(
                 tfaValid = true;
                 // Remove used backup code
                 backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
                 log(`Backup code used for 2FA login: ${email}`, 'security');
                 break;
               }
@@ -1499,7 +1503,7 @@ export async function registerRoutes(
                 tfaValid = true;
                 // Remove used backup code
                 backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0Result.user.user_id, backupCodes);
+                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
                 log(`Legacy backup code used for 2FA login: ${email}`, 'security');
                 break;
               }
@@ -1513,7 +1517,7 @@ export async function registerRoutes(
         }
 
         // Update last used timestamp
-        await dbStorage.updateTwoFactorLastUsed(auth0Result.user.user_id);
+        await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
       }
 
       // Revoke ALL existing sessions for this user (single-session policy)
