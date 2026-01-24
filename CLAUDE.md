@@ -16,6 +16,85 @@
 | Production | app.ozvps.com.au | `main` | 103.75.119.183 |
 | Development | dev.ozvps.com.au | `claude/dev-l5488` | Different server |
 
+## Design System
+
+### Tech Stack
+- **Tailwind CSS v4** (not v3 - uses `@theme inline` syntax)
+- **shadcn/ui components** (Radix UI primitives)
+- **Lucide React icons**
+- **React Query** for data fetching
+
+### Fonts
+```css
+--font-sans: 'Inter', sans-serif;        /* Body text */
+--font-display: 'Outfit', sans-serif;    /* Headings */
+--font-mono: 'JetBrains Mono', monospace; /* Code/IPs */
+```
+
+### Dark Theme Colors (Default)
+```css
+/* Backgrounds */
+--background: hsl(216 33% 6%);        /* #0a0d14 - darkest */
+--card: hsl(216 28% 7%);              /* #0d1117 - cards/surfaces */
+--popover: hsl(215 21% 11%);          /* #161b22 - elevated */
+
+/* Text */
+--foreground: hsl(0 0% 100%);         /* White - primary text */
+--muted-foreground: hsl(0 0% 65%);    /* #a6a6a6 - secondary text */
+
+/* Primary - OzVPS Blue */
+--primary: hsl(210 100% 50%);         /* #0080ff */
+
+/* Accent - Cyan */
+--accent-foreground: hsl(190 100% 50%); /* #00d4ff */
+
+/* Borders */
+--border: hsl(0 0% 100% / 0.08);      /* white at 8% opacity */
+
+/* Status Colors */
+--success: hsl(160 84% 39%);          /* emerald */
+--destructive: hsl(0 84% 60%);        /* red */
+--warning: hsl(14 100% 60%);          /* orange */
+```
+
+### Component Patterns
+```jsx
+/* Standard Card */
+<div className="bg-card rounded-xl p-6 border border-border">
+
+/* Glass Card (special effects) */
+<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl">
+
+/* Section Label */
+<p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Label</p>
+
+/* Stats Display */
+<span className="text-2xl font-bold text-foreground">42%</span>
+<span className="text-sm text-muted-foreground">of 100 GB</span>
+
+/* Icon + Text Row */
+<div className="flex items-center gap-2 text-muted-foreground">
+  <Cpu className="h-4 w-4" />
+  <span>4 vCPU</span>
+</div>
+
+/* Layout: Sidebar + Main */
+<div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+  <div className="space-y-4">{/* Sidebar */}</div>
+  <div className="space-y-6">{/* Main content */}</div>
+</div>
+```
+
+### Border Radius
+```css
+--radius-sm: 0.25rem;  /* rounded */
+--radius-md: 0.5rem;   /* rounded-lg */
+--radius-lg: 0.75rem;  /* rounded-xl */
+```
+
+### Key Style File
+- `client/src/index.css` - All theme variables, component classes, typography
+
 ## Key Files
 - `scripts/ozvps` - Control panel CLI (v4.2.0, git-based updates with auto db:push)
 - `scripts/ozvps-install.sh` - Fresh install script (git clone based)
