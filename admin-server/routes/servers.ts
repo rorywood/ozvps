@@ -40,17 +40,24 @@ export function registerServersRoutes(router: Router) {
       let updated = 0;
       const errors: string[] = [];
 
+      console.log(`[admin-servers] Syncing ${vfPackages.length} packages from VirtFusion`);
+
       for (const vfPkg of vfPackages) {
         try {
+          console.log(`[admin-servers] Processing package ${vfPkg.id}: ${vfPkg.name}, enabled=${vfPkg.enabled}`);
+
           // Check if plan exists with this virtfusionPackageId
           const [existingPlan] = await db
             .select()
             .from(plans)
             .where(eq(plans.virtfusionPackageId, vfPkg.id));
 
-          // Calculate monthly price (pennies per hour * hours in month)
-          const hourlyPrice = vfPkg.billing?.price?.price_per_hour || 0;
-          const monthlyPrice = Math.round(hourlyPrice * 730 * 100); // 730 hours avg month, convert to cents
+          // Get monthly price from prices array (getPackages already transforms this)
+          const monthlyPriceEntry = vfPkg.prices?.find((p: any) => p.billingPeriod === 'monthly');
+          const monthlyPrice = monthlyPriceEntry?.price || 0;
+
+          // Memory is in MB from getPackages, convert to GB for storage
+          const ramGb = Math.round(vfPkg.memory / 1024);
 
           if (existingPlan) {
             // Update existing plan
@@ -58,39 +65,42 @@ export function registerServersRoutes(router: Router) {
               .update(plans)
               .set({
                 name: vfPkg.name,
-                cpu: vfPkg.settings?.cpuCores || existingPlan.cpu,
-                ram: vfPkg.settings?.memory ? Math.round(vfPkg.settings.memory / 1024) : existingPlan.ram,
-                storage: vfPkg.settings?.primaryDiskSize || existingPlan.storage,
-                bandwidth: vfPkg.settings?.trafficLimit || existingPlan.bandwidth,
+                cpu: vfPkg.cpuCores || existingPlan.cpu,
+                ram: ramGb || existingPlan.ram,
+                storage: vfPkg.primaryStorage || existingPlan.storage,
+                bandwidth: vfPkg.traffic || existingPlan.bandwidth,
                 priceMonthly: monthlyPrice || existingPlan.priceMonthly,
                 active: vfPkg.enabled,
               })
               .where(eq(plans.id, existingPlan.id));
             updated++;
             synced++;
+            console.log(`[admin-servers] Updated plan ${existingPlan.id} (${vfPkg.name})`);
           } else {
             // Create new plan
             const code = vfPkg.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-            await db.insert(plans).values({
+            const [newPlan] = await db.insert(plans).values({
               name: vfPkg.name,
               code: code || `vf-${vfPkg.id}`,
-              cpu: vfPkg.settings?.cpuCores || 1,
-              ram: vfPkg.settings?.memory ? Math.round(vfPkg.settings.memory / 1024) : 1,
-              storage: vfPkg.settings?.primaryDiskSize || 20,
-              bandwidth: vfPkg.settings?.trafficLimit || 1000,
-              priceMonthly: monthlyPrice || 500,
+              cpu: vfPkg.cpuCores || 1,
+              ram: ramGb || 1,
+              storage: vfPkg.primaryStorage || 20,
+              bandwidth: vfPkg.traffic || 1000,
+              priceMonthly: monthlyPrice || 0,
               virtfusionPackageId: vfPkg.id,
               active: vfPkg.enabled,
-            });
+            }).returning();
             created++;
             synced++;
+            console.log(`[admin-servers] Created new plan ${newPlan.id} for package ${vfPkg.id} (${vfPkg.name})`);
           }
         } catch (error: any) {
+          console.log(`[admin-servers] Error syncing package ${vfPkg.id}: ${error.message}`);
           errors.push(`Package ${vfPkg.id}: ${error.message}`);
         }
       }
 
-      console.log(`[admin-servers] Plans sync: ${synced} synced (${created} created, ${updated} updated)`);
+      console.log(`[admin-servers] Plans sync complete: ${synced} synced (${created} created, ${updated} updated)`);
       res.json({ success: true, synced, created, updated, errors: errors.length > 0 ? errors : undefined });
     } catch (error: any) {
       console.log(`[admin-servers] Plans sync error: ${error.message}`);
