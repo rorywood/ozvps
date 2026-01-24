@@ -2559,7 +2559,7 @@ export async function sendTrialEndedEmail(
                         <td style="padding: 16px 20px;">
                           <p style="margin: 0 0 4px; color: ${warningColor}; font-size: 13px; font-weight: 600;">Important</p>
                           <p style="margin: 0; color: ${emailStyles.textMuted}; font-size: 13px; line-height: 1.5;">
-                            Your trial server data will be retained for 7 days. After this period, the server and all data will be permanently deleted.
+                            Your trial server data will be retained for 3 days. After this period, the server and all data will be permanently deleted.
                           </p>
                         </td>
                       </tr>
@@ -2609,7 +2609,7 @@ WANT TO KEEP USING OZVPS?
 Contact our support team to discuss upgrading to a paid plan. We'll help you get set up with a new server.
 
 IMPORTANT
-Your trial server data will be retained for 7 days. After this period, the server and all data will be permanently deleted.
+Your trial server data will be retained for 3 days. After this period, the server and all data will be permanently deleted.
 
 Contact Support: ${appUrl}/support
 

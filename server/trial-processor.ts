@@ -15,7 +15,7 @@ import { sendTrialEndedEmail } from './email';
  * - Send trial ended email
  *
  * Phase 2: Delete old ended trials
- * - Find trials where trialEndedAt is 7+ days ago
+ * - Find trials where trialEndedAt is 3+ days ago
  * - Create cancellation request (immediate mode) to delete server
  * - This uses the existing cancellation flow for clean deletion
  */
@@ -105,16 +105,16 @@ async function endExpiredTrials(): Promise<{ ended: number; errors: number }> {
   return { ended, errors };
 }
 
-// Phase 2: Delete old ended trials (7+ days after trial ended)
+// Phase 2: Delete old ended trials (3+ days after trial ended)
 async function deleteOldEndedTrials(): Promise<{ queued: number; errors: number }> {
   let queued = 0;
   let errors = 0;
   const now = new Date();
-  const sevenDaysAgo = new Date(now);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const threeDaysAgo = new Date(now);
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
   try {
-    // Find trials that ended 7+ days ago
+    // Find trials that ended 3+ days ago
     const oldEndedTrials = await db
       .select()
       .from(serverBilling)
@@ -122,7 +122,7 @@ async function deleteOldEndedTrials(): Promise<{ queued: number; errors: number 
         and(
           eq(serverBilling.isTrial, true),
           isNotNull(serverBilling.trialEndedAt),
-          lte(serverBilling.trialEndedAt, sevenDaysAgo),
+          lte(serverBilling.trialEndedAt, threeDaysAgo),
           // Don't process if already cancelled/deleted
           sql`${serverBilling.status} NOT IN ('cancelled', 'deleted')`
         )
@@ -158,7 +158,7 @@ async function deleteOldEndedTrials(): Promise<{ queued: number; errors: number 
             auth0UserId: trial.auth0UserId,
             virtfusionServerId: serverId,
             serverName: null,
-            reason: "Trial period ended - automatic deletion after 7 days",
+            reason: "Trial period ended - automatic deletion after 3 days",
             mode: "immediate",
             status: "pending",
             scheduledDeletionAt,
