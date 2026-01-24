@@ -827,6 +827,15 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
+  const bugReportRateLimiter = rateLimit({
+    windowMs: 90 * 1000, // 90 seconds
+    max: 1, // 1 bug report per 90 seconds
+    message: { error: 'Please wait before submitting another bug report.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -7290,8 +7299,8 @@ export async function registerRoutes(
   // FEEDBACK / BUG REPORT
   // ==========================================
 
-  // Submit a bug report (authenticated users only)
-  app.post('/api/feedback/bug-report', authMiddleware, async (req, res) => {
+  // Submit a bug report (authenticated users only, rate limited to 1 per 90 seconds)
+  app.post('/api/feedback/bug-report', authMiddleware, bugReportRateLimiter, async (req, res) => {
     try {
       const { description, currentUrl, appVersion, userAgent } = req.body;
 
