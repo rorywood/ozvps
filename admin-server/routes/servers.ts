@@ -851,6 +851,7 @@ export function registerServersRoutes(router: Router) {
         notes,
         isTrial = false,
         trialDuration,
+        name,
       } = req.body;
 
       // Validate required fields
@@ -910,6 +911,7 @@ export function registerServersRoutes(router: Router) {
           .values({
             auth0UserId,
             email: userEmail,
+            name: name || null,
             virtFusionUserId: vfUser.id,
           })
           .returning();
