@@ -988,6 +988,13 @@ export async function registerRoutes(
 
       const { email, password, name, recaptchaToken } = parsed.data;
 
+      // SECURITY: Server-side banned name check (defense-in-depth, also checked client-side)
+      const bannedNames = ['darius'];
+      if (name && bannedNames.some(banned => name.toLowerCase().includes(banned))) {
+        log(`Registration blocked - banned name detected: ${name}`, 'security');
+        return res.status(400).json({ error: 'This name is not allowed. Please choose a different name.' });
+      }
+
       // Check reCAPTCHA if enabled
       const recaptchaSettings = dbStorage.getRecaptchaSettings();
       if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
@@ -3750,7 +3757,7 @@ export async function registerRoutes(
       }
 
       // Generate and send a verification code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
       await dbStorage.setEmailOtpCode(session.auth0UserId, code, expiresAt);
@@ -3842,7 +3849,7 @@ export async function registerRoutes(
       }
 
       // Generate and send code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
       await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
