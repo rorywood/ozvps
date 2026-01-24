@@ -1991,6 +1991,9 @@ export async function registerRoutes(
                 adminSuspendedReason: billingStatus.adminSuspendedReason,
                 planId: billingStatus.planId,
                 planName: planMap[billingStatus.planId] || null,
+                isTrial: billingStatus.isTrial,
+                trialExpiresAt: billingStatus.trialExpiresAt,
+                trialEndedAt: billingStatus.trialEndedAt,
               } : null,
             };
           } catch (error) {
@@ -2101,6 +2104,9 @@ export async function registerRoutes(
                 adminSuspendedReason: billingStatus.adminSuspendedReason,
                 planId: billingStatus.planId,
                 planName: planMap[billingStatus.planId] || null,
+                isTrial: billingStatus.isTrial,
+                trialExpiresAt: billingStatus.trialExpiresAt,
+                trialEndedAt: billingStatus.trialEndedAt,
               } : null,
             };
           } catch (error) {
@@ -2220,6 +2226,9 @@ export async function registerRoutes(
           adminSuspendedReason: billingStatus.adminSuspendedReason,
           planId: billingStatus.planId,
           planName,
+          isTrial: billingStatus.isTrial,
+          trialExpiresAt: billingStatus.trialExpiresAt,
+          trialEndedAt: billingStatus.trialEndedAt,
         } : null,
       });
     } catch (error: any) {

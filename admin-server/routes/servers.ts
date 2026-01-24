@@ -778,6 +778,63 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // End a trial server early
+  router.post("/servers/:serverId/end-trial", async (req: Request, res: Response) => {
+    try {
+      const serverId = parseInt(req.params.serverId, 10);
+      const session = req.adminSession!;
+
+      if (isNaN(serverId)) {
+        return res.status(400).json({ error: "Invalid server ID" });
+      }
+
+      // Get billing record
+      const [billing] = await db
+        .select()
+        .from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, String(serverId)));
+
+      if (!billing) {
+        return res.status(404).json({ error: "Server billing record not found" });
+      }
+
+      if (!billing.isTrial) {
+        return res.status(400).json({ error: "This server is not a trial server" });
+      }
+
+      if (billing.trialEndedAt) {
+        return res.status(400).json({ error: "Trial has already ended" });
+      }
+
+      // Power off the server
+      try {
+        await virtfusionClient.powerAction(String(serverId), 'poweroff');
+      } catch (powerErr: any) {
+        console.log(`[admin-servers] Warning: Could not power off trial server ${serverId}: ${powerErr.message}`);
+      }
+
+      // Update billing record
+      await db
+        .update(serverBilling)
+        .set({
+          trialEndedAt: new Date(),
+          status: "trial_ended",
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.virtfusionServerId, String(serverId)));
+
+      await auditSuccess(req, "server.end-trial", "server", String(serverId));
+
+      console.log(`[admin-servers] Trial ended for server ${serverId} by ${session.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditFailure(req, "server.end-trial", "server", error.message, req.params.serverId);
+      console.log(`[admin-servers] End trial error: ${error.message}`);
+      res.status(500).json({ error: "Failed to end trial" });
+    }
+  });
+
   // Admin provision server for a user
   router.post("/servers/provision", async (req: Request, res: Response) => {
     try {
@@ -791,7 +848,9 @@ export function registerServersRoutes(router: Router) {
         locationCode = "BNE",
         freeServer = false,
         sendCredentials = true,
-        notes
+        notes,
+        isTrial = false,
+        trialDuration,
       } = req.body;
 
       // Validate required fields
@@ -928,6 +987,17 @@ export function registerServersRoutes(router: Router) {
       const nextBillAt = new Date(now);
       nextBillAt.setMonth(nextBillAt.getMonth() + 1);
 
+      // Calculate trial expiration if this is a trial server
+      let trialExpiresAt: Date | null = null;
+      if (isTrial && trialDuration) {
+        trialExpiresAt = new Date(now);
+        if (trialDuration === '24h') {
+          trialExpiresAt.setHours(trialExpiresAt.getHours() + 24);
+        } else if (trialDuration === '7d') {
+          trialExpiresAt.setDate(trialExpiresAt.getDate() + 7);
+        }
+      }
+
       const [billingRecord] = await db
         .insert(serverBilling)
         .values({
@@ -936,11 +1006,13 @@ export function registerServersRoutes(router: Router) {
           virtfusionServerUuid: serverResult.uuid || null,
           planId: plan.id,
           deployedAt: now,
-          monthlyPriceCents: freeServer ? 0 : plan.priceMonthly,
+          monthlyPriceCents: (freeServer || isTrial) ? 0 : plan.priceMonthly,
           status: "active",
-          autoRenew: true,
+          autoRenew: !isTrial, // Trials don't auto-renew
           nextBillAt,
-          freeServer,
+          freeServer: freeServer || isTrial, // Trials are free
+          isTrial: isTrial || false,
+          trialExpiresAt,
         })
         .returning();
 
@@ -989,6 +1061,8 @@ export function registerServersRoutes(router: Router) {
         planId,
         hostname,
         freeServer,
+        isTrial,
+        trialDuration,
         notes,
       });
 

@@ -1131,6 +1131,8 @@ export default function ServerDetail() {
   const isAdminSuspended = server?.billing?.adminSuspended === true;
   const isBillingSuspended = server?.billing?.status === 'suspended' && !isAdminSuspended;
   const needsSetup = server?.needsSetup === true;
+  const isTrialEnded = server?.billing?.isTrial === true && server?.billing?.trialEndedAt != null;
+  const isActiveTrial = server?.billing?.isTrial === true && !server?.billing?.trialEndedAt;
 
   // Determine if server is still being provisioned/built
   // Show checklist if ANY of these conditions are true:
@@ -1442,7 +1444,32 @@ export default function ServerDetail() {
             </div>
           </div>
         )}
-        
+
+        {/* Trial Ended Banner */}
+        {isTrialEnded && (
+          <div className="bg-amber-500/20 border border-amber-500/50 rounded-lg p-4" data-testid="banner-trial-ended">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-amber-300">Trial Period Ended</h3>
+                  <p className="text-sm text-amber-300/80 mt-1">
+                    Your trial period for this server has ended. The server has been powered off.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Contact support to discuss upgrading to a paid plan.
+                  </p>
+                </div>
+              </div>
+              <Link href="/support">
+                <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20">
+                  Contact Support
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* DigitalOcean-style Layout: Sidebar + Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
 
@@ -1529,8 +1556,50 @@ export default function ServerDetail() {
                   </div>
                 )}
 
+                {/* Trial Info Section */}
+                {isActiveTrial && server.billing?.trialExpiresAt && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Trial
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      <p className="text-sm font-medium text-amber-500">
+                        Trial Server
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Expires: {new Date(server.billing.trialExpiresAt).toLocaleDateString('en-AU', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                )}
+
+                {/* Trial Ended Section */}
+                {isTrialEnded && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Status
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-amber-500" />
+                      <p className="text-sm font-medium text-amber-500">
+                        Trial Ended
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Contact support to upgrade
+                    </p>
+                  </div>
+                )}
+
                 {/* Billing Status Section */}
-                {server.billing?.freeServer ? (
+                {server.billing?.freeServer && !server.billing?.isTrial ? (
                   <div className="border-t border-border pt-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
                       Billing

@@ -23,6 +23,7 @@
 - `server/index.ts` - Express setup, rate limiters, middleware
 - `server/virtfusion.ts` - VirtFusion API client with stale cache fallback
 - `server/cancellation-processor.ts` - Server cancellation with orphan cleanup
+- `server/trial-processor.ts` - Trial expiration and cleanup (runs via billing processor)
 - `server/webhookHandlers.ts` - Stripe webhook processing
 - `server/email.ts` - All email templates (ticket confirmation, guest ticket, admin notification, etc.)
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
@@ -36,9 +37,23 @@
 - `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-23 - Session 2)
+## Recent Session Work (2026-01-24)
 
 ### Completed This Session
+1. **Trial Servers Feature** - Full implementation of time-limited trial servers:
+   - Database: Added `is_trial`, `trial_expires_at`, `trial_ended_at` columns to `server_billing`
+   - Migration: `0013_add_trial_servers.sql`
+   - Admin provision: Accept `isTrial` and `trialDuration` (24h or 7d) parameters
+   - Admin end trial: New endpoint `POST /servers/:serverId/end-trial`
+   - Trial processor: `server/trial-processor.ts` - runs every 30 mins to:
+     - End expired trials (power off, set status to 'trial_ended')
+     - Delete old ended trials after 7 days via cancellation system
+   - Email: `sendTrialEndedEmail()` template
+   - Admin UI: Trial checkbox and duration selector in provision form
+   - Client UI: TRIAL and TRIAL ENDED badges on server cards
+   - Server detail: Trial ended banner and trial info in sidebar
+
+### Previous Session (2026-01-23 - Session 2)
 1. **Login button success state** - Button turns green with "Login Successful" instead of toast
 2. **Admin 2FA bypass** - Added `ADMIN_BYPASS_2FA=true` env var for recovery when 2FA app lost
 3. **Email verification complete overhaul**:
@@ -50,8 +65,6 @@
 4. **Admin IP whitelist disabled** (temporary) - Commented out in `admin-server/index.ts`
 
 ### Previous Session (2026-01-23)
-
-### Completed That Session
 1. **System Health Check - Block Login When API Down**:
    - Fixed health check to detect when VirtFusion API is disabled (was only checking database)
    - Added `isSystemDown` flag that covers ALL failure scenarios (DB, VirtFusion, network errors)
@@ -179,7 +192,7 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 - Git-based updates
 
 ## Current Version
-- **App Version**: 1.10.0
+- **App Version**: 1.11.0
 - **Control Panel**: 4.1.0
 
 ## Common Issues & Solutions

@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { runBillingJob, retryUnpaidServers } from "./billing";
 import { dbStorage } from "./storage";
 import { log } from "./logger";
+import { processTrials } from "./trial-processor";
 
 // Billing runs daily at 6pm AEST (8am UTC / 18:00 AEST)
 // AEST is UTC+10, so 6pm AEST = 8am UTC
@@ -45,11 +46,13 @@ export async function startBillingProcessor(stripe: Stripe | null) {
     }, msUntilNextRun);
   };
 
-  // Also run a quick check every 30 minutes for urgent tasks (auto top-ups, reactivations)
+  // Also run a quick check every 30 minutes for urgent tasks (auto top-ups, reactivations, trials)
   // This ensures users who top up get their servers reactivated promptly
   const runQuickCheck = async () => {
     try {
       await processAutoTopups(stripe);
+      // Process trial expirations
+      await processTrials();
     } catch (err: any) {
       log(`Error in quick billing check: ${err.message}`, 'billing', { level: 'error' });
     }

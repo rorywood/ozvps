@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Copy,
   MapPin,
+  Clock,
 } from "lucide-react";
 import { Link } from "wouter";
 import { getOsLogoUrl, FALLBACK_LOGO } from "../lib/os-logos";
@@ -35,6 +36,8 @@ export default function ProvisionServer() {
   const [freeServer, setFreeServer] = useState(false);
   const [sendCredentials, setSendCredentials] = useState(true);
   const [notes, setNotes] = useState("");
+  const [isTrial, setIsTrial] = useState(false);
+  const [trialDuration, setTrialDuration] = useState<'24h' | '7d'>('24h');
 
   // Result state
   const [provisionResult, setProvisionResult] = useState<any>(null);
@@ -123,9 +126,11 @@ export default function ProvisionServer() {
       hostname,
       osId: selectedOs,
       locationCode: selectedLocation,
-      freeServer,
+      freeServer: freeServer || isTrial, // Trials are always free
       sendCredentials,
       notes: notes || undefined,
+      isTrial,
+      trialDuration: isTrial ? trialDuration : undefined,
     });
   };
 
@@ -145,6 +150,8 @@ export default function ProvisionServer() {
     setNotes("");
     setProvisionResult(null);
     setUserSearch("");
+    setIsTrial(false);
+    setTrialDuration('24h');
   };
 
   // Show result screen after successful provision
@@ -576,11 +583,65 @@ export default function ProvisionServer() {
                 </div>
                 <input
                   type="checkbox"
-                  checked={freeServer}
+                  checked={freeServer || isTrial}
                   onChange={(e) => setFreeServer(e.target.checked)}
-                  className="w-5 h-5 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                  disabled={isTrial}
+                  className="w-5 h-5 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] disabled:opacity-50"
                 />
               </label>
+
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <Clock className="h-5 w-5 text-amber-400" />
+                    <div>
+                      <p className="font-medium">Trial Server</p>
+                      <p className="text-sm text-gray-400">Time-limited server (auto-stops when trial ends)</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isTrial}
+                    onChange={(e) => {
+                      setIsTrial(e.target.checked);
+                      if (e.target.checked) {
+                        setFreeServer(true);
+                      }
+                    }}
+                    className="w-5 h-5 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                  />
+                </label>
+
+                {isTrial && (
+                  <div className="mt-3 ml-8 space-y-2">
+                    <p className="text-xs text-gray-400 font-medium">Trial Duration:</p>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="trialDuration"
+                          value="24h"
+                          checked={trialDuration === '24h'}
+                          onChange={() => setTrialDuration('24h')}
+                          className="text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                        />
+                        <span className="text-sm">24 Hours</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="trialDuration"
+                          value="7d"
+                          checked={trialDuration === '7d'}
+                          onChange={() => setTrialDuration('7d')}
+                          className="text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                        />
+                        <span className="text-sm">7 Days</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -663,13 +724,21 @@ export default function ProvisionServer() {
               <div className="flex justify-between">
                 <span className="text-gray-400">Monthly Cost</span>
                 <span className="font-mono font-bold text-[var(--color-primary)]">
-                  {freeServer
+                  {freeServer || isTrial
                     ? "FREE"
                     : selectedPlan
                     ? `$${(selectedPlan.priceMonthly / 100).toFixed(2)}`
                     : "-"}
                 </span>
               </div>
+              {isTrial && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Trial Duration</span>
+                  <span className="font-medium text-amber-400">
+                    {trialDuration === '24h' ? '24 Hours' : '7 Days'}
+                  </span>
+                </div>
+              )}
             </div>
 
             <button

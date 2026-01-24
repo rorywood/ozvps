@@ -2459,3 +2459,176 @@ Need help? Contact us at support@ozvps.com.au
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send trial ended email to user when their trial server expires
+ */
+export async function sendTrialEndedEmail(
+  to: string,
+  serverName: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send trial ended email', 'email');
+    return { success: false, error: 'Email service not configured.' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+  const warningColor = '#d97706';
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Your trial has ended: ${serverName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Trial Ended</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+
+                <!-- Warning Header -->
+                <tr>
+                  <td style="padding: 24px 40px; background-color: ${warningColor};">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Trial Period Ended</h1>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding: 32px 40px;">
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      Your trial period for <strong style="color: ${emailStyles.textDark};">${serverName}</strong> has ended. The server has been powered off.
+                    </p>
+
+                    <!-- Server Info Box -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px; color: ${emailStyles.textLight}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server</p>
+                                <p style="margin: 0; color: ${emailStyles.textDark}; font-size: 16px; font-weight: 600;">${serverName}</p>
+                              </td>
+                              <td align="right" valign="middle">
+                                <span style="display: inline-block; background-color: #fef3c7; color: ${warningColor}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500;">Trial Ended</span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- What's Next -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-left: 4px solid ${emailStyles.primaryColor}; background-color: #eff6ff; border-radius: 0 6px 6px 0; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <p style="margin: 0 0 4px; color: ${emailStyles.primaryColor}; font-size: 14px; font-weight: 600;">Want to keep using OzVPS?</p>
+                          <p style="margin: 0; color: ${emailStyles.textMuted}; font-size: 13px; line-height: 1.5;">
+                            Contact our support team to discuss upgrading to a paid plan. We'll help you get set up with a new server.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Data Notice -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-left: 4px solid ${warningColor}; background-color: #fffbeb; border-radius: 0 6px 6px 0; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <p style="margin: 0 0 4px; color: ${warningColor}; font-size: 13px; font-weight: 600;">Important</p>
+                          <p style="margin: 0; color: ${emailStyles.textMuted}; font-size: 13px; line-height: 1.5;">
+                            Your trial server data will be retained for 7 days. After this period, the server and all data will be permanently deleted.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 8px 0;">
+                          <a href="${appUrl}/support" style="display: inline-block; padding: 14px 28px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                            Contact Support
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textMuted}; font-size: 13px;">
+                Thank you for trying OzVPS!
+              </p>
+              <p style="margin: 0; color: ${emailStyles.textLight}; font-size: 13px;">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. Australian owned and operated.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+TRIAL PERIOD ENDED
+
+Your trial period for ${serverName} has ended. The server has been powered off.
+
+WANT TO KEEP USING OZVPS?
+Contact our support team to discuss upgrading to a paid plan. We'll help you get set up with a new server.
+
+IMPORTANT
+Your trial server data will be retained for 7 days. After this period, the server and all data will be permanently deleted.
+
+Contact Support: ${appUrl}/support
+
+Thank you for trying OzVPS!
+
+---
+© ${new Date().getFullYear()} OzVPS Pty Ltd. Australian owned and operated.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send trial ended email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Trial ended email sent to ${to} for server ${serverName}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending trial ended email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}

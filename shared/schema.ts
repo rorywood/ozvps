@@ -143,6 +143,11 @@ export const serverBilling = pgTable("server_billing", {
   // Complimentary server flag - admin can grant free hosting
   freeServer: boolean("free_server").default(false).notNull(),
 
+  // Trial server fields
+  isTrial: boolean("is_trial").default(false).notNull(),
+  trialExpiresAt: timestamp("trial_expires_at"),
+  trialEndedAt: timestamp("trial_ended_at"),
+
   // Admin suspension - separate from billing suspension
   adminSuspended: boolean("admin_suspended").default(false).notNull(),
   adminSuspendedAt: timestamp("admin_suspended_at"),

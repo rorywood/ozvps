@@ -44,7 +44,7 @@ export interface Server {
     net_out: number;
   };
   billing?: {
-    status: string; // 'paid' | 'unpaid' | 'suspended' | 'cancelled'
+    status: string; // 'paid' | 'unpaid' | 'suspended' | 'cancelled' | 'trial_ended'
     nextBillAt: string;
     suspendAt: string | null;
     monthlyPriceCents: number;
@@ -54,6 +54,9 @@ export interface Server {
     adminSuspended?: boolean;
     adminSuspendedReason?: string | null;
     planName?: string | null;
+    isTrial?: boolean;
+    trialExpiresAt?: string | null;
+    trialEndedAt?: string | null;
   } | null;
   created_at: string;
 }

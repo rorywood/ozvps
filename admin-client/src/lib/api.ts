@@ -221,6 +221,8 @@ export const serversApi = {
     freeServer?: boolean;
     sendCredentials?: boolean;
     notes?: string;
+    isTrial?: boolean;
+    trialDuration?: '24h' | '7d';
   }) => api.post<{
     success: boolean;
     server: {
@@ -233,6 +235,9 @@ export const serversApi = {
     };
     billing: any;
   }>("/servers/provision", data),
+
+  endTrial: (serverId: number) =>
+    api.post<{ success: boolean }>(`/servers/${serverId}/end-trial`),
 };
 
 // Billing API

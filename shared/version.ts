@@ -1,4 +1,4 @@
-export const VERSION = "1.10.0";
+export const VERSION = "1.11.0";
 
 export const FEATURES = [
   "Embedded VNC console with WebSocket connection",
@@ -17,6 +17,18 @@ export const FEATURES = [
 ];
 
 export const VERSION_HISTORY = [
+  {
+    version: "1.11.0",
+    date: "2026-01-24",
+    changes: [
+      "Feature: Trial servers - Admin can provision time-limited servers (24h or 7d)",
+      "Trial servers auto-stop when trial expires and are deleted after 7 days",
+      "Trial ended email notification sent to users when trial expires",
+      "Trial badges on server cards (TRIAL, TRIAL ENDED)",
+      "Trial info in server detail sidebar with expiration date",
+      "Admin can manually end trials early via End Trial action",
+    ],
+  },
   {
     version: "1.10.0",
     date: "2026-01-18",

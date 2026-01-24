@@ -1,7 +1,7 @@
 import { StatusBadge, type StatusType } from "./status-badge";
 import { Button } from "./button";
 import { Progress } from "./progress";
-import { ChevronRight, Ban, AlertTriangle, Gift, Clock } from "lucide-react";
+import { ChevronRight, Ban, AlertTriangle, Gift, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Server } from "@/lib/types";
 import { usePowerActions } from "@/hooks/use-power-actions";
@@ -31,6 +31,9 @@ interface BillingStatus {
   adminSuspendedReason?: string | null;
   planId?: number;
   planName?: string | null;
+  isTrial?: boolean;
+  trialExpiresAt?: string | null;
+  trialEndedAt?: string | null;
 }
 
 interface ServerCardProps {
@@ -111,7 +114,19 @@ export function ServerCard({ server, cancellation, billingStatus, onClick }: Ser
             <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors truncate">
               {server.name}
             </h3>
-            {billingStatus?.freeServer && (
+            {billingStatus?.isTrial && billingStatus?.trialEndedAt && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <XCircle className="h-2.5 w-2.5 mr-0.5" />
+                TRIAL ENDED
+              </Badge>
+            )}
+            {billingStatus?.isTrial && !billingStatus?.trialEndedAt && (
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                <Clock className="h-2.5 w-2.5 mr-0.5" />
+                TRIAL
+              </Badge>
+            )}
+            {billingStatus?.freeServer && !billingStatus?.isTrial && (
               <Badge variant="info" className="text-[10px] px-1.5 py-0 flex-shrink-0">
                 <Gift className="h-2.5 w-2.5 mr-0.5" />
                 FREE
