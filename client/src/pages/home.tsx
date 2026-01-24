@@ -335,7 +335,7 @@ function PricingSection({
                     </div>
                     <div className="flex items-center gap-3">
                       <HardDrive className="h-4 w-4 text-primary/70" />
-                      <span>{plan.storageGb}GB NVMe</span>
+                      <span>{plan.storageGb}GB SSD</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <Activity className="h-4 w-4 text-primary/70" />
@@ -396,7 +396,7 @@ function FeaturesSection() {
     },
     {
       icon: HardDrive,
-      title: "NVMe Storage",
+      title: "SSD Storage",
       description: "Enterprise SSDs for fast I/O",
     },
     {

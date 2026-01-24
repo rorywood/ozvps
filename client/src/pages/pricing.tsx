@@ -91,7 +91,7 @@ export default function PricingPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <HardDrive className="h-4 w-4 text-primary/70" />
-                    <span>{plan.storageGb} GB NVMe Storage</span>
+                    <span>{plan.storageGb} GB SSD Storage</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Activity className="h-4 w-4 text-primary/70" />
