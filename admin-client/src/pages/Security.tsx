@@ -10,7 +10,6 @@ export default function Security() {
   const [secretKey, setSecretKey] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [version, setVersion] = useState<'v2' | 'v3'>('v3');
-  const [minScore, setMinScore] = useState(0.5);
   const [hasChanges, setHasChanges] = useState(false);
   const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
@@ -21,7 +20,6 @@ export default function Security() {
       setSiteKey(data.siteKey || "");
       setEnabled(data.enabled);
       setVersion(data.version);
-      setMinScore(data.minScore);
       setHasChanges(false);
     },
   });
@@ -33,7 +31,6 @@ export default function Security() {
         secretKey,
         enabled,
         version,
-        minScore,
       }),
     onSuccess: () => {
       toast.success("reCAPTCHA settings saved successfully");
@@ -192,35 +189,6 @@ export default function Security() {
                 </button>
               </div>
             </div>
-
-            {/* v3 Score Threshold */}
-            {version === 'v3' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Minimum Score Threshold: {minScore.toFixed(1)}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={minScore}
-                  onChange={(e) => {
-                    setMinScore(parseFloat(e.target.value));
-                    handleChange();
-                  }}
-                  className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                />
-                <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  <span>0.0 (Allow all)</span>
-                  <span>0.5 (Default)</span>
-                  <span>1.0 (Strict)</span>
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  Users with scores below this threshold will be blocked. Lower = more permissive.
-                </p>
-              </div>
-            )}
 
             {/* API Keys */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
