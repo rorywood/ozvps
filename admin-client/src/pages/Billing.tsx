@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { billingApi } from "../lib/api";
+import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
 import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock } from "lucide-react";
 
@@ -58,6 +58,17 @@ export default function Billing() {
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
+  });
+
+  const endTrialMutation = useMutation({
+    mutationFn: (serverId: number) => serversApi.endTrial(serverId),
+    onSuccess: () => {
+      toast.success("Trial ended - server has been powered off");
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      setSelectedRecord(null);
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to end trial"),
   });
 
   const updateRecordMutation = useMutation({
@@ -225,18 +236,34 @@ export default function Billing() {
                   <Calendar className="h-4 w-4" />
                   Change Due Date
                 </button>
-                <button
-                  onClick={handleToggleFree}
-                  disabled={updateRecordMutation.isPending}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    selectedRecord.billing.freeServer
-                      ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
-                      : "bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20"
-                  }`}
-                >
-                  <Gift className="h-4 w-4" />
-                  {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
-                </button>
+                {!selectedRecord.billing.isTrial && (
+                  <button
+                    onClick={handleToggleFree}
+                    disabled={updateRecordMutation.isPending}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      selectedRecord.billing.freeServer
+                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
+                        : "bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20"
+                    }`}
+                  >
+                    <Gift className="h-4 w-4" />
+                    {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
+                  </button>
+                )}
+                {selectedRecord.billing.isTrial && !selectedRecord.billing.trialEndedAt && (
+                  <button
+                    onClick={() => {
+                      if (confirm("Are you sure you want to end this trial? The server will be powered off.")) {
+                        endTrialMutation.mutate(parseInt(selectedRecord.billing.virtfusionServerId));
+                      }
+                    }}
+                    disabled={endTrialMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg text-sm hover:bg-amber-500/20 transition-colors"
+                  >
+                    <Clock className="h-4 w-4" />
+                    End Trial
+                  </button>
+                )}
                 {selectedRecord.billing.status === "suspended" ? (
                   <button
                     onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
