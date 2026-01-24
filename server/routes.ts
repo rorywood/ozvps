@@ -5326,7 +5326,19 @@ export async function registerRoutes(
   app.get('/api/plans', async (req, res) => {
     try {
       const allPlans = await dbStorage.getAllPlans();
-      res.json({ plans: allPlans });
+
+      // Filter out admin-only plans from public endpoint
+      // Set ADMIN_ONLY_PLAN_IDS=7,8,9 in .env to hide specific plans from deploy page
+      const adminOnlyPlanIds = (process.env.ADMIN_ONLY_PLAN_IDS || '')
+        .split(',')
+        .map(id => parseInt(id.trim(), 10))
+        .filter(id => !isNaN(id));
+
+      const publicPlans = adminOnlyPlanIds.length > 0
+        ? allPlans.filter(plan => !adminOnlyPlanIds.includes(plan.id))
+        : allPlans;
+
+      res.json({ plans: publicPlans });
     } catch (error: any) {
       log(`Error fetching plans: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch plans' });
