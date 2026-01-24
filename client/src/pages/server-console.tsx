@@ -78,9 +78,7 @@ export default function ServerConsole() {
   // Redirect to noVNC when we have the console data
   useEffect(() => {
     if (consoleData?.embedded && consoleData?.vnc?.wsUrl && !redirected) {
-      console.log('VNC wsUrl from API:', consoleData.vnc.wsUrl);
       const noVncUrl = buildNoVncUrl(consoleData.vnc.wsUrl, consoleData.vnc.password);
-      console.log('noVNC redirect URL:', noVncUrl);
       setRedirected(true);
       window.location.href = noVncUrl;
     }
