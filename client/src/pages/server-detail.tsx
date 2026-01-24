@@ -1906,7 +1906,7 @@ export default function ServerDetail() {
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() => setPasswordResetDialogOpen(true)}
-                  disabled={isSuspended || isPasswordResetDisabled}
+                  disabled={isSuspended || isTrialEnded || isPasswordResetDisabled}
                 >
                   <Key className="h-4 w-4 mr-2" /> Reset Password
                   {isPasswordResetDisabled && <span className="text-[10px] text-muted-foreground ml-auto">(wait 1min)</span>}
@@ -2305,7 +2305,7 @@ export default function ServerDetail() {
                         : "bg-blue-600 hover:bg-blue-700"
                     )}
                     onClick={() => setPasswordResetDialogOpen(true)}
-                    disabled={isSuspended || !!cancellationData?.cancellation || isPasswordResetDisabled}
+                    disabled={isSuspended || isTrialEnded || !!cancellationData?.cancellation || isPasswordResetDisabled}
                     data-testid="button-reset-password"
                   >
                     <Key className="h-4 w-4 mr-2" />
@@ -2420,7 +2420,7 @@ export default function ServerDetail() {
                       setHostname(server?.name || '');
                       setReinstallDialogOpen(true);
                     }}
-                    disabled={isSuspended || !!cancellationData?.cancellation}
+                    disabled={isSuspended || isTrialEnded || !!cancellationData?.cancellation}
                     data-testid="button-reinstall"
                   >
                     <RefreshCw className="h-5 w-5 mr-2" />
@@ -2603,7 +2603,7 @@ export default function ServerDetail() {
                           ? "bg-red-600 hover:bg-red-700 text-white"
                           : "bg-red-600/30 text-red-400/50 cursor-not-allowed"
                       )}
-                      disabled={immediateConfirmText !== server?.name || isSuspended}
+                      disabled={immediateConfirmText !== server?.name || isSuspended || isTrialEnded}
                       onClick={() => {
                         setPasswordError("");
                         setImmediatePassword("");
@@ -2651,7 +2651,7 @@ export default function ServerDetail() {
                             reason: cancellationReason || undefined,
                             mode: 'grace'
                           })}
-                          disabled={isSuspended || requestCancellationMutation.isPending}
+                          disabled={isSuspended || isTrialEnded || requestCancellationMutation.isPending}
                           data-testid="button-cancel-grace"
                         >
                           {requestCancellationMutation.isPending ? (
