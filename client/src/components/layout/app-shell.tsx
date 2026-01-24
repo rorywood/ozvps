@@ -2,16 +2,19 @@ import { TopNav } from "./top-nav";
 import { Link } from "wouter";
 import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
 import { useState, useEffect } from "react";
-import { Info, ChevronUp, ChevronDown } from "lucide-react";
+import { Info, ChevronUp, ChevronDown, Bug, Loader2, CheckCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useMutation } from "@tanstack/react-query";
+import { secureFetch } from "@/lib/api";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   // Check if dev banner should show
@@ -54,6 +57,137 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <Footer />
     </div>
+  );
+}
+
+function BugReportDialog() {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const bugReportMutation = useMutation({
+    mutationFn: async (data: { description: string; currentUrl: string; appVersion: string; userAgent: string }) => {
+      const response = await secureFetch('/api/feedback/bug-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to submit bug report');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setSubmitted(true);
+      setDescription("");
+      setTimeout(() => {
+        setOpen(false);
+        setSubmitted(false);
+      }, 2000);
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!description.trim() || description.trim().length < 10) return;
+    bugReportMutation.mutate({
+      description: description.trim(),
+      currentUrl: window.location.href,
+      appVersion: VERSION,
+      userAgent: navigator.userAgent,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (!isOpen) {
+        setSubmitted(false);
+        bugReportMutation.reset();
+      }
+    }}>
+      <DialogTrigger asChild>
+        <button
+          className="text-xs text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer flex items-center gap-1"
+          data-testid="button-report-bug"
+        >
+          <Bug className="h-3 w-3" />
+          Report Bug
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-border">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            <Bug className="h-5 w-5 text-destructive" />
+            Report a Bug
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Help us improve by reporting issues you encounter.
+          </DialogDescription>
+        </DialogHeader>
+
+        {submitted ? (
+          <div className="py-8 text-center">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+            <p className="text-foreground font-medium">Thank you!</p>
+            <p className="text-sm text-muted-foreground">Your bug report has been submitted.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Describe the issue
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What happened? What did you expect to happen?"
+                className="w-full h-32 px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                disabled={bugReportMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {description.length}/2000 characters (minimum 10)
+              </p>
+            </div>
+
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
+              <p><span className="text-foreground">Page:</span> {window.location.pathname}</p>
+              <p><span className="text-foreground">Version:</span> v{VERSION}</p>
+            </div>
+
+            {bugReportMutation.isError && (
+              <p className="text-sm text-destructive">
+                {bugReportMutation.error?.message || 'Failed to submit. Please try again.'}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setOpen(false)}
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                disabled={bugReportMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={bugReportMutation.isPending || description.trim().length < 10}
+                className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {bugReportMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Report'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -172,6 +306,8 @@ function Footer() {
             Powered by Australian infrastructure. Built with ❤️ in Queensland.
           </p>
           <div className="flex items-center gap-3">
+            <BugReportDialog />
+            <span className="text-muted-foreground/30">|</span>
             <span className={cn(
               "px-2 py-0.5 text-[10px] font-bold rounded border",
               envColor

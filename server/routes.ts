@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
@@ -7283,6 +7283,52 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error deleting ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to delete ticket' });
+    }
+  });
+
+  // ==========================================
+  // FEEDBACK / BUG REPORT
+  // ==========================================
+
+  // Submit a bug report (authenticated users only)
+  app.post('/api/feedback/bug-report', authMiddleware, async (req, res) => {
+    try {
+      const { description, currentUrl, appVersion, userAgent } = req.body;
+
+      // Validate required fields
+      if (!description || typeof description !== 'string') {
+        return res.status(400).json({ error: 'Description is required' });
+      }
+
+      // Sanitize and limit description length
+      const sanitizedDescription = description.trim().slice(0, 2000);
+      if (sanitizedDescription.length < 10) {
+        return res.status(400).json({ error: 'Please provide a more detailed description (at least 10 characters)' });
+      }
+
+      const userEmail = req.userSession!.email;
+      const userName = req.userSession!.name || null;
+
+      // Send bug report email
+      const result = await sendBugReportEmail(
+        sanitizedDescription,
+        userEmail,
+        userName,
+        userAgent || 'Unknown',
+        currentUrl || 'Unknown',
+        appVersion || 'Unknown'
+      );
+
+      if (!result.success) {
+        log(`Failed to send bug report from ${userEmail}: ${result.error}`, 'api');
+        return res.status(500).json({ error: 'Failed to send bug report. Please try again later.' });
+      }
+
+      log(`Bug report submitted by ${userEmail}`, 'api');
+      res.json({ success: true, message: 'Bug report submitted successfully' });
+    } catch (error: any) {
+      log(`Error submitting bug report: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to submit bug report' });
     }
   });
 

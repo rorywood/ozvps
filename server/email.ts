@@ -2632,3 +2632,183 @@ Thank you for trying OzVPS!
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send bug report email to support
+ */
+export async function sendBugReportEmail(
+  description: string,
+  userEmail: string,
+  userName: string | null,
+  userAgent: string,
+  currentUrl: string,
+  appVersion: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send bug report', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const logoUrl = getLogoUrl();
+  const submittedAt = new Date().toLocaleString('en-AU', {
+    timeZone: 'Australia/Brisbane',
+    dateStyle: 'full',
+    timeStyle: 'long'
+  });
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: ['support@cloudasn.com'],
+      replyTo: userEmail,
+      subject: `[Bug Report] OzVPS Panel - ${userName || userEmail}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Bug Report</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+
+          <!-- Logo on dark background -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 32px;">
+                    <!-- Header -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600; color: #dc2626;">
+                            Bug Report Submitted
+                          </h1>
+                          <p style="margin: 0 0 24px 0; font-size: 14px; color: ${emailStyles.textMuted};">
+                            A user has reported an issue with the OzVPS Panel
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Reporter Info -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; border-radius: 8px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Reported By</p>
+                                <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark};">${userName || 'User'} &lt;${userEmail}&gt;</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Submitted At</p>
+                                <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark};">${submittedAt}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">App Version</p>
+                                <p style="margin: 0; font-size: 14px; font-family: monospace; color: ${emailStyles.textDark};">v${appVersion}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Current Page</p>
+                                <p style="margin: 0; font-size: 14px; font-family: monospace; color: ${emailStyles.textDark}; word-break: break-all;">${currentUrl}</p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Browser</p>
+                                <p style="margin: 0; font-size: 12px; color: ${emailStyles.textDark}; word-break: break-all;">${userAgent}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Bug Description -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                      <tr>
+                        <td>
+                          <p style="margin: 0 0 8px 0; font-size: 12px; color: ${emailStyles.textMuted}; text-transform: uppercase; letter-spacing: 0.5px;">Bug Description</p>
+                          <div style="padding: 16px; background-color: ${emailStyles.bgLight}; border-radius: 8px; border-left: 3px solid #dc2626;">
+                            <p style="margin: 0; font-size: 14px; color: ${emailStyles.textDark}; line-height: 1.6; white-space: pre-wrap;">${description}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 0; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: ${emailStyles.textLight};">
+                This is an automated bug report from the OzVPS Panel
+              </p>
+              <p style="margin: 0; font-size: 12px; color: ${emailStyles.textLight};">
+                © ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `,
+      text: `
+BUG REPORT - OzVPS Panel
+
+Reported By: ${userName || 'User'} <${userEmail}>
+Submitted At: ${submittedAt}
+App Version: v${appVersion}
+Current Page: ${currentUrl}
+Browser: ${userAgent}
+
+BUG DESCRIPTION:
+${description}
+
+---
+This is an automated bug report from the OzVPS Panel.
+© ${new Date().getFullYear()} OzVPS Pty Ltd.
+      `.trim(),
+    });
+
+    if (error) {
+      log(`Failed to send bug report: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+
+    log(`Bug report sent from ${userEmail}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending bug report: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
