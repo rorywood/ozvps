@@ -31,6 +31,73 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Sync plans from VirtFusion
+  router.post("/plans/sync", async (req: Request, res: Response) => {
+    try {
+      const vfPackages = await virtfusionClient.getPackages();
+      let synced = 0;
+      let created = 0;
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const vfPkg of vfPackages) {
+        try {
+          // Check if plan exists with this virtfusionPackageId
+          const [existingPlan] = await db
+            .select()
+            .from(plans)
+            .where(eq(plans.virtfusionPackageId, vfPkg.id));
+
+          // Calculate monthly price (pennies per hour * hours in month)
+          const hourlyPrice = vfPkg.billing?.price?.price_per_hour || 0;
+          const monthlyPrice = Math.round(hourlyPrice * 730 * 100); // 730 hours avg month, convert to cents
+
+          if (existingPlan) {
+            // Update existing plan
+            await db
+              .update(plans)
+              .set({
+                name: vfPkg.name,
+                cpu: vfPkg.settings?.cpuCores || existingPlan.cpu,
+                ram: vfPkg.settings?.memory ? Math.round(vfPkg.settings.memory / 1024) : existingPlan.ram,
+                storage: vfPkg.settings?.primaryDiskSize || existingPlan.storage,
+                bandwidth: vfPkg.settings?.trafficLimit || existingPlan.bandwidth,
+                priceMonthly: monthlyPrice || existingPlan.priceMonthly,
+                active: vfPkg.enabled,
+              })
+              .where(eq(plans.id, existingPlan.id));
+            updated++;
+            synced++;
+          } else {
+            // Create new plan
+            const code = vfPkg.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+            await db.insert(plans).values({
+              name: vfPkg.name,
+              code: code || `vf-${vfPkg.id}`,
+              cpu: vfPkg.settings?.cpuCores || 1,
+              ram: vfPkg.settings?.memory ? Math.round(vfPkg.settings.memory / 1024) : 1,
+              storage: vfPkg.settings?.primaryDiskSize || 20,
+              bandwidth: vfPkg.settings?.trafficLimit || 1000,
+              priceMonthly: monthlyPrice || 500,
+              virtfusionPackageId: vfPkg.id,
+              active: vfPkg.enabled,
+            });
+            created++;
+            synced++;
+          }
+        } catch (error: any) {
+          errors.push(`Package ${vfPkg.id}: ${error.message}`);
+        }
+      }
+
+      console.log(`[admin-servers] Plans sync: ${synced} synced (${created} created, ${updated} updated)`);
+      res.json({ success: true, synced, created, updated, errors: errors.length > 0 ? errors : undefined });
+    } catch (error: any) {
+      console.log(`[admin-servers] Plans sync error: ${error.message}`);
+      res.status(500).json({ error: "Failed to sync plans from VirtFusion" });
+    }
+  });
+
   // Get OS templates for a plan (for provisioning)
   router.get("/plans/:id/templates", async (req: Request, res: Response) => {
     try {

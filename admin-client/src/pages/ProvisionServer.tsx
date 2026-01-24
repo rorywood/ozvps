@@ -19,6 +19,7 @@ import {
   Copy,
   MapPin,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 import { Link } from "wouter";
 import { getOsLogoUrl, FALLBACK_LOGO } from "../lib/os-logos";
@@ -98,6 +99,18 @@ export default function ProvisionServer() {
       } else {
         toast.error(err.message || "Failed to provision server");
       }
+    },
+  });
+
+  // Sync plans from VirtFusion mutation
+  const syncPlansMutation = useMutation({
+    mutationFn: plansApi.syncFromVirtFusion,
+    onSuccess: (data) => {
+      toast.success(`Synced ${data.synced} plans (${data.created} new, ${data.updated} updated)`);
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to sync plans from VirtFusion");
     },
   });
 
@@ -365,9 +378,20 @@ export default function ProvisionServer() {
 
           {/* Plan Selection */}
           <div className="bg-white dark:bg-[var(--color-card)] rounded-xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Package className="h-5 w-5 text-[var(--color-primary)]" />
-              <h2 className="text-lg font-semibold">Select Plan</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-[var(--color-primary)]" />
+                <h2 className="text-lg font-semibold">Select Plan</h2>
+              </div>
+              <button
+                onClick={() => syncPlansMutation.mutate()}
+                disabled={syncPlansMutation.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                title="Sync plans from VirtFusion"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncPlansMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncPlansMutation.isPending ? 'Syncing...' : 'Sync'}
+              </button>
             </div>
 
             {loadingPlans ? (

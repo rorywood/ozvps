@@ -374,6 +374,7 @@ export const settingsApi = {
 export const plansApi = {
   list: () => api.get<{ plans: any[] }>("/plans"),
   getTemplates: (planId: number) => api.get<{ templates: any[] }>(`/plans/${planId}/templates`),
+  syncFromVirtFusion: () => api.post<{ success: boolean; synced: number; created: number; updated: number }>("/plans/sync"),
 };
 
 // VirtFusion API
