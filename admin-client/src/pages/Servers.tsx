@@ -76,6 +76,16 @@ export default function Servers() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const endTrialMutation = useMutation({
+    mutationFn: (serverId: number) => serversApi.endTrial(serverId),
+    onSuccess: () => {
+      toast.success("Trial ended - server has been powered off");
+      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to end trial"),
+  });
+
   // Query for OS templates when modal is open
   const { data: osTemplatesData, isLoading: loadingTemplates } = useQuery({
     queryKey: ["os-templates", serverDetails?.billing?.planId],
@@ -537,6 +547,20 @@ export default function Servers() {
                             className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/20 transition-colors disabled:opacity-50"
                           >
                             Suspend
+                          </button>
+                        )}
+                        {serverDetails.billing?.isTrial && !serverDetails.billing?.trialEndedAt && (
+                          <button
+                            onClick={() => {
+                              if (confirm("Are you sure you want to end this trial? The server will be powered off.")) {
+                                endTrialMutation.mutate(selectedServer.id);
+                              }
+                            }}
+                            disabled={endTrialMutation.isPending}
+                            className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                          >
+                            <Clock className="h-4 w-4" />
+                            End Trial
                           </button>
                         )}
                         <button
