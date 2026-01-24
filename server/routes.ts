@@ -20,6 +20,7 @@ import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDe
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
+import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
 import path from "path";
 
@@ -1199,6 +1200,9 @@ export async function registerRoutes(
         // Send password reset email
         const emailResult = await sendPasswordResetEmail(email, resetLink, 30);
 
+        // Audit log password reset request
+        await auditUserAction(req, user.user_id, email, UserActions.PASSWORD_RESET_REQUEST, 'account', user.user_id);
+
         if (emailResult.success) {
           log(`Password reset email sent to ${email}`, 'auth');
         } else {
@@ -1272,6 +1276,9 @@ export async function registerRoutes(
 
       // Revoke all existing sessions for security
       await storage.revokeSessionsByAuth0UserId(user.user_id, SESSION_REVOKE_REASONS.PASSWORD_CHANGED);
+
+      // Audit log password reset complete
+      await auditUserAction(req, user.user_id, resetToken.email, UserActions.PASSWORD_RESET_COMPLETE, 'account', user.user_id);
 
       log(`Password successfully reset for ${resetToken.email}`, 'auth');
 
@@ -1624,6 +1631,13 @@ export async function registerRoutes(
       const csrfToken = generateCsrfToken();
       setCsrfCookie(res, csrfToken, expiresAt);
 
+      // Audit log successful login
+      await auditUserAction(req, auth0UserIdPrefixed, email, UserActions.LOGIN_SUCCESS, 'session', session.id, {
+        isAdmin,
+        emailVerified,
+        has2FA: !!tfa,
+      });
+
       res.json({
         user: {
           id: auth0UserIdPrefixed,
@@ -1685,17 +1699,22 @@ export async function registerRoutes(
 
   app.post('/api/auth/logout', async (req, res) => {
     const sessionId = req.cookies?.[SESSION_COOKIE];
-    
+
     if (sessionId) {
       try {
+        // Get session info before deleting for audit log
+        const session = await storage.getSession(sessionId);
+        if (session) {
+          await auditUserAction(req, session.auth0UserId || 'unknown', session.email || 'unknown', UserActions.LOGOUT, 'session', sessionId);
+        }
         await storage.deleteSession(sessionId);
       } catch (error) {
         log(`Logout error: ${error}`, 'api');
       }
     }
-    
+
     res.clearCookie(SESSION_COOKIE);
-      res.clearCookie(CSRF_COOKIE);
+    res.clearCookie(CSRF_COOKIE);
     res.json({ success: true });
   });
 
@@ -2619,6 +2638,14 @@ export async function registerRoutes(
         ).catch(() => {});  // Fire and forget
       }
 
+      // Audit log server reinstall
+      await auditUserAction(req, req.userSession!.auth0UserId!, req.userSession!.email, UserActions.SERVER_REINSTALL, 'server', req.params.id, {
+        serverName: server.name,
+        osId,
+        osName: selectedTemplate?.name || 'Unknown',
+        hostname,
+      });
+
       res.json({ success: true });
     } catch (error: any) {
       log(`Error reinstalling server ${req.params.id}: ${error.message}`, 'api');
@@ -2698,6 +2725,11 @@ export async function registerRoutes(
         log(`[ERROR] Password reset for ${req.params.id} succeeded but no password returned`, 'api');
         return res.status(500).json({ error: 'Password reset succeeded but no new password was returned' });
       }
+
+      // Audit log server password reset
+      await auditUserAction(req, session.auth0UserId!, session.email, UserActions.SERVER_PASSWORD_RESET, 'server', req.params.id, {
+        serverName: server.name,
+      });
 
       log(`Password reset completed for server ${req.params.id} by user ${req.userSession!.auth0UserId}`, 'api');
       res.json({ success: true, password: result.password, username: result.username });
@@ -2990,9 +3022,17 @@ export async function registerRoutes(
         scheduledDeletionAt,
         mode,
       });
-      
+
+      // Audit log server cancellation
+      await auditUserAction(req, session.auth0UserId!, session.email, UserActions.SERVER_CANCEL, 'server', serverId, {
+        serverName: server.name,
+        mode,
+        scheduledDeletionAt: scheduledDeletionAt.toISOString(),
+        reason: reason || null,
+      });
+
       log(`Cancellation requested for server ${serverId} by user ${session.auth0UserId}, mode=${mode}, scheduled for ${scheduledDeletionAt.toISOString()}`, 'api');
-      
+
       res.json({ success: true, cancellation });
     } catch (error: any) {
       log(`Error requesting cancellation for server ${req.params.id}: ${error.message}`, 'api');
@@ -3199,15 +3239,21 @@ export async function registerRoutes(
           return res.status(500).json({ error: 'Failed to update name' });
         }
         updatedName = name.trim();
-        
+
         // Persist the name change to the session storage
         if (sessionId) {
           await storage.updateSession(sessionId, { name: updatedName });
         }
-        
+
+        // Audit log profile update
+        await auditUserAction(req, session.auth0UserId, session.email, UserActions.PROFILE_UPDATE, 'account', session.auth0UserId, {
+          oldName: session.name,
+          newName: updatedName,
+        });
+
         log(`Updated user name for ${session.email} to: ${updatedName}`, 'api');
       }
-      
+
       res.json({
         id: session.userId || session.id,
         email: session.email,
@@ -3261,6 +3307,9 @@ export async function registerRoutes(
       const currentSessionId = req.cookies?.[SESSION_COOKIE];
       await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.PASSWORD_CHANGED, currentSessionId);
       log(`All other sessions revoked after password change for: ${session.email}`, 'security');
+
+      // Audit log password change
+      await auditUserAction(req, session.auth0UserId, session.email, UserActions.PASSWORD_CHANGE, 'account', session.auth0UserId);
 
       res.json({ success: true, message: 'Password changed successfully' });
     } catch (error: any) {
@@ -3549,6 +3598,9 @@ export async function registerRoutes(
       // Enable 2FA with backup codes
       await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
 
+      // Audit log 2FA enable
+      await auditUserAction(req, session.auth0UserId, session.email, UserActions.TWO_FA_ENABLE, '2fa', session.auth0UserId, { method: 'totp' });
+
       log(`2FA enabled for user ${session.email}`, 'security');
 
       res.json({
@@ -3596,6 +3648,10 @@ export async function registerRoutes(
       }
 
       await dbStorage.disableTwoFactorAuth(session.auth0UserId);
+
+      // Audit log 2FA disable
+      await auditUserAction(req, session.auth0UserId, session.email, UserActions.TWO_FA_DISABLE, '2fa', session.auth0UserId);
+
       log(`2FA disabled for user ${session.email}`, 'security');
 
       res.json({ success: true, message: '2FA has been disabled' });
