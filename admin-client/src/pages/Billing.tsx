@@ -314,7 +314,9 @@ export default function Billing() {
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{record.user?.name || "Unknown"}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {record.user?.name || record.user?.email?.split('@')[0] || "Unknown"}
+                        </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{record.user?.email || "N/A"}</p>
                       </div>
                     </td>
