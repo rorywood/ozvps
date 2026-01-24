@@ -56,8 +56,8 @@ export function registerServersRoutes(router: Router) {
           const monthlyPriceEntry = vfPkg.prices?.find((p: any) => p.billingPeriod === 'monthly');
           const monthlyPrice = monthlyPriceEntry?.price || 0;
 
-          // Memory is in MB from getPackages, convert to GB for storage
-          const ramGb = Math.round(vfPkg.memory / 1024);
+          // Memory is in MB from getPackages
+          const ramMb = vfPkg.memory || 1024;
 
           if (existingPlan) {
             // Update existing plan
@@ -65,10 +65,10 @@ export function registerServersRoutes(router: Router) {
               .update(plans)
               .set({
                 name: vfPkg.name,
-                cpu: vfPkg.cpuCores || existingPlan.cpu,
-                ram: ramGb || existingPlan.ram,
-                storage: vfPkg.primaryStorage || existingPlan.storage,
-                bandwidth: vfPkg.traffic || existingPlan.bandwidth,
+                vcpu: vfPkg.cpuCores || existingPlan.vcpu,
+                ramMb: ramMb || existingPlan.ramMb,
+                storageGb: vfPkg.primaryStorage || existingPlan.storageGb,
+                transferGb: vfPkg.traffic || existingPlan.transferGb,
                 priceMonthly: monthlyPrice || existingPlan.priceMonthly,
                 active: vfPkg.enabled,
               })
@@ -82,10 +82,10 @@ export function registerServersRoutes(router: Router) {
             const [newPlan] = await db.insert(plans).values({
               name: vfPkg.name,
               code: code || `vf-${vfPkg.id}`,
-              cpu: vfPkg.cpuCores || 1,
-              ram: ramGb || 1,
-              storage: vfPkg.primaryStorage || 20,
-              bandwidth: vfPkg.traffic || 1000,
+              vcpu: vfPkg.cpuCores || 1,
+              ramMb: ramMb || 1024,
+              storageGb: vfPkg.primaryStorage || 20,
+              transferGb: vfPkg.traffic || 1000,
               priceMonthly: monthlyPrice || 0,
               virtfusionPackageId: vfPkg.id,
               active: vfPkg.enabled,
