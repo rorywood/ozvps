@@ -112,13 +112,45 @@
 - `admin-client/src/pages/ProvisionServer.tsx` - Admin provision server UI
 - `admin-server/middleware/ip-whitelist.ts` - Admin IP whitelist with TRUST_PROXY check
 - `admin-server/middleware/csrf.ts` - CSRF protection with token rotation
-- `client/src/hooks/use-system-health.ts` - System health check hook (isSystemDown flag)
+- `admin-server/routes/security.ts` - Admin reCAPTCHA configuration endpoints
+- `client/src/hooks/use-system-health.ts` - System health check hook (isSystemDown, isRateLimited flags)
+- `client/public/novnc/` - Native noVNC v1.5.0 files with OzVPS branding
 - `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
 ## Recent Session Work (2026-01-24)
 
 ### Completed This Session
+1. **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0:
+   - Downloaded noVNC to `client/public/novnc/`
+   - Console page now redirects to `/novnc/vnc.html` with WebSocket params
+   - Full sidebar controls (clipboard, settings, extra keys, fullscreen)
+   - OzVPS branding in noVNC UI
+   - Password and path passed securely via URL hash fragment
+
+2. **Rate Limiting UX Fix** - Users now see proper message when rate limited:
+   - Health check 429 was showing "System unavailable" - fixed
+   - Added `isRateLimited` flag separate from `isSystemDown`
+   - Login/register show "You have been rate limited" message
+   - Files: `client/src/lib/api.ts`, `client/src/hooks/use-system-health.ts`
+
+3. **reCAPTCHA Admin Configuration** - New admin panel page for reCAPTCHA:
+   - Created `admin-server/routes/security.ts` with GET/POST endpoints
+   - Admin page at Security in sidebar to configure site key, secret key
+   - Test button to verify configuration works
+   - Files: `admin-client/src/pages/Security.tsx`
+
+4. **reCAPTCHA Visibility** - Users can see protection is active:
+   - Added green shield icon with "Protected by reCAPTCHA" on login/register
+   - reCAPTCHA v3 is invisible by design, visual indicator confirms protection
+   - Added full reCAPTCHA support to forgot-password page
+
+5. **Security Audit Fixes** - Critical vulnerabilities fixed:
+   - **CRITICAL**: Replaced `Math.random()` with `crypto.randomInt()` for 2FA/OTP codes
+   - **MEDIUM**: Added server-side name ban for "darius" (was client-side only)
+   - Banned names array in registration endpoint for easy future additions
+
+### Previous Session (2026-01-24 - Earlier)
 1. **Trial Servers Feature** - Full implementation of time-limited trial servers:
    - Database: Added `is_trial`, `trial_expires_at`, `trial_ended_at` columns to `server_billing`
    - Migration: `0013_add_trial_servers.sql`
@@ -309,9 +341,11 @@ git checkout claude/dev-l5488
 - [x] Admin suspend account bug - FIXED (was returning "User not found" for Auth0 API errors)
 - [x] Promotional codes feature - DONE
 - [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
-- [x] Username ban "Darius" - DONE
-- [x] Security audit - DONE (path traversal, X-Forwarded-For, error disclosure, input validation)
+- [x] Username ban "Darius" - DONE (client + server-side validation)
+- [x] Security audit - DONE (path traversal, X-Forwarded-For, error disclosure, input validation, crypto RNG)
 - [x] Block login when API down - DONE (health check now covers VirtFusion + database)
+- [x] reCAPTCHA admin config - DONE (admin panel page for configuration)
+- [x] Native noVNC console - DONE (full sidebar controls, OzVPS branding)
 
 ## Notes for Claude
 - User prefers direct, concise responses
