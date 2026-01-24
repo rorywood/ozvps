@@ -1644,7 +1644,7 @@ export default function ServerDetail() {
                       Add funds to reactivate this server
                     </p>
                   </div>
-                ) : server.billing?.nextBillAt && (() => {
+                ) : server.billing?.nextBillAt && !server.billing?.isTrial && (() => {
                   const nextBillDate = new Date(server.billing.nextBillAt);
                   const now = new Date();
                   // Normalize to start of day in local timezone for accurate day count
