@@ -59,6 +59,9 @@ export function registerServersRoutes(router: Router) {
           // Memory is in MB from getPackages
           const ramMb = vfPkg.memory || 1024;
 
+          // Traffic 0 in VirtFusion means unlimited - keep it as 0
+          const transferGb = vfPkg.traffic ?? 0;
+
           if (existingPlan) {
             // Update existing plan
             await db
@@ -68,7 +71,7 @@ export function registerServersRoutes(router: Router) {
                 vcpu: vfPkg.cpuCores || existingPlan.vcpu,
                 ramMb: ramMb || existingPlan.ramMb,
                 storageGb: vfPkg.primaryStorage || existingPlan.storageGb,
-                transferGb: vfPkg.traffic || existingPlan.transferGb,
+                transferGb: transferGb,
                 priceMonthly: monthlyPrice || existingPlan.priceMonthly,
                 active: vfPkg.enabled,
               })
@@ -85,7 +88,7 @@ export function registerServersRoutes(router: Router) {
               vcpu: vfPkg.cpuCores || 1,
               ramMb: ramMb || 1024,
               storageGb: vfPkg.primaryStorage || 20,
-              transferGb: vfPkg.traffic || 1000,
+              transferGb: transferGb,
               priceMonthly: monthlyPrice || 0,
               virtfusionPackageId: vfPkg.id,
               active: vfPkg.enabled,
