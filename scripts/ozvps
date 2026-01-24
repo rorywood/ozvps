@@ -955,6 +955,12 @@ EOF
         warning "Could not auto-detect domain for webhooks"
     fi
 
+    # Auto-configure ADMIN_ONLY_PLAN_IDS if not set
+    if ! grep -q "^ADMIN_ONLY_PLAN_IDS=" "$INSTALL_DIR/.env" 2>/dev/null; then
+        echo "ADMIN_ONLY_PLAN_IDS=7" >> "$INSTALL_DIR/.env"
+        success "Admin-only plans configured (Plan ID 7)"
+    fi
+
     # Update NGINX error pages
     info "Updating NGINX error pages..."
     local error_pages_dir="/var/www/ozvps-errors"
