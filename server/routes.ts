@@ -5328,14 +5328,14 @@ export async function registerRoutes(
       const allPlans = await dbStorage.getAllPlans();
 
       // Filter out admin-only plans from public endpoint
-      // Set ADMIN_ONLY_PLAN_IDS=7,8,9 in .env to hide specific plans from deploy page
+      // Set ADMIN_ONLY_PLAN_IDS=7,8,9 in .env to hide specific VirtFusion package IDs from deploy page
       const adminOnlyPlanIds = (process.env.ADMIN_ONLY_PLAN_IDS || '')
         .split(',')
         .map(id => parseInt(id.trim(), 10))
         .filter(id => !isNaN(id));
 
       const publicPlans = adminOnlyPlanIds.length > 0
-        ? allPlans.filter(plan => !adminOnlyPlanIds.includes(plan.id))
+        ? allPlans.filter(plan => !plan.virtfusionPackageId || !adminOnlyPlanIds.includes(plan.virtfusionPackageId))
         : allPlans;
 
       res.json({ plans: publicPlans });
