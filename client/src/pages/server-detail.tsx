@@ -1002,6 +1002,8 @@ export default function ServerDetail() {
 
   // Get bandwidth allowance from server plan specs (traffic limit in GB)
   const bandwidthAllowance = server?.plan?.specs?.traffic || 0;
+  // Consider unlimited if: 0, undefined, or >= 50TB (50000 GB)
+  const isUnlimitedBandwidth = !bandwidthAllowance || bandwidthAllowance === 0 || bandwidthAllowance >= 50000;
   const currentMonth = new Date().getMonth() + 1;
 
   // Parse OS templates into flat list with categories
@@ -1497,12 +1499,16 @@ export default function ServerDetail() {
                       <StorageIcon className="h-4 w-4" />
                       <span>{server.plan.specs.disk} GB Storage</span>
                     </div>
-                    {server.plan.specs.traffic && server.plan.specs.traffic > 0 && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Globe className="h-4 w-4" />
-                        <span>{server.plan.specs.traffic >= 1000 ? `${(server.plan.specs.traffic / 1000).toFixed(0)} TB` : `${server.plan.specs.traffic} GB`} Bandwidth</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Globe className="h-4 w-4" />
+                      <span>
+                        {!server.plan.specs.traffic || server.plan.specs.traffic === 0 || server.plan.specs.traffic >= 50000
+                          ? 'Unlimited Bandwidth'
+                          : server.plan.specs.traffic >= 1000
+                            ? `${(server.plan.specs.traffic / 1000).toFixed(0)} TB Bandwidth`
+                            : `${server.plan.specs.traffic} GB Bandwidth`}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2121,8 +2127,8 @@ export default function ServerDetail() {
                 
                 return (
                   <div className="space-y-2">
-                    {/* Bandwidth Exceeded Warning */}
-                    {usagePercent >= 100 && (
+                    {/* Bandwidth Exceeded Warning - only show if not unlimited */}
+                    {!isUnlimitedBandwidth && usagePercent >= 100 && (
                       <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
                         <div className="flex items-start gap-4">
                           <AlertTriangle className="h-7 w-7 text-destructive flex-shrink-0 mt-0.5" />
@@ -2133,7 +2139,7 @@ export default function ServerDetail() {
                         </div>
                       </div>
                     )}
-                    {usagePercent >= 80 && usagePercent < 100 && (
+                    {!isUnlimitedBandwidth && usagePercent >= 80 && usagePercent < 100 && (
                       <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2">
                         <div className="flex items-start gap-2">
                           <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
@@ -2148,33 +2154,35 @@ export default function ServerDetail() {
                     {/* Compact Usage Display */}
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground whitespace-nowrap" data-testid="text-bandwidth-used">
-                        {usedDisplay} <span className="text-muted-foreground font-normal">/ {limitGB > 0 ? (limitGB >= 1000 ? `${(limitGB / 1000).toFixed(2)} TB` : `${limitGB} GB`) : '∞'}</span>
+                        {usedDisplay} {!isUnlimitedBandwidth && <span className="text-muted-foreground font-normal">/ {limitGB >= 1000 ? `${(limitGB / 1000).toFixed(2)} TB` : `${limitGB} GB`}</span>}
                       </span>
-                      {remainingDisplay !== null ? (
+                      {isUnlimitedBandwidth ? (
+                        <span className="text-sm font-semibold text-green-400 whitespace-nowrap">Unlimited</span>
+                      ) : remainingDisplay !== null ? (
                         <span className="text-sm font-semibold text-green-400 whitespace-nowrap" data-testid="text-bandwidth-remaining">
                           {remainingDisplay} <span className="text-[10px] text-muted-foreground font-normal">left</span>
                         </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Unlimited</span>
-                      )}
+                      ) : null}
                     </div>
-                    
-                    {/* Progress Bar */}
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={cn(
-                          "h-2 rounded-full transition-all duration-500",
-                          usagePercent > 90 ? "bg-red-500" :
-                          usagePercent > 70 ? "bg-yellow-500" :
-                          "bg-blue-500"
-                        )}
-                        style={{ width: `${Math.max(usagePercent, 1)}%` }}
-                        data-testid="progress-bandwidth"
-                      />
-                    </div>
-                    
+
+                    {/* Progress Bar - hide for unlimited */}
+                    {!isUnlimitedBandwidth && (
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className={cn(
+                            "h-2 rounded-full transition-all duration-500",
+                            usagePercent > 90 ? "bg-red-500" :
+                            usagePercent > 70 ? "bg-yellow-500" :
+                            "bg-blue-500"
+                          )}
+                          style={{ width: `${Math.max(usagePercent, 1)}%` }}
+                          data-testid="progress-bandwidth"
+                        />
+                      </div>
+                    )}
+
                     {/* Compact Stats Row */}
-                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                    <div className={cn("grid gap-1.5 text-center", isUnlimitedBandwidth ? "grid-cols-3" : "grid-cols-4")}>
                       <div className="p-1.5 bg-muted/50 rounded border border-border">
                         <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
                           <ArrowDownToLine className="h-2.5 w-2.5 text-green-400" />IN
@@ -2193,12 +2201,14 @@ export default function ServerDetail() {
                         </div>
                         <div className="text-xs font-semibold text-foreground" data-testid="text-port-speed">{network?.portSpeed || 500}M</div>
                       </div>
-                      <div className="p-1.5 bg-muted/50 rounded border border-border">
-                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                          <Network className="h-2.5 w-2.5 text-cyan-400" />%
+                      {!isUnlimitedBandwidth && (
+                        <div className="p-1.5 bg-muted/50 rounded border border-border">
+                          <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                            <Network className="h-2.5 w-2.5 text-cyan-400" />%
+                          </div>
+                          <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
                         </div>
-                        <div className="text-xs font-semibold text-foreground" data-testid="text-bandwidth-percent">{usagePercent.toFixed(1)}%</div>
-                      </div>
+                      )}
                     </div>
                     
                     {/* Period - inline */}
