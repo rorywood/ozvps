@@ -1,8 +1,7 @@
-import { useEffect } from "react";
-import { useRoute, useLocation, useSearch } from "wouter";
+import { useEffect, useState } from "react";
+import { useRoute, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { VncViewer } from "@/components/vnc-viewer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Monitor, ArrowLeft, AlertCircle, Ban } from "lucide-react";
@@ -11,15 +10,73 @@ import { useConsoleLock } from "@/hooks/use-console-lock";
 import { ConsoleLockedOverlay } from "@/components/console-locked-overlay";
 import { useAuth } from "@/hooks/use-auth";
 
+// Build noVNC URL from WebSocket URL and password
+function buildNoVncUrl(wsUrl: string, password: string): string {
+  const url = new URL(wsUrl);
+  const host = url.hostname;
+  const port = url.port || (url.protocol === 'wss:' ? '443' : '80');
+  const path = url.pathname.replace(/^\//, ''); // Remove leading slash
+  const encrypt = url.protocol === 'wss:' ? '1' : '0';
+
+  // Use hash fragment for password (more secure - not sent to server in logs)
+  const queryParams = new URLSearchParams({
+    host,
+    port,
+    encrypt,
+    autoconnect: '1',
+    resize: 'scale',
+    reconnect: '1',
+    reconnect_delay: '2000',
+  });
+
+  // Password and path go in hash fragment for security
+  const hashParams = new URLSearchParams({
+    path,
+    password,
+  });
+
+  return `/novnc/vnc.html?${queryParams.toString()}#${hashParams.toString()}`;
+}
+
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
-  const [, setLocation] = useLocation();
   const searchString = useSearch();
   const serverId = params?.id;
   const { user } = useAuth();
+  const [redirected, setRedirected] = useState(false);
 
   // Check if this is a popout window
   const isPopout = searchString.includes('popout=true');
+
+  // Console lock for 15 seconds after boot
+  const consoleLock = useConsoleLock(serverId || '');
+
+  const { data: consoleData, isLoading, error, refetch } = useQuery({
+    queryKey: ['console-url', serverId],
+    queryFn: async () => {
+      const result = await api.getConsoleUrl(serverId || '');
+      return result;
+    },
+    enabled: !!serverId && !consoleLock.isLocked && !user?.accountSuspended,
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Set window title for popout
+  useEffect(() => {
+    if (isPopout) {
+      document.title = `Console - Server ${serverId}`;
+    }
+  }, [isPopout, serverId]);
+
+  // Redirect to noVNC when we have the console data
+  useEffect(() => {
+    if (consoleData?.embedded && consoleData?.vnc?.wsUrl && !redirected) {
+      const noVncUrl = buildNoVncUrl(consoleData.vnc.wsUrl, consoleData.vnc.password);
+      setRedirected(true);
+      window.location.href = noVncUrl;
+    }
+  }, [consoleData, redirected]);
 
   // Check if account is suspended - show blocked message
   if (user?.accountSuspended) {
@@ -50,88 +107,6 @@ export default function ServerConsole() {
       </div>
     );
   }
-  
-  // Console lock for 15 seconds after boot
-  const consoleLock = useConsoleLock(serverId || '');
-
-  const { data: consoleData, isLoading, error, refetch } = useQuery({
-    queryKey: ['console-url', serverId],
-    queryFn: async () => {
-      const result = await api.getConsoleUrl(serverId || '');
-      return result;
-    },
-    enabled: !!serverId && !consoleLock.isLocked,
-    refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  // Set window title for popout
-  useEffect(() => {
-    if (isPopout) {
-      document.title = `Console - Server ${serverId}`;
-    }
-  }, [isPopout, serverId]);
-
-  // Cleanup VNC on component unmount (navigating away) or window close
-  useEffect(() => {
-    if (!serverId) return;
-
-    const disableVncWithKeepalive = () => {
-      // Use fetch with keepalive for reliable cleanup during page unload
-      // This ensures the request completes even if the page is closing
-      const csrfToken = document.cookie.split('; ').find(c => c.startsWith('ozvps_csrf='))?.split('=')[1] || '';
-
-      fetch(`/api/servers/${serverId}/vnc/disable`, {
-        method: 'POST',
-        keepalive: true,
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-      }).catch(() => {});
-    };
-
-    const handleBeforeUnload = () => {
-      disableVncWithKeepalive();
-    };
-
-    // Add beforeunload listener for popout window close
-    if (isPopout) {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-    }
-
-    // Cleanup function runs when component unmounts (user navigates away)
-    return () => {
-      if (isPopout) {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
-      // Disable VNC when navigating away from console (embedded or popout)
-      api.disableVnc(serverId).catch(() => {});
-    };
-  }, [isPopout, serverId]);
-
-  const handleClose = () => {
-    if (isPopout) {
-      window.close();
-    } else {
-      setLocation(`/servers/${serverId}`);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (serverId) {
-      try {
-        await api.disableVnc(serverId);
-      } catch (e) {
-        console.error('Failed to disable VNC:', e);
-      }
-    }
-    // Auto-close popout on disconnect
-    if (isPopout) {
-      window.close();
-    }
-  };
 
   // Show console locked overlay during lock period
   if (consoleLock.isLocked) {
@@ -184,15 +159,15 @@ export default function ServerConsole() {
     );
   }
 
+  // Show redirecting state while we navigate to noVNC
   if (consoleData?.embedded && consoleData?.vnc?.wsUrl) {
     return (
-      <div className="h-screen bg-background">
-        <VncViewer
-          wsUrl={consoleData.vnc.wsUrl}
-          password={consoleData.vnc.password}
-          onClose={handleClose}
-          onDisconnect={handleDisconnect}
-        />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="p-12 flex flex-col items-center">
+          <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
+          <p className="text-foreground font-medium mb-1">Opening Console</p>
+          <p className="text-muted-foreground text-sm">Redirecting to noVNC...</p>
+        </Card>
       </div>
     );
   }
