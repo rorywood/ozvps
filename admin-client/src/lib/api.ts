@@ -239,6 +239,12 @@ export const serversApi = {
 
   endTrial: (serverId: number) =>
     api.post<{ success: boolean }>(`/servers/${serverId}/end-trial`),
+
+  convertTrial: (serverId: number, monthlyPriceCents: number, nextBillingDate?: string) =>
+    api.post<{ success: boolean; poweredOn: boolean }>(`/servers/${serverId}/convert-trial`, {
+      monthlyPriceCents,
+      nextBillingDate,
+    }),
 };
 
 // Billing API

@@ -778,6 +778,91 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
+  // Convert a trial server to a normal paid server
+  router.post("/servers/:serverId/convert-trial", async (req: Request, res: Response) => {
+    try {
+      const serverId = parseInt(req.params.serverId, 10);
+      const session = req.adminSession!;
+      const { monthlyPriceCents, nextBillingDate } = req.body;
+
+      if (isNaN(serverId)) {
+        return res.status(400).json({ error: "Invalid server ID" });
+      }
+
+      if (typeof monthlyPriceCents !== "number" || monthlyPriceCents < 0) {
+        return res.status(400).json({ error: "Invalid monthly price" });
+      }
+
+      // Get billing record
+      const [billing] = await db
+        .select()
+        .from(serverBilling)
+        .where(eq(serverBilling.virtfusionServerId, String(serverId)));
+
+      if (!billing) {
+        return res.status(404).json({ error: "Server billing record not found" });
+      }
+
+      if (!billing.isTrial) {
+        return res.status(400).json({ error: "This server is not a trial server" });
+      }
+
+      const wasTrialEnded = !!billing.trialEndedAt;
+
+      // Calculate next billing date (default to 30 days from now)
+      let nextBillAt: Date;
+      if (nextBillingDate) {
+        nextBillAt = new Date(nextBillingDate);
+        if (isNaN(nextBillAt.getTime())) {
+          return res.status(400).json({ error: "Invalid next billing date" });
+        }
+      } else {
+        nextBillAt = new Date();
+        nextBillAt.setDate(nextBillAt.getDate() + 30);
+      }
+
+      // Update billing record - convert from trial to normal
+      await db
+        .update(serverBilling)
+        .set({
+          isTrial: false,
+          trialExpiresAt: null,
+          trialEndedAt: null,
+          monthlyPriceCents,
+          freeServer: monthlyPriceCents === 0,
+          status: "active",
+          autoRenew: true,
+          nextBillAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(serverBilling.virtfusionServerId, String(serverId)));
+
+      // If the trial had ended, power the server back on
+      if (wasTrialEnded) {
+        try {
+          await virtfusionClient.powerAction(String(serverId), 'start');
+          console.log(`[admin-servers] Powered on server ${serverId} after trial conversion`);
+        } catch (powerErr: any) {
+          console.log(`[admin-servers] Warning: Could not power on server ${serverId}: ${powerErr.message}`);
+        }
+      }
+
+      await auditSuccess(req, "server.convert-trial", "server", String(serverId), {
+        monthlyPriceCents,
+        nextBillingDate: nextBillAt.toISOString(),
+        wasTrialEnded,
+      });
+
+      console.log(`[admin-servers] Trial converted to paid for server ${serverId} by ${session.email} ($${(monthlyPriceCents / 100).toFixed(2)}/month)`);
+
+      res.json({ success: true, poweredOn: wasTrialEnded });
+    } catch (error: any) {
+      await auditFailure(req, "server.convert-trial", "server", error.message, req.params.serverId);
+      console.log(`[admin-servers] Convert trial error: ${error.message}`);
+      res.status(500).json({ error: "Failed to convert trial" });
+    }
+  });
+
   // End a trial server early
   router.post("/servers/:serverId/end-trial", async (req: Request, res: Response) => {
     try {

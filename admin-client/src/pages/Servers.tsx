@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon, Plus, Download, X, Loader2, Clock } from "lucide-react";
+import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon, Plus, Download, X, Loader2, Clock, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 import { virtfusionApi } from "../lib/api";
 
@@ -12,6 +12,9 @@ export default function Servers() {
   const [showInstallOsModal, setShowInstallOsModal] = useState(false);
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
   const [installResult, setInstallResult] = useState<{ password?: string; osName?: string } | null>(null);
+  const [showConvertTrialModal, setShowConvertTrialModal] = useState(false);
+  const [convertPrice, setConvertPrice] = useState("");
+  const [convertBillingDate, setConvertBillingDate] = useState("");
   const queryClient = useQueryClient();
 
   const { data: servers, isLoading } = useQuery({
@@ -84,6 +87,20 @@ export default function Servers() {
       queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
     },
     onError: (err: any) => toast.error(err.message || "Failed to end trial"),
+  });
+
+  const convertTrialMutation = useMutation({
+    mutationFn: ({ serverId, monthlyPriceCents, nextBillingDate }: { serverId: number; monthlyPriceCents: number; nextBillingDate?: string }) =>
+      serversApi.convertTrial(serverId, monthlyPriceCents, nextBillingDate),
+    onSuccess: (data) => {
+      toast.success(data.poweredOn ? "Trial converted to paid - server has been powered on" : "Trial converted to paid");
+      setShowConvertTrialModal(false);
+      setConvertPrice("");
+      setConvertBillingDate("");
+      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to convert trial"),
   });
 
   // Query for OS templates when modal is open
@@ -549,19 +566,40 @@ export default function Servers() {
                             Suspend
                           </button>
                         )}
-                        {serverDetails.billing?.isTrial && !serverDetails.billing?.trialEndedAt && (
-                          <button
-                            onClick={() => {
-                              if (confirm("Are you sure you want to end this trial? The server will be powered off.")) {
-                                endTrialMutation.mutate(selectedServer.id);
-                              }
-                            }}
-                            disabled={endTrialMutation.isPending}
-                            className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-                          >
-                            <Clock className="h-4 w-4" />
-                            End Trial
-                          </button>
+                        {serverDetails.billing?.isTrial && (
+                          <>
+                            {!serverDetails.billing?.trialEndedAt && (
+                              <button
+                                onClick={() => {
+                                  if (confirm("Are you sure you want to end this trial? The server will be powered off.")) {
+                                    endTrialMutation.mutate(selectedServer.id);
+                                  }
+                                }}
+                                disabled={endTrialMutation.isPending}
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                              >
+                                <Clock className="h-4 w-4" />
+                                End Trial
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                // Default price from plan if available
+                                const defaultPrice = serverDetails.billing?.monthlyPriceCents || 0;
+                                setConvertPrice((defaultPrice / 100).toString());
+                                // Default to 30 days from now
+                                const defaultDate = new Date();
+                                defaultDate.setDate(defaultDate.getDate() + 30);
+                                setConvertBillingDate(defaultDate.toISOString().split('T')[0]);
+                                setShowConvertTrialModal(true);
+                              }}
+                              disabled={convertTrialMutation.isPending}
+                              className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                              Convert to Paid
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => setShowInstallOsModal(true)}
@@ -714,6 +752,105 @@ export default function Servers() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert Trial Modal */}
+      {showConvertTrialModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold">Convert Trial to Paid</h2>
+              <button
+                onClick={() => {
+                  setShowConvertTrialModal(false);
+                  setConvertPrice("");
+                  setConvertBillingDate("");
+                }}
+                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Convert <strong>{selectedServer?.name || `Server ${selectedServer?.id}`}</strong> from a trial to a regular server.
+                {serverDetails?.billing?.trialEndedAt && (
+                  <span className="block mt-1 text-green-500">The server will be powered on after conversion.</span>
+                )}
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Monthly Price ($)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={convertPrice}
+                  onChange={(e) => setConvertPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                />
+                <p className="text-xs text-gray-400 mt-1">Set to 0 for a free server</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  First Billing Date
+                </label>
+                <input
+                  type="date"
+                  value={convertBillingDate}
+                  onChange={(e) => setConvertBillingDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowConvertTrialModal(false);
+                    setConvertPrice("");
+                    setConvertBillingDate("");
+                  }}
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const priceCents = Math.round(parseFloat(convertPrice || "0") * 100);
+                    if (isNaN(priceCents) || priceCents < 0) {
+                      toast.error("Please enter a valid price");
+                      return;
+                    }
+                    convertTrialMutation.mutate({
+                      serverId: selectedServer.id,
+                      monthlyPriceCents: priceCents,
+                      nextBillingDate: convertBillingDate || undefined,
+                    });
+                  }}
+                  disabled={convertTrialMutation.isPending}
+                  className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {convertTrialMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Converting...
+                    </>
+                  ) : (
+                    <>
+                      <DollarSign className="h-4 w-4" />
+                      Convert
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
