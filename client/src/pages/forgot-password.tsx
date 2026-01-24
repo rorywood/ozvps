@@ -3,11 +3,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle, Shield, Zap, Server, RefreshCw, DatabaseIcon } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useSystemHealth } from "@/hooks/use-system-health";
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      render: (container: HTMLElement, options: any) => number;
+      reset: (widgetId: number) => void;
+    };
+  }
+}
 
 export default function ForgotPasswordPage() {
   useDocumentTitle("Forgot Password - OzVPS");
@@ -17,13 +28,103 @@ export default function ForgotPasswordPage() {
 
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
+  const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<number | null>(null);
+
+  // Fetch reCAPTCHA config
+  const { data: recaptchaConfig } = useQuery({
+    queryKey: ['recaptcha-config'],
+    queryFn: async () => {
+      const response = await fetch('/api/security/recaptcha-config', {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) return { enabled: false, siteKey: null, version: 'v3' };
+      return response.json();
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const isValidSiteKey = (key: string | null | undefined): boolean => {
+    if (!key || typeof key !== 'string') return false;
+    return key.startsWith('6L') && key.length > 30;
+  };
+
+  const recaptchaEnabled = recaptchaConfig?.enabled && isValidSiteKey(recaptchaConfig?.siteKey);
+  const isV3 = recaptchaConfig?.version === 'v3';
+
+  // Load reCAPTCHA
+  useEffect(() => {
+    if (!recaptchaConfig?.enabled || !isValidSiteKey(recaptchaConfig?.siteKey)) {
+      setRecaptchaLoaded(false);
+      setRecaptchaToken(null);
+      setRecaptchaError(null);
+      widgetIdRef.current = null;
+      return;
+    }
+
+    let retryTimer: ReturnType<typeof setTimeout>;
+    const version = recaptchaConfig.version || 'v3';
+
+    const tryInitRecaptcha = () => {
+      if (version === 'v3') {
+        if (typeof window.grecaptcha?.execute === 'function') {
+          setRecaptchaLoaded(true);
+          setRecaptchaError(null);
+        }
+      } else {
+        if (recaptchaRef.current && window.grecaptcha?.render) {
+          try {
+            recaptchaRef.current.innerHTML = '';
+            widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
+              sitekey: recaptchaConfig.siteKey!,
+              callback: (token: string) => setRecaptchaToken(token),
+            });
+            setRecaptchaLoaded(true);
+            setRecaptchaError(null);
+          } catch (e: any) {
+            if (e.message?.includes('already been rendered')) {
+              setRecaptchaLoaded(true);
+              setRecaptchaError(null);
+            }
+          }
+        }
+      }
+    };
+
+    const existingScript = document.querySelector('script[src*="recaptcha"]');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = version === 'v3'
+        ? `https://www.google.com/recaptcha/api.js?render=${recaptchaConfig.siteKey}`
+        : 'https://www.google.com/recaptcha/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(tryInitRecaptcha);
+        }
+      };
+      document.head.appendChild(script);
+    } else {
+      if (window.grecaptcha?.ready) {
+        window.grecaptcha.ready(tryInitRecaptcha);
+      }
+    }
+
+    return () => {
+      clearTimeout(retryTimer);
+    };
+  }, [recaptchaEnabled, recaptchaConfig?.siteKey, recaptchaConfig?.version]);
 
   const forgotPasswordMutation = useMutation({
-    mutationFn: async (email: string) => {
+    mutationFn: async ({ email, recaptchaToken }: { email: string; recaptchaToken?: string }) => {
       const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, recaptchaToken }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -34,12 +135,37 @@ export default function ForgotPasswordPage() {
     onSuccess: () => {
       setSubmitted(true);
     },
+    onError: () => {
+      // Reset reCAPTCHA on error
+      setRecaptchaToken(null);
+      if (widgetIdRef.current !== null && window.grecaptcha?.reset) {
+        window.grecaptcha.reset(widgetIdRef.current);
+      }
+    },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
-      forgotPasswordMutation.mutate(email.trim());
+    if (!email.trim()) return;
+
+    if (recaptchaEnabled && recaptchaLoaded) {
+      if (isV3) {
+        try {
+          const token = await window.grecaptcha.execute(recaptchaConfig!.siteKey!, { action: 'forgot_password' });
+          forgotPasswordMutation.mutate({ email: email.trim(), recaptchaToken: token });
+        } catch (err) {
+          console.error('reCAPTCHA v3 execute error:', err);
+          forgotPasswordMutation.mutate({ email: email.trim() });
+        }
+      } else {
+        if (!recaptchaToken) {
+          setRecaptchaError("Please complete the reCAPTCHA verification");
+          return;
+        }
+        forgotPasswordMutation.mutate({ email: email.trim(), recaptchaToken });
+      }
+    } else {
+      forgotPasswordMutation.mutate({ email: email.trim() });
     }
   };
 
@@ -231,6 +357,24 @@ export default function ForgotPasswordPage() {
                     </div>
                   </div>
 
+                  {/* reCAPTCHA v2 Widget */}
+                  {recaptchaEnabled && !recaptchaError && !isV3 && (
+                    <div className="flex flex-col items-center py-2">
+                      <div ref={recaptchaRef} />
+                      {!recaptchaLoaded && (
+                        <div className="text-sm text-[#737373]">Loading verification...</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* reCAPTCHA Error */}
+                  {recaptchaError && (
+                    <div className="flex items-start gap-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                      <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                      <span>{recaptchaError}</span>
+                    </div>
+                  )}
+
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all mt-4"
@@ -245,6 +389,24 @@ export default function ForgotPasswordPage() {
                       "Send reset link"
                     )}
                   </Button>
+
+                  {/* reCAPTCHA Notice */}
+                  {recaptchaEnabled && (
+                    <div className="flex items-center justify-center gap-2 text-xs text-[#737373] mt-4">
+                      <svg className="h-4 w-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      <span>Protected by reCAPTCHA</span>
+                      <span className="text-[#555]">·</span>
+                      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
+                        Privacy
+                      </a>
+                      <span className="text-[#555]">·</span>
+                      <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-[#a6a6a6] hover:text-white transition-colors">
+                        Terms
+                      </a>
+                    </div>
+                  )}
                 </form>
               </>
             )}

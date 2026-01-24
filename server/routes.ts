@@ -1173,7 +1173,7 @@ export async function registerRoutes(
   // Forgot password - request reset link
   app.post('/api/auth/forgot-password', loginRateLimiter, async (req, res) => {
     try {
-      const { email } = req.body;
+      const { email, recaptchaToken } = req.body;
 
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Email is required' });
@@ -1182,6 +1182,25 @@ export async function registerRoutes(
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Check reCAPTCHA if enabled
+      const recaptchaSettings = dbStorage.getRecaptchaSettings();
+      if (recaptchaSettings.enabled && recaptchaSettings.secretKey) {
+        if (!recaptchaToken) {
+          log(`Forgot password blocked - missing reCAPTCHA token for: ${email}`, 'security');
+          return res.status(400).json({ error: 'Please complete the reCAPTCHA verification' });
+        }
+        const verifyResult = await verifyRecaptchaToken(
+          recaptchaToken,
+          recaptchaSettings.secretKey,
+          'forgot_password',
+          recaptchaSettings.minScore
+        );
+        if (!verifyResult.success) {
+          log(`reCAPTCHA verification failed for forgot password: ${verifyResult.error}`, 'security');
+          return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
+        }
       }
 
       // Check if user exists in Auth0
