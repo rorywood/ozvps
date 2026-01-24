@@ -12,6 +12,7 @@ import {
   Activity,
   FileText,
   Shield,
+  ShieldCheck,
   Tag,
   LogOut,
   Menu,
@@ -29,6 +30,7 @@ const navItems = [
   { path: "/tickets", icon: MessageSquare, label: "Tickets" },
   { path: "/health", icon: Activity, label: "Health" },
   { path: "/logs", icon: FileText, label: "Logs" },
+  { path: "/security", icon: ShieldCheck, label: "Security" },
   { path: "/whitelist", icon: Shield, label: "IP Whitelist" },
 ];
 

@@ -476,3 +476,32 @@ export const promoCodesApi = {
       totalUsage: number;
     }>("/promo-codes-stats"),
 };
+
+// reCAPTCHA Settings types
+export interface RecaptchaSettings {
+  enabled: boolean;
+  siteKey: string | null;
+  hasSecretKey: boolean;
+  version: 'v2' | 'v3';
+  minScore: number;
+}
+
+// Security API (reCAPTCHA, etc.)
+export const securityApi = {
+  getRecaptchaSettings: () =>
+    api.get<RecaptchaSettings>("/admin/security/recaptcha"),
+
+  updateRecaptchaSettings: (data: {
+    siteKey: string;
+    secretKey: string;
+    enabled: boolean;
+    version?: 'v2' | 'v3';
+    minScore?: number;
+  }) => api.post<{ success: boolean }>("/admin/security/recaptcha", data),
+
+  testRecaptchaConfig: (siteKey: string, secretKey: string) =>
+    api.post<{ valid: boolean; error?: string }>("/admin/security/recaptcha/test", {
+      siteKey,
+      secretKey,
+    }),
+};
