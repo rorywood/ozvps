@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 interface SystemHealth {
   status: 'ok' | 'error';
-  errorCode?: 'DB_UNAVAILABLE' | 'VF_API_UNAVAILABLE' | 'SYSTEM_ERROR';
+  errorCode?: 'DB_UNAVAILABLE' | 'VF_API_UNAVAILABLE' | 'SYSTEM_ERROR' | 'RATE_LIMITED';
   message?: string;
   services?: {
     database: boolean | null;
@@ -19,6 +19,17 @@ export function useSystemHealth() {
           // Short timeout - if API is down, fail fast
           signal: AbortSignal.timeout(5000),
         });
+
+        // Handle rate limiting - this is NOT a system error, just user hitting limits
+        if (response.status === 429) {
+          return {
+            status: 'error' as const,
+            errorCode: 'RATE_LIMITED' as const,
+            message: 'You have been rate limited. Please wait a moment.',
+            services: { database: true, virtfusion: true } // Services are fine, just rate limited
+          };
+        }
+
         if (!response.ok) {
           // Non-2xx response - parse error if possible
           try {
@@ -62,14 +73,18 @@ export function useSystemHealth() {
     data?.errorCode === 'VF_API_UNAVAILABLE' ||
     data?.services?.virtfusion === false;
 
+  // Rate limited - user hit request limits (not a system problem)
+  const isRateLimited = data?.errorCode === 'RATE_LIMITED';
+
   // System is unavailable if ANY critical service is down
   // This should block login/registration
+  // Note: Rate limiting is NOT a system error - user just needs to wait
   const isSystemDown =
-    data?.status === 'error' ||  // Any error status
+    (data?.status === 'error' && !isRateLimited) ||  // Error status (except rate limit)
     isDatabaseDown ||
     isVirtFusionDown ||
     data?.errorCode === 'SYSTEM_ERROR' ||
-    (error !== null && !isLoading); // Health check failed completely
+    (error !== null && !isLoading && !isRateLimited); // Health check failed completely
 
   return {
     health: data,
@@ -79,6 +94,7 @@ export function useSystemHealth() {
     isHealthy,
     isDatabaseDown,
     isVirtFusionDown,
+    isRateLimited,  // User hit rate limits - not a system problem
     isSystemDown,  // Use this to block login - covers ALL failure scenarios
     errorMessage: data?.message || (error ? 'System is temporarily unavailable' : undefined),
     errorCode: data?.errorCode || (error ? 'SYSTEM_ERROR' : undefined),

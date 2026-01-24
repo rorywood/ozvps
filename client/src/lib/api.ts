@@ -643,12 +643,21 @@ class ApiClient {
       const healthCheck = await fetch('/api/health', {
         signal: AbortSignal.timeout(3000),
       });
+
+      // Check for rate limiting first (429 status)
+      if (healthCheck.status === 429) {
+        throw new Error('You have been rate limited. Please wait a moment before trying again.');
+      }
+
       const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
       // Block if status is not 'ok' OR any errorCode is present
       if (healthData.status !== 'ok' || healthData.errorCode) {
         throw new Error(healthData.message || 'System is temporarily unavailable. Please try again later.');
       }
     } catch (e: any) {
+      if (e.message?.includes('rate limited')) {
+        throw e;
+      }
       if (e.message?.includes('temporarily unavailable') || e.message?.includes('unavailable')) {
         throw e;
       }
@@ -681,12 +690,21 @@ class ApiClient {
       const healthCheck = await fetch('/api/health', {
         signal: AbortSignal.timeout(3000),
       });
+
+      // Check for rate limiting first (429 status)
+      if (healthCheck.status === 429) {
+        throw new Error('You have been rate limited. Please wait a moment before trying again.');
+      }
+
       const healthData = await healthCheck.json().catch(() => ({ status: 'error' }));
       // Block if status is not 'ok' OR any errorCode is present
       if (healthData.status !== 'ok' || healthData.errorCode) {
         throw new Error(healthData.message || 'System is temporarily unavailable. Please try again later.');
       }
     } catch (e: any) {
+      if (e.message?.includes('rate limited')) {
+        throw e;
+      }
       if (e.message?.includes('temporarily unavailable') || e.message?.includes('unavailable')) {
         throw e;
       }
