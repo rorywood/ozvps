@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon, Plus, Download, X, Loader2 } from "lucide-react";
+import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon, Plus, Download, X, Loader2, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { virtfusionApi } from "../lib/api";
 
@@ -424,7 +424,12 @@ export default function Servers() {
                           <div className="flex items-center gap-2 mb-3">
                             <CreditCard className="h-4 w-4 text-gray-400" />
                             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Billing</span>
-                            {serverDetails.billing.freeServer && (
+                            {serverDetails.billing.isTrial ? (
+                              <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Trial Server
+                              </span>
+                            ) : serverDetails.billing.freeServer && (
                               <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-full">
                                 Free Server
                               </span>
@@ -436,9 +441,26 @@ export default function Servers() {
                               <span className="font-medium text-gray-900 dark:text-white capitalize">{serverDetails.billing.status}</span>
                             </div>
                             <div>
-                              <span className="text-gray-500 dark:text-gray-400 block">Monthly</span>
+                              <span className="text-gray-500 dark:text-gray-400 block">
+                                {serverDetails.billing.isTrial ? 'Trial Expires' : 'Monthly'}
+                              </span>
                               <span className="font-medium text-gray-900 dark:text-white">
-                                {serverDetails.billing.freeServer ? (
+                                {serverDetails.billing.isTrial ? (
+                                  serverDetails.billing.trialEndedAt ? (
+                                    <span className="text-red-400">Ended</span>
+                                  ) : serverDetails.billing.trialExpiresAt ? (
+                                    <span className="text-amber-400">
+                                      {new Date(serverDetails.billing.trialExpiresAt).toLocaleDateString('en-AU', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-400">Trial</span>
+                                  )
+                                ) : serverDetails.billing.freeServer ? (
                                   <span className="text-green-400">$0.00 (Free)</span>
                                 ) : (
                                   `$${(serverDetails.billing.monthlyPriceCents / 100).toFixed(2)}`

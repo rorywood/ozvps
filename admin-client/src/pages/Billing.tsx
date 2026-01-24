@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { billingApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2 } from "lucide-react";
+import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock } from "lucide-react";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -202,7 +202,12 @@ export default function Billing() {
                 <span className={`px-2 py-0.5 text-xs rounded ${getStatusColor(selectedRecord.billing.status)}`}>
                   {selectedRecord.billing.status}
                 </span>
-                {selectedRecord.billing.freeServer && (
+                {selectedRecord.billing.isTrial ? (
+                  <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Trial
+                  </span>
+                ) : selectedRecord.billing.freeServer && (
                   <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded">Free</span>
                 )}
                 <button
@@ -317,7 +322,12 @@ export default function Billing() {
                       <span className="font-medium text-gray-900 dark:text-white">
                         {formatCurrency(record.billing.monthlyPriceCents)}
                       </span>
-                      {record.billing.freeServer && (
+                      {record.billing.isTrial ? (
+                        <span className="ml-2 px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Trial
+                        </span>
+                      ) : record.billing.freeServer && (
                         <span className="ml-2 px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full">Free</span>
                       )}
                     </td>
