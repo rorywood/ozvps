@@ -228,11 +228,13 @@ export function useReinstallTask(serverId: string) {
       const stillBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
 
       if (stillBuilding) {
-        // Determine status from phase or default to provisioning
+        // Determine status from raw VirtFusion state (granular) or fall back to phase
         let newStatus: ReinstallStatus = 'provisioning';
-        if (buildStatus.phase) {
-          newStatus = mapVirtFusionStatus(buildStatus.phase);
-        } else if (commissioned === 0) {
+        const rawState = buildStatus.state || buildStatus.phase;
+        if (rawState) {
+          newStatus = mapVirtFusionStatus(rawState);
+        }
+        if (newStatus === 'idle' || commissioned === 0) {
           newStatus = 'queued';
         }
 

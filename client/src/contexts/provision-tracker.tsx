@@ -119,7 +119,8 @@ export function ProvisionTrackerProvider({ children }: { children: ReactNode }) 
             };
           });
         } else {
-          const newStatus = mapPhaseToStatus(buildStatus.phase);
+          // Use raw VirtFusion state for granular phase mapping, fall back to simplified phase
+          const newStatus = mapPhaseToStatus(buildStatus.state || buildStatus.phase);
           const newPercent = STATUS_PERCENT[newStatus];
           updateProvisions(prev => {
             if (!prev[provision.serverId]) return prev;
