@@ -1488,11 +1488,18 @@ export async function registerRoutes(
             return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
           }
 
-          if (tfa.emailOtpCode === emailOtpToken) {
-            tfaValid = true;
-            // Clear the used code
-            await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
-            log(`Email 2FA verified for user: ${email}`, 'security');
+          try {
+            const codeBuffer = Buffer.from(tfa.emailOtpCode, 'utf8');
+            const tokenBuffer = Buffer.from(emailOtpToken, 'utf8');
+            if (codeBuffer.length === tokenBuffer.length &&
+                crypto.timingSafeEqual(codeBuffer, tokenBuffer)) {
+              tfaValid = true;
+              // Clear the used code
+              await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
+              log(`Email 2FA verified for user: ${email}`, 'security');
+            }
+          } catch {
+            // Invalid format, reject
           }
         } else if (tfa.method === 'totp' || totpToken) {
           // TOTP verification
@@ -1971,9 +1978,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid verification link' });
       }
 
-      // Check if already verified
+      // Check if already verified - token is single-use, treat as error
       if (verificationToken.verified) {
-        return res.json({ success: true, message: 'Email is already verified', alreadyVerified: true });
+        return res.status(400).json({ error: 'This verification link has already been used.', alreadyVerified: true });
       }
 
       // Check if expired

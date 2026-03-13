@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 
 // Standalone component for token verification - NO AUTH REQUIRED
 function TokenVerification({ token }: { token: string }) {
-  const [verifyState, setVerifyState] = useState<'verifying' | 'success' | 'error'>('verifying');
+  const [verifyState, setVerifyState] = useState<'verifying' | 'success' | 'error' | 'already-used'>('verifying');
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const verificationStarted = useRef(false);
 
@@ -24,6 +24,8 @@ function TokenVerification({ token }: { token: string }) {
           const data = await res.json();
           if (res.ok) {
             setVerifyState('success');
+          } else if (data.alreadyVerified) {
+            setVerifyState('already-used');
           } else {
             setVerifyState('error');
             setVerifyError(data.error || 'Failed to verify email');
@@ -89,6 +91,24 @@ function TokenVerification({ token }: { token: string }) {
                     </p>
                   </div>
                 </>
+              ) : verifyState === 'already-used' ? (
+                <>
+                  <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground mb-3">
+                    Already Verified
+                  </h2>
+                  <p className="text-muted-foreground mb-6">
+                    This verification link has already been used. Your email is verified.
+                  </p>
+                  <a
+                    href="/login"
+                    className="inline-flex items-center justify-center w-full h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    Go to Login
+                  </a>
+                </>
               ) : (
                 <>
                   <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -97,12 +117,15 @@ function TokenVerification({ token }: { token: string }) {
                   <h2 className="text-xl font-semibold text-foreground mb-3">
                     Verification Failed
                   </h2>
-                  <p className="text-muted-foreground mb-6">
+                  <p className="text-muted-foreground mb-4">
                     {verifyError || 'The verification link is invalid or has expired.'}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Please sign in and request a new verification email.
-                  </p>
+                  <a
+                    href="/verify-email"
+                    className="inline-flex items-center justify-center w-full h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    Request a new verification email
+                  </a>
                 </>
               )}
             </div>
