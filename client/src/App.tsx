@@ -32,6 +32,8 @@ import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
 import { useSystemHealth } from "@/hooks/use-system-health";
+import { ProvisionTrackerProvider } from "@/contexts/provision-tracker";
+
 
 // Public routes that handle their own DB error UI or don't require auth
 const PUBLIC_AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing', '/verify-email', '/support/guest'];
@@ -245,6 +247,7 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark">
       <QueryClientProvider client={queryClient}>
+        <ProvisionTrackerProvider>
         <PowerActionProvider>
           <TooltipProvider>
             <DevBanner />
@@ -257,6 +260,7 @@ function App() {
             </SystemHealthCheck>
           </TooltipProvider>
         </PowerActionProvider>
+        </ProvisionTrackerProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

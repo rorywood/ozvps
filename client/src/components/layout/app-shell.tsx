@@ -1,4 +1,5 @@
 import { TopNav } from "./top-nav";
+import { ProvisionProgressWidget } from "@/components/provision-progress-widget";
 import { Link } from "wouter";
 import { VERSION, FEATURES, VERSION_HISTORY } from "@/lib/version";
 import { useState, useEffect } from "react";
@@ -56,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
       <Footer />
+      <ProvisionProgressWidget />
     </div>
   );
 }

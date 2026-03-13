@@ -24,6 +24,7 @@ import {
   X
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useProvisionTracker } from "@/contexts/provision-tracker";
 import { getOsLogoUrl, FALLBACK_LOGO } from "@/lib/os-logos";
 import { cn } from "@/lib/utils";
 import flagAU from "@/assets/flag-au.png";
@@ -90,6 +91,7 @@ export default function DeployPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { startProvision } = useProvisionTracker();
 
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [selectedLocationCode, setSelectedLocationCode] = useState<string>("");
@@ -213,17 +215,13 @@ export default function DeployPage() {
   const deployMutation = useMutation({
     mutationFn: (data: { planId: number; osId: number; hostname: string; locationCode: string; promoCode?: string }) =>
       api.deployServer(data),
-    onSuccess: (data: { orderId: number; serverId: number }) => {
+    onSuccess: (data: { orderId: number; serverId: number }, variables) => {
       toast({
         title: "Server deployed!",
         description: "Your new VPS is being provisioned.",
       });
-      // Set setupMode flag so server-detail page shows provisioning view
-      try {
-        sessionStorage.setItem(`setupMode:${data.serverId}`, 'true');
-      } catch {
-        // Ignore storage errors
-      }
+      // Start global provision tracker so progress persists across navigation
+      startProvision(data.serverId, variables.hostname);
       queryClient.invalidateQueries({ queryKey: ['wallet'] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });

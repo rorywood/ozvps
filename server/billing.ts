@@ -105,17 +105,7 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
   const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
 
   return await db.transaction(async (tx) => {
-    // Check if already charged
-    const existing = await tx.select().from(billingLedger)
-      .where(eq(billingLedger.idempotencyKey, idempotencyKey))
-      .limit(1);
-
-    if (existing.length > 0) {
-      log(`Server ${billing.virtfusionServerId} already charged for ${billing.nextBillAt.toISOString()}`, 'billing');
-      return true; // Already charged
-    }
-
-    // Lock wallet row and check balance
+    // Lock wallet row FIRST to prevent concurrent charges
     const walletRows = await tx.select().from(wallets)
       .where(eq(wallets.auth0UserId, billing.auth0UserId))
       .for('update')
@@ -124,6 +114,16 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     if (walletRows.length === 0) {
       log(`No wallet found for user ${billing.auth0UserId}`, 'billing');
       return false;
+    }
+
+    // Check idempotency AFTER acquiring wallet lock to prevent duplicate charges
+    const existing = await tx.select().from(billingLedger)
+      .where(eq(billingLedger.idempotencyKey, idempotencyKey))
+      .limit(1);
+
+    if (existing.length > 0) {
+      log(`Server ${billing.virtfusionServerId} already charged for ${billing.nextBillAt.toISOString()}`, 'billing');
+      return true; // Already charged
     }
 
     const wallet = walletRows[0];
@@ -537,12 +537,15 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
             },
           });
 
-          // Revert billing status AND nextBillAt to prevent double-charging
-          // Use original nextBillAt so idempotency key matches if retried
+          // Remove the ledger entry so future retries can charge again
+          const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
+          await db.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+
+          // Revert billing status to suspended - keep the updated nextBillAt (future date)
+          // so the next retry uses a fresh idempotency key
           await db.update(serverBilling)
             .set({
               status: 'suspended',
-              nextBillAt: billing.nextBillAt, // Revert to original to preserve idempotency
               updatedAt: new Date(),
             })
             .where(eq(serverBilling.id, billing.id));
