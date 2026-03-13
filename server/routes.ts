@@ -387,9 +387,10 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
-  // Skip CSRF for login/register (no session yet)
+  // Skip CSRF for login/register/logout (no session yet, or low-risk)
   if (req.originalUrl === '/api/auth/login' ||
       req.originalUrl === '/api/auth/register' ||
+      req.originalUrl === '/api/auth/logout' ||
       req.originalUrl === '/api/auth/force-logout') {
     return next();
   }
