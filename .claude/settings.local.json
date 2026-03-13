@@ -102,7 +102,10 @@
       "WebSearch",
       "Bash(git revert:*)",
       "Bash(git rebase:*)",
-      "Bash(git grep:*)"
+      "Bash(git grep:*)",
+      "Bash(sshpass:*)",
+      "Bash(where:*)",
+      "Bash(\"C:\\\\Program Files\\\\PuTTY\\\\plink.exe\":*)"
     ]
   }
 }

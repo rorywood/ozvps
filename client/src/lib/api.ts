@@ -269,7 +269,7 @@ class ApiClient {
   async getDashboardOverview(): Promise<{
     servers: Server[];
     cancellations: Record<string, { scheduledDeletionAt: string; reason: string | null; mode: string; status: string }>;
-    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null }>;
+    billingStatuses: Record<string, { status: string; nextBillAt?: string; suspendAt?: string | null; monthlyPriceCents?: number; freeServer?: boolean; adminSuspended?: boolean; adminSuspendedReason?: string | null; planName?: string | null }>;
     bandwidth: { totalBandwidth: number; totalLimit: number; serverCount: number };
   }> {
     const response = await secureFetch(`${this.baseUrl}/dashboard/overview`);

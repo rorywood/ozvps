@@ -9,16 +9,6 @@ import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useSystemHealth } from "@/hooks/use-system-health";
 
-declare global {
-  interface Window {
-    grecaptcha: {
-      ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
-      render: (container: HTMLElement, options: any) => number;
-      reset: (widgetId: number) => void;
-    };
-  }
-}
 
 export default function ForgotPasswordPage() {
   useDocumentTitle("Forgot Password - OzVPS");
@@ -81,6 +71,7 @@ export default function ForgotPasswordPage() {
             widgetIdRef.current = window.grecaptcha.render(recaptchaRef.current, {
               sitekey: recaptchaConfig.siteKey!,
               callback: (token: string) => setRecaptchaToken(token),
+              theme: 'dark',
             });
             setRecaptchaLoaded(true);
             setRecaptchaError(null);

@@ -1214,7 +1214,7 @@ export async function registerRoutes(
           'forgot_password',
           recaptchaSettings.minScore
         );
-        if (!verifyResult.success) {
+        if (!verifyResult.valid) {
           log(`reCAPTCHA verification failed for forgot password: ${verifyResult.error}`, 'security');
           return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
