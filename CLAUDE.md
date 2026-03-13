@@ -117,13 +117,49 @@
 - `admin-server/middleware/csrf.ts` - CSRF protection with token rotation
 - `admin-server/routes/security.ts` - Admin reCAPTCHA configuration endpoints
 - `client/src/hooks/use-system-health.ts` - System health check hook (isSystemDown, isRateLimited flags)
+- `client/src/hooks/use-reinstall-task.ts` - Per-page build status polling hook (server-detail checklist)
+- `client/src/components/setup-progress-checklist.tsx` - Provisioning checklist UI component
 - `client/public/novnc/` - Native noVNC v1.5.0 files with OzVPS branding
 - `shared/schema.ts` - Database schema (tickets support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
+- `admin-client/src/pages/Deletions.tsx` - Admin page for approving/recovering server deletion requests
 
-## Recent Session Work (2026-03-13)
+## Recent Session Work (2026-03-13 - Session 2)
 
 ### Completed This Session
+1. **Transaction Labels Improved** - Admin wallet adjustments now show meaningful titles:
+   - `adjustment_credit`/`adjustment_debit` types now show the admin's typed description as the title
+   - Sub-line shows "Note: [reason] · By: [admin email]" instead of nothing
+   - Admin Users panel: same rich display with server name, reason, adjustedBy fields
+   - Admin wallet adjust endpoint: fixed to use atomic SQL (`balanceCents + amount`) instead of read-then-write race condition
+   - Files: `client/src/pages/billing.tsx`, `admin-client/src/pages/Users.tsx`, `admin-server/routes/users.ts`
+
+2. **Provision Widget Auto-Dismiss Fixed** - Widget now actually disappears after 30 seconds:
+   - Was using a `useEffect` dependent on provisions state changing — but polling stops when complete so state never changed again
+   - Fixed with a dedicated 5-second `setInterval` that always checks for stale completed provisions
+   - File: `client/src/contexts/provision-tracker.tsx`
+
+3. **Server-Detail Checklist Auto-Dismiss** - No longer requires clicking "Continue to Server":
+   - Added 20-second auto-dismiss when `reinstallTask.status === 'complete'`
+   - Automatically clears sessionStorage flags and invalidates queries
+   - File: `client/src/pages/server-detail.tsx`
+
+4. **Admin Deletion Approval Workflow** - Server deletions now require admin approval:
+   - User requests deletion → status `pending_approval` (NOT processed by cancellation processor)
+   - Server-detail shows orange "Pending Admin Review" card with support ticket link
+   - New admin panel **Deletions** page lists all pending requests
+   - Admin can **Approve** (schedules deletion 1 hour from now → status `pending`) or **Recover** (revokes → server stays alive)
+   - Files: `server/routes.ts`, `server/storage.ts`, `admin-server/routes/servers.ts`, `admin-client/src/pages/Deletions.tsx`, `client/src/pages/server-detail.tsx`
+   - `serverCancellations.status` values: `pending_approval` → `pending` → `processing` → `completed` (or `revoked`)
+
+5. **Provisioning Checklist Progress Fixed** - Checklist steps now actually progress:
+   - Root cause: `getServerBuildStatus` returns simplified `phase` ('queued'|'building'|'complete'|'error') AND raw `state` from VirtFusion ('provisioning', 'installing', etc.)
+   - Both `use-reinstall-task.ts` and `provision-tracker.tsx` were mapping `phase` — 'building' never matched any step keyword so progress was stuck
+   - Fix: now uses `state || phase` so VirtFusion's actual states drive the checklist steps
+   - Steps: queued → provisioning → imaging → installing → configuring → complete
+   - Files: `client/src/hooks/use-reinstall-task.ts`, `client/src/contexts/provision-tracker.tsx`
+
+### Previous Session (2026-03-13 - Session 1)
 1. **Email OTP Timing-Safe Comparison** - Fixed timing attack vulnerability:
    - OTP comparison now uses `crypto.timingSafeEqual()` with Buffer comparison
    - Only compares when buffer lengths match (prevents length oracle attacks)
@@ -180,37 +216,19 @@
      - Previously: ledger entry remained, future retries hit idempotency and passed
        without charging, then refunded again → free money bug
 
-### Previous Session (2026-01-24)
-1. **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0
-2. **Rate Limiting UX Fix** - `isRateLimited` flag separate from `isSystemDown`
-3. **reCAPTCHA Admin Configuration** - Admin panel page for configuring keys
-4. **reCAPTCHA Visibility** - Green shield icon on login/register/forgot-password
-5. **Security Audit Fixes**:
-   - **CRITICAL**: Replaced `Math.random()` with `crypto.randomInt()` for 2FA/OTP codes
-   - **MEDIUM**: Server-side name ban for "darius" (was client-side only)
-
-### Previous Session (2026-01-24 - Earlier)
-1. **Trial Servers Feature** - Full implementation of time-limited trial servers:
-   - Database: Added `is_trial`, `trial_expires_at`, `trial_ended_at` columns to `server_billing`
-   - Migration: `0013_add_trial_servers.sql`
-   - Admin provision: Accept `isTrial` and `trialDuration` (24h or 7d) parameters
-   - Trial processor: `server/trial-processor.ts` - ends expired trials, deletes after 7 days
-   - Client UI: TRIAL and TRIAL ENDED badges on server cards
-
-### Previous Session (2026-01-23 - Session 2)
-1. **Login button success state** - Button turns green with "Login Successful" instead of toast
-2. **Admin 2FA bypass** - `ADMIN_BYPASS_2FA=true` env var for recovery
-3. **Email verification complete overhaul** - Must verify before dashboard, works cross-device
-
-### Previous Session (2026-01-23)
-1. **System Health Check** - Block login when VirtFusion API or DB is down
-2. **Security Audit** - Path traversal, X-Forwarded-For spoofing, error disclosure, input validation, CSRF rotation
-
-### Previous Session (2026-01-22)
-1. **Billing bug fixes** - Promo refund mismatch (FREE MONEY BUG), race conditions, unsuspend refund
-2. **Promotional codes feature** - Fully implemented
-3. **Email support system** - Inbound webhook, guest tickets, email threading
-4. **Profile picture upload** - Base64 upload to account settings
+### Previous Sessions (condensed)
+- **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0
+- **Rate Limiting UX** - `isRateLimited` flag separate from `isSystemDown`
+- **reCAPTCHA** - Admin config page + visible shield icon on auth forms
+- **Security fixes** - `crypto.randomInt()` for OTP, server-side name bans, path traversal, X-Forwarded-For spoofing, error disclosure
+- **Trial Servers** - Full implementation: DB columns, admin provision UI, trial processor, TRIAL/TRIAL ENDED badges
+- **Email verification overhaul** - Single-use tokens, must verify before dashboard, works cross-device
+- **Admin 2FA bypass** - `ADMIN_BYPASS_2FA=true` env var for emergency recovery
+- **System Health Check** - Blocks login when VirtFusion API or DB is down
+- **Billing bug fixes** - Promo refund mismatch (FREE MONEY BUG), race conditions, unsuspend refund
+- **Promotional codes** - Fully implemented
+- **Email support system** - Inbound webhook at `/api/hooks/resend-inbound`, guest tickets, email threading
+- **Profile picture upload** - Base64 upload in account settings
 
 ## Billing System Architecture
 **chargeServer() flow (server/billing.ts):**
@@ -258,6 +276,32 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 - `confirm-dialog.tsx` - Reusable ConfirmDialog (replaces all native `confirm()`)
 - `prompt-dialog.tsx` - Reusable PromptDialog (replaces all native `prompt()`)
 
+## Provisioning Architecture
+**Two separate polling systems** — both use `api.getBuildStatus(serverId)`:
+
+1. **Global `ProvisionTrackerContext`** (`client/src/contexts/provision-tracker.tsx`):
+   - Persists in `localStorage` key `ozvps:activeProvisions`
+   - Polls every 3 seconds for all active provisions across any page
+   - Shows floating bottom-right widget (`provision-progress-widget.tsx`)
+   - `startProvision()` called from `deploy.tsx` after successful deploy
+   - Auto-dismisses completed provisions after 30 seconds (5s interval check)
+
+2. **Per-page `useReinstallTask`** (`client/src/hooks/use-reinstall-task.ts`):
+   - Used by `server-detail.tsx` for full-page checklist UI
+   - Persists in `sessionStorage` (per-tab, not cross-tab)
+   - Polls at 2s for first 30s, then 5s
+   - Auto-dismisses 20s after `status === 'complete'`
+
+**VirtFusion build status fields** (`getServerBuildStatus`):
+- `commissionStatus`: 0=queued, 1=building, 2=paused, 3=complete (authoritative)
+- `state`: raw VirtFusion state ('queued', 'provisioning', 'installing', 'running', etc.)
+- `phase`: simplified ('queued'|'building'|'complete'|'error') — DO NOT use for step mapping
+- **Always map using `state || phase`** — `state` has the granular VirtFusion values
+
+**Server deletion status flow:**
+`pending_approval` (awaiting admin) → `pending` (approved, waiting scheduledAt) → `processing` (VirtFusion deleting) → `completed`
+Or: `pending_approval` → `revoked` (admin recovered it)
+
 ## Email System
 - **Inbound**: MX record → `inbound-smtp.ap-northeast-1.amazonaws.com` (priority 10)
 - **Webhook**: `https://app.ozvps.com.au/api/hooks/resend-inbound`
@@ -295,6 +339,11 @@ git push origin main
 ## TODO / Known Issues
 - [ ] Security features - implement lockout logic and audit logging (tables exist in DB, logic pending)
 - [ ] Disk usage - VirtFusion returns disk image size, not actual filesystem usage (need to investigate different field)
+- [x] Transaction labels - DONE (adjustment_credit/debit show admin description, By: admin email)
+- [x] Provision widget auto-dismiss - DONE (interval-based, fires even after polling stops)
+- [x] Server checklist auto-dismiss - DONE (20s after complete, no button click required)
+- [x] Admin deletion approval - DONE (pending_approval → admin approves/recovers → Deletions page)
+- [x] Provisioning checklist stuck at queued - DONE (use state || phase, not just phase)
 - [x] Admin panel redesign - DONE (dark theme, no native dialogs, OzVPS branding)
 - [x] Admin Center link fix - DONE (was pointing to /admin, now https://admin.ozvps.com.au)
 - [x] Global provision tracker - DONE (localStorage persistence, polls across all pages)
