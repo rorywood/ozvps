@@ -35,7 +35,7 @@ export default function Security() {
     onSuccess: () => {
       toast.success("reCAPTCHA settings saved successfully");
       setHasChanges(false);
-      setSecretKey(""); // Clear secret key after save
+      setSecretKey("");
       queryClient.invalidateQueries({ queryKey: ["recaptcha-settings"] });
     },
     onError: (err: any) => toast.error(err.message),
@@ -67,17 +67,17 @@ export default function Security() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Security Settings</h1>
+      <h1 className="text-2xl font-bold text-white mb-6">Security Settings</h1>
 
       {/* reCAPTCHA Section */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-6">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Shield className="h-6 w-6 text-blue-400" />
+          <div className="p-2 bg-[hsl(210_100%_50%)/15] rounded-lg">
+            <Shield className="h-6 w-6 text-[hsl(210_100%_70%)]" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">reCAPTCHA Protection</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <h2 className="text-base font-semibold text-white">reCAPTCHA Protection</h2>
+            <p className="text-sm text-white/50">
               Protect login and registration forms from bots
             </p>
           </div>
@@ -87,26 +87,26 @@ export default function Security() {
         {!isLoading && (
           <div className={`mb-6 p-4 rounded-lg border ${
             settings?.enabled
-              ? "bg-green-500/10 border-green-500/30"
-              : "bg-yellow-500/10 border-yellow-500/30"
+              ? "bg-[hsl(160_84%_39%)/10] border-[hsl(160_84%_39%)/30]"
+              : "bg-[hsl(14_100%_60%)/10] border-[hsl(14_100%_60%)/30]"
           }`}>
             <div className="flex items-center gap-3">
               {settings?.enabled ? (
                 <>
-                  <Check className="h-5 w-5 text-green-400" />
+                  <Check className="h-5 w-5 text-[hsl(160_84%_60%)]" />
                   <div>
-                    <p className="font-medium text-green-400">reCAPTCHA is Active</p>
-                    <p className="text-sm text-green-400/80">
+                    <p className="font-medium text-[hsl(160_84%_60%)]">reCAPTCHA is Active</p>
+                    <p className="text-sm text-[hsl(160_84%_60%)/70]">
                       Login and registration forms are protected ({settings.version.toUpperCase()})
                     </p>
                   </div>
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                  <AlertTriangle className="h-5 w-5 text-[hsl(14_100%_70%)]" />
                   <div>
-                    <p className="font-medium text-yellow-400">reCAPTCHA is Disabled</p>
-                    <p className="text-sm text-yellow-400/80">
+                    <p className="font-medium text-[hsl(14_100%_70%)]">reCAPTCHA is Disabled</p>
+                    <p className="text-sm text-[hsl(14_100%_70%)/70]">
                       Your forms are not protected from automated attacks
                     </p>
                   </div>
@@ -118,15 +118,15 @@ export default function Security() {
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[hsl(210_100%_50%)]"></div>
           </div>
         ) : (
           <div className="space-y-6">
             {/* Enable Toggle */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
               <div>
-                <label className="font-medium text-gray-900 dark:text-white">Enable reCAPTCHA</label>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <label className="font-medium text-white text-sm">Enable reCAPTCHA</label>
+                <p className="text-xs text-white/50 mt-0.5">
                   Require reCAPTCHA verification on login and registration
                 </p>
               </div>
@@ -136,7 +136,7 @@ export default function Security() {
                   handleChange();
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  enabled ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+                  enabled ? "bg-[hsl(210_100%_50%)]" : "bg-white/20"
                 }`}
               >
                 <span
@@ -149,7 +149,7 @@ export default function Security() {
 
             {/* Version Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-white/60 mb-2">
                 reCAPTCHA Version
               </label>
               <div className="grid grid-cols-2 gap-4">
@@ -161,13 +161,13 @@ export default function Security() {
                   }}
                   className={`p-4 rounded-lg border-2 text-left transition-colors ${
                     version === 'v3'
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                      ? "border-[hsl(210_100%_50%)] bg-[hsl(210_100%_50%)/10]"
+                      : "border-white/10 hover:border-white/20 bg-white/5"
                   }`}
                 >
-                  <p className="font-medium text-gray-900 dark:text-white">v3 (Recommended)</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Invisible - scores user behavior without interaction
+                  <p className="font-medium text-white text-sm">v3 (Recommended)</p>
+                  <p className="text-xs text-white/50 mt-1">
+                    Invisible — scores user behavior without interaction
                   </p>
                 </button>
                 <button
@@ -178,12 +178,12 @@ export default function Security() {
                   }}
                   className={`p-4 rounded-lg border-2 text-left transition-colors ${
                     version === 'v2'
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                      ? "border-[hsl(210_100%_50%)] bg-[hsl(210_100%_50%)/10]"
+                      : "border-white/10 hover:border-white/20 bg-white/5"
                   }`}
                 >
-                  <p className="font-medium text-gray-900 dark:text-white">v2 Checkbox</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="font-medium text-white text-sm">v2 Checkbox</p>
+                  <p className="text-xs text-white/50 mt-1">
                     "I'm not a robot" checkbox verification
                   </p>
                 </button>
@@ -193,11 +193,11 @@ export default function Security() {
             {/* API Keys */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-white/60 mb-1">
                   Site Key (Public)
                 </label>
                 <div className="relative">
-                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                   <input
                     type="text"
                     value={siteKey}
@@ -206,19 +206,19 @@ export default function Security() {
                       handleChange();
                     }}
                     placeholder="6Lxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="w-full pl-10 pr-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                    className="w-full pl-10 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none font-mono text-sm placeholder-white/30"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-white/60 mb-1">
                   Secret Key (Private)
                   {settings?.hasSecretKey && !secretKey && (
-                    <span className="ml-2 text-green-500 text-xs">(configured)</span>
+                    <span className="ml-2 text-[hsl(160_84%_60%)] text-xs">(configured)</span>
                   )}
                 </label>
                 <div className="relative">
-                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                   <input
                     type="password"
                     value={secretKey}
@@ -227,7 +227,7 @@ export default function Security() {
                       handleChange();
                     }}
                     placeholder={settings?.hasSecretKey ? "••••••••••••••••••••" : "6Lxxxxxxxxxxxxxxxxxxxxxxxxx"}
-                    className="w-full pl-10 pr-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                    className="w-full pl-10 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none font-mono text-sm placeholder-white/30"
                   />
                 </div>
               </div>
@@ -235,12 +235,12 @@ export default function Security() {
 
             {/* Get Keys Link */}
             <div className="flex items-center gap-2 text-sm">
-              <ExternalLink className="h-4 w-4 text-gray-400" />
+              <ExternalLink className="h-4 w-4 text-white/40" />
               <a
                 href="https://www.google.com/recaptcha/admin"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-600"
+                className="text-[hsl(210_100%_60%)] hover:text-[hsl(210_100%_70%)] transition-colors"
               >
                 Get reCAPTCHA keys from Google
               </a>
@@ -248,21 +248,21 @@ export default function Security() {
 
             {/* Test Result */}
             {testResult && (
-              <div className={`p-4 rounded-lg ${
+              <div className={`p-4 rounded-lg border ${
                 testResult.valid
-                  ? "bg-green-500/10 border border-green-500/30"
-                  : "bg-red-500/10 border border-red-500/30"
+                  ? "bg-[hsl(160_84%_39%)/10] border-[hsl(160_84%_39%)/30]"
+                  : "bg-[hsl(0_84%_60%)/10] border-[hsl(0_84%_60%)/30]"
               }`}>
                 <div className="flex items-center gap-2">
                   {testResult.valid ? (
                     <>
-                      <Check className="h-5 w-5 text-green-400" />
-                      <span className="text-green-400 font-medium">Configuration is valid</span>
+                      <Check className="h-5 w-5 text-[hsl(160_84%_60%)]" />
+                      <span className="text-[hsl(160_84%_60%)] font-medium">Configuration is valid</span>
                     </>
                   ) : (
                     <>
-                      <X className="h-5 w-5 text-red-400" />
-                      <span className="text-red-400 font-medium">
+                      <X className="h-5 w-5 text-[hsl(0_84%_70%)]" />
+                      <span className="text-[hsl(0_84%_70%)] font-medium">
                         {testResult.error || "Invalid configuration"}
                       </span>
                     </>
@@ -272,11 +272,11 @@ export default function Security() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3 pt-4 border-t border-white/8">
               <button
                 onClick={() => testMutation.mutate()}
                 disabled={!canTest || testMutation.isPending}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                className="px-4 py-2 bg-white/5 border border-white/10 text-white/70 rounded-lg hover:bg-white/10 hover:text-white disabled:opacity-50 flex items-center gap-2 transition-colors text-sm"
               >
                 <TestTube className="h-4 w-4" />
                 {testMutation.isPending ? "Testing..." : "Test Configuration"}
@@ -284,13 +284,13 @@ export default function Security() {
               <button
                 onClick={() => saveMutation.mutate()}
                 disabled={!canSave || saveMutation.isPending || !hasChanges}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                className="px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] disabled:opacity-50 flex items-center gap-2 transition-colors text-sm"
               >
                 <Save className="h-4 w-4" />
                 {saveMutation.isPending ? "Saving..." : "Save Settings"}
               </button>
               {hasChanges && (
-                <span className="text-sm text-yellow-500">Unsaved changes</span>
+                <span className="text-sm text-[hsl(14_100%_70%)]">Unsaved changes</span>
               )}
             </div>
           </div>
@@ -298,18 +298,18 @@ export default function Security() {
       </div>
 
       {/* Info Section */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">About reCAPTCHA</h3>
-        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+        <h3 className="font-semibold text-white mb-4">About reCAPTCHA</h3>
+        <div className="space-y-3 text-sm text-white/50">
           <p>
-            <strong>v3 (Recommended):</strong> Runs invisibly in the background and assigns a score (0.0-1.0)
+            <span className="text-white/70 font-medium">v3 (Recommended):</span> Runs invisibly in the background and assigns a score (0.0–1.0)
             based on user behavior. No user interaction required. Best for user experience.
           </p>
           <p>
-            <strong>v2 Checkbox:</strong> Shows a "I'm not a robot" checkbox. May present image challenges
+            <span className="text-white/70 font-medium">v2 Checkbox:</span> Shows a "I'm not a robot" checkbox. May present image challenges
             if suspicious activity is detected. More intrusive but familiar to users.
           </p>
-          <p className="pt-2 border-t border-gray-200 dark:border-gray-700">
+          <p className="pt-3 border-t border-white/8">
             reCAPTCHA protects your login and registration forms from automated attacks, credential stuffing,
             and bot registrations.
           </p>

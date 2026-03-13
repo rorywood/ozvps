@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Server, Search, Power, Play, Square, RefreshCw, Trash2, AlertTriangle, Globe, User, CreditCard, HardDrive, Cpu, MemoryStick, HardDriveIcon, Plus, Download, X, Loader2, Clock, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 import { virtfusionApi } from "../lib/api";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { PromptDialog } from "../components/ui/prompt-dialog";
 
 export default function Servers() {
   const [search, setSearch] = useState("");
@@ -15,6 +17,12 @@ export default function Servers() {
   const [showConvertTrialModal, setShowConvertTrialModal] = useState(false);
   const [convertPrice, setConvertPrice] = useState("");
   const [convertBillingDate, setConvertBillingDate] = useState("");
+
+  // Dialog states replacing native dialogs
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false);
+  const [showEndTrialDialog, setShowEndTrialDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   const queryClient = useQueryClient();
 
   const { data: servers, isLoading } = useQuery({
@@ -32,7 +40,7 @@ export default function Servers() {
     queryKey: ["server-stats", selectedServer?.id],
     queryFn: () => serversApi.getStats(selectedServer.id),
     enabled: !!selectedServer?.id && serverDetails?.server?.status === "running",
-    refetchInterval: 15000, // Refresh stats every 15 seconds
+    refetchInterval: 15000,
   });
 
   const powerMutation = useMutation({
@@ -40,7 +48,6 @@ export default function Servers() {
       serversApi.powerAction(serverId, action),
     onSuccess: () => {
       toast.success("Power action sent - status will update shortly");
-      // Delay refetch to allow VirtFusion to process the action
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["servers"] });
         queryClient.invalidateQueries({ queryKey: ["server", selectedServer?.id] });
@@ -103,16 +110,11 @@ export default function Servers() {
     onError: (err: any) => toast.error(err.message || "Failed to convert trial"),
   });
 
-  // Query for OS templates when modal is open
   const { data: osTemplatesData, isLoading: loadingTemplates } = useQuery({
     queryKey: ["os-templates", serverDetails?.billing?.planId],
     queryFn: async () => {
-      // Get the VirtFusion package ID from the plan
       if (!serverDetails?.billing?.planId) return { templates: [] };
-      // We need to get packages to find the virtfusionPackageId
       const packages = await virtfusionApi.getPackages();
-      // For now, get all templates from all packages (simplified)
-      // In production, you'd want to get the specific package's templates
       const allTemplates: any[] = [];
       for (const pkg of packages.packages || []) {
         try {
@@ -122,7 +124,6 @@ export default function Servers() {
           // Ignore errors for packages without templates
         }
       }
-      // Deduplicate by ID
       const uniqueTemplates = Array.from(new Map(allTemplates.map(t => [t.id, t])).values());
       return { templates: uniqueTemplates };
     },
@@ -154,31 +155,31 @@ export default function Servers() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      running: "bg-green-500/20 text-green-400 border border-green-500/30",
-      stopped: "bg-gray-500/20 text-gray-400 border border-gray-500/30",
-      suspended: "bg-red-500/20 text-red-400 border border-red-500/30",
-      installing: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
+      running: "bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30]",
+      stopped: "bg-white/10 text-white/60 border border-white/10",
+      suspended: "bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30]",
+      installing: "bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30]",
     };
-    return colors[status] || "bg-gray-500/20 text-gray-400 border border-gray-500/30";
+    return colors[status] || "bg-white/10 text-white/60 border border-white/10";
   };
 
   const getStatusDot = (status: string) => {
     const colors: Record<string, string> = {
-      running: "bg-green-400",
-      stopped: "bg-gray-400",
-      suspended: "bg-red-400",
-      installing: "bg-yellow-400",
+      running: "bg-[hsl(160_84%_50%)]",
+      stopped: "bg-white/40",
+      suspended: "bg-[hsl(0_84%_60%)]",
+      installing: "bg-[hsl(14_100%_60%)]",
     };
-    return colors[status] || "bg-gray-400";
+    return colors[status] || "bg-white/40";
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Servers</h1>
+        <h1 className="text-2xl font-bold text-white">Servers</h1>
         <Link
           to="/servers/provision"
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors"
         >
           <Plus className="h-5 w-5" />
           Provision Server
@@ -188,41 +189,41 @@ export default function Servers() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Server List */}
         <div className="lg:col-span-1">
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4">
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
             <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
               <input
                 type="text"
                 placeholder="Search servers..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500/40 outline-none text-gray-900 dark:text-white placeholder-gray-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none text-white placeholder-white/30 transition-colors"
               />
             </div>
 
             {isLoading ? (
               <div className="flex justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                <RefreshCw className="h-6 w-6 animate-spin text-white/40" />
               </div>
             ) : (
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
                 {servers?.servers?.map((server: any) => (
                   <button
                     key={server.id}
                     onClick={() => setSelectedServer(server)}
                     className={`w-full text-left p-3 rounded-lg transition-all ${
                       selectedServer?.id === server.id
-                        ? "bg-blue-500/10 border border-blue-500/30 dark:bg-blue-500/20"
-                        : "bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 border border-transparent"
+                        ? "bg-[hsl(210_100%_50%)/10] border border-[hsl(210_100%_50%)/30]"
+                        : "bg-white/3 hover:bg-white/5 border border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${getStatusDot(server.status)}`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDot(server.status)}`} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white truncate">
+                        <p className="font-medium text-white truncate">
                           {server.name || `Server ${server.id}`}
                         </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                        <p className="text-sm text-white/50 font-mono">
                           {server.primaryIp}
                         </p>
                       </div>
@@ -230,13 +231,13 @@ export default function Servers() {
                   </button>
                 ))}
                 {servers?.servers?.length === 0 && (
-                  <p className="text-center text-gray-500 dark:text-gray-400 py-8">No servers found</p>
+                  <p className="text-center text-white/40 py-8">No servers found</p>
                 )}
               </div>
             )}
 
             {servers?.pagination && (
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 text-center">
+              <div className="mt-4 pt-4 border-t border-white/8 text-sm text-white/40 text-center">
                 {servers.pagination.total} server{servers.pagination.total !== 1 ? "s" : ""}
               </div>
             )}
@@ -247,17 +248,17 @@ export default function Servers() {
         <div className="lg:col-span-2">
           {selectedServer ? (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+              <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-500/10 rounded-lg">
-                      <HardDrive className="h-5 w-5 text-blue-500" />
+                    <div className="p-2 bg-[hsl(210_100%_50%)/10] rounded-lg">
+                      <HardDrive className="h-5 w-5 text-[hsl(210_100%_60%)]" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      <h2 className="text-lg font-semibold text-white">
                         {selectedServer.name || `Server ${selectedServer.id}`}
                       </h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                      <p className="text-sm text-white/50 font-mono">
                         {selectedServer.primaryIp}
                       </p>
                     </div>
@@ -265,7 +266,7 @@ export default function Servers() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={refreshServer}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                      className="p-1.5 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                       title="Refresh status"
                     >
                       <RefreshCw className={`h-4 w-4 ${loadingDetails ? 'animate-spin' : ''}`} />
@@ -278,118 +279,109 @@ export default function Servers() {
 
                 {loadingDetails ? (
                   <div className="animate-pulse space-y-4">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+                    <div className="h-4 bg-white/10 rounded w-3/4"></div>
+                    <div className="h-4 bg-white/10 rounded w-1/2"></div>
+                    <div className="h-4 bg-white/10 rounded w-2/3"></div>
                   </div>
                 ) : serverDetails && (
                   <div className="space-y-6">
                     {/* Suspension Warning */}
                     {serverDetails.billing?.adminSuspended && (
-                      <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                      <div className="p-4 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/30] rounded-lg flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-[hsl(0_84%_70%)] mt-0.5 flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-red-400">Admin Suspended</p>
-                          <p className="text-sm text-red-400/80">{serverDetails.billing.adminSuspendedReason}</p>
+                          <p className="font-medium text-[hsl(0_84%_70%)]">Admin Suspended</p>
+                          <p className="text-sm text-[hsl(0_84%_70%)/80]">{serverDetails.billing.adminSuspendedReason}</p>
                         </div>
                       </div>
                     )}
                     {serverDetails.server?.suspended && !serverDetails.billing?.adminSuspended && (
-                      <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                      <div className="p-4 bg-[hsl(14_100%_60%)/10] border border-[hsl(14_100%_60%)/30] rounded-lg flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-[hsl(14_100%_70%)] mt-0.5 flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-orange-400">Suspended in VirtFusion</p>
-                          <p className="text-sm text-orange-400/80">This server was suspended directly in VirtFusion (not via admin panel)</p>
+                          <p className="font-medium text-[hsl(14_100%_70%)]">Suspended in VirtFusion</p>
+                          <p className="text-sm text-[hsl(14_100%_70%)/80]">This server was suspended directly in VirtFusion (not via admin panel)</p>
                         </div>
                       </div>
                     )}
 
                     {/* Server Info Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                      <div className="p-4 bg-white/5 rounded-lg">
                         <div className="flex items-center gap-2 mb-3">
-                          <Globe className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Network</span>
+                          <Globe className="h-4 w-4 text-white/40" />
+                          <span className="text-sm font-medium text-white/60">Network</span>
                         </div>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-gray-400">IP Address</span>
-                            <span className="font-mono text-gray-900 dark:text-white">{serverDetails.server.primaryIp}</span>
+                            <span className="text-white/50">IP Address</span>
+                            <span className="font-mono text-white">{serverDetails.server.primaryIp}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-gray-400">Hostname</span>
-                            <span className="font-medium text-gray-900 dark:text-white truncate ml-2">{serverDetails.server.hostname}</span>
+                            <span className="text-white/50">Hostname</span>
+                            <span className="font-medium text-white truncate ml-2">{serverDetails.server.hostname}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Resource Usage */}
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                      <div className="p-4 bg-white/5 rounded-lg">
                         <div className="flex items-center gap-2 mb-3">
-                          <Cpu className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Resources</span>
-                          {loadingStats && <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />}
+                          <Cpu className="h-4 w-4 text-white/40" />
+                          <span className="text-sm font-medium text-white/60">Resources</span>
+                          {loadingStats && <RefreshCw className="h-3 w-3 animate-spin text-white/40" />}
                         </div>
                         {serverDetails.server.status !== "running" ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Server is not running</p>
+                          <p className="text-sm text-white/40">Server is not running</p>
                         ) : serverStats?.stats ? (
                           <div className="space-y-3">
-                            {/* CPU */}
                             <div>
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-500 dark:text-gray-400">CPU</span>
-                                <span className="text-gray-900 dark:text-white">{serverStats.stats.cpu_usage.toFixed(1)}%</span>
+                                <span className="text-white/50">CPU</span>
+                                <span className="text-white">{serverStats.stats.cpu_usage.toFixed(1)}%</span>
                               </div>
-                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    serverStats.stats.cpu_usage > 90
-                                      ? "bg-red-500"
-                                      : serverStats.stats.cpu_usage > 70
-                                      ? "bg-yellow-500"
-                                      : "bg-green-500"
+                                    serverStats.stats.cpu_usage > 90 ? "bg-[hsl(0_84%_60%)]" :
+                                    serverStats.stats.cpu_usage > 70 ? "bg-[hsl(14_100%_60%)]" :
+                                    "bg-[hsl(160_84%_50%)]"
                                   }`}
                                   style={{ width: `${Math.min(100, serverStats.stats.cpu_usage)}%` }}
                                 />
                               </div>
                             </div>
-                            {/* RAM */}
                             <div>
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-500 dark:text-gray-400">RAM</span>
-                                <span className="text-gray-900 dark:text-white">
+                                <span className="text-white/50">RAM</span>
+                                <span className="text-white">
                                   {serverStats.stats.memory_used_mb} / {serverStats.stats.memory_total_mb} MB ({serverStats.stats.ram_usage.toFixed(1)}%)
                                 </span>
                               </div>
-                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    serverStats.stats.ram_usage > 90
-                                      ? "bg-red-500"
-                                      : serverStats.stats.ram_usage > 70
-                                      ? "bg-yellow-500"
-                                      : "bg-green-500"
+                                    serverStats.stats.ram_usage > 90 ? "bg-[hsl(0_84%_60%)]" :
+                                    serverStats.stats.ram_usage > 70 ? "bg-[hsl(14_100%_60%)]" :
+                                    "bg-[hsl(160_84%_50%)]"
                                   }`}
                                   style={{ width: `${Math.min(100, serverStats.stats.ram_usage)}%` }}
                                 />
                               </div>
                             </div>
-                            {/* Disk */}
                             <div>
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-500 dark:text-gray-400">Disk</span>
-                                <span className="text-gray-900 dark:text-white">
+                                <span className="text-white/50">Disk</span>
+                                <span className="text-white">
                                   {serverStats.stats.disk_used_gb.toFixed(1)} / {serverStats.stats.disk_total_gb.toFixed(1)} GB ({serverStats.stats.disk_usage.toFixed(1)}%)
                                 </span>
                               </div>
-                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    serverStats.stats.disk_usage > 90
-                                      ? "bg-red-500"
-                                      : serverStats.stats.disk_usage > 70
-                                      ? "bg-yellow-500"
-                                      : "bg-green-500"
+                                    serverStats.stats.disk_usage > 90 ? "bg-[hsl(0_84%_60%)]" :
+                                    serverStats.stats.disk_usage > 70 ? "bg-[hsl(14_100%_60%)]" :
+                                    "bg-[hsl(160_84%_50%)]"
                                   }`}
                                   style={{ width: `${Math.min(100, serverStats.stats.disk_usage)}%` }}
                                 />
@@ -397,86 +389,86 @@ export default function Servers() {
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Loading stats...</p>
+                          <p className="text-sm text-white/40">Loading stats...</p>
                         )}
                       </div>
 
                       {/* Server Specs */}
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                      <div className="p-4 bg-white/5 rounded-lg">
                         <div className="flex items-center gap-2 mb-3">
-                          <HardDrive className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Specifications</span>
+                          <HardDrive className="h-4 w-4 text-white/40" />
+                          <span className="text-sm font-medium text-white/60">Specifications</span>
                         </div>
                         <div className="grid grid-cols-3 gap-3 text-sm">
-                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
-                            <div className="text-lg font-bold text-blue-500">{serverDetails.server.plan?.specs?.vcpu || 1}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">vCPU</div>
+                          <div className="text-center p-2 bg-white/5 rounded-lg">
+                            <div className="text-lg font-bold text-[hsl(210_100%_60%)]">{serverDetails.server.plan?.specs?.vcpu || 1}</div>
+                            <div className="text-xs text-white/40">vCPU</div>
                           </div>
-                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
-                            <div className="text-lg font-bold text-green-500">
+                          <div className="text-center p-2 bg-white/5 rounded-lg">
+                            <div className="text-lg font-bold text-[hsl(160_84%_60%)]">
                               {serverDetails.server.plan?.specs?.ram >= 1024
                                 ? `${(serverDetails.server.plan.specs.ram / 1024).toFixed(0)} GB`
                                 : `${serverDetails.server.plan?.specs?.ram || 1024} MB`}
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">RAM</div>
+                            <div className="text-xs text-white/40">RAM</div>
                           </div>
-                          <div className="text-center p-2 bg-white dark:bg-gray-900/50 rounded-lg">
-                            <div className="text-lg font-bold text-purple-500">{serverDetails.server.plan?.specs?.disk || 20} GB</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">Disk</div>
+                          <div className="text-center p-2 bg-white/5 rounded-lg">
+                            <div className="text-lg font-bold text-[hsl(270_70%_70%)]">{serverDetails.server.plan?.specs?.disk || 20} GB</div>
+                            <div className="text-xs text-white/40">Disk</div>
                           </div>
                         </div>
                       </div>
 
                       {serverDetails.owner && (
-                        <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                        <div className="p-4 bg-white/5 rounded-lg">
                           <div className="flex items-center gap-2 mb-3">
-                            <User className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Owner</span>
+                            <User className="h-4 w-4 text-white/40" />
+                            <span className="text-sm font-medium text-white/60">Owner</span>
                           </div>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
-                              <span className="text-gray-500 dark:text-gray-400">Email</span>
-                              <span className="font-medium text-gray-900 dark:text-white truncate ml-2">{serverDetails.owner.email}</span>
+                              <span className="text-white/50">Email</span>
+                              <span className="font-medium text-white truncate ml-2">{serverDetails.owner.email}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-500 dark:text-gray-400">Name</span>
-                              <span className="font-medium text-gray-900 dark:text-white">{serverDetails.owner.name || "Not set"}</span>
+                              <span className="text-white/50">Name</span>
+                              <span className="font-medium text-white">{serverDetails.owner.name || "Not set"}</span>
                             </div>
                           </div>
                         </div>
                       )}
 
                       {serverDetails.billing && (
-                        <div className="p-4 bg-gray-50 dark:bg-gray-800/30 rounded-lg md:col-span-2">
+                        <div className="p-4 bg-white/5 rounded-lg md:col-span-2">
                           <div className="flex items-center gap-2 mb-3">
-                            <CreditCard className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Billing</span>
+                            <CreditCard className="h-4 w-4 text-white/40" />
+                            <span className="text-sm font-medium text-white/60">Billing</span>
                             {serverDetails.billing.isTrial ? (
-                              <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full flex items-center gap-1">
+                              <span className="px-2 py-0.5 text-xs bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-full flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 Trial Server
                               </span>
                             ) : serverDetails.billing.freeServer && (
-                              <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-full">
+                              <span className="px-2 py-0.5 text-xs bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-full">
                                 Free Server
                               </span>
                             )}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
-                              <span className="text-gray-500 dark:text-gray-400 block">Status</span>
-                              <span className="font-medium text-gray-900 dark:text-white capitalize">{serverDetails.billing.status}</span>
+                              <span className="text-white/50 block">Status</span>
+                              <span className="font-medium text-white capitalize">{serverDetails.billing.status}</span>
                             </div>
                             <div>
-                              <span className="text-gray-500 dark:text-gray-400 block">
+                              <span className="text-white/50 block">
                                 {serverDetails.billing.isTrial ? 'Trial Expires' : 'Monthly'}
                               </span>
-                              <span className="font-medium text-gray-900 dark:text-white">
+                              <span className="font-medium text-white">
                                 {serverDetails.billing.isTrial ? (
                                   serverDetails.billing.trialEndedAt ? (
-                                    <span className="text-red-400">Ended</span>
+                                    <span className="text-[hsl(0_84%_70%)]">Ended</span>
                                   ) : serverDetails.billing.trialExpiresAt ? (
-                                    <span className="text-amber-400">
+                                    <span className="text-[hsl(14_100%_70%)]">
                                       {new Date(serverDetails.billing.trialExpiresAt).toLocaleDateString('en-AU', {
                                         day: 'numeric',
                                         month: 'short',
@@ -485,18 +477,18 @@ export default function Servers() {
                                       })}
                                     </span>
                                   ) : (
-                                    <span className="text-amber-400">Trial</span>
+                                    <span className="text-[hsl(14_100%_70%)]">Trial</span>
                                   )
                                 ) : serverDetails.billing.freeServer ? (
-                                  <span className="text-green-400">$0.00 (Free)</span>
+                                  <span className="text-[hsl(160_84%_60%)]">$0.00 (Free)</span>
                                 ) : (
                                   `$${(serverDetails.billing.monthlyPriceCents / 100).toFixed(2)}`
                                 )}
                               </span>
                             </div>
                             <div>
-                              <span className="text-gray-500 dark:text-gray-400 block">Server ID</span>
-                              <span className="font-mono text-gray-900 dark:text-white">{serverDetails.server.id}</span>
+                              <span className="text-white/50 block">Server ID</span>
+                              <span className="font-mono text-white">{serverDetails.server.id}</span>
                             </div>
                           </div>
                         </div>
@@ -504,13 +496,13 @@ export default function Servers() {
                     </div>
 
                     {/* Power Actions */}
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Power Actions</h3>
+                    <div className="pt-4 border-t border-white/8">
+                      <h3 className="text-sm font-medium text-white/60 mb-3">Power Actions</h3>
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => powerMutation.mutate({ serverId: selectedServer.id, action: "start" })}
                           disabled={powerMutation.isPending}
-                          className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg hover:bg-[hsl(160_84%_39%)/20] transition-colors disabled:opacity-50 text-sm"
                         >
                           <Play className="h-4 w-4" />
                           Start
@@ -518,7 +510,7 @@ export default function Servers() {
                         <button
                           onClick={() => powerMutation.mutate({ serverId: selectedServer.id, action: "stop" })}
                           disabled={powerMutation.isPending}
-                          className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 rounded-lg hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg hover:bg-[hsl(14_100%_60%)/20] transition-colors disabled:opacity-50 text-sm"
                         >
                           <Square className="h-4 w-4" />
                           Stop
@@ -526,7 +518,7 @@ export default function Servers() {
                         <button
                           onClick={() => powerMutation.mutate({ serverId: selectedServer.id, action: "restart" })}
                           disabled={powerMutation.isPending}
-                          className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)/10] text-[hsl(210_100%_70%)] border border-[hsl(210_100%_50%)/30] rounded-lg hover:bg-[hsl(210_100%_50%)/20] transition-colors disabled:opacity-50 text-sm"
                         >
                           <RefreshCw className="h-4 w-4" />
                           Restart
@@ -534,7 +526,7 @@ export default function Servers() {
                         <button
                           onClick={() => powerMutation.mutate({ serverId: selectedServer.id, action: "kill" })}
                           disabled={powerMutation.isPending}
-                          className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(0_84%_60%)/10] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30] rounded-lg hover:bg-[hsl(0_84%_60%)/20] transition-colors disabled:opacity-50 text-sm"
                         >
                           <Power className="h-4 w-4" />
                           Kill
@@ -543,25 +535,22 @@ export default function Servers() {
                     </div>
 
                     {/* Admin Actions */}
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Admin Actions</h3>
+                    <div className="pt-4 border-t border-white/8">
+                      <h3 className="text-sm font-medium text-white/60 mb-3">Admin Actions</h3>
                       <div className="flex flex-wrap gap-2">
                         {(serverDetails.billing?.adminSuspended || serverDetails.server?.suspended) ? (
                           <button
                             onClick={() => unsuspendMutation.mutate(selectedServer.id)}
                             disabled={unsuspendMutation.isPending}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg hover:bg-[hsl(160_84%_39%)/20] transition-colors disabled:opacity-50 text-sm"
                           >
                             Unsuspend
                           </button>
                         ) : (
                           <button
-                            onClick={() => {
-                              const reason = prompt("Enter suspension reason:");
-                              if (reason) suspendMutation.mutate({ serverId: selectedServer.id, reason });
-                            }}
+                            onClick={() => setShowSuspendDialog(true)}
                             disabled={suspendMutation.isPending}
-                            className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg hover:bg-[hsl(14_100%_60%)/20] transition-colors disabled:opacity-50 text-sm"
                           >
                             Suspend
                           </button>
@@ -570,13 +559,9 @@ export default function Servers() {
                           <>
                             {!serverDetails.billing?.trialEndedAt && (
                               <button
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to end this trial? The server will be powered off.")) {
-                                    endTrialMutation.mutate(selectedServer.id);
-                                  }
-                                }}
+                                onClick={() => setShowEndTrialDialog(true)}
                                 disabled={endTrialMutation.isPending}
-                                className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg hover:bg-[hsl(14_100%_60%)/20] transition-colors disabled:opacity-50 text-sm"
                               >
                                 <Clock className="h-4 w-4" />
                                 End Trial
@@ -584,17 +569,15 @@ export default function Servers() {
                             )}
                             <button
                               onClick={() => {
-                                // Default price from plan if available
                                 const defaultPrice = serverDetails.billing?.monthlyPriceCents || 0;
                                 setConvertPrice((defaultPrice / 100).toString());
-                                // Default to 30 days from now
                                 const defaultDate = new Date();
                                 defaultDate.setDate(defaultDate.getDate() + 30);
                                 setConvertBillingDate(defaultDate.toISOString().split('T')[0]);
                                 setShowConvertTrialModal(true);
                               }}
                               disabled={convertTrialMutation.isPending}
-                              className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                              className="flex items-center gap-2 px-4 py-2 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg hover:bg-[hsl(160_84%_39%)/20] transition-colors disabled:opacity-50 text-sm"
                             >
                               <DollarSign className="h-4 w-4" />
                               Convert to Paid
@@ -603,22 +586,14 @@ export default function Servers() {
                         )}
                         <button
                           onClick={() => setShowInstallOsModal(true)}
-                          className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-500/20 transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(270_70%_60%)/10] text-[hsl(270_70%_70%)] border border-[hsl(270_70%_60%)/30] rounded-lg hover:bg-[hsl(270_70%_60%)/20] transition-colors text-sm"
                         >
                           <Download className="h-4 w-4" />
                           Install OS
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm("Are you sure you want to delete this server? This cannot be undone.")) {
-                              serversApi.delete(selectedServer.id).then(() => {
-                                toast.success("Server deleted");
-                                setSelectedServer(null);
-                                queryClient.invalidateQueries({ queryKey: ["servers"] });
-                              }).catch((err: any) => toast.error(err.message));
-                            }
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                          onClick={() => setShowDeleteDialog(true)}
+                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(0_84%_60%)] text-white rounded-lg hover:bg-[hsl(0_84%_55%)] transition-colors text-sm"
                         >
                           <Trash2 className="h-4 w-4" />
                           Delete
@@ -630,25 +605,77 @@ export default function Servers() {
               </div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-12 text-center">
-              <div className="inline-flex p-4 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
-                <Server className="h-8 w-8 text-gray-400" />
+            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-12 text-center">
+              <div className="inline-flex p-4 bg-white/5 rounded-full mb-4">
+                <Server className="h-8 w-8 text-white/30" />
               </div>
-              <p className="text-gray-500 dark:text-gray-400">Select a server to view details</p>
+              <p className="text-white/40">Select a server to view details</p>
             </div>
           )}
         </div>
       </div>
 
+      {/* Suspend Dialog */}
+      <PromptDialog
+        open={showSuspendDialog}
+        onOpenChange={setShowSuspendDialog}
+        title="Suspend Server"
+        description="Enter a reason for suspending this server."
+        placeholder="e.g., Payment overdue"
+        label="Suspension Reason"
+        confirmText="Suspend"
+        onConfirm={(reason) => {
+          if (selectedServer) {
+            suspendMutation.mutate({ serverId: selectedServer.id, reason });
+          }
+        }}
+        isPending={suspendMutation.isPending}
+      />
+
+      {/* End Trial Dialog */}
+      <ConfirmDialog
+        open={showEndTrialDialog}
+        onOpenChange={setShowEndTrialDialog}
+        title="End Trial"
+        description="Are you sure you want to end this trial? The server will be powered off immediately."
+        confirmText="End Trial"
+        variant="destructive"
+        onConfirm={() => {
+          if (selectedServer) {
+            endTrialMutation.mutate(selectedServer.id);
+          }
+        }}
+        isPending={endTrialMutation.isPending}
+      />
+
+      {/* Delete Dialog */}
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Server"
+        description="Are you sure you want to delete this server? This action cannot be undone."
+        confirmText="Delete Server"
+        variant="destructive"
+        onConfirm={() => {
+          if (selectedServer) {
+            serversApi.delete(selectedServer.id).then(() => {
+              toast.success("Server deleted");
+              setSelectedServer(null);
+              queryClient.invalidateQueries({ queryKey: ["servers"] });
+            }).catch((err: any) => toast.error(err.message));
+          }
+        }}
+      />
+
       {/* Install OS Modal */}
       {showInstallOsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold">Install Operating System</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-white/8">
+              <h2 className="text-lg font-semibold text-white">Install Operating System</h2>
               <button
                 onClick={closeInstallModal}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="p-1 text-white/40 hover:text-white transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -657,16 +684,16 @@ export default function Servers() {
             <div className="p-4 overflow-y-auto max-h-[60vh]">
               {installResult ? (
                 <div className="space-y-4">
-                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    <p className="font-medium text-green-400 mb-2">OS Installation Started!</p>
-                    <p className="text-sm text-gray-400">The server is now installing the operating system. This may take a few minutes.</p>
+                  <div className="p-4 bg-[hsl(160_84%_39%)/10] border border-[hsl(160_84%_39%)/30] rounded-lg">
+                    <p className="font-medium text-[hsl(160_84%_60%)] mb-2">OS Installation Started!</p>
+                    <p className="text-sm text-white/50">The server is now installing the operating system. This may take a few minutes.</p>
                   </div>
 
                   {installResult.password && (
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <label className="text-sm text-gray-400 block mb-1">New Root Password</label>
+                    <div className="p-4 bg-white/5 rounded-lg">
+                      <label className="text-sm text-white/40 block mb-1">New Root Password</label>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 font-mono text-lg bg-gray-100 dark:bg-gray-900 px-3 py-2 rounded">
+                        <code className="flex-1 font-mono text-lg bg-white/8 px-3 py-2 rounded text-white">
                           {installResult.password}
                         </code>
                         <button
@@ -674,32 +701,32 @@ export default function Servers() {
                             navigator.clipboard.writeText(installResult.password || "");
                             toast.success("Password copied!");
                           }}
-                          className="px-3 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                          className="px-3 py-2 bg-white/10 rounded hover:bg-white/15 transition-colors text-white/70 hover:text-white"
                         >
                           Copy
                         </button>
                       </div>
-                      <p className="text-xs text-gray-400 mt-2">Credentials have been emailed to the user.</p>
+                      <p className="text-xs text-white/40 mt-2">Credentials have been emailed to the user.</p>
                     </div>
                   )}
 
                   <button
                     onClick={closeInstallModal}
-                    className="w-full py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+                    className="w-full py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors"
                   >
                     Close
                   </button>
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-gray-400 mb-4">
-                    Select an operating system to install on <strong>{selectedServer?.name || `Server ${selectedServer?.id}`}</strong>.
+                  <p className="text-sm text-white/50 mb-4">
+                    Select an operating system to install on <strong className="text-white">{selectedServer?.name || `Server ${selectedServer?.id}`}</strong>.
                     This will erase all existing data on the server.
                   </p>
 
                   {loadingTemplates ? (
                     <div className="flex justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                      <Loader2 className="h-6 w-6 animate-spin text-white/40" />
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -709,33 +736,33 @@ export default function Servers() {
                           onClick={() => setSelectedOsId(template.id)}
                           className={`w-full text-left p-3 rounded-lg border transition-colors ${
                             selectedOsId === template.id
-                              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-                              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                              ? "border-[hsl(210_100%_50%)/50] bg-[hsl(210_100%_50%)/10] text-white"
+                              : "border-white/10 hover:border-white/20 text-white/70 hover:text-white"
                           }`}
                         >
                           <p className="font-medium">{template.name}</p>
                           {template.description && (
-                            <p className="text-sm text-gray-400">{template.description}</p>
+                            <p className="text-sm text-white/40">{template.description}</p>
                           )}
                         </button>
                       ))}
                       {(!osTemplatesData?.templates || osTemplatesData.templates.length === 0) && (
-                        <p className="text-center text-gray-400 py-4">No OS templates available</p>
+                        <p className="text-center text-white/40 py-4">No OS templates available</p>
                       )}
                     </div>
                   )}
 
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                  <div className="mt-4 pt-4 border-t border-white/8 flex gap-3">
                     <button
                       onClick={closeInstallModal}
-                      className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      className="flex-1 py-2 bg-white/8 text-white/70 rounded-lg hover:bg-white/12 hover:text-white transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleInstallOs}
                       disabled={!selectedOsId || installOsMutation.isPending}
-                      className="flex-1 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="flex-1 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {installOsMutation.isPending ? (
                         <>
@@ -759,32 +786,32 @@ export default function Servers() {
 
       {/* Convert Trial Modal */}
       {showConvertTrialModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold">Convert Trial to Paid</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-white/8">
+              <h2 className="text-lg font-semibold text-white">Convert Trial to Paid</h2>
               <button
                 onClick={() => {
                   setShowConvertTrialModal(false);
                   setConvertPrice("");
                   setConvertBillingDate("");
                 }}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="p-1 text-white/40 hover:text-white transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="p-4 space-y-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Convert <strong>{selectedServer?.name || `Server ${selectedServer?.id}`}</strong> from a trial to a regular server.
+              <p className="text-sm text-white/50">
+                Convert <strong className="text-white">{selectedServer?.name || `Server ${selectedServer?.id}`}</strong> from a trial to a regular server.
                 {serverDetails?.billing?.trialEndedAt && (
-                  <span className="block mt-1 text-green-500">The server will be powered on after conversion.</span>
+                  <span className="block mt-1 text-[hsl(160_84%_60%)]">The server will be powered on after conversion.</span>
                 )}
               </p>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-white/60 mb-1">
                   Monthly Price ($)
                 </label>
                 <input
@@ -794,20 +821,20 @@ export default function Servers() {
                   value={convertPrice}
                   onChange={(e) => setConvertPrice(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none text-white placeholder-white/30"
                 />
-                <p className="text-xs text-gray-400 mt-1">Set to 0 for a free server</p>
+                <p className="text-xs text-white/40 mt-1">Set to 0 for a free server</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-white/60 mb-1">
                   First Billing Date
                 </label>
                 <input
                   type="date"
                   value={convertBillingDate}
                   onChange={(e) => setConvertBillingDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none text-white"
                 />
               </div>
 
@@ -818,7 +845,7 @@ export default function Servers() {
                     setConvertPrice("");
                     setConvertBillingDate("");
                   }}
-                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="flex-1 py-2 bg-white/8 text-white/70 rounded-lg hover:bg-white/12 hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
@@ -836,7 +863,7 @@ export default function Servers() {
                     });
                   }}
                   disabled={convertTrialMutation.isPending}
-                  className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 py-2 bg-[hsl(160_84%_39%)] text-white rounded-lg hover:bg-[hsl(160_84%_34%)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {convertTrialMutation.isPending ? (
                     <>

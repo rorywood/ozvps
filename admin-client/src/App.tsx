@@ -20,8 +20,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[hsl(216_33%_6%)]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[hsl(210_100%_50%)]"></div>
       </div>
     );
   }
@@ -38,8 +38,8 @@ function AppRoutes() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[hsl(216_33%_6%)]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[hsl(210_100%_50%)]"></div>
       </div>
     );
   }

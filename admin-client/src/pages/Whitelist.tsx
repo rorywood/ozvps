@@ -4,12 +4,20 @@ import { whitelistApi } from "../lib/api";
 import { toast } from "sonner";
 import { Shield, Plus, Trash2, RefreshCw, AlertTriangle, Check, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { PromptDialog } from "../components/ui/prompt-dialog";
 
 export default function Whitelist() {
   const { bootstrapMode } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newIp, setNewIp] = useState("");
   const [newLabel, setNewLabel] = useState("");
+
+  // Dialog states replacing native dialogs
+  const [showAddMyIpDialog, setShowAddMyIpDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+
   const queryClient = useQueryClient();
 
   const { data: entries, isLoading } = useQuery({
@@ -57,6 +65,7 @@ export default function Whitelist() {
     mutationFn: (id: number) => whitelistApi.delete(id),
     onSuccess: () => {
       toast.success("Entry deleted");
+      setPendingDeleteId(null);
       queryClient.invalidateQueries({ queryKey: ["whitelist"] });
     },
     onError: (err: any) => toast.error(err.message),
@@ -68,15 +77,15 @@ export default function Whitelist() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">IP Whitelist</h1>
+      <h1 className="text-2xl font-bold text-white mb-6">IP Whitelist</h1>
 
       {/* Bootstrap Warning */}
       {bootstrapMode && (
-        <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-yellow-400 mt-0.5" />
+        <div className="mb-6 p-4 bg-[hsl(14_100%_60%)/10] border border-[hsl(14_100%_60%)/30] rounded-xl flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-[hsl(14_100%_70%)] mt-0.5" />
           <div>
-            <h3 className="font-semibold text-yellow-400">Bootstrap Mode Active</h3>
-            <p className="text-sm text-yellow-400/80 mt-1">
+            <h3 className="font-semibold text-[hsl(14_100%_70%)]">Bootstrap Mode Active</h3>
+            <p className="text-sm text-[hsl(14_100%_70%)/80] mt-1">
               The IP whitelist is empty, so all admin access is currently allowed. Add your IP address below to enable whitelist protection.
             </p>
           </div>
@@ -84,18 +93,18 @@ export default function Whitelist() {
       )}
 
       {/* Current IP Info */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-6">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Your Current IP</h2>
-            <p className="text-2xl font-mono text-gray-700 dark:text-gray-300 mt-1">{currentIp?.ip || "Loading..."}</p>
+            <h2 className="text-base font-semibold text-white">Your Current IP</h2>
+            <p className="text-2xl font-mono text-white mt-1">{currentIp?.ip || "Loading..."}</p>
             {isCurrentIpWhitelisted ? (
-              <p className="text-sm text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
+              <p className="text-sm text-[hsl(160_84%_60%)] mt-2 flex items-center gap-1">
                 <Check className="h-4 w-4" />
                 Your IP is whitelisted
               </p>
             ) : (
-              <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2 flex items-center gap-1">
+              <p className="text-sm text-[hsl(14_100%_70%)] mt-2 flex items-center gap-1">
                 <AlertTriangle className="h-4 w-4" />
                 Your IP is not whitelisted
               </p>
@@ -103,14 +112,9 @@ export default function Whitelist() {
           </div>
           {!isCurrentIpWhitelisted && (
             <button
-              onClick={() => {
-                const label = prompt("Enter a label for this IP (e.g., 'Office', 'Home'):");
-                if (label) {
-                  addCurrentMutation.mutate(label);
-                }
-              }}
+              onClick={() => setShowAddMyIpDialog(true)}
               disabled={addCurrentMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+              className="px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] flex items-center gap-2 transition-colors text-sm"
             >
               <Plus className="h-4 w-4" />
               Add My IP
@@ -120,12 +124,12 @@ export default function Whitelist() {
       </div>
 
       {/* Add IP Form */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-6">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Whitelist Entries</h2>
+          <h2 className="text-base font-semibold text-white">Whitelist Entries</h2>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            className="px-4 py-2 bg-white/5 border border-white/10 text-white/70 rounded-lg hover:bg-white/10 hover:text-white flex items-center gap-2 transition-colors text-sm"
           >
             <Plus className="h-4 w-4" />
             Add IP
@@ -133,26 +137,26 @@ export default function Whitelist() {
         </div>
 
         {showAddForm && (
-          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <div className="mb-6 p-4 bg-white/5 rounded-lg">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">IP Address</label>
+                <label className="block text-sm font-medium text-white/60 mb-1">IP Address</label>
                 <input
                   type="text"
                   value={newIp}
                   onChange={(e) => setNewIp(e.target.value)}
                   placeholder="192.168.1.1"
-                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none placeholder-white/30 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Label</label>
+                <label className="block text-sm font-medium text-white/60 mb-1">Label</label>
                 <input
                   type="text"
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
                   placeholder="Office, Home, etc."
-                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none placeholder-white/30 text-sm"
                 />
               </div>
               <div className="flex items-end gap-2">
@@ -163,7 +167,7 @@ export default function Whitelist() {
                     }
                   }}
                   disabled={!newIp || !newLabel || addMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] disabled:opacity-50 transition-colors text-sm"
                 >
                   Add
                 </button>
@@ -173,7 +177,7 @@ export default function Whitelist() {
                     setNewIp("");
                     setNewLabel("");
                   }}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2 bg-white/8 text-white/70 rounded-lg hover:bg-white/12 hover:text-white transition-colors text-sm"
                 >
                   Cancel
                 </button>
@@ -185,55 +189,54 @@ export default function Whitelist() {
         {/* Entries List */}
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+            <RefreshCw className="h-6 w-6 animate-spin text-white/40" />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-800/50">
+              <thead className="bg-white/5">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">IP Address</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Label</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Added By</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">IP Address</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Label</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Added By</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-white/5">
                 {entries?.entries?.map((entry: any) => (
-                  <tr key={entry.id} className={!entry.enabled ? "bg-gray-50 dark:bg-gray-800/30 opacity-60" : ""}>
-                    <td className="px-4 py-3 font-mono text-gray-900 dark:text-gray-100">
+                  <tr key={entry.id} className={!entry.enabled ? "opacity-50" : ""}>
+                    <td className="px-4 py-3 font-mono text-white text-sm">
                       {entry.ipAddress}
-                      {entry.cidr && <span className="text-gray-400">{entry.cidr}</span>}
+                      {entry.cidr && <span className="text-white/40">{entry.cidr}</span>}
                       {entry.ipAddress === currentIp?.ip && (
-                        <span className="ml-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded-full">You</span>
+                        <span className="ml-2 px-2 py-0.5 bg-[hsl(210_100%_50%)/20] text-[hsl(210_100%_70%)] text-xs rounded-full">You</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{entry.label}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{entry.addedByEmail}</td>
+                    <td className="px-4 py-3 text-white text-sm">{entry.label}</td>
+                    <td className="px-4 py-3 text-sm text-white/50">{entry.addedByEmail}</td>
                     <td className="px-4 py-3">
                       {entry.enabled ? (
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 border border-green-500/30 text-xs rounded-full">Active</span>
+                        <span className="px-2 py-1 bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] text-xs rounded-full">Active</span>
                       ) : (
-                        <span className="px-2 py-1 bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs rounded-full">Disabled</span>
+                        <span className="px-2 py-1 bg-white/10 text-white/50 border border-white/10 text-xs rounded-full">Disabled</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleMutation.mutate({ id: entry.id, enabled: !entry.enabled })}
-                          className={`p-1 rounded transition-colors ${entry.enabled ? "text-yellow-400 hover:bg-yellow-500/20" : "text-green-400 hover:bg-green-500/20"}`}
+                          className={`p-1 rounded transition-colors ${entry.enabled ? "text-[hsl(14_100%_70%)] hover:bg-[hsl(14_100%_60%)/20]" : "text-[hsl(160_84%_60%)] hover:bg-[hsl(160_84%_39%)/20]"}`}
                           title={entry.enabled ? "Disable" : "Enable"}
                         >
                           {entry.enabled ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm("Delete this whitelist entry?")) {
-                              deleteMutation.mutate(entry.id);
-                            }
+                            setPendingDeleteId(entry.id);
+                            setShowDeleteConfirm(true);
                           }}
-                          className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                          className="p-1 text-[hsl(0_84%_70%)] hover:bg-[hsl(0_84%_60%)/20] rounded transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -244,8 +247,8 @@ export default function Whitelist() {
                 ))}
                 {(!entries?.entries || entries.entries.length === 0) && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      <Shield className="h-8 w-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                    <td colSpan={5} className="px-4 py-8 text-center text-white/40">
+                      <Shield className="h-8 w-8 mx-auto mb-2 text-white/20" />
                       No whitelist entries. Add your IP to enable protection.
                     </td>
                   </tr>
@@ -255,6 +258,38 @@ export default function Whitelist() {
           </div>
         )}
       </div>
+
+      {/* Add My IP Dialog */}
+      <PromptDialog
+        open={showAddMyIpDialog}
+        onOpenChange={setShowAddMyIpDialog}
+        title="Add My IP to Whitelist"
+        description={`Add your current IP (${currentIp?.ip}) to the whitelist.`}
+        placeholder="e.g., Office, Home"
+        label="Label for this IP"
+        confirmText="Add to Whitelist"
+        onConfirm={(label) => addCurrentMutation.mutate(label)}
+        isPending={addCurrentMutation.isPending}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open);
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete Whitelist Entry"
+        description="Are you sure you want to delete this whitelist entry?"
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingDeleteId !== null) {
+            deleteMutation.mutate(pendingDeleteId);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { promoCodesApi, type PromoCode, type PromoCodeUsage, type CreatePromoCodeInput } from "../lib/api";
 import { toast } from "sonner";
 import { Tag, Plus, RefreshCw, Trash2, Edit2, Eye, Power, X, Percent, DollarSign, Users, Clock } from "lucide-react";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 
 export default function PromoCodes() {
   const [selectedPromo, setSelectedPromo] = useState<PromoCode | null>(null);
@@ -10,6 +11,8 @@ export default function PromoCodes() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [usageData, setUsageData] = useState<PromoCodeUsage[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingDeletePromo, setPendingDeletePromo] = useState<PromoCode | null>(null);
   const queryClient = useQueryClient();
 
   const { data: promoCodes, isLoading } = useQuery({
@@ -61,6 +64,7 @@ export default function PromoCodes() {
       queryClient.invalidateQueries({ queryKey: ["promo-codes"] });
       queryClient.invalidateQueries({ queryKey: ["promo-codes-stats"] });
       setSelectedPromo(null);
+      setPendingDeletePromo(null);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -99,10 +103,10 @@ export default function PromoCodes() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Promo Codes</h1>
+        <h1 className="text-2xl font-bold text-white">Promo Codes</h1>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors text-sm"
         >
           <Plus className="h-4 w-4" />
           Create Code
@@ -112,83 +116,83 @@ export default function PromoCodes() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4">
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/10 rounded-lg">
-                <Tag className="h-6 w-6 text-blue-500" />
+              <div className="p-2 bg-[hsl(210_100%_50%)/15] rounded-lg">
+                <Tag className="h-6 w-6 text-[hsl(210_100%_60%)]" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Codes</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalCodes}</p>
+                <p className="text-xs text-white/40 uppercase tracking-wide">Total Codes</p>
+                <p className="text-xl font-bold text-white">{stats.totalCodes}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
-            <p className="text-xl font-bold text-green-500">{stats.activeCodes}</p>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Active</p>
+            <p className="text-xl font-bold text-[hsl(160_84%_60%)]">{stats.activeCodes}</p>
           </div>
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Inactive</p>
-            <p className="text-xl font-bold text-gray-500">{stats.inactiveCodes}</p>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Inactive</p>
+            <p className="text-xl font-bold text-white/50">{stats.inactiveCodes}</p>
           </div>
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total Uses</p>
-            <p className="text-xl font-bold text-purple-500">{stats.totalUsage}</p>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Total Uses</p>
+            <p className="text-xl font-bold text-[hsl(270_70%_70%)]">{stats.totalUsage}</p>
           </div>
         </div>
       )}
 
       {/* Promo Codes Table */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+            <RefreshCw className="h-8 w-8 animate-spin text-white/40" />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-800/50">
+              <thead className="bg-white/5">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Discount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Usage</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Validity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Discount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Usage</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Validity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-white/40 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-white/5">
                 {promoCodes?.promoCodes?.map((promo) => (
-                  <tr key={promo.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                  <tr key={promo.id} className="hover:bg-white/3">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded font-mono text-sm text-gray-900 dark:text-white">
+                        <code className="px-2 py-1 bg-white/8 rounded font-mono text-sm text-white">
                           {promo.code}
                         </code>
                         {promo.appliesTo === "specific" && (
-                          <span className="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded">Specific Plans</span>
+                          <span className="px-1.5 py-0.5 text-xs bg-[hsl(270_70%_60%)/20] text-[hsl(270_70%_70%)] rounded">Specific Plans</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {promo.discountType === "percentage" ? (
-                          <Percent className="h-4 w-4 text-blue-500" />
+                          <Percent className="h-4 w-4 text-[hsl(210_100%_60%)]" />
                         ) : (
-                          <DollarSign className="h-4 w-4 text-green-500" />
+                          <DollarSign className="h-4 w-4 text-[hsl(160_84%_60%)]" />
                         )}
-                        <span className="font-medium text-gray-900 dark:text-white">{formatDiscount(promo)}</span>
+                        <span className="font-medium text-white">{formatDiscount(promo)}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <Users className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-900 dark:text-white">
+                        <Users className="h-4 w-4 text-white/40" />
+                        <span className="text-white">
                           {promo.currentUses}
-                          {promo.maxUsesTotal !== null && <span className="text-gray-500"> / {promo.maxUsesTotal}</span>}
+                          {promo.maxUsesTotal !== null && <span className="text-white/50"> / {promo.maxUsesTotal}</span>}
                         </span>
                         {promo.maxUsesPerUser !== null && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-white/40">
                             ({promo.maxUsesPerUser}/user)
                           </span>
                         )}
@@ -196,31 +200,31 @@ export default function PromoCodes() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <Clock className="h-4 w-4 text-gray-400" />
+                        <Clock className="h-4 w-4 text-white/40" />
                         {promo.validUntil ? (
-                          <span className={`text-sm ${isExpired(promo) ? "text-red-500" : "text-gray-600 dark:text-gray-300"}`}>
+                          <span className={`text-sm ${isExpired(promo) ? "text-[hsl(0_84%_70%)]" : "text-white/70"}`}>
                             {isExpired(promo) ? "Expired" : `Until ${new Date(promo.validUntil).toLocaleDateString()}`}
                           </span>
                         ) : (
-                          <span className="text-sm text-gray-500">No expiry</span>
+                          <span className="text-sm text-white/40">No expiry</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       {promo.active && !isExpired(promo) && !isMaxedOut(promo) ? (
-                        <span className="px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg">
+                        <span className="px-2 py-1 text-xs bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg">
                           Active
                         </span>
                       ) : isMaxedOut(promo) ? (
-                        <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg">
+                        <span className="px-2 py-1 text-xs bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg">
                           Maxed Out
                         </span>
                       ) : isExpired(promo) ? (
-                        <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg">
+                        <span className="px-2 py-1 text-xs bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30] rounded-lg">
                           Expired
                         </span>
                       ) : (
-                        <span className="px-2 py-1 text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg">
+                        <span className="px-2 py-1 text-xs bg-white/10 text-white/50 border border-white/10 rounded-lg">
                           Inactive
                         </span>
                       )}
@@ -229,7 +233,7 @@ export default function PromoCodes() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleViewUsage(promo)}
-                          className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                          className="p-1.5 text-white/40 hover:text-white hover:bg-white/8 rounded-lg transition-colors"
                           title="View Usage"
                         >
                           <Eye className="h-4 w-4" />
@@ -239,7 +243,7 @@ export default function PromoCodes() {
                             setSelectedPromo(promo);
                             setShowEditModal(true);
                           }}
-                          className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-[hsl(210_100%_60%)] hover:bg-[hsl(210_100%_50%)/10] rounded-lg transition-colors"
                           title="Edit"
                         >
                           <Edit2 className="h-4 w-4" />
@@ -249,8 +253,8 @@ export default function PromoCodes() {
                           disabled={toggleMutation.isPending}
                           className={`p-1.5 rounded-lg transition-colors ${
                             promo.active
-                              ? "text-yellow-500 hover:text-yellow-700 hover:bg-yellow-500/10"
-                              : "text-green-500 hover:text-green-700 hover:bg-green-500/10"
+                              ? "text-[hsl(14_100%_70%)] hover:bg-[hsl(14_100%_60%)/10]"
+                              : "text-[hsl(160_84%_60%)] hover:bg-[hsl(160_84%_39%)/10]"
                           }`}
                           title={promo.active ? "Deactivate" : "Activate"}
                         >
@@ -258,12 +262,11 @@ export default function PromoCodes() {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Delete promo code "${promo.code}"? This cannot be undone.`)) {
-                              deleteMutation.mutate(promo.id);
-                            }
+                            setPendingDeletePromo(promo);
+                            setShowDeleteConfirm(true);
                           }}
                           disabled={deleteMutation.isPending}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-[hsl(0_84%_70%)] hover:bg-[hsl(0_84%_60%)/10] rounded-lg transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -274,7 +277,7 @@ export default function PromoCodes() {
                 ))}
                 {(!promoCodes?.promoCodes || promoCodes.promoCodes.length === 0) && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-white/40">
                       No promo codes found. Create your first one!
                     </td>
                   </tr>
@@ -284,6 +287,25 @@ export default function PromoCodes() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open);
+          if (!open) setPendingDeletePromo(null);
+        }}
+        title="Delete Promo Code"
+        description={`Delete promo code "${pendingDeletePromo?.code}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingDeletePromo) {
+            deleteMutation.mutate(pendingDeletePromo.id);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
 
       {/* Create Modal */}
       {showCreateModal && (
@@ -309,11 +331,11 @@ export default function PromoCodes() {
 
       {/* Usage History Modal */}
       {showUsageModal && selectedPromo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Usage History: <code className="text-blue-500">{selectedPromo.code}</code>
+              <h3 className="text-lg font-semibold text-white">
+                Usage History: <code className="text-[hsl(210_100%_70%)]">{selectedPromo.code}</code>
               </h3>
               <button
                 onClick={() => {
@@ -321,35 +343,35 @@ export default function PromoCodes() {
                   setSelectedPromo(null);
                   setUsageData([]);
                 }}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                className="p-1 text-white/40 hover:text-white transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="overflow-auto flex-1">
               {usageData.length === 0 ? (
-                <p className="text-center text-gray-500 dark:text-gray-400 py-8">No usage recorded yet</p>
+                <p className="text-center text-white/40 py-8">No usage recorded yet</p>
               ) : (
                 <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-800/50 sticky top-0">
+                  <thead className="bg-white/5 sticky top-0">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Original</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Discount</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Final</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-white/40 uppercase">User</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-white/40 uppercase">Original</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-white/40 uppercase">Discount</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-white/40 uppercase">Final</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-white/40 uppercase">Date</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className="divide-y divide-white/5">
                     {usageData.map((usage) => (
                       <tr key={usage.id}>
-                        <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">
+                        <td className="px-4 py-2 text-sm text-white">
                           {usage.userEmail || usage.auth0UserId.substring(0, 16) + "..."}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">{formatCurrency(usage.originalPriceCents)}</td>
-                        <td className="px-4 py-2 text-sm text-green-500">-{formatCurrency(usage.discountAppliedCents)}</td>
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(usage.finalPriceCents)}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
+                        <td className="px-4 py-2 text-sm text-white/50">{formatCurrency(usage.originalPriceCents)}</td>
+                        <td className="px-4 py-2 text-sm text-[hsl(160_84%_60%)]">-{formatCurrency(usage.discountAppliedCents)}</td>
+                        <td className="px-4 py-2 text-sm font-medium text-white">{formatCurrency(usage.finalPriceCents)}</td>
+                        <td className="px-4 py-2 text-sm text-white/50">
                           {new Date(usage.usedAt).toLocaleString()}
                         </td>
                       </tr>
@@ -358,14 +380,14 @@ export default function PromoCodes() {
                 </table>
               )}
             </div>
-            <div className="flex justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex justify-end mt-4 pt-4 border-t border-white/8">
               <button
                 onClick={() => {
                   setShowUsageModal(false);
                   setSelectedPromo(null);
                   setUsageData([]);
                 }}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="px-4 py-2 text-white/60 hover:text-white transition-colors"
               >
                 Close
               </button>
@@ -391,7 +413,6 @@ function PromoCodeModal({
 }) {
   const [code, setCode] = useState(promo?.code || "");
   const [discountType, setDiscountType] = useState<"percentage" | "fixed">(promo?.discountType || "percentage");
-  // For fixed discounts, convert cents to dollars for display
   const [discountValue, setDiscountValue] = useState(
     promo?.discountValue
       ? (promo.discountType === "fixed" ? (promo.discountValue / 100).toString() : promo.discountValue.toString())
@@ -408,10 +429,9 @@ function PromoCodeModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // For fixed discounts, convert dollars to cents for storage
     const valueToStore = discountType === "fixed"
-      ? Math.round(parseFloat(discountValue) * 100) // dollars to cents
-      : parseFloat(discountValue); // percentage stays as-is
+      ? Math.round(parseFloat(discountValue) * 100)
+      : parseFloat(discountValue);
 
     const data: CreatePromoCodeInput = {
       code: code.toUpperCase(),
@@ -427,51 +447,48 @@ function PromoCodeModal({
     onSubmit(data);
   };
 
+  const inputClass = "w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none placeholder-white/30 text-sm disabled:opacity-50";
+  const labelClass = "block text-sm font-medium text-white/60 mb-1";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold text-white mb-4">
           {promo ? "Edit Promo Code" : "Create Promo Code"}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Code */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Promo Code *
-            </label>
+            <label className={labelClass}>Promo Code *</label>
             <input
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               disabled={!!promo}
               placeholder="e.g., SAVE20"
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 font-mono"
+              className={`${inputClass} font-mono`}
               required
               minLength={3}
               maxLength={20}
             />
             {promo && (
-              <p className="text-xs text-gray-500 mt-1">Code cannot be changed after creation</p>
+              <p className="text-xs text-white/40 mt-1">Code cannot be changed after creation</p>
             )}
           </div>
 
-          {/* Discount Type & Value */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Discount Type
-              </label>
+              <label className={labelClass}>Discount Type</label>
               <select
                 value={discountType}
                 onChange={(e) => setDiscountType(e.target.value as "percentage" | "fixed")}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className={inputClass}
               >
                 <option value="percentage">Percentage</option>
                 <option value="fixed">Fixed Amount</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className={labelClass}>
                 {discountType === "percentage" ? "Percentage *" : "Amount (AUD) *"}
               </label>
               <input
@@ -479,82 +496,64 @@ function PromoCodeModal({
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
                 placeholder={discountType === "percentage" ? "e.g., 20" : "e.g., 5.00"}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className={inputClass}
                 required
                 min={discountType === "percentage" ? 1 : 0.01}
                 max={discountType === "percentage" ? 100 : undefined}
                 step={discountType === "percentage" ? 1 : 0.01}
               />
-              {discountType === "percentage" && (
-                <p className="text-xs text-gray-500 mt-1">1-100</p>
-              )}
-              {discountType === "fixed" && (
-                <p className="text-xs text-gray-500 mt-1">Enter dollar amount (e.g., 5 for $5.00)</p>
-              )}
             </div>
           </div>
 
-          {/* Applies To */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Applies To
-            </label>
+            <label className={labelClass}>Applies To</label>
             <select
               value={appliesTo}
               onChange={(e) => setAppliesTo(e.target.value as "all" | "specific")}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className={inputClass}
             >
               <option value="all">All Plans</option>
               <option value="specific">Specific Plans (not yet supported)</option>
             </select>
           </div>
 
-          {/* Usage Limits */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Max Total Uses
-              </label>
+              <label className={labelClass}>Max Total Uses</label>
               <input
                 type="number"
                 value={maxUsesTotal}
                 onChange={(e) => setMaxUsesTotal(e.target.value)}
                 placeholder="Unlimited"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className={inputClass}
                 min={1}
               />
-              <p className="text-xs text-gray-500 mt-1">Leave empty for unlimited</p>
+              <p className="text-xs text-white/30 mt-1">Leave empty for unlimited</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Max Uses Per User
-              </label>
+              <label className={labelClass}>Max Uses Per User</label>
               <input
                 type="number"
                 value={maxUsesPerUser}
                 onChange={(e) => setMaxUsesPerUser(e.target.value)}
                 placeholder="1"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className={inputClass}
                 min={1}
               />
             </div>
           </div>
 
-          {/* Valid Until */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Valid Until
-            </label>
+            <label className={labelClass}>Valid Until</label>
             <input
               type="date"
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className={inputClass}
             />
-            <p className="text-xs text-gray-500 mt-1">Leave empty for no expiry</p>
+            <p className="text-xs text-white/30 mt-1">Leave empty for no expiry</p>
           </div>
 
-          {/* Active */}
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -563,24 +562,23 @@ function PromoCodeModal({
               onChange={(e) => setActive(e.target.checked)}
               className="rounded"
             />
-            <label htmlFor="active" className="text-sm text-gray-700 dark:text-gray-300">
+            <label htmlFor="active" className="text-sm text-white/70">
               Active (users can use this code)
             </label>
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/8">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              className="px-4 py-2 text-white/60 hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors disabled:opacity-50"
             >
               {isLoading ? "Saving..." : promo ? "Update" : "Create"}
             </button>

@@ -35,7 +35,6 @@ export default function Logs() {
         if (data.type === "log") {
           setLogs((prev) => {
             const newLogs = [...prev, data];
-            // Keep last 1000 logs
             if (newLogs.length > 1000) {
               return newLogs.slice(-1000);
             }
@@ -95,11 +94,15 @@ export default function Logs() {
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
+    <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Logs</h1>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${connected ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"}`}>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-white">Logs</h1>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
+            connected
+              ? "bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border-[hsl(160_84%_39%)/30]"
+              : "bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] border-[hsl(0_84%_60%)/30]"
+          }`}>
             {connected ? "Connected" : "Disconnected"}
           </span>
         </div>
@@ -109,46 +112,54 @@ export default function Logs() {
             placeholder="Filter logs..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none w-48"
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none w-48"
           />
           <button
             onClick={() => setPaused(!paused)}
-            className={`p-2 rounded-lg transition-colors ${paused ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"}`}
+            className={`p-2 rounded-lg transition-colors ${
+              paused
+                ? "bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] hover:bg-[hsl(160_84%_39%)/30]"
+                : "bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] hover:bg-[hsl(14_100%_60%)/30]"
+            }`}
             title={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
           >
-            {paused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+            {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
           </button>
           <button
             onClick={() => setLogs([])}
-            className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-2 bg-white/5 border border-white/10 text-white/60 rounded-lg hover:bg-white/10 hover:text-white transition-colors"
             title="Clear logs"
           >
-            <Trash2 className="h-5 w-5" />
+            <Trash2 className="h-4 w-4" />
           </button>
           <button
             onClick={downloadLogs}
-            className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+            className="p-2 bg-[hsl(210_100%_50%)/20] text-[hsl(210_100%_70%)] rounded-lg hover:bg-[hsl(210_100%_50%)/30] transition-colors"
             title="Download logs"
           >
-            <Download className="h-5 w-5" />
+            <Download className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="bg-gray-900 dark:bg-gray-950 rounded-xl h-full overflow-hidden border border-gray-800">
+      <div className="flex-1 bg-[hsl(216_28%_5%)] border border-white/8 rounded-xl overflow-hidden">
         <div className="h-full overflow-y-auto p-4 font-mono text-sm">
           {filteredLogs.map((log, i) => (
             <div
               key={i}
-              className={`py-0.5 ${log.stream === "stderr" || log.type === "error" ? "text-red-400" : "text-gray-300"}`}
+              className={`py-0.5 leading-relaxed ${
+                log.stream === "stderr" || log.type === "error"
+                  ? "text-[hsl(0_84%_70%)]"
+                  : "text-[hsl(0_0%_80%)]"
+              }`}
             >
-              <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>{" "}
+              <span className="text-white/30">[{new Date(log.timestamp).toLocaleTimeString()}]</span>{" "}
               {log.line}
             </div>
           ))}
           <div ref={logsEndRef} />
           {filteredLogs.length === 0 && (
-            <div className="text-gray-500 text-center py-8">
+            <div className="text-white/30 text-center py-8">
               {connected ? "Waiting for logs..." : "Not connected to log stream"}
             </div>
           )}

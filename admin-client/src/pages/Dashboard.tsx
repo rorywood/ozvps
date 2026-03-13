@@ -15,10 +15,10 @@ import {
 } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    healthy: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400",
-    degraded: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400",
-    unhealthy: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400",
+  const styles: Record<string, string> = {
+    healthy: "bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30]",
+    degraded: "bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30]",
+    unhealthy: "bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30]",
   };
 
   const icons: Record<string, typeof CheckCircle> = {
@@ -30,7 +30,7 @@ function StatusBadge({ status }: { status: string }) {
   const Icon = icons[status] || AlertTriangle;
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${colors[status] || colors.degraded}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.degraded}`}>
       <Icon className="h-3 w-3" />
       {status}
     </span>
@@ -50,28 +50,35 @@ function StatCard({
   trend?: string;
   color?: string;
 }) {
-  const colorClasses: Record<string, string> = {
-    blue: "bg-blue-500",
-    green: "bg-green-500",
-    yellow: "bg-yellow-500",
-    purple: "bg-purple-500",
+  const iconBg: Record<string, string> = {
+    blue: "bg-[hsl(210_100%_50%)/15] text-[hsl(210_100%_60%)]",
+    green: "bg-[hsl(160_84%_39%)/15] text-[hsl(160_84%_60%)]",
+    yellow: "bg-[hsl(14_100%_60%)/15] text-[hsl(14_100%_70%)]",
+    purple: "bg-[hsl(270_70%_60%)/15] text-[hsl(270_70%_70%)]",
+  };
+
+  const borderAccent: Record<string, string> = {
+    blue: "border-t-[hsl(210_100%_50%)/40]",
+    green: "border-t-[hsl(160_84%_39%)/40]",
+    yellow: "border-t-[hsl(14_100%_60%)/40]",
+    purple: "border-t-[hsl(270_70%_60%)/40]",
   };
 
   return (
-    <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
+    <div className={`bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 border-t-2 ${borderAccent[color] || borderAccent.blue}`}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+          <p className="text-xs uppercase tracking-wide text-white/40 mb-1">{title}</p>
+          <p className="text-2xl font-bold text-white mt-1">{value}</p>
           {trend && (
-            <p className="text-sm text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+            <p className="text-sm text-[hsl(160_84%_60%)] mt-1 flex items-center gap-1">
               <TrendingUp className="h-4 w-4" />
               {trend}
             </p>
           )}
         </div>
-        <div className={`${colorClasses[color]} p-3 rounded-lg`}>
-          <Icon className="h-6 w-6 text-white" />
+        <div className={`p-3 rounded-xl ${iconBg[color] || iconBg.blue}`}>
+          <Icon className="h-6 w-6" />
         </div>
       </div>
     </div>
@@ -127,10 +134,8 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Dashboard</h1>
-
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Monthly Recurring Revenue"
           value={formatCurrency(billingStats?.mrr || 0)}
@@ -158,19 +163,19 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Settings */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-8">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
-          <Settings className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Quick Settings</h2>
+          <Settings className="h-5 w-5 text-white/40" />
+          <h2 className="text-base font-semibold text-white">Quick Settings</h2>
         </div>
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+        <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${registrationSetting?.enabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-              <UserPlus className={`h-5 w-5 ${registrationSetting?.enabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+            <div className={`p-2 rounded-lg ${registrationSetting?.enabled ? 'bg-[hsl(160_84%_39%)/15]' : 'bg-[hsl(0_84%_60%)/15]'}`}>
+              <UserPlus className={`h-5 w-5 ${registrationSetting?.enabled ? 'text-[hsl(160_84%_60%)]' : 'text-[hsl(0_84%_70%)]'}`} />
             </div>
             <div>
-              <p className="font-medium text-gray-900 dark:text-white">User Registration</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="font-medium text-white">User Registration</p>
+              <p className="text-sm text-white/50">
                 {registrationSetting?.enabled ? 'New users can create accounts' : 'Registration is disabled'}
               </p>
             </div>
@@ -178,8 +183,8 @@ export default function Dashboard() {
           <button
             onClick={() => toggleRegistrationMutation.mutate(!registrationSetting?.enabled)}
             disabled={toggleRegistrationMutation.isPending}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              registrationSetting?.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              registrationSetting?.enabled ? 'bg-[hsl(160_84%_39%)]' : 'bg-white/20'
             } ${toggleRegistrationMutation.isPending ? 'opacity-50' : ''}`}
           >
             <span
@@ -192,34 +197,39 @@ export default function Dashboard() {
       </div>
 
       {/* Service Health */}
-      <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mb-8">
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Service Health</h2>
+          <h2 className="text-base font-semibold text-white">Service Health</h2>
           {health && <StatusBadge status={health.status} />}
         </div>
 
         {healthLoading ? (
           <div className="animate-pulse space-y-3">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded"></div>
+              <div key={i} className="h-12 bg-white/5 rounded-lg"></div>
             ))}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {health?.services.map((service) => (
               <div
                 key={service.name}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
               >
                 <div className="flex items-center gap-3">
-                  <span className="font-medium text-gray-900 dark:text-white">{service.name}</span>
+                  <div className={`w-2 h-2 rounded-full ${
+                    service.status === "healthy" ? "bg-[hsl(160_84%_50%)]" :
+                    service.status === "degraded" ? "bg-[hsl(14_100%_60%)]" :
+                    "bg-[hsl(0_84%_60%)]"
+                  }`} />
+                  <span className="font-medium text-white text-sm">{service.name}</span>
                   {service.message && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">({service.message})</span>
+                    <span className="text-xs text-white/40">({service.message})</span>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
                   {service.latencyMs !== undefined && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{service.latencyMs}ms</span>
+                    <span className="text-xs text-white/40">{service.latencyMs}ms</span>
                   )}
                   <StatusBadge status={service.status} />
                 </div>
@@ -231,35 +241,35 @@ export default function Dashboard() {
 
       {/* System Info */}
       {health?.system && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Memory Usage</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+            <h3 className="text-xs uppercase tracking-wide text-white/40 mb-3">Memory Usage</h3>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Used</span>
-                <span className="font-medium dark:text-white">{health.system.memory.used} MB</span>
+                <span className="text-white/60">Used</span>
+                <span className="font-medium text-white">{health.system.memory.used} MB</span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div className="w-full bg-white/10 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full ${
                     health.system.memory.usagePercent > 90
-                      ? "bg-red-500"
+                      ? "bg-[hsl(0_84%_60%)]"
                       : health.system.memory.usagePercent > 70
-                      ? "bg-yellow-500"
-                      : "bg-blue-600"
+                      ? "bg-[hsl(14_100%_60%)]"
+                      : "bg-[hsl(210_100%_50%)]"
                   }`}
                   style={{ width: `${health.system.memory.usagePercent}%` }}
                 />
               </div>
-              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex justify-between text-xs text-white/40">
                 <span>{health.system.memory.usagePercent}% used</span>
                 <span>{health.system.memory.total} MB total</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">CPU Load</h3>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+            <h3 className="text-xs uppercase tracking-wide text-white/40 mb-3">CPU Load</h3>
             {(() => {
               const load1m = parseFloat(health.system.cpu.loadAvg["1min"]);
               const cores = health.system.cpu.cores;
@@ -267,22 +277,22 @@ export default function Dashboard() {
               return (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Load</span>
-                    <span className="font-medium dark:text-white">{health.system.cpu.loadAvg["1min"]}</span>
+                    <span className="text-white/60">Load</span>
+                    <span className="font-medium text-white">{health.system.cpu.loadAvg["1min"]}</span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="w-full bg-white/10 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full ${
                         cpuPercent > 90
-                          ? "bg-red-500"
+                          ? "bg-[hsl(0_84%_60%)]"
                           : cpuPercent > 70
-                          ? "bg-yellow-500"
-                          : "bg-blue-600"
+                          ? "bg-[hsl(14_100%_60%)]"
+                          : "bg-[hsl(210_100%_50%)]"
                       }`}
                       style={{ width: `${cpuPercent}%` }}
                     />
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                  <div className="flex justify-between text-xs text-white/40">
                     <span>{cpuPercent}% utilized</span>
                     <span>{cores} cores</span>
                   </div>
@@ -291,31 +301,31 @@ export default function Dashboard() {
             })()}
           </div>
 
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Disk Usage</h3>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+            <h3 className="text-xs uppercase tracking-wide text-white/40 mb-3">Disk Usage</h3>
             {health.system.disk ? (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Used</span>
-                  <span className="font-medium dark:text-white">
+                  <span className="text-white/60">Used</span>
+                  <span className="font-medium text-white">
                     {health.system.disk.total >= 1024
                       ? `${(health.system.disk.used / 1024).toFixed(1)} GB`
                       : `${health.system.disk.used} MB`}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-white/10 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full ${
                       health.system.disk.usagePercent > 90
-                        ? "bg-red-500"
+                        ? "bg-[hsl(0_84%_60%)]"
                         : health.system.disk.usagePercent > 70
-                        ? "bg-yellow-500"
-                        : "bg-blue-600"
+                        ? "bg-[hsl(14_100%_60%)]"
+                        : "bg-[hsl(210_100%_50%)]"
                     }`}
                     style={{ width: `${health.system.disk.usagePercent}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex justify-between text-xs text-white/40">
                   <span>{health.system.disk.usagePercent}% used</span>
                   <span>
                     {health.system.disk.total >= 1024
@@ -325,24 +335,24 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Not available</p>
+              <p className="text-sm text-white/40">Not available</p>
             )}
           </div>
 
-          <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">System Info</h3>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+            <h3 className="text-xs uppercase tracking-wide text-white/40 mb-3">System Info</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">Hostname</span>
-                <span className="font-medium dark:text-white">{health.system.hostname}</span>
+                <span className="text-white/60">Hostname</span>
+                <span className="font-medium text-white">{health.system.hostname}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">Platform</span>
-                <span className="font-medium dark:text-white">{health.system.platform}</span>
+                <span className="text-white/60">Platform</span>
+                <span className="font-medium text-white">{health.system.platform}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">Uptime</span>
-                <span className="font-medium dark:text-white">
+                <span className="text-white/60">Uptime</span>
+                <span className="font-medium text-white">
                   {Math.floor(health.system.uptime / 86400)}d{" "}
                   {Math.floor((health.system.uptime % 86400) / 3600)}h
                 </span>
@@ -354,18 +364,18 @@ export default function Dashboard() {
 
       {/* Billing Summary */}
       {billingStats && (
-        <div className="bg-white dark:bg-[var(--color-card)] rounded-xl shadow-sm p-6 mt-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Billing Summary</h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+          <h2 className="text-base font-semibold text-white mb-4">Billing Summary</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {Object.entries(billingStats.statusCounts).map(([status, count]) => (
-              <div key={status} className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{status}</p>
+              <div key={status} className="text-center p-3 bg-white/5 rounded-lg">
+                <p className="text-2xl font-bold text-white">{count}</p>
+                <p className="text-xs text-white/40 capitalize mt-1">{status}</p>
               </div>
             ))}
           </div>
           {billingStats.freeServerCount > 0 && (
-            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-4 text-sm text-white/40">
               {billingStats.freeServerCount} complimentary server(s)
             </p>
           )}
