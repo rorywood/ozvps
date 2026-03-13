@@ -101,6 +101,7 @@
 - `server/routes.ts` - All API endpoints (49 admin routes with `requireAdmin` middleware)
 - `server/index.ts` - Express setup, rate limiters, middleware
 - `server/virtfusion.ts` - VirtFusion API client with stale cache fallback
+- `server/billing.ts` - Monthly billing job, chargeServer(), retryUnpaidServers()
 - `server/cancellation-processor.ts` - Server cancellation with orphan cleanup
 - `server/trial-processor.ts` - Trial expiration and cleanup (runs via billing processor)
 - `server/webhookHandlers.ts` - Stripe webhook processing
@@ -108,6 +109,8 @@
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
 - `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page
+- `client/src/contexts/provision-tracker.tsx` - Global provision tracking context (localStorage + polling)
+- `client/src/components/provision-progress-widget.tsx` - Floating bottom-right provisioning widget
 - `admin-server/routes/servers.ts` - Admin server management (provision, delete, suspend, transfer)
 - `admin-client/src/pages/ProvisionServer.tsx` - Admin provision server UI
 - `admin-server/middleware/ip-whitelist.ts` - Admin IP whitelist with TRUST_PROXY check
@@ -115,163 +118,122 @@
 - `admin-server/routes/security.ts` - Admin reCAPTCHA configuration endpoints
 - `client/src/hooks/use-system-health.ts` - System health check hook (isSystemDown, isRateLimited flags)
 - `client/public/novnc/` - Native noVNC v1.5.0 files with OzVPS branding
-- `shared/schema.ts` - Database schema (tickets now support guest tickets with `guestEmail`, `guestAccessToken`)
+- `shared/schema.ts` - Database schema (tickets support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 
-## Recent Session Work (2026-01-24)
+## Recent Session Work (2026-03-13)
 
 ### Completed This Session
-1. **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0:
-   - Downloaded noVNC to `client/public/novnc/`
-   - Console page now redirects to `/novnc/vnc.html` with WebSocket params
-   - Full sidebar controls (clipboard, settings, extra keys, fullscreen)
-   - OzVPS branding in noVNC UI
-   - Password and path passed securely via URL hash fragment
+1. **Email OTP Timing-Safe Comparison** - Fixed timing attack vulnerability:
+   - OTP comparison now uses `crypto.timingSafeEqual()` with Buffer comparison
+   - Only compares when buffer lengths match (prevents length oracle attacks)
+   - File: `server/routes.ts`
 
-2. **Rate Limiting UX Fix** - Users now see proper message when rate limited:
-   - Health check 429 was showing "System unavailable" - fixed
-   - Added `isRateLimited` flag separate from `isSystemDown`
-   - Login/register show "You have been rate limited" message
-   - Files: `client/src/lib/api.ts`, `client/src/hooks/use-system-health.ts`
+2. **Single-Use Email Verification Tokens** - Tokens can no longer be reused:
+   - Backend returns 400 with `alreadyVerified: true` on reuse (was 200 success)
+   - Frontend `verify-email.tsx` handles three states: success / already-used / error
+   - `already-used` state shows "Go to Login" button
+   - Error state shows "Request a new verification email" button linking to `/verify-email`
 
-3. **reCAPTCHA Admin Configuration** - New admin panel page for reCAPTCHA:
-   - Created `admin-server/routes/security.ts` with GET/POST endpoints
-   - Admin page at Security in sidebar to configure site key, secret key
-   - Test button to verify configuration works
-   - Files: `admin-client/src/pages/Security.tsx`
+3. **Admin Panel Complete Redesign** - Total visual overhaul matching OzVPS dark theme:
+   - `admin-client/src/index.css` - Complete rewrite with OzVPS brand colors
+   - `admin-client/src/components/Layout.tsx` - New sidebar with blue active states, page titles, user info at bottom
+   - New UI component library: `button.tsx`, `dialog.tsx`, `badge.tsx`, `input.tsx`, `label.tsx`, `textarea.tsx`
+   - `admin-client/src/components/ui/confirm-dialog.tsx` - Reusable ConfirmDialog (replaces `confirm()`)
+   - `admin-client/src/components/ui/prompt-dialog.tsx` - Reusable PromptDialog (replaces `prompt()`)
+   - Replaced ALL native browser `confirm()`/`prompt()` calls across 6 pages:
+     - Users.tsx: suspend, block, revoke sessions, adjust wallet
+     - Servers.tsx: suspend, end trial, delete
+     - Billing.tsx: cleanup orphaned, end trial, suspend server
+     - Tickets.tsx: delete ticket
+     - PromoCodes.tsx: delete promo code
+     - Whitelist.tsx: add IP (with label), delete entry
+   - Applied OzVPS dark theme to Dashboard, Health, Logs, Security pages
 
-4. **reCAPTCHA Visibility** - Users can see protection is active:
-   - Added green shield icon with "Protected by reCAPTCHA" on login/register
-   - reCAPTCHA v3 is invisible by design, visual indicator confirms protection
-   - Added full reCAPTCHA support to forgot-password page
+4. **Admin Center Link Fix** - Was pointing to internal `/admin` route (404):
+   - Fixed in `client/src/components/layout/sidebar.tsx`
+   - Fixed in `client/src/components/layout/top-nav.tsx` (desktop + mobile)
+   - Changed to `https://admin.ozvps.com.au` with `<a target="_blank">` tag
 
-5. **Security Audit Fixes** - Critical vulnerabilities fixed:
+5. **Global Provision Progress Tracker** - Provisioning persists across all pages:
+   - `client/src/contexts/provision-tracker.tsx` - React context with localStorage persistence
+   - Polls VirtFusion build status every 3 seconds for all active provisions
+   - Survives page navigation and browser refresh
+   - Auto-dismisses completed servers after 30 seconds
+   - `client/src/components/provision-progress-widget.tsx` - Floating bottom-right widget
+     - Collapsible header showing count of provisioning/ready servers
+     - Per-server: icon, name, status label, animated progress bar
+     - "View Server" button to navigate to server detail page
+     - Dismiss button (hover to reveal)
+   - `client/src/App.tsx` - ProvisionTrackerProvider wraps the entire app
+   - `client/src/pages/deploy.tsx` - Calls `startProvision()` on successful deploy
+
+6. **Billing Safety Fixes** - Two bugs fixed in `server/billing.ts`:
+   - **Idempotency check order**: Moved check to AFTER wallet `FOR UPDATE` lock
+     - Previously: check → lock (concurrent txs could both pass before blocking)
+     - Now: lock → check (second tx sees ledger entry after first commits)
+     - Prevents unique constraint violation errors in logs
+   - **Unsuspend failure refund loop**: When VirtFusion fails to unsuspend after charging:
+     - Now deletes the billing ledger entry when refunding
+     - Keeps nextBillAt as future date (not reverted to past)
+     - Allows next billing cycle to retry with a fresh charge attempt
+     - Previously: ledger entry remained, future retries hit idempotency and passed
+       without charging, then refunded again → free money bug
+
+### Previous Session (2026-01-24)
+1. **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0
+2. **Rate Limiting UX Fix** - `isRateLimited` flag separate from `isSystemDown`
+3. **reCAPTCHA Admin Configuration** - Admin panel page for configuring keys
+4. **reCAPTCHA Visibility** - Green shield icon on login/register/forgot-password
+5. **Security Audit Fixes**:
    - **CRITICAL**: Replaced `Math.random()` with `crypto.randomInt()` for 2FA/OTP codes
-   - **MEDIUM**: Added server-side name ban for "darius" (was client-side only)
-   - Banned names array in registration endpoint for easy future additions
+   - **MEDIUM**: Server-side name ban for "darius" (was client-side only)
 
 ### Previous Session (2026-01-24 - Earlier)
 1. **Trial Servers Feature** - Full implementation of time-limited trial servers:
    - Database: Added `is_trial`, `trial_expires_at`, `trial_ended_at` columns to `server_billing`
    - Migration: `0013_add_trial_servers.sql`
    - Admin provision: Accept `isTrial` and `trialDuration` (24h or 7d) parameters
-   - Admin end trial: New endpoint `POST /servers/:serverId/end-trial`
-   - Trial processor: `server/trial-processor.ts` - runs every 30 mins to:
-     - End expired trials (power off, set status to 'trial_ended')
-     - Delete old ended trials after 7 days via cancellation system
-   - Email: `sendTrialEndedEmail()` template
-   - Admin UI: Trial checkbox and duration selector in provision form
+   - Trial processor: `server/trial-processor.ts` - ends expired trials, deletes after 7 days
    - Client UI: TRIAL and TRIAL ENDED badges on server cards
-   - Server detail: Trial ended banner and trial info in sidebar
 
 ### Previous Session (2026-01-23 - Session 2)
 1. **Login button success state** - Button turns green with "Login Successful" instead of toast
-2. **Admin 2FA bypass** - Added `ADMIN_BYPASS_2FA=true` env var for recovery when 2FA app lost
-3. **Email verification complete overhaul**:
-   - Fixed: Users now MUST verify email before accessing dashboard
-   - Fixed: Verification works on different device (phone) without login
-   - Fixed: Auto-redirect on original device when verified elsewhere
-   - Root cause: `getAuthUser()` was using `secureFetch` which auto-redirected on 401
-   - Solution: Use regular `fetch` for auth checks, `secureFetch` only for authenticated actions
-4. **Admin IP whitelist disabled** (temporary) - Commented out in `admin-server/index.ts`
+2. **Admin 2FA bypass** - `ADMIN_BYPASS_2FA=true` env var for recovery
+3. **Email verification complete overhaul** - Must verify before dashboard, works cross-device
 
 ### Previous Session (2026-01-23)
-1. **System Health Check - Block Login When API Down**:
-   - Fixed health check to detect when VirtFusion API is disabled (was only checking database)
-   - Added `isSystemDown` flag that covers ALL failure scenarios (DB, VirtFusion, network errors)
-   - Login form now disabled while health check loading AND when system down
-   - Pre-flight health check in `api.login()` requires `status === 'ok'` explicitly
-   - Fixed VirtFusion health endpoint URL (was `/connect`, should be `/api/v1/connect`)
-   - Fixed VirtFusion connection check to treat ANY non-2xx as down (was only 500+)
-
-2. **Security Audit & Fixes** (comprehensive audit of admin + frontend):
-   - **CRITICAL: Path traversal vulnerability** in profile picture upload/delete
-     - Added validation to prevent `../` attacks in filenames
-     - Verifies resolved path stays within uploads directory
-   - **HIGH: X-Forwarded-For spoofing** in admin IP whitelist
-     - Now only trusts proxy headers when `TRUST_PROXY=true` env var set
-     - Validates IP format before using
-   - **MEDIUM: Error message disclosure** - 6 endpoints fixed
-     - VirtFusion errors no longer leak internal API details
-     - billing.ts, servers.ts, users.ts, health.ts now return generic messages
-   - **MEDIUM: Input validation** for `reason` parameters
-     - Added `sanitizeReason()` function (max 500 chars, trimmed)
-     - Applied to: block, suspend, wallet adjust, server delete, admin-suspend
-   - **MEDIUM: CSRF token rotation** - Added tracking infrastructure
-     - Tokens now track creation time in Redis/memory
-     - Support for 2-hour rotation checks
-
-### Security Audit Summary (for reference)
-**Secure practices found:**
-- CSRF double-submit pattern with timing-safe comparison
-- Stripe webhook signature verification
-- Session idle timeout (15 min)
-- 2FA mandatory for admin
-- Password/token redaction in logs
-- CSP/HSTS headers configured
-- No `dangerouslySetInnerHTML` in sensitive areas
-
-### Previous Session (2026-01-22 - Session 2)
-1. **Admin provision server fixes**:
-   - Fixed VirtFusion user auto-creation using correct email (was using auth0UserId like `auth0|123456`)
-   - Fixed hypervisor group ID (was 1, should be 2 for Brisbane)
-   - Added location selector with country flags
-   - Fixed email "undefined server" issue - now fetches OS name from templates
-2. **Bandwidth limit exceeded text** - Made warning more prominent (larger text, icon, padding)
-3. **VirtFusion API error details** - Now shows actual validation errors instead of just "422 Unprocessable Content"
-4. **Admin delete process** - Now creates cancellation request (immediate mode, 5 min delay) instead of directly deleting, so servers show "deleting" status like client-side deletion
-5. **Ticket status email notifications** - Added null checks for guest tickets (no auth0UserId)
-
-### Previous Session (2026-01-22 - Session 1)
-1. **Email verification on different device** - Removed AuthGuard from /verify-email route, works without being logged in
-2. **Sign out button fix** - Fixed verify-email page logout button not ending session properly
-3. **Username ban "Darius"** - Server + client-side validation blocks registration with this name
-4. **Bandwidth warning visibility** - Made "Approaching Bandwidth Limit" warning larger and more readable
-5. **Support page improvements** - Added collapsible FAQ section with common questions, hides when creating ticket
-6. **Ticket confirmation emails** - Sends email to user when they create a support ticket
-7. **Full email support system** - Complete inbound email handling:
-   - Webhook at `/api/hooks/resend-inbound` receives emails to support@ozvps.com.au
-   - Creates new tickets from email (links to account if user exists)
-   - Guest tickets for non-users with unique access tokens
-   - Email replies add to existing tickets (parses [Ticket #123] in subject)
-   - Reply-to address `support+{id}@ozvps.com.au` for threading
-8. **Guest ticket viewing** - Public page at `/support/guest/:accessToken` for non-users to view/reply to tickets
-
-### Resend Inbound Email Setup
-- MX record: `ozvps.com.au` → `inbound-smtp.ap-northeast-1.amazonaws.com` (priority 10)
-- Webhook URL: `https://app.ozvps.com.au/api/hooks/resend-inbound`
-- Reply-to format: `support+{ticketId}@ozvps.com.au`
+1. **System Health Check** - Block login when VirtFusion API or DB is down
+2. **Security Audit** - Path traversal, X-Forwarded-For spoofing, error disclosure, input validation, CSRF rotation
 
 ### Previous Session (2026-01-22)
-1. **Security tables** - Added login_attempts, account_lockouts, user_audit_logs tables and session binding
-2. **Disk usage color thresholds** - Yellow at 60%, red at 85%
-3. **Server card disk display fix** - Was showing percentage as GB
-4. **Admin suspend bug fix** - Was showing "User not found" for Auth0 API errors (rate limits, etc.)
-5. **CRITICAL: Billing bug fixes**:
-   - Promo refund mismatch - was refunding full price instead of discounted (FREE MONEY BUG!)
-   - Promo usage tracking - now records before provisioning, aborts if fails
-   - Promo race condition - atomic increment with limit check
-   - Unsuspend failure - now refunds if VirtFusion unsuspend fails
-6. **Promotional codes feature** - Fully implemented
+1. **Billing bug fixes** - Promo refund mismatch (FREE MONEY BUG), race conditions, unsuspend refund
+2. **Promotional codes feature** - Fully implemented
+3. **Email support system** - Inbound webhook, guest tickets, email threading
+4. **Profile picture upload** - Base64 upload to account settings
 
-### Previous Session (2026-01-21)
-1. **Plan name on server cards** - Added plan name display to dashboard, servers page, and server detail sidebar
-2. **Admin ticket email notifications** - Sends email to `ADMIN_NOTIFICATION_EMAIL` when new support ticket submitted
-3. **Admin ticket management** - Added status/priority/category dropdowns, reopen/close/delete functionality
-4. **Profile picture upload** - Base64 image upload to account settings
-5. **Email verification fixes** - Fixed duplicate emails, added auto-redirect after verification
-6. **VirtFusion user deletion** - Fixed to use correct API endpoint
+## Billing System Architecture
+**chargeServer() flow (server/billing.ts):**
+1. Lock wallet row (`FOR UPDATE`) to prevent concurrent charges
+2. Check idempotency key in billingLedger (after lock, not before)
+3. Check balance >= monthlyPriceCents
+4. Deduct wallet atomically within transaction
+5. Insert billingLedger entry (unique idempotencyKey = `bill:${serverId}:${nextBillAt}`)
+6. Insert walletTransactions for user visibility
+7. Update serverBilling record with new nextBillAt
 
-### Pending Tasks
-1. **Security features** - Implement actual lockout logic and audit logging (tables exist, logic pending)
-2. **Disk usage investigation** - VirtFusion's `physical` field shows disk image size, not filesystem usage (may need different field)
+**Unsuspend failure handling:**
+- If VirtFusion unsuspend fails after charging: refund wallet, delete ledger entry, keep future nextBillAt
+- Next billing cycle retry will find no ledger entry and charge fresh
 
-### Admin Panel
+**Billing idempotencyKey format:** `bill:${virtfusionServerId}:${nextBillAt.toISOString()}`
+
+## Admin Panel
 Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
 **Architecture:**
 - `admin-server/` - Express backend on port 5001
-- `admin-client/` - Vite React frontend
+- `admin-client/` - Vite React frontend (dark theme matching main client)
 - NGINX proxies admin.ozvps.com.au → localhost:5001
 - Same database, separate sessions table (`admin_sessions`)
 
@@ -281,6 +243,8 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 3. Mandatory 2FA verification
 4. IP whitelist (bootstrap mode: allow all if whitelist empty)
 
+**To grant admin access in Auth0:** Set `app_metadata.is_admin = true` on the user
+
 **Admin Provision Server:**
 - Select user by search (email/name)
 - Auto-creates VirtFusion user if not synced
@@ -289,18 +253,16 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 - Sends credentials email to user
 - Location config in `admin-server/routes/servers.ts` (LOCATION_CONFIG)
 
-### Previous Work (2026-01-19)
-- TypeScript cleanup, all errors fixed
-- Rate limiting adjustments
-- Email templates redesigned (white/light theme)
-- Server status caching improvements
-- Update script fixes
+**Admin UI Components (admin-client/src/components/ui/):**
+- `button.tsx`, `dialog.tsx`, `badge.tsx`, `input.tsx`, `label.tsx`, `textarea.tsx`
+- `confirm-dialog.tsx` - Reusable ConfirmDialog (replaces all native `confirm()`)
+- `prompt-dialog.tsx` - Reusable PromptDialog (replaces all native `prompt()`)
 
-### Previous Session (2026-01-18)
-- Security hardening (admin middleware, CSRF, confirmations)
-- "Server not found" flash fix
-- Stale cache fallback
-- Git-based updates
+## Email System
+- **Inbound**: MX record → `inbound-smtp.ap-northeast-1.amazonaws.com` (priority 10)
+- **Webhook**: `https://app.ozvps.com.au/api/hooks/resend-inbound`
+- **Reply-to format**: `support+{ticketId}@ozvps.com.au`
+- **Templates**: White/light themed (dark mode breaks emails in clients)
 
 ## Current Version
 - **App Version**: 1.11.0
@@ -316,10 +278,7 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
 ## Update Commands
 ```bash
-# Dev server
-cd /tmp && ozvps --update
-
-# Prod server
+# Update production or dev server
 cd /tmp && ozvps --update
 
 # If ozvps command not found
@@ -329,27 +288,29 @@ chmod +x /usr/local/bin/ozvps
 
 ## Git Workflow
 ```bash
-# Always push to dev first, test, then merge to main
-git push origin claude/dev-l5488
-git checkout main && git merge claude/dev-l5488 && git push origin main
-git checkout claude/dev-l5488
+# Push directly to main (no dev branch)
+git push origin main
 ```
 
 ## TODO / Known Issues
-- [ ] Security features - implement lockout logic and audit logging (tables ready)
-- [ ] Disk usage - VirtFusion returns disk image size, not actual filesystem usage (need to investigate)
-- [x] Admin suspend account bug - FIXED (was returning "User not found" for Auth0 API errors)
-- [x] Promotional codes feature - DONE
-- [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
-- [x] Username ban "Darius" - DONE (client + server-side validation)
+- [ ] Security features - implement lockout logic and audit logging (tables exist in DB, logic pending)
+- [ ] Disk usage - VirtFusion returns disk image size, not actual filesystem usage (need to investigate different field)
+- [x] Admin panel redesign - DONE (dark theme, no native dialogs, OzVPS branding)
+- [x] Admin Center link fix - DONE (was pointing to /admin, now https://admin.ozvps.com.au)
+- [x] Global provision tracker - DONE (localStorage persistence, polls across all pages)
+- [x] Billing race condition fix - DONE (idempotency check after lock, unsuspend refund loop fixed)
+- [x] Email OTP timing attack - DONE (crypto.timingSafeEqual)
+- [x] Single-use verification tokens - DONE (400 on reuse, UI shows already-used state)
 - [x] Security audit - DONE (path traversal, X-Forwarded-For, error disclosure, input validation, crypto RNG)
-- [x] Block login when API down - DONE (health check now covers VirtFusion + database)
-- [x] reCAPTCHA admin config - DONE (admin panel page for configuration)
 - [x] Native noVNC console - DONE (full sidebar controls, OzVPS branding)
+- [x] reCAPTCHA admin config - DONE
+- [x] Trial servers - DONE
+- [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
+- [x] Promotional codes - DONE
 
 ## Notes for Claude
 - User prefers direct, concise responses
-- Push fixes to `main` branch only (user requested no dev branch for production)
+- Push fixes to `main` branch only (no dev branch for production)
 - User gets frustrated with repeated issues - triple-check fixes
 - The `.ozvps-branch` file on servers determines which branch to pull from
 - Email templates must be white/light themed (dark mode breaks emails)
@@ -367,3 +328,4 @@ git checkout claude/dev-l5488
     - Admin billing routes (`admin-server/routes/billing.ts`)
     - Promo codes (`server/routes.ts` - promo code logic, `admin-server/routes/promo-codes.ts`)
     - Wallet/payment logic in storage (`server/storage.ts` - wallet functions)
+    - Core billing logic (`server/billing.ts`)
