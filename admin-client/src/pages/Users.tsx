@@ -448,21 +448,36 @@ export default function Users() {
                     {transactions.transactions.slice(0, 30).map((tx: any) => (
                       <div key={tx.id} className="p-3 bg-white/5 rounded-lg text-sm">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white capitalize">
-                            {tx.type?.replace(/_/g, " ")}
+                          <span className="font-medium text-white">
+                            {tx.type === 'adjustment_credit'
+                              ? (tx.metadata?.description || 'Credit Added')
+                              : tx.type === 'adjustment_debit'
+                              ? (tx.metadata?.description || 'Balance Deducted')
+                              : tx.type === 'credit'
+                              ? 'Wallet Top-Up'
+                              : tx.type === 'debit'
+                              ? (tx.metadata?.description || 'Server Charge')
+                              : tx.type === 'refund'
+                              ? 'Refund'
+                              : tx.type?.replace(/_/g, " ")}
                           </span>
                           <span className={`font-semibold ${tx.amountCents >= 0 ? "text-[hsl(160_84%_60%)]" : "text-[hsl(0_84%_70%)]"}`}>
                             {tx.amountCents >= 0 ? "+" : ""}{formatCurrency(tx.amountCents)}
                           </span>
                         </div>
-                        {tx.metadata?.description && (
+                        {tx.metadata?.reason && (
                           <p className="text-white/60 text-xs mb-1">
-                            {tx.metadata.description}
+                            Note: {tx.metadata.reason}
                           </p>
                         )}
-                        {tx.metadata?.serverId && (
+                        {tx.metadata?.adjustedBy && (
+                          <p className="text-white/40 text-xs mb-1">
+                            By: {tx.metadata.adjustedBy}
+                          </p>
+                        )}
+                        {tx.metadata?.serverName && (
                           <p className="text-white/40 text-xs">
-                            Server ID: {tx.metadata.serverId}
+                            Server: {tx.metadata.serverName}
                           </p>
                         )}
                         {tx.metadata?.stripePaymentIntentId && (

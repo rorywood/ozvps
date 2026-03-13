@@ -116,7 +116,7 @@ function formatCardBrand(brand: string): string {
 }
 
 function getTransactionIcon(type: string, metadata?: any, amountCents?: number) {
-  if (type === 'admin_adjustment') {
+  if (type === 'admin_adjustment' || type === 'adjustment_credit' || type === 'adjustment_debit') {
     return <Shield className="h-4 w-4" />;
   }
   if (type === 'credit') {
@@ -131,19 +131,23 @@ function getTransactionIcon(type: string, metadata?: any, amountCents?: number) 
 
 function getTransactionType(type: string, metadata?: any, amountCents?: number): string {
   if (type === 'admin_adjustment') {
-    // Check for specific admin actions
     if (metadata?.action === 'admin_deployed_server') {
       return metadata?.freeServer ? 'Admin Deployed Server (Free)' : 'Admin Deployed Server';
     }
     return amountCents !== undefined && amountCents >= 0 ? 'Admin Credit' : 'Admin Debit';
   }
+  if (type === 'adjustment_credit') {
+    return metadata?.description || 'Credit Added';
+  }
+  if (type === 'adjustment_debit') {
+    return metadata?.description || 'Balance Deducted';
+  }
   if (type === 'credit') {
     if (metadata?.auto_topup) return 'Auto Top-Up';
     if (metadata?.source === 'auto_topup') return 'Auto Top-Up';
-    return 'Credit';
+    return 'Wallet Top-Up';
   }
   if (type === 'debit') {
-    // Show the description from metadata if available (e.g. "Server renewal")
     if (metadata?.description) return metadata.description;
     return 'Debit';
   }
@@ -1505,6 +1509,13 @@ export default function BillingPage() {
                                   ) : tx.type === 'admin_adjustment' && tx.metadata && (tx.metadata as Record<string, string>).reason ? (
                                     <div className="text-sm text-muted-foreground mt-0.5">
                                       <span className="text-primary">Reason:</span> {(tx.metadata as Record<string, string>).reason}
+                                    </div>
+                                  ) : (tx.type === 'adjustment_credit' || tx.type === 'adjustment_debit') && tx.metadata ? (
+                                    <div className="text-sm text-muted-foreground mt-0.5">
+                                      {(tx.metadata as Record<string, string>).reason && (
+                                        <span><span className="text-primary">Note:</span> {(tx.metadata as Record<string, string>).reason} · </span>
+                                      )}
+                                      <span className="text-primary">By:</span> {(tx.metadata as Record<string, string>).adjustedBy || 'Admin'}
                                     </div>
                                   ) : null}
                                 </div>

@@ -537,12 +537,13 @@ export function registerUsersRoutes(router: Router) {
         },
       });
 
-      // Update wallet balance
-      const newBalance = wallet.balanceCents + amountCents;
-      await db
+      // Update wallet balance atomically
+      const [updatedWallet] = await db
         .update(wallets)
-        .set({ balanceCents: newBalance, updatedAt: new Date() })
-        .where(eq(wallets.auth0UserId, auth0UserId));
+        .set({ balanceCents: sql`${wallets.balanceCents} + ${amountCents}`, updatedAt: new Date() })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+      const newBalance = updatedWallet.balanceCents;
 
       // Audit log
       await auditSuccess(req, "user.wallet-adjust", "user", auth0UserId, auth0User.email, { amountCents, description, reason, newBalance });
