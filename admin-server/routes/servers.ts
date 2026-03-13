@@ -1251,4 +1251,77 @@ export function registerServersRoutes(router: Router) {
       res.status(500).json({ error: "Failed to provision server" });
     }
   });
+
+  // GET /servers/cancellations/pending - list all pending approval cancellations
+  router.get('/servers/cancellations/pending', async (req: Request, res: Response) => {
+    try {
+      const cancellations = await db
+        .select()
+        .from(serverCancellations)
+        .where(eq(serverCancellations.status, 'pending_approval'))
+        .orderBy(serverCancellations.requestedAt);
+      res.json({ cancellations });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch pending cancellations' });
+    }
+  });
+
+  // POST /servers/:serverId/cancellation/approve - approve deletion
+  router.post('/servers/:serverId/cancellation/approve', async (req: Request, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const session = req.adminSession!;
+
+      const [cancellation] = await db.select().from(serverCancellations)
+        .where(and(
+          eq(serverCancellations.virtfusionServerId, serverId),
+          eq(serverCancellations.status, 'pending_approval')
+        ))
+        .limit(1);
+
+      if (!cancellation) {
+        return res.status(404).json({ error: 'No pending approval cancellation found for this server' });
+      }
+
+      const scheduledAt = new Date();
+      scheduledAt.setHours(scheduledAt.getHours() + 1);
+
+      await db.update(serverCancellations)
+        .set({ status: 'pending', scheduledDeletionAt: scheduledAt })
+        .where(eq(serverCancellations.id, cancellation.id));
+
+      console.log(`[admin] Cancellation approved for server ${serverId} by ${session.email}`);
+      res.json({ success: true, message: 'Deletion approved and scheduled for 1 hour from now' });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to approve cancellation' });
+    }
+  });
+
+  // POST /servers/:serverId/cancellation/recover - recover (cancel the deletion)
+  router.post('/servers/:serverId/cancellation/recover', async (req: Request, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const session = req.adminSession!;
+
+      const [cancellation] = await db.select().from(serverCancellations)
+        .where(and(
+          eq(serverCancellations.virtfusionServerId, serverId),
+          eq(serverCancellations.status, 'pending_approval')
+        ))
+        .limit(1);
+
+      if (!cancellation) {
+        return res.status(404).json({ error: 'No pending approval cancellation found for this server' });
+      }
+
+      await db.update(serverCancellations)
+        .set({ status: 'revoked', revokedAt: new Date() })
+        .where(eq(serverCancellations.id, cancellation.id));
+
+      console.log(`[admin] Cancellation recovered for server ${serverId} by ${session.email}`);
+      res.json({ success: true, message: 'Deletion request cancelled - server has been recovered' });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to recover server' });
+    }
+  });
 }

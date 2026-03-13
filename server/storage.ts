@@ -1343,7 +1343,7 @@ export const dbStorage = {
         and(
           eq(serverCancellations.virtfusionServerId, virtfusionServerId),
           eq(serverCancellations.auth0UserId, auth0UserId),
-          inArray(serverCancellations.status, ['pending', 'processing'])
+          inArray(serverCancellations.status, ['pending_approval', 'pending', 'processing'])
         )
       );
     return cancellation;
@@ -1364,6 +1364,25 @@ export const dbStorage = {
       .from(serverCancellations)
       .where(eq(serverCancellations.status, 'pending'))
       .orderBy(serverCancellations.scheduledDeletionAt);
+  },
+
+  async getPendingApprovalCancellations(): Promise<ServerCancellation[]> {
+    return db
+      .select()
+      .from(serverCancellations)
+      .where(eq(serverCancellations.status, 'pending_approval'))
+      .orderBy(serverCancellations.requestedAt);
+  },
+
+  async approveCancellation(id: number, adminEmail: string): Promise<ServerCancellation | undefined> {
+    const scheduledAt = new Date();
+    scheduledAt.setHours(scheduledAt.getHours() + 1);
+    const [updated] = await db
+      .update(serverCancellations)
+      .set({ status: 'pending', scheduledDeletionAt: scheduledAt })
+      .where(eq(serverCancellations.id, id))
+      .returning();
+    return updated;
   },
 
   async getProcessingCancellations(): Promise<ServerCancellation[]> {

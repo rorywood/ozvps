@@ -2102,7 +2102,7 @@ export async function registerRoutes(
       }
 
       // Build cancellation map
-      const activeCancellations = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
+      const activeCancellations = cancellations.filter(c => c.status === 'pending_approval' || c.status === 'pending' || c.status === 'processing');
       const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
       for (const c of activeCancellations) {
         cancellationMap[c.virtfusionServerId] = {
@@ -2794,8 +2794,8 @@ export async function registerRoutes(
       const session = req.userSession!;
       const cancellations = await dbStorage.getUserCancellations(session.auth0UserId!);
       
-      // Filter to return pending and processing cancellations (active deletions)
-      const active = cancellations.filter(c => c.status === 'pending' || c.status === 'processing');
+      // Filter to return pending_approval, pending and processing cancellations (active deletions)
+      const active = cancellations.filter(c => c.status === 'pending_approval' || c.status === 'pending' || c.status === 'processing');
       
       // Return as a map of serverId -> cancellation for easy lookup
       const cancellationMap: Record<string, { scheduledDeletionAt: Date; reason: string | null; mode: string; status: string }> = {};
@@ -3070,7 +3070,7 @@ export async function registerRoutes(
         virtfusionServerId: serverId,
         serverName: server.name,
         reason: reason || null,
-        status: 'pending',
+        status: 'pending_approval',
         scheduledDeletionAt,
         mode,
       });

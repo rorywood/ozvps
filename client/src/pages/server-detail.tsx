@@ -1223,10 +1223,64 @@ export default function ServerDetail() {
     );
   }
 
+  // If server has a pending_approval cancellation, show pending review state
+  if (activeCancellation?.status === 'pending_approval') {
+    return (
+      <AppShell>
+        <div className="max-w-2xl mx-auto py-12">
+          <Link href="/servers">
+            <Button variant="ghost" className="mb-6">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Servers
+            </Button>
+          </Link>
+
+          <Card className="p-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <Server className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-foreground">{server.name}</h1>
+                <p className="text-sm text-muted-foreground">{server.primaryIp}</p>
+              </div>
+              <Badge className="h-7 bg-orange-500/20 text-orange-400 border-orange-500/30">
+                Pending Review
+              </Badge>
+            </div>
+          </Card>
+
+          <Card className="p-6 border-orange-500/30 bg-orange-500/5">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground mb-1">
+                    Deletion Request Pending Admin Review
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Your request to delete <span className="font-medium text-foreground">{server.name}</span> has been received and is awaiting admin approval before proceeding.
+                  </p>
+                  <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-medium text-orange-300">Made a mistake?</p>
+                    <p className="text-sm text-muted-foreground">
+                      If you did not intend to delete this server, please <Link href="/support"><span className="text-primary underline cursor-pointer">raise a support ticket immediately</span></Link>.{' '}
+                      There is no guarantee the server can be recovered once deletion is approved.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
   // If server has immediate mode cancellation OR is in processing status (VirtFusion deleting), show locked deletion state
   const isBeingDeleted = activeCancellation &&
     (activeCancellation.mode === 'immediate' || activeCancellation.status === 'processing');
-  
+
   if (isBeingDeleted && activeCancellation) {
     const scheduledAt = new Date(activeCancellation.scheduledDeletionAt);
     const now = new Date();
