@@ -245,8 +245,12 @@ export function useReinstallTask(serverId: string) {
             // VirtFusion gave us a meaningful specific state - use it
             newStatus = mappedFromState;
           } else {
-            // VirtFusion just says "building" or nothing - simulate progress by time
-            if (!buildingStartedAtRef.current) {
+            // VirtFusion just says "building" or nothing - simulate progress by time.
+            // Server provides buildingStartedAt so elapsed time is accurate after page refresh.
+            const serverStartedAt = (buildStatus as any).buildingStartedAt as number | null;
+            if (serverStartedAt) {
+              buildingStartedAtRef.current = serverStartedAt;
+            } else if (!buildingStartedAtRef.current) {
               buildingStartedAtRef.current = Date.now();
             }
             const elapsedMs = Date.now() - buildingStartedAtRef.current;

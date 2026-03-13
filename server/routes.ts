@@ -346,6 +346,10 @@ declare global {
   }
 }
 
+// Server-side build start time tracking - survives page refreshes unlike client refs
+// Key: serverId, Value: timestamp (ms) when we first saw commissioned=1
+const buildStartTimes = new Map<string, number>();
+
 const SESSION_COOKIE = 'ozvps_session';
 const CSRF_COOKIE = 'ozvps_csrf';
 const CSRF_HEADER = 'x-csrf-token';
@@ -2702,23 +2706,40 @@ export async function registerRoutes(
 
   app.get('/api/servers/:id/build-status', authMiddleware, async (req, res) => {
     try {
+      const serverId = req.params.id;
+
       // CRITICAL FIX: Get build status FIRST to check if commissioned
       // This prevents caching stale data before we know to invalidate
-      const buildStatus = await virtfusionClient.getServerBuildStatus(req.params.id);
+      const buildStatus = await virtfusionClient.getServerBuildStatus(serverId);
+
+      // Track server-side build start time so clients get accurate elapsed time after page refresh
+      if (buildStatus.commissioned === 1 || buildStatus.isBuilding) {
+        if (!buildStartTimes.has(serverId)) {
+          buildStartTimes.set(serverId, Date.now());
+        }
+      } else if (buildStatus.commissioned === 0) {
+        // Still queued — reset timer so elapsed starts from when building actually begins
+        buildStartTimes.delete(serverId);
+      } else if (buildStatus.commissioned === 3 || buildStatus.isComplete) {
+        // Complete — clean up
+        buildStartTimes.delete(serverId);
+      }
+
+      const buildingStartedAt = buildStartTimes.get(serverId) ?? null;
 
       // If commissioned, invalidate cache BEFORE ownership check to prevent stale data
       if (buildStatus.commissioned === 3) {
-        log(`Server ${req.params.id} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
-        virtfusionClient.invalidateServerCache(req.params.id);
+        log(`Server ${serverId} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
+        virtfusionClient.invalidateServerCache(serverId);
       }
 
       // Now do ownership check - will fetch fresh data if cache was invalidated
-      const { server, error, status } = await getServerWithOwnershipCheck(req.params.id, req.userSession!.virtFusionUserId);
+      const { server, error, status } = await getServerWithOwnershipCheck(serverId, req.userSession!.virtFusionUserId);
       if (!server) {
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
 
-      res.json(buildStatus);
+      res.json({ ...buildStatus, buildingStartedAt });
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch build status' });

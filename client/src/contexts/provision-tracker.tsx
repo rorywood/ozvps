@@ -119,8 +119,30 @@ export function ProvisionTrackerProvider({ children }: { children: ReactNode }) 
             };
           });
         } else {
-          // Use raw VirtFusion state for granular phase mapping, fall back to simplified phase
-          const newStatus = mapPhaseToStatus(buildStatus.state || buildStatus.phase);
+          // Use raw VirtFusion state if available, otherwise use server-provided elapsed time
+          let newStatus: ProvisionStatus;
+          const rawState = buildStatus.state || '';
+          const mappedFromState = rawState ? mapPhaseToStatus(rawState) : null;
+
+          if (mappedFromState && mappedFromState !== 'installing') {
+            // VirtFusion gave us a meaningful state
+            newStatus = mappedFromState;
+          } else if (buildStatus.commissioned === 0) {
+            newStatus = 'queued';
+          } else {
+            // Commissioned=1 but no granular state — use server-tracked elapsed time
+            const buildingStartedAt: number | null = (buildStatus as any).buildingStartedAt ?? null;
+            const elapsedSec = buildingStartedAt ? (Date.now() - buildingStartedAt) / 1000 : 0;
+            if (elapsedSec < 20) {
+              newStatus = 'provisioning';
+            } else if (elapsedSec < 60) {
+              newStatus = 'imaging';
+            } else if (elapsedSec < 150) {
+              newStatus = 'installing';
+            } else {
+              newStatus = 'configuring';
+            }
+          }
           const newPercent = STATUS_PERCENT[newStatus];
           updateProvisions(prev => {
             if (!prev[provision.serverId]) return prev;
