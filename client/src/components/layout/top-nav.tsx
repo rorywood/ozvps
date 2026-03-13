@@ -39,7 +39,7 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: "/admin", icon: ShieldCheck, label: "Admin Center" },
+  { href: "https://admin.ozvps.com.au", icon: ShieldCheck, label: "Admin Center" },
 ];
 
 function formatBalance(cents: number): string {
@@ -314,22 +314,16 @@ function DesktopNav() {
                 <>
                   <div className="w-px h-6 bg-border mx-2" />
                   {adminNavItems.map((item) => {
-                    const isActive = location === item.href || location.startsWith(item.href);
                     return (
-                      <Link key={item.href} href={item.href}>
+                      <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer">
                         <div
                           data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
-                            isActive
-                              ? "bg-amber-500/10 text-amber-400"
-                              : "text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/5"
-                          )}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/5"
                         >
-                          <item.icon className={cn("h-4 w-4", isActive ? "text-amber-400" : "")} />
+                          <item.icon className="h-4 w-4" />
                           {item.label}
                         </div>
-                      </Link>
+                      </a>
                     );
                   })}
                 </>
@@ -514,23 +508,17 @@ function MobileNav() {
                     <>
                       <div className="my-3 border-t border-border" />
                       {adminNavItems.map((item) => {
-                        const isActive = location === item.href || location.startsWith(item.href);
                         return (
-                          <Link key={item.href} href={item.href}>
+                          <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer">
                             <div
                               onClick={() => setOpen(false)}
                               data-testid={`mobile-nav-${item.label.toLowerCase().replace(' ', '-')}`}
-                              className={cn(
-                                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
-                                isActive
-                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                  : "text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/5"
-                              )}
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/5"
                             >
-                              <item.icon className={cn("h-4 w-4", isActive ? "text-amber-400" : "")} />
+                              <item.icon className="h-4 w-4" />
                               {item.label}
                             </div>
-                          </Link>
+                          </a>
                         );
                       })}
                     </>
