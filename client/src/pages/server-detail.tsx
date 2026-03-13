@@ -386,8 +386,22 @@ export default function ServerDetail() {
     }
   }, [server?.needsSetup, server?.primaryIp, reinstallTask.isActive, serverId]);
 
-  // Note: Auto-dismiss removed - user must click "Continue to Server" button
-  // This ensures they see the "Server is Ready" banner and credentials
+  // Auto-dismiss checklist 20 seconds after server finishes building
+  useEffect(() => {
+    if (reinstallTask.status !== 'complete' || !reinstallTask.isActive) return;
+    const timer = setTimeout(() => {
+      reinstallTask.reset();
+      updateSetupMode(false);
+      try {
+        sessionStorage.removeItem(`setupMode:${serverId}`);
+        sessionStorage.removeItem(`setupMinimized:${serverId}`);
+        sessionStorage.setItem(`setupCompleted:${serverId}`, 'true');
+      } catch {}
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, [reinstallTask.status, reinstallTask.isActive, serverId]);
 
   // Mark when build starts (so banner shows after auto-dismiss)
   useEffect(() => {

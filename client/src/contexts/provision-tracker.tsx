@@ -160,18 +160,23 @@ export function ProvisionTrackerProvider({ children }: { children: ReactNode }) 
   }, [provisions, pollAll]);
 
   // Auto-dismiss completed provisions after 30 seconds
+  // Uses an interval so it fires even when provisions state stops changing (polling stopped)
   useEffect(() => {
-    const completed = Object.values(provisions).filter(
-      p => p.status === 'complete' && p.completedAt && Date.now() - p.completedAt > 30000
-    );
-    if (completed.length > 0) {
-      updateProvisions(prev => {
-        const next = { ...prev };
-        completed.forEach(p => delete next[p.serverId]);
-        return next;
-      });
-    }
-  }, [provisions, updateProvisions]);
+    const interval = setInterval(() => {
+      const current = provisionsRef.current;
+      const stale = Object.values(current).filter(
+        p => p.status === 'complete' && p.completedAt && Date.now() - p.completedAt > 30000
+      );
+      if (stale.length > 0) {
+        updateProvisions(prev => {
+          const next = { ...prev };
+          stale.forEach(p => delete next[p.serverId]);
+          return next;
+        });
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [updateProvisions]);
 
   const startProvision = useCallback((serverId: string | number, serverName: string, credentials?: ActiveProvision['credentials']) => {
     const id = String(serverId);
