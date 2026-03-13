@@ -3029,11 +3029,16 @@ export async function registerRoutes(
 
       // Check if server is overdue on payment - block deletion to prevent abuse
       const billingStatus = await getServerBillingStatus(serverId, session.auth0UserId!, server.uuid);
-      if (billingStatus && (billingStatus.status === 'unpaid' || billingStatus.status === 'suspended')) {
-        return res.status(403).json({
-          error: 'Cannot delete server with outstanding payment. Please pay the overdue balance first.',
-          code: 'PAYMENT_REQUIRED'
-        });
+      if (billingStatus && !billingStatus.freeServer) {
+        const isOverdue = billingStatus.status === 'unpaid' ||
+          billingStatus.status === 'suspended' ||
+          (billingStatus.nextBillAt && new Date(billingStatus.nextBillAt) <= new Date());
+        if (isOverdue) {
+          return res.status(403).json({
+            error: 'Cannot delete server with outstanding payment. Please pay the overdue balance first.',
+            code: 'PAYMENT_REQUIRED'
+          });
+        }
       }
 
       // Check if server is already cancelled
@@ -5867,24 +5872,23 @@ export async function registerRoutes(
   // SECURITY: Ensures Stripe customer exists before returning wallet
   app.get('/api/wallet', authMiddleware, async (req, res) => {
     try {
-      const { wallet, stripeCustomerId } = await ensureStripeCustomer({
-        auth0UserId: req.userSession!.auth0UserId,
-        email: req.userSession!.email,
-        name: req.userSession!.name,
-        userId: req.userSession!.userId,
-      });
-      
-      res.json({ 
-        wallet,
-        hasStripeCustomer: !!stripeCustomerId 
-      });
-    } catch (error: any) {
-      if (error instanceof StripeCustomerError) {
-        return res.status(error.httpStatus).json({ 
-          error: error.message, 
-          code: error.code 
+      const auth0UserId = req.userSession!.auth0UserId;
+      if (!auth0UserId) {
+        return res.status(400).json({ error: 'No Auth0 user ID in session' });
+      }
+      // Fetch wallet directly from DB - no Stripe call needed just to show balance
+      const wallet = await dbStorage.getOrCreateWallet(auth0UserId);
+      if (wallet.deletedAt) {
+        return res.status(403).json({
+          error: 'Billing access suspended. Please contact support.',
+          code: 'WALLET_FROZEN'
         });
       }
+      res.json({
+        wallet,
+        hasStripeCustomer: !!wallet.stripeCustomerId
+      });
+    } catch (error: any) {
       log(`Error fetching wallet: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch wallet' });
     }
