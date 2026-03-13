@@ -2,12 +2,33 @@ import { dbStorage } from "./storage";
 import { virtfusionClient } from "./virtfusion";
 import { log } from './log';
 import { db } from "./db";
-import { serverBilling } from "../shared/schema";
-import { eq } from "drizzle-orm";
+import { serverBilling, serverCancellations } from "../shared/schema";
+import { eq, and, lte } from "drizzle-orm";
 
 const PROCESSING_INTERVAL_MS = 30 * 1000; // Check every 30 seconds for faster cleanup
+const AUTO_APPROVE_AFTER_MS = 24 * 60 * 60 * 1000; // Auto-approve pending_approval after 24 hours
 
 let isRunning = false;
+
+// Phase -1: Auto-approve pending_approval cancellations older than 24 hours
+async function autoApproveStaleCancellations(): Promise<number> {
+  const cutoff = new Date(Date.now() - AUTO_APPROVE_AFTER_MS);
+  const stale = await db.select().from(serverCancellations)
+    .where(and(
+      eq(serverCancellations.status, 'pending_approval'),
+      lte(serverCancellations.requestedAt, cutoff)
+    ));
+
+  for (const cancellation of stale) {
+    const scheduledAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+    await db.update(serverCancellations)
+      .set({ status: 'pending', scheduledDeletionAt: scheduledAt })
+      .where(eq(serverCancellations.id, cancellation.id));
+    log(`Auto-approved deletion for server ${cancellation.virtfusionServerId} (pending_approval for >24h)`, 'cancellation');
+  }
+
+  return stale.length;
+}
 
 // Phase 0: Clean up cancellations for servers that no longer exist in VirtFusion
 // This handles cases where servers are deleted manually outside the panel
@@ -187,6 +208,13 @@ export async function processExpiredCancellations(): Promise<{ processed: number
   let errors = 0;
 
   try {
+    // Phase -1: Auto-approve pending_approval cancellations older than 24 hours
+    const autoApproved = await autoApproveStaleCancellations();
+    if (autoApproved > 0) {
+      log(`Auto-approved ${autoApproved} stale pending-approval cancellations`, 'cancellation');
+      processed += autoApproved;
+    }
+
     // Phase 0: Clean up orphaned cancellations (servers already deleted from VirtFusion)
     const cleaned = await cleanupOrphanedCancellations();
     processed += cleaned;

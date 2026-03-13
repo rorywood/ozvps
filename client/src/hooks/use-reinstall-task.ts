@@ -128,6 +128,7 @@ export function useReinstallTask(serverId: string) {
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const pollCountRef = useRef(0);
   const lastStatusRef = useRef<ReinstallStatus>('idle');
+  const buildingStartedAtRef = useRef<number | null>(null); // when we first saw commissioned=1
 
   const addTimelineEvent = useCallback((status: ReinstallStatus, message?: string) => {
     if (status !== lastStatusRef.current) {
@@ -228,14 +229,39 @@ export function useReinstallTask(serverId: string) {
       const stillBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
 
       if (stillBuilding) {
-        // Determine status from raw VirtFusion state (granular) or fall back to phase
         let newStatus: ReinstallStatus = 'provisioning';
-        const rawState = buildStatus.state || buildStatus.phase;
-        if (rawState) {
-          newStatus = mapVirtFusionStatus(rawState);
-        }
-        if (newStatus === 'idle' || commissioned === 0) {
+
+        if (commissioned === 0) {
+          // Genuinely queued - not yet picked up by VirtFusion
           newStatus = 'queued';
+          buildingStartedAtRef.current = null;
+        } else {
+          // commissioned=1 (or unknown) - VirtFusion is building but rarely gives granular state.
+          // Try to use raw state field first; fall back to time-based simulation.
+          const rawState = buildStatus.state || '';
+          const mappedFromState = rawState ? mapVirtFusionStatus(rawState) : 'idle';
+
+          if (mappedFromState !== 'idle' && mappedFromState !== 'queued' && mappedFromState !== 'provisioning') {
+            // VirtFusion gave us a meaningful specific state - use it
+            newStatus = mappedFromState;
+          } else {
+            // VirtFusion just says "building" or nothing - simulate progress by time
+            if (!buildingStartedAtRef.current) {
+              buildingStartedAtRef.current = Date.now();
+            }
+            const elapsedMs = Date.now() - buildingStartedAtRef.current;
+            const elapsedSec = elapsedMs / 1000;
+
+            if (elapsedSec < 20) {
+              newStatus = 'provisioning';
+            } else if (elapsedSec < 60) {
+              newStatus = 'imaging';
+            } else if (elapsedSec < 150) {
+              newStatus = 'installing';
+            } else {
+              newStatus = 'configuring';
+            }
+          }
         }
 
         const newPercent = STATUS_PERCENT_MAP[newStatus];
