@@ -175,6 +175,12 @@ export default function DeployPage() {
 
   const stripeConfigured = stripeStatus?.configured ?? false;
 
+  // Clear promo validation when plan changes — discount was calculated for the previous plan's price
+  useEffect(() => {
+    setPromoCode("");
+    setPromoValidation(null);
+  }, [selectedPlanId]);
+
   const handleApplyPromoCode = async () => {
     if (!promoCodeInput.trim() || !selectedPlanId) return;
 

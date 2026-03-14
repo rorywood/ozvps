@@ -74,7 +74,7 @@ function ProvisionItem({ provision, onDismiss }: { provision: ActiveProvision; o
       </div>
 
       {/* Go to server button */}
-      {(isComplete || !isFailed) && (
+      {(isComplete || isFailed) && (
         <button
           onClick={() => navigate(`/servers/${provision.serverId}`)}
           className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground bg-white/5 hover:bg-white/10 rounded-md transition-colors"

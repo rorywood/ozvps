@@ -317,12 +317,17 @@ export default function ServerDetail() {
   });
   
   
-  // Fetch cancellation status - poll aggressively for real-time deletion status
+  // Fetch cancellation status - poll rate depends on how active the deletion is
   const { data: cancellationData, refetch: refetchCancellation } = useQuery({
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId,
-    refetchInterval: 1000, // Poll every 1 second for deletion progress
+    refetchInterval: (query) => {
+      const cancellation = (query.state.data as any)?.cancellation;
+      if (!cancellation) return 30000;             // No active deletion — check every 30s
+      if (cancellation.status === 'processing') return 5000;  // Actively deleting — check every 5s
+      return 15000;                                // pending_approval / pending — check every 15s
+    },
   });
 
   // Power action pending state - declared here so liveStats can use it
