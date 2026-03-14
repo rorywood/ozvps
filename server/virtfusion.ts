@@ -752,6 +752,15 @@ export class VirtFusionClient {
       let diskTotalBytes = 0;
       const disk = remoteState.disk || {};
 
+      // Log full remoteState once per server so we can see all available fields
+      if (!virtfusionClient._remoteStateLogged) virtfusionClient._remoteStateLogged = new Set();
+      if (!virtfusionClient._remoteStateLogged.has(serverId)) {
+        virtfusionClient._remoteStateLogged.add(serverId);
+        log(`[disk-debug] remoteState keys for server ${serverId}: ${JSON.stringify(Object.keys(remoteState))}`, 'virtfusion');
+        log(`[disk-debug] disk data: ${JSON.stringify(disk)}`, 'virtfusion');
+        if (remoteState.filesystems) log(`[disk-debug] filesystems: ${JSON.stringify(remoteState.filesystems)}`, 'virtfusion');
+      }
+
       // Disk is an object with disk names as keys (e.g., "vda", "sda")
       const diskKeys = Object.keys(disk);
       for (const key of diskKeys) {
