@@ -7136,7 +7136,7 @@ export async function registerRoutes(
       log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
 
       // Send confirmation to user (non-blocking)
-      sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, cleanTitle, accessToken, cleanName).catch(err => {
+      sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, ticket.ticketNumber!, cleanTitle, accessToken, cleanName).catch(err => {
         log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
       });
 
@@ -7145,7 +7145,7 @@ export async function registerRoutes(
         log(`Failed to send admin notification for guest ticket #${ticket.id}: ${err.message}`, 'email');
       });
 
-      res.json({ ticketId: ticket.id, accessToken });
+      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken });
     } catch (error: any) {
       log(`Error creating guest ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to submit your enquiry. Please try again.' });
@@ -7389,7 +7389,7 @@ export async function registerRoutes(
 
       // Notify guest ticket author by email
       if (!ticket.auth0UserId && ticket.guestEmail && ticket.guestAccessToken) {
-        sendGuestTicketAdminReplyEmail(ticket.guestEmail, ticketId, ticket.title, ticket.guestAccessToken, parseResult.data.message).catch(err => {
+        sendGuestTicketAdminReplyEmail(ticket.guestEmail, ticketId, ticket.ticketNumber ?? ticketId, ticket.title, ticket.guestAccessToken, parseResult.data.message).catch(err => {
           log(`Failed to send guest ticket reply notification for ticket #${ticketId}: ${err.message}`, 'email');
         });
       }

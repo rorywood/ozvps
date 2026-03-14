@@ -95,7 +95,7 @@ export default function ContactPage() {
   const { toast } = useToast();
 
   const [form, setForm] = useState({ name: "", email: "", category: "", title: "", message: "" });
-  const [submitted, setSubmitted] = useState<{ ticketId: number; accessToken: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ ticketId: number; ticketNumber: number; accessToken: string } | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof form) => {
@@ -152,7 +152,7 @@ export default function ContactPage() {
                 </p>
                 <div className="bg-background border border-border rounded-xl p-6 mb-8">
                   <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your ticket number</p>
-                  <p className="text-5xl font-bold text-foreground font-mono">#{submitted.ticketId}</p>
+                  <p className="text-5xl font-bold text-foreground font-mono">#{submitted.ticketNumber ?? submitted.ticketId}</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <a href={`/support/guest/${submitted.accessToken}`} className="flex-1">

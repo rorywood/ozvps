@@ -1830,7 +1830,14 @@ export const dbStorage = {
 
   // Create a new ticket
   async createTicket(data: InsertTicket): Promise<Ticket> {
-    const [ticket] = await db.insert(tickets).values(data as typeof tickets.$inferInsert).returning();
+    // Generate a unique random 6-digit display number
+    let ticketNumber: number | undefined;
+    for (let i = 0; i < 10; i++) {
+      const candidate = Math.floor(100000 + Math.random() * 900000);
+      const existing = await db.select({ id: tickets.id }).from(tickets).where(eq(tickets.ticketNumber, candidate)).limit(1);
+      if (existing.length === 0) { ticketNumber = candidate; break; }
+    }
+    const [ticket] = await db.insert(tickets).values({ ...data as typeof tickets.$inferInsert, ticketNumber }).returning();
     return ticket;
   },
 

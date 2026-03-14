@@ -310,6 +310,7 @@ export type TicketStatus = typeof TICKET_STATUSES[number];
 // Support tickets - user support requests
 export const tickets = pgTable("tickets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  ticketNumber: integer("ticket_number").unique(), // random 6-digit display number
   auth0UserId: text("auth0_user_id"), // nullable for guest tickets
   guestEmail: text("guest_email"), // email for guest tickets (when auth0UserId is null)
   guestAccessToken: text("guest_access_token"), // unique token for guest ticket access

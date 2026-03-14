@@ -162,7 +162,7 @@ export default function GuestTicketPage() {
     refetchInterval: 15000,
   });
 
-  useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id} — OzVPS Support` : "Support Ticket");
+  useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.ticketNumber ?? data.ticket.id} — OzVPS Support` : "Support Ticket");
 
   useEffect(() => {
     if (data?.messages?.length) {
@@ -253,7 +253,7 @@ export default function GuestTicketPage() {
               <div>
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">Ticket</p>
                 <p className="text-sm font-semibold text-foreground flex items-center gap-1">
-                  <Hash className="h-3.5 w-3.5 text-muted-foreground" />{ticket.id}
+                  <Hash className="h-3.5 w-3.5 text-muted-foreground" />{ticket.ticketNumber ?? ticket.id}
                 </p>
               </div>
               <div>

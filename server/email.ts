@@ -650,6 +650,7 @@ export async function sendTicketConfirmationEmail(
 export async function sendGuestTicketConfirmationEmail(
   to: string,
   ticketId: number,
+  ticketNumber: number,
   title: string,
   accessToken: string,
   userName: string | null
@@ -668,7 +669,7 @@ export async function sendGuestTicketConfirmationEmail(
     <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Hi${userName ? ` ${userName}` : ''}, your support ticket has been created. You don't need an account — use the link below to view and track your ticket.</p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
-      ${row('Ticket Number', `#${ticketId}`)}
+      ${row('Ticket Number', `#${ticketNumber}`)}
       ${row('Subject', title, true)}
     </table>
 
@@ -680,12 +681,12 @@ export async function sendGuestTicketConfirmationEmail(
       from: EMAIL_FROM,
       to,
       replyTo: `support+${ticketId}@ozvps.com.au`,
-      subject: `[Ticket #${ticketId}] ${title}`,
+      subject: `[Ticket #${ticketNumber}] ${title}`,
       html: baseEmail(body, logoUrl),
-      text: `We've Received Your Request\n\nTicket: #${ticketId}\nSubject: ${title}\n\nView your ticket:\n${ticketUrl}\n\nOr reply to this email to add more information.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+      text: `We've Received Your Request\n\nTicket: #${ticketNumber}\nSubject: ${title}\n\nView your ticket:\n${ticketUrl}\n\nOr reply to this email to add more information.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
     });
     if (error) { log(`Failed to send guest ticket confirmation to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
-    log(`Guest ticket confirmation sent to ${to} for ticket #${ticketId}, messageId: ${data?.id}`, 'email');
+    log(`Guest ticket confirmation sent to ${to} for ticket #${ticketNumber}, messageId: ${data?.id}`, 'email');
     return { success: true, messageId: data?.id };
   } catch (err: any) {
     log(`Error sending guest ticket confirmation to ${to}: ${err.message}`, 'email');
@@ -699,6 +700,7 @@ export async function sendGuestTicketConfirmationEmail(
 export async function sendGuestTicketAdminReplyEmail(
   to: string,
   ticketId: number,
+  ticketNumber: number,
   title: string,
   accessToken: string,
   adminReplyMessage: string
@@ -718,7 +720,7 @@ export async function sendGuestTicketAdminReplyEmail(
     <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Our support team has replied to your ticket. Click below to view the conversation and respond.</p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
-      ${row('Ticket', `#${ticketId}`)}
+      ${row('Ticket', `#${ticketNumber}`)}
       ${row('Subject', title, true)}
     </table>
 
@@ -735,9 +737,9 @@ export async function sendGuestTicketAdminReplyEmail(
       from: EMAIL_FROM,
       to,
       replyTo: `support+${ticketId}@ozvps.com.au`,
-      subject: `[Ticket #${ticketId}] ${title}`,
+      subject: `[Ticket #${ticketNumber}] ${title}`,
       html: baseEmail(body, logoUrl),
-      text: `New Reply on Your Ticket\n\nTicket: #${ticketId}\nSubject: ${title}\n\nOur support team has replied. View and reply here:\n${ticketUrl}\n\nOr reply directly to this email.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+      text: `New Reply on Your Ticket\n\nTicket: #${ticketNumber}\nSubject: ${title}\n\nOur support team has replied. View and reply here:\n${ticketUrl}\n\nOr reply directly to this email.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
     });
     if (error) { log(`Failed to send guest ticket reply notification to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
     log(`Guest ticket reply notification sent to ${to} for ticket #${ticketId}`, 'email');
