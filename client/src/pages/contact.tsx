@@ -14,10 +14,8 @@ import {
   ShieldAlert,
   TrendingUp,
   User,
-  ArrowLeft,
-  Headphones,
-  Globe,
-  Lock,
+  Clock,
+  ArrowRight,
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,26 +24,26 @@ import logo from "@/assets/logo.png";
 const CATEGORIES = [
   {
     value: "sales",
-    label: "Sales Enquiry",
-    description: "Pricing, plans, or custom quotes",
+    label: "Sales",
+    description: "Pricing, plans & quotes",
     icon: TrendingUp,
-    accent: "text-blue-400",
-    border: "border-blue-500/40",
-    bg: "bg-blue-500/10",
+    color: "text-blue-400",
+    activeBorder: "border-primary",
+    activeBg: "bg-primary/5",
   },
   {
     value: "abuse",
-    label: "Network Abuse",
-    description: "Report spam, attacks, or policy violations",
+    label: "Abuse Report",
+    description: "Spam, attacks & violations",
     icon: ShieldAlert,
-    accent: "text-red-400",
-    border: "border-red-500/40",
-    bg: "bg-red-500/10",
+    color: "text-red-400",
+    activeBorder: "border-red-500",
+    activeBg: "bg-red-500/5",
   },
 ];
 
 export default function ContactPage() {
-  useDocumentTitle("Contact Us — OzVPS");
+  useDocumentTitle("Contact Support — OzVPS");
   const { toast } = useToast();
 
   const [form, setForm] = useState({ name: "", email: "", category: "", title: "", message: "" });
@@ -60,174 +58,123 @@ export default function ContactPage() {
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to submit enquiry");
+        throw new Error(err.error || "Failed to submit");
       }
       return response.json();
     },
     onSuccess: (data) => setSubmitted(data),
     onError: (error: Error) => {
-      toast({ title: "Submission failed", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.category) {
-      toast({ title: "Please select an enquiry type", variant: "destructive" });
-      return;
-    }
-    submitMutation.mutate(form);
-  };
-
-  // ── Success screen ──────────────────────────────────────────────────────
+  // ── Success ─────────────────────────────────────────────────────────────
   if (submitted) {
     return (
-      <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14] items-center justify-center p-6">
-        {/* Background orbs */}
-        <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-[128px] pointer-events-none" />
-        <div className="fixed bottom-1/4 right-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[96px] pointer-events-none" />
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Nav */}
+        <nav className="border-b border-border bg-card/50 backdrop-blur-sm">
+          <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="https://ozvps.com.au">
+              <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
+            </a>
+            <a href="/login">
+              <Button variant="outline" size="sm">Sign In</Button>
+            </a>
+          </div>
+        </nav>
 
-        <div className="relative w-full max-w-md text-center">
-          <div className="bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 border-t-2 border-t-emerald-500 rounded-2xl p-10 shadow-2xl shadow-black/20">
-            <div className="h-16 w-16 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="h-8 w-8 text-green-400" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg">
+            {/* Success card */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="h-1.5 bg-gradient-to-r from-primary via-blue-400 to-primary/50" />
+              <div className="p-10 text-center">
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 border border-green-500/20 mb-6">
+                  <CheckCircle2 className="h-8 w-8 text-green-400" />
+                </div>
+
+                <h1 className="text-2xl font-bold text-foreground mb-2">Ticket Submitted</h1>
+                <p className="text-muted-foreground mb-8">
+                  We've emailed <span className="text-foreground font-medium">{form.email}</span> with your ticket details and a link to track replies.
+                </p>
+
+                {/* Ticket number */}
+                <div className="bg-background border border-border rounded-xl p-6 mb-8">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your ticket number</p>
+                  <p className="text-5xl font-bold text-foreground font-mono">#{submitted.ticketId}</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <a href={`/support/guest/${submitted.accessToken}`} className="flex-1">
+                    <Button className="w-full">
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      View Ticket
+                    </Button>
+                  </a>
+                  <a href="https://ozvps.com.au" className="flex-1">
+                    <Button variant="outline" className="w-full">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Back to OzVPS
+                    </Button>
+                  </a>
+                </div>
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">Enquiry Received</h1>
-            <p className="text-[#a6a6a6] mb-8 leading-relaxed">
-              We've received your message and sent a confirmation to{" "}
-              <span className="text-white font-medium">{form.email}</span>.
-              Our team will get back to you shortly.
+
+            <p className="text-center text-xs text-muted-foreground mt-6">
+              Didn't receive an email? Check your spam folder or{" "}
+              <button onClick={() => setSubmitted(null)} className="text-primary hover:underline">
+                submit again
+              </button>.
             </p>
-
-            <div className="bg-[#161b22]/60 border border-white/10 rounded-xl p-4 mb-8 text-left">
-              <p className="text-xs uppercase tracking-widest text-[#525252] mb-1.5">Ticket Reference</p>
-              <p className="text-3xl font-bold text-white font-mono">#{submitted.ticketId}</p>
-              <p className="text-xs text-[#737373] mt-1.5">Bookmark your ticket link to check replies</p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <a href={`/support/guest/${submitted.accessToken}`}>
-                <Button className="w-full h-11 text-sm font-semibold rounded-xl">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  View Your Ticket
-                </Button>
-              </a>
-              <a href="https://ozvps.com.au">
-                <Button variant="outline" className="w-full h-11 text-sm font-semibold rounded-xl border-white/10 text-[#a6a6a6] hover:text-white hover:bg-white/5">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to OzVPS
-                </Button>
-              </a>
-            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Main form ───────────────────────────────────────────────────────────
+  // ── Form ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
+    <div className="min-h-screen bg-background flex flex-col">
 
-      {/* Left panel — brand */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-primary/10" />
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }} />
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/30 rounded-full blur-[128px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-blue-500/20 rounded-full blur-[96px]" />
-
-        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <div>
-            <a href="https://ozvps.com.au">
-              <img src={logo} alt="OzVPS" className="h-20 w-auto brightness-0 invert" />
-            </a>
-          </div>
-
-          <div>
-            <div className="mb-14">
-              <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
-                We're here<br />
-                <span className="text-primary">to help.</span>
-              </h1>
-              <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
-                Have a question about our plans or need to report abuse? Our team responds fast.
-              </p>
-            </div>
-
-            <div className="grid gap-7">
-              <div className="flex items-center gap-4 group">
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 transition-colors">
-                  <TrendingUp className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Sales & Pricing</h3>
-                  <p className="text-sm text-[#737373]">Custom quotes, bulk orders, or general enquiries</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 group">
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 transition-colors">
-                  <ShieldAlert className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Abuse Reports</h3>
-                  <p className="text-sm text-[#737373]">Spam, DDoS, or policy violations</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 group">
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 transition-colors">
-                  <Lock className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Private & Secure</h3>
-                  <p className="text-sm text-[#737373]">Your ticket link is unique — no account needed</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 flex items-center gap-2 text-xs text-[#525252]">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>All systems operational · Brisbane, AU</span>
-            </div>
-          </div>
-
-          <div className="text-sm text-[#525252]">
-            © {new Date().getFullYear()} OzVPS. All rights reserved.
-          </div>
+      {/* Nav */}
+      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+          <a href="https://ozvps.com.au">
+            <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
+          </a>
+          <a href="/login">
+            <Button variant="outline" size="sm">Sign In</Button>
+          </a>
         </div>
-      </div>
+      </nav>
 
-      {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 overflow-y-auto">
-        <div className="w-full max-w-lg py-8">
+      <div className="flex-1 max-w-3xl mx-auto w-full px-6 py-12">
 
-          {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-10">
-            <a href="https://ozvps.com.au">
-              <img src={logo} alt="OzVPS" className="h-16 w-auto mx-auto brightness-0 invert" />
-            </a>
-            <p className="text-sm text-[#737373] mt-2">Australian cloud servers</p>
+        {/* Page header */}
+        <div className="mb-10">
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-3 py-1 mb-4">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            Support
           </div>
+          <h1 className="text-3xl font-bold text-foreground mb-3">Contact Us</h1>
+          <p className="text-muted-foreground max-w-md">
+            Fill in the form below and we'll get back to you. You'll receive a ticket number by email so you can track your request and see our replies.
+          </p>
+        </div>
 
-          {/* Card */}
-          <div className="bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 border-t-2 border-t-[hsl(210_100%_50%)] rounded-2xl p-8 shadow-2xl shadow-black/20">
-            <div className="mb-7">
-              <h2 className="text-2xl font-bold text-white mb-1.5">Contact Us</h2>
-              <p className="text-[#a6a6a6] text-sm leading-relaxed">
-                For billing or technical support,{" "}
-                <a href="/login" className="text-primary hover:text-primary/80 transition-colors">sign in to your account</a>.
-              </p>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Form */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-primary via-blue-400 to-transparent" />
+            <div className="p-8 space-y-6">
 
               {/* Category */}
               <div>
-                <Label className="text-sm font-medium text-[#ebebeb] mb-3 block">
-                  Enquiry type <span className="text-destructive">*</span>
+                <Label className="text-sm font-medium text-foreground mb-3 block">
+                  What's this about? <span className="text-destructive">*</span>
                 </Label>
                 <div className="grid grid-cols-2 gap-3">
                   {CATEGORIES.map((cat) => {
@@ -239,20 +186,21 @@ export default function ContactPage() {
                         type="button"
                         onClick={() => setForm((f) => ({ ...f, category: cat.value }))}
                         className={cn(
-                          "flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all",
+                          "flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all",
                           selected
-                            ? `${cat.bg} ${cat.border}`
-                            : "bg-[#161b22]/50 border-white/10 hover:border-white/20"
+                            ? `${cat.activeBg} ${cat.activeBorder}`
+                            : "bg-background border-border hover:border-white/20"
                         )}
                       >
-                        <div className={cn("p-1.5 rounded-lg", selected ? cat.bg : "bg-white/5")}>
-                          <Icon className={cn("h-4 w-4", selected ? cat.accent : "text-[#737373]")} />
+                        <div className={cn(
+                          "flex-shrink-0 h-9 w-9 rounded-lg flex items-center justify-center",
+                          selected ? "bg-white/10" : "bg-muted/50"
+                        )}>
+                          <Icon className={cn("h-4 w-4", selected ? cat.color : "text-muted-foreground")} />
                         </div>
                         <div>
-                          <p className={cn("text-sm font-semibold leading-tight", selected ? "text-white" : "text-[#ebebeb]")}>
-                            {cat.label}
-                          </p>
-                          <p className="text-xs text-[#737373] mt-0.5 leading-tight">{cat.description}</p>
+                          <p className="text-sm font-semibold text-foreground">{cat.label}</p>
+                          <p className="text-xs text-muted-foreground leading-tight mt-0.5">{cat.description}</p>
                         </div>
                       </button>
                     );
@@ -261,27 +209,27 @@ export default function ContactPage() {
               </div>
 
               {/* Name + Email */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name" className="text-sm font-medium text-[#ebebeb]">Name</Label>
+                  <Label htmlFor="name" className="text-sm font-medium text-foreground">Name</Label>
                   <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#737373] pointer-events-none" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="name"
                       placeholder="Your name"
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                       maxLength={100}
-                      className="pl-10 h-11 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                      className="pl-9"
                     />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm font-medium text-[#ebebeb]">
+                  <Label htmlFor="email" className="text-sm font-medium text-foreground">
                     Email <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#737373] pointer-events-none" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="email"
                       type="email"
@@ -290,7 +238,7 @@ export default function ContactPage() {
                       onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                       required
                       maxLength={254}
-                      className="pl-10 h-11 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                      className="pl-9"
                     />
                   </div>
                 </div>
@@ -298,7 +246,7 @@ export default function ContactPage() {
 
               {/* Subject */}
               <div className="space-y-1.5">
-                <Label htmlFor="title" className="text-sm font-medium text-[#ebebeb]">
+                <Label htmlFor="title" className="text-sm font-medium text-foreground">
                   Subject <span className="text-destructive">*</span>
                 </Label>
                 <Input
@@ -309,62 +257,116 @@ export default function ContactPage() {
                   required
                   minLength={5}
                   maxLength={200}
-                  className="h-11 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                 />
               </div>
 
               {/* Message */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="message" className="text-sm font-medium text-[#ebebeb]">
+                  <Label htmlFor="message" className="text-sm font-medium text-foreground">
                     Message <span className="text-destructive">*</span>
                   </Label>
-                  <span className="text-xs text-[#525252]">{form.message.length}/5000</span>
+                  <span className="text-xs text-muted-foreground">{form.message.length}/5000</span>
                 </div>
                 <Textarea
                   id="message"
-                  placeholder="Describe your enquiry in detail..."
+                  placeholder="Give us as much detail as you can..."
                   value={form.message}
                   onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
                   required
-                  rows={5}
+                  rows={6}
                   maxLength={5000}
-                  className="resize-none bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                  className="resize-none"
                 />
               </div>
 
               <Button
-                type="submit"
-                className="w-full h-12 text-base font-semibold rounded-xl"
+                onClick={handleSubmit}
+                className="w-full h-11 font-semibold"
                 disabled={submitMutation.isPending || !form.category}
               >
                 {submitMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
+                    Submitting...
                   </>
                 ) : (
                   <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Enquiry
+                    Submit Ticket
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
               </Button>
-            </form>
+            </div>
           </div>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <a
-              href="https://ozvps.com.au"
-              className="text-sm text-[#525252] hover:text-[#a6a6a6] transition-colors inline-flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to ozvps.com.au
-            </a>
+          {/* Sidebar info */}
+          <div className="space-y-4">
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Response Times</h3>
+              </div>
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Sales</span>
+                  <span className="text-xs font-medium text-foreground bg-muted rounded-full px-2 py-0.5">Within 24h</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Abuse</span>
+                  <span className="text-xs font-medium text-green-400 bg-green-500/10 rounded-full px-2 py-0.5">Within 4h</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">How it works</h3>
+              </div>
+              <ol className="space-y-2.5">
+                {[
+                  "Submit your enquiry below",
+                  "We'll email you a ticket number",
+                  "Track replies via your ticket link",
+                  "Reply by email or on the ticket page",
+                ].map((step, i) => (
+                  <li key={i} className="flex items-start gap-2.5">
+                    <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-muted-foreground">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                <strong className="text-foreground">Already a customer?</strong>{" "}
+                <a href="/login" className="text-primary hover:underline">Sign in</a> for billing, technical support, and account help.
+              </p>
+            </div>
           </div>
         </div>
       </div>
+
+      <footer className="border-t border-border py-6 mt-6">
+        <div className="max-w-3xl mx-auto px-6">
+          <p className="text-sm text-muted-foreground text-center">
+            © {new Date().getFullYear()} OzVPS Pty Ltd · <a href="https://ozvps.com.au" className="hover:text-foreground transition-colors">ozvps.com.au</a>
+          </p>
+        </div>
+      </footer>
     </div>
   );
+
+  function handleSubmit(e: React.MouseEvent) {
+    e.preventDefault();
+    if (!form.category) {
+      toast({ title: "Please select an enquiry type", variant: "destructive" });
+      return;
+    }
+    submitMutation.mutate(form);
+  }
 }

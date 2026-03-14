@@ -1,18 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, Link } from "wouter";
+import { useParams } from "wouter";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { TicketCategory, TicketPriority, TicketStatus } from "@/lib/types";
+import { TicketCategory, TicketStatus } from "@/lib/types";
 import {
   MessageSquare,
   Clock,
   Loader2,
   Send,
-  Calendar,
-  AlertTriangle,
   CheckCircle2,
   CircleDot,
   Timer,
@@ -20,87 +18,48 @@ import {
   User,
   ShieldCheck,
   ExternalLink,
+  Hash,
+  Mail,
+  Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/logo.png";
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
   sales: "Sales",
   accounts: "Accounts",
   support: "Support",
-  abuse: "Abuse",
+  abuse: "Abuse Report",
 };
 
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  low: "Low",
-  normal: "Normal",
-  high: "High",
-  urgent: "Urgent",
+const STATUS_CONFIG: Record<TicketStatus, { label: string; dot: string; badge: string }> = {
+  new:           { label: "New",                dot: "bg-blue-400",   badge: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  open:          { label: "Open",               dot: "bg-cyan-400",   badge: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
+  waiting_user:  { label: "Awaiting Your Reply",dot: "bg-amber-400",  badge: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  waiting_admin: { label: "In Progress",        dot: "bg-purple-400", badge: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
+  resolved:      { label: "Resolved",           dot: "bg-green-400",  badge: "text-green-400 bg-green-500/10 border-green-500/20" },
+  closed:        { label: "Closed",             dot: "bg-neutral-500",badge: "text-muted-foreground bg-muted/40 border-border" },
 };
 
-const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot }> = {
-  new: { label: "New", color: "text-blue-400 bg-blue-500/10", icon: CircleDot },
-  open: { label: "Open", color: "text-cyan-400 bg-cyan-500/10", icon: CircleDot },
-  waiting_user: { label: "Awaiting Your Reply", color: "text-amber-400 bg-amber-500/10", icon: Timer },
-  waiting_admin: { label: "In Progress", color: "text-purple-400 bg-purple-500/10", icon: Clock },
-  resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
-  closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
-};
-
-function StatusBadge({ status }: { status: TicketStatus }) {
-  const config = STATUS_CONFIG[status];
-  const Icon = config.icon;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", config.color)}>
-      <Icon className="h-3 w-3" />
-      {config.label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: TicketPriority }) {
-  const colors: Record<TicketPriority, string> = {
-    low: "text-muted-foreground bg-muted/50",
-    normal: "text-foreground bg-muted/50",
-    high: "text-amber-400 bg-amber-500/10",
-    urgent: "text-red-400 bg-red-500/10",
-  };
-  return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium", colors[priority])}>
-      <AlertTriangle className="h-3 w-3" />
-      {PRIORITY_LABELS[priority]}
-    </span>
-  );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatRelativeDate(dateString: string): string {
+function formatRelative(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+}
 
-  if (diffHours < 1) {
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    return diffMins <= 1 ? "Just now" : `${diffMins} minutes ago`;
-  } else if (diffHours < 24) {
-    return `${Math.floor(diffHours)} hours ago`;
-  } else if (diffDays < 7) {
-    return `${Math.floor(diffDays)} days ago`;
-  } else {
-    return formatDate(dateString);
-  }
+function formatFull(dateString: string): string {
+  return new Date(dateString).toLocaleDateString("en-AU", {
+    weekday: "short", day: "numeric", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 }
 
 interface TicketMessage {
@@ -112,37 +71,70 @@ interface TicketMessage {
   createdAt: string;
 }
 
-function MessageBubble({ message, isUser }: { message: TicketMessage; isUser: boolean }) {
+function Message({ msg }: { msg: TicketMessage }) {
+  const isSupport = msg.authorType === "admin";
+  const displayName = msg.authorName || msg.authorEmail.split("@")[0];
+
   return (
-    <div className="flex gap-3">
-      <div
-        className={cn(
-          "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0",
-          isUser ? "bg-primary/10" : "bg-green-500/10"
-        )}
-      >
-        {isUser ? (
-          <User className="h-4 w-4 text-primary" />
-        ) : (
-          <ShieldCheck className="h-4 w-4 text-green-500" />
-        )}
+    <div className={cn("flex gap-3", isSupport ? "flex-row" : "flex-row-reverse")}>
+      {/* Avatar */}
+      <div className={cn(
+        "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold",
+        isSupport ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+      )}>
+        {isSupport ? <ShieldCheck className="h-4 w-4" /> : <User className="h-4 w-4" />}
       </div>
-      <div className="flex-1 min-w-0">
+
+      {/* Bubble */}
+      <div className={cn("max-w-[75%] min-w-0", isSupport ? "items-start" : "items-end flex flex-col")}>
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-semibold text-foreground">
-            {message.authorName || message.authorEmail.split("@")[0]}
-          </span>
-          {!isUser && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-500 font-medium uppercase tracking-wide">
-              Support
-            </span>
+          {isSupport ? (
+            <>
+              <span className="text-xs font-semibold text-foreground">OzVPS Support</span>
+              <span className="text-[10px] font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5 uppercase tracking-wide">Team</span>
+            </>
+          ) : (
+            <span className="text-xs font-semibold text-foreground">{displayName}</span>
           )}
-          <span className="text-xs text-muted-foreground">{formatRelativeDate(message.createdAt)}</span>
+          <span className="text-[11px] text-muted-foreground">{formatRelative(msg.createdAt)}</span>
         </div>
-        <div className="bg-muted/30 border border-border rounded-lg p-3">
-          <p className="whitespace-pre-wrap break-words text-sm text-foreground leading-relaxed">
-            {message.message}
-          </p>
+        <div className={cn(
+          "rounded-2xl px-4 py-3 text-sm leading-relaxed",
+          isSupport
+            ? "bg-primary/5 border border-primary/10 text-foreground rounded-tl-sm"
+            : "bg-card border border-border text-foreground rounded-tr-sm"
+        )}>
+          <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1 px-1">{formatFull(msg.createdAt)}</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <nav className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+          <a href="https://ozvps.com.au">
+            <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
+          </a>
+        </div>
+      </nav>
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="h-14 w-14 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto mb-5">
+            <XCircle className="h-7 w-7 text-destructive" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground mb-2">{title}</h2>
+          <p className="text-sm text-muted-foreground mb-6">{message}</p>
+          <a href="https://ozvps.com.au">
+            <Button variant="outline">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Go to OzVPS
+            </Button>
+          </a>
         </div>
       </div>
     </div>
@@ -154,84 +146,53 @@ export default function GuestTicketPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [replyMessage, setReplyMessage] = useState("");
+  const [reply, setReply] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["guest-ticket", accessToken],
     queryFn: async () => {
-      const response = await fetch(`/api/support/guest/${accessToken}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch ticket");
+      const res = await fetch(`/api/support/guest/${accessToken}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to fetch ticket");
       }
-      return response.json();
+      return res.json();
     },
     enabled: !!accessToken && accessToken.length >= 32,
-    refetchInterval: 10000,
+    refetchInterval: 15000,
   });
 
-  useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id}` : "Support Ticket");
+  useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id} — OzVPS Support` : "Support Ticket");
 
   useEffect(() => {
-    if (data?.messages) {
+    if (data?.messages?.length) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [data?.messages]);
+  }, [data?.messages?.length]);
 
   const replyMutation = useMutation({
     mutationFn: async (message: string) => {
-      const response = await fetch(`/api/support/guest/${accessToken}/messages`, {
+      const res = await fetch(`/api/support/guest/${accessToken}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to send reply");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to send reply");
       }
-      return response.json();
+      return res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "Reply Sent",
-        description: "Your message has been sent successfully.",
-      });
-      setReplyMessage("");
+      setReply("");
       queryClient.invalidateQueries({ queryKey: ["guest-ticket", accessToken] });
+      toast({ title: "Reply sent" });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const handleSubmitReply = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyMessage.trim()) return;
-    replyMutation.mutate(replyMessage);
-  };
-
   if (!accessToken || accessToken.length < 32) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
-          <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <h2 className="text-lg font-medium text-foreground">Invalid Access Link</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            This ticket link is invalid or has expired.
-          </p>
-          <a href="https://ozvps.com.au" className="inline-block mt-4">
-            <Button variant="outline">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Go to OzVPS
-            </Button>
-          </a>
-        </div>
-      </div>
-    );
+    return <ErrorState title="Invalid Link" message="This ticket link is invalid or has expired." />;
   }
 
   if (isLoading) {
@@ -243,157 +204,156 @@ export default function GuestTicketPage() {
   }
 
   if (error || !data) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
-          <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <h2 className="text-lg font-medium text-foreground">Ticket Not Found</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            The ticket you're looking for doesn't exist or the access link is invalid.
-          </p>
-          <a href="https://ozvps.com.au" className="inline-block mt-4">
-            <Button variant="outline">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Go to OzVPS
-            </Button>
-          </a>
-        </div>
-      </div>
-    );
+    return <ErrorState title="Ticket Not Found" message="This ticket doesn't exist or your access link is invalid." />;
   }
 
   const { ticket, messages } = data;
-  const isResolved = ticket.status === "resolved";
+  const statusCfg = STATUS_CONFIG[ticket.status as TicketStatus] ?? STATUS_CONFIG.open;
   const isClosed = ticket.status === "closed";
-  const isInactive = isResolved || isClosed;
+  const isResolved = ticket.status === "resolved";
+  const canReply = !isClosed;
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-bold text-foreground">OzVPS Support</h1>
-                <p className="text-xs text-muted-foreground">Ticket #{ticket.id}</p>
-              </div>
-            </div>
-            <a href="https://app.ozvps.com.au/login">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-            </a>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background flex flex-col">
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        <div className="space-y-6">
-          {/* Ticket Header */}
-          <div className="rounded-lg bg-card border border-border p-4">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <StatusBadge status={ticket.status} />
-              <PriorityBadge priority={ticket.priority} />
-              <span className="text-xs text-muted-foreground">
-                {CATEGORY_LABELS[ticket.category as TicketCategory]}
+      {/* Nav */}
+      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+          <a href="https://ozvps.com.au">
+            <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
+          </a>
+          <a href="/login">
+            <Button variant="outline" size="sm">Sign In</Button>
+          </a>
+        </div>
+      </nav>
+
+      <div className="flex-1 max-w-3xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
+
+        {/* Ticket header */}
+        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-primary via-blue-400 to-transparent" />
+          <div className="p-6">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+                statusCfg.badge
+              )}>
+                <span className={cn("h-1.5 w-1.5 rounded-full", statusCfg.dot)} />
+                {statusCfg.label}
+              </span>
+              <span className="text-xs text-muted-foreground bg-muted/50 border border-border rounded-full px-2.5 py-1">
+                {CATEGORY_LABELS[ticket.category as TicketCategory] || ticket.category}
               </span>
             </div>
-            <h2 className="text-xl font-bold text-foreground">{ticket.title}</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Created {formatDate(ticket.createdAt)}
-            </p>
+
+            <h1 className="text-xl font-bold text-foreground mb-4">{ticket.title}</h1>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">Ticket</p>
+                <p className="text-sm font-semibold text-foreground flex items-center gap-1">
+                  <Hash className="h-3.5 w-3.5 text-muted-foreground" />{ticket.id}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">Opened</p>
+                <p className="text-sm font-semibold text-foreground">{formatRelative(ticket.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">Messages</p>
+                <p className="text-sm font-semibold text-foreground">{messages.length}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Resolved / closed banner */}
+        {isResolved && (
+          <div className="flex items-center gap-3 bg-green-500/5 border border-green-500/20 rounded-xl px-5 py-3.5">
+            <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
+            <p className="text-sm text-green-400 font-medium">This ticket has been resolved. Reply below to reopen it.</p>
+          </div>
+        )}
+
+        {/* Conversation */}
+        <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col">
+          <div className="px-6 py-4 border-b border-border flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Conversation</h2>
           </div>
 
           {/* Messages */}
-          <div className="rounded-lg bg-card border border-border overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Conversation
-              </h3>
-            </div>
+          <div className="flex-1 p-6 space-y-6 overflow-y-auto" style={{ maxHeight: "520px" }}>
+            {messages.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-8">No messages yet.</p>
+            ) : (
+              messages.map((msg: TicketMessage) => (
+                <Message key={msg.id} msg={msg} />
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-            <div className="p-4 space-y-6 max-h-[500px] overflow-y-auto">
-              {messages.map((message: TicketMessage) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isUser={message.authorType === "user"}
+          {/* Reply box */}
+          {canReply ? (
+            <div className="border-t border-border p-5 bg-background/50">
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (reply.trim()) replyMutation.mutate(reply); }}
+                className="space-y-3"
+              >
+                <Textarea
+                  placeholder="Write your reply..."
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  rows={4}
+                  disabled={replyMutation.isPending}
+                  className="resize-none"
                 />
-              ))}
-              <div ref={messagesEndRef} />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5" />
+                    You can also reply by email
+                  </p>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!reply.trim() || replyMutation.isPending}
+                  >
+                    {replyMutation.isPending ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    {replyMutation.isPending ? "Sending..." : "Send Reply"}
+                  </Button>
+                </div>
+              </form>
             </div>
-
-            {!isInactive && (
-              <div className="p-4 border-t border-border bg-muted/20">
-                <form onSubmit={handleSubmitReply} className="space-y-3">
-                  <Textarea
-                    placeholder="Type your reply..."
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    rows={4}
-                    disabled={replyMutation.isPending}
-                    className="resize-none"
-                  />
-                  <div className="flex justify-between items-center">
-                    <p className="text-xs text-muted-foreground">
-                      You can also reply by email
-                    </p>
-                    <Button type="submit" disabled={!replyMessage.trim() || replyMutation.isPending}>
-                      {replyMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="mr-2 h-4 w-4" />
-                          Send Reply
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {isResolved && (
-              <div className="p-4 border-t border-border bg-green-500/5">
-                <p className="text-sm text-green-500 font-medium text-center">
-                  This ticket has been resolved. Reply to reopen it.
-                </p>
-              </div>
-            )}
-
-            {isClosed && (
-              <div className="p-4 border-t border-border bg-muted/20">
-                <p className="text-sm text-muted-foreground text-center">
-                  This ticket is closed. Please email support@ozvps.com.au if you need further assistance.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Info Banner */}
-          <div className="rounded-lg bg-muted/30 border border-border p-4">
-            <p className="text-sm text-muted-foreground">
-              <strong>Tip:</strong> Bookmark this page to easily access your ticket later.
-              You can also reply to the confirmation email to add messages to this ticket.
-            </p>
-          </div>
+          ) : (
+            <div className="border-t border-border p-5 bg-background/50 text-center">
+              <p className="text-sm text-muted-foreground">
+                This ticket is closed. Email{" "}
+                <a href="mailto:support@ozvps.com.au" className="text-primary hover:underline">support@ozvps.com.au</a>
+                {" "}if you need further help.
+              </p>
+            </div>
+          )}
         </div>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border mt-12">
-        <div className="max-w-4xl mx-auto px-4 py-6 text-center">
+        {/* Tip */}
+        <div className="flex items-start gap-3 bg-muted/20 border border-border rounded-xl px-5 py-4">
+          <Bookmark className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} OzVPS. All rights reserved.
+            <strong className="text-foreground">Tip:</strong> Bookmark this page to check for replies anytime. You'll also get an email when we respond.
+          </p>
+        </div>
+      </div>
+
+      <footer className="border-t border-border py-6">
+        <div className="max-w-3xl mx-auto px-6">
+          <p className="text-sm text-muted-foreground text-center">
+            © {new Date().getFullYear()} OzVPS Pty Ltd · <a href="https://ozvps.com.au" className="hover:text-foreground transition-colors">ozvps.com.au</a>
           </p>
         </div>
       </footer>

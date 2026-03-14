@@ -34,9 +34,11 @@ function getLogoUrl(): string {
   return `${appUrl}/logo-email.png`;
 }
 
-/** Shared white email shell — blue top accent, logo, content, footer */
+/** Shared email shell — dark branded header with logo, white content area, clean footer */
 function baseEmail(bodyHtml: string, logoUrl: string): string {
   const year = new Date().getFullYear();
+  const headerBg = '#0d1117';
+  const headerBorder = '#21262d';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,44 +46,41 @@ function baseEmail(bodyHtml: string, logoUrl: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
   <meta name="supported-color-schemes" content="light">
+  <title>OzVPS</title>
 </head>
 <body style="margin:0;padding:0;background-color:${bgLight};font-family:${ff};-webkit-font-smoothing:antialiased;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${bgLight};padding:40px 20px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${bgLight};padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;">
 
-          <!-- Card -->
+          <!-- Dark header with logo -->
           <tr>
-            <td style="background-color:#ffffff;border-radius:10px;border:1px solid ${border};overflow:hidden;">
-              <table width="100%" cellpadding="0" cellspacing="0">
+            <td style="background-color:${headerBg};border-radius:12px 12px 0 0;border:1px solid ${headerBorder};border-bottom:none;padding:28px 40px;text-align:center;">
+              <img src="${logoUrl}" alt="OzVPS" width="130" height="auto" style="display:block;margin:0 auto;max-width:130px;">
+            </td>
+          </tr>
 
-                <!-- Blue accent line -->
-                <tr><td style="height:4px;background-color:${blue};font-size:0;line-height:0;">&nbsp;</td></tr>
+          <!-- Blue accent bar -->
+          <tr>
+            <td style="background:linear-gradient(90deg,#2563eb,#3b82f6,#60a5fa);height:3px;font-size:0;line-height:0;border-left:1px solid ${headerBorder};border-right:1px solid ${headerBorder};">&nbsp;</td>
+          </tr>
 
-                <!-- Logo -->
-                <tr>
-                  <td style="padding:28px 40px;text-align:center;border-bottom:1px solid ${border};">
-                    <img src="${logoUrl}" alt="OzVPS" width="120" height="auto" style="display:block;margin:0 auto;">
-                  </td>
-                </tr>
+          <!-- White card body -->
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid ${border};border-top:none;padding:40px;">
+              ${bodyHtml}
+            </td>
+          </tr>
 
-                <!-- Body -->
-                <tr>
-                  <td style="padding:36px 40px;">
-                    ${bodyHtml}
-                  </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                  <td style="padding:20px 40px 28px;text-align:center;border-top:1px solid ${border};">
-                    <p style="margin:0 0 4px;color:${textLight};font-size:13px;">© ${year} OzVPS Pty Ltd · Australian owned and operated</p>
-                    <p style="margin:0;color:${textLight};font-size:12px;">Brisbane, QLD · <a href="https://ozvps.com.au" style="color:${textLight};text-decoration:none;">ozvps.com.au</a></p>
-                  </td>
-                </tr>
-
-              </table>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid ${border};border-top:1px solid ${border};border-radius:0 0 12px 12px;padding:20px 40px 28px;text-align:center;">
+              <p style="margin:0 0 6px;color:${textLight};font-size:13px;font-weight:500;">© ${year} OzVPS Pty Ltd</p>
+              <p style="margin:0;color:${textLight};font-size:12px;">
+                Australian owned &amp; operated · Brisbane, QLD ·
+                <a href="https://ozvps.com.au" style="color:${blue};text-decoration:none;">ozvps.com.au</a>
+              </p>
             </td>
           </tr>
 
