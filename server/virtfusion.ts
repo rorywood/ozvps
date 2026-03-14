@@ -758,6 +758,7 @@ export class VirtFusionClient {
         virtfusionClient._remoteStateLogged.add(serverId);
         log(`[disk-debug] remoteState keys for server ${serverId}: ${JSON.stringify(Object.keys(remoteState))}`, 'virtfusion');
         log(`[disk-debug] disk data: ${JSON.stringify(disk)}`, 'virtfusion');
+        log(`[disk-debug] agent data: ${JSON.stringify(remoteState.agent)}`, 'virtfusion');
         if (remoteState.filesystems) log(`[disk-debug] filesystems: ${JSON.stringify(remoteState.filesystems)}`, 'virtfusion');
       }
 
