@@ -248,7 +248,7 @@ export function useReinstallTask(serverId: string) {
             // VirtFusion just says "building" or nothing - simulate progress by time.
             // Server provides buildingStartedAt so elapsed time is accurate after page refresh.
             const serverStartedAt = (buildStatus as any).buildingStartedAt as number | null;
-            if (serverStartedAt) {
+            if (serverStartedAt != null) {
               buildingStartedAtRef.current = serverStartedAt;
             } else if (!buildingStartedAtRef.current) {
               buildingStartedAtRef.current = Date.now();
@@ -411,15 +411,15 @@ export function useReinstallTask(serverId: string) {
     };
   }, [state.isActive, state.status, checkBuildStatus]);
 
+  // Unmount cleanup only — do NOT include state.status as dep.
+  // Polling lifecycle is managed by startTask (fast→slow interval) and checkBuildStatus (resume on mount).
+  // If status were a dep, React would run stopPolling() as cleanup on every status transition,
+  // killing startTask's 2s fast-poll interval prematurely.
   useEffect(() => {
-    if (state.isActive && state.status !== 'complete' && state.status !== 'failed' && !pollRef.current) {
-      pollRef.current = setInterval(poll, 5000);
-    }
-
     return () => {
       stopPolling();
     };
-  }, [state.isActive, state.status, poll, stopPolling]);
+  }, [stopPolling]);
 
   return {
     ...state,

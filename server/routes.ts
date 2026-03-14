@@ -2638,7 +2638,10 @@ export async function registerRoutes(
       // Block reinstall if server has a pending cancellation
       const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, req.userSession!.auth0UserId!);
       if (pendingCancellation) {
-        return res.status(403).json({ error: 'Server is scheduled for deletion. Reinstall is disabled.' });
+        const cancellationMsg = pendingCancellation.status === 'pending_approval'
+          ? 'Your deletion request is pending admin approval. Reinstall is disabled.'
+          : 'Server is scheduled for deletion. Reinstall is disabled.';
+        return res.status(403).json({ error: cancellationMsg });
       }
 
       // Validate request body with Zod schema
@@ -2720,6 +2723,9 @@ export async function registerRoutes(
       } else if (buildStatus.commissioned === 0) {
         // Still queued — reset timer so elapsed starts from when building actually begins
         buildStartTimes.delete(serverId);
+      } else if (buildStatus.commissioned === 2) {
+        // Paused — clear so elapsed doesn't tick during pause (rare but avoids stale entries)
+        buildStartTimes.delete(serverId);
       } else if (buildStatus.commissioned === 3 || buildStatus.isComplete) {
         // Complete — clean up
         buildStartTimes.delete(serverId);
@@ -2784,7 +2790,10 @@ export async function registerRoutes(
       // Block password reset if server has a pending cancellation
       const pendingCancellation = await dbStorage.getCancellationByServerId(req.params.id, session.auth0UserId!);
       if (pendingCancellation) {
-        return res.status(403).json({ error: 'Server is scheduled for deletion. Password reset is disabled.' });
+        const cancellationMsg = pendingCancellation.status === 'pending_approval'
+          ? 'Your deletion request is pending admin approval. Password reset is disabled.'
+          : 'Server is scheduled for deletion. Password reset is disabled.';
+        return res.status(403).json({ error: cancellationMsg });
       }
 
       const result = await virtfusionClient.resetServerPassword(req.params.id);
