@@ -635,6 +635,13 @@ function Footer() {
             <a href="mailto:sales@ozvps.com.au" className="hover:text-foreground transition-colors">
               Sales
             </a>
+            <a href="https://status.ozvps.com.au" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+              </span>
+              Status
+            </a>
           </div>
 
           <div className="text-sm text-muted-foreground">
