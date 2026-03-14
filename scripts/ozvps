@@ -961,6 +961,12 @@ EOF
         success "Admin-only plans configured (Plan ID 7)"
     fi
 
+    # Enable session IP validation if not already configured
+    if ! grep -q "^SESSION_VALIDATE_IP=" "$INSTALL_DIR/.env" 2>/dev/null; then
+        echo "SESSION_VALIDATE_IP=true" >> "$INSTALL_DIR/.env"
+        success "Session IP validation enabled"
+    fi
+
     # Update NGINX error pages
     info "Updating NGINX error pages..."
     local error_pages_dir="/var/www/ozvps-errors"
