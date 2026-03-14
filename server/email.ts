@@ -2812,3 +2812,207 @@ This is an automated bug report from the OzVPS Panel.
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send auto top-up success email
+ */
+export async function sendAutoTopupSuccessEmail(
+  to: string,
+  amountCharged: string,
+  newBalance: string
+): Promise<EmailResult> {
+  if (!resend) return { success: false, error: 'Email service not configured.' };
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Auto top-up of ${amountCharged} was successful`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Auto Top-Up Successful</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 40px;">
+                    <h1 style="margin: 0 0 8px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Auto Top-Up Successful</h1>
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      Your wallet was automatically topped up to cover a server charge.
+                    </p>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${emailStyles.borderColor}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Amount Charged</span>
+                        </td>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor}; text-align: right;">
+                          <strong style="color: ${emailStyles.successColor}; font-size: 16px;">${amountCharged}</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 14px 20px;">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">New Wallet Balance</span>
+                        </td>
+                        <td style="padding: 14px 20px; text-align: right;">
+                          <strong style="color: ${emailStyles.textDark}; font-size: 14px;">${newBalance}</strong>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 14px; line-height: 1.6;">
+                      You can manage your auto top-up settings or disable this feature in the billing section of your account.
+                    </p>
+                    <a href="${appUrl}/billing" style="display: inline-block; padding: 14px 28px; background-color: ${emailStyles.primaryColor}; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                      View Billing
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 13px;">© ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+      text: `Auto Top-Up Successful\n\nYour wallet was automatically topped up.\n\nAmount Charged: ${amountCharged}\nNew Wallet Balance: ${newBalance}\n\nManage your auto top-up settings: ${appUrl}/billing\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+
+    if (error) {
+      log(`Failed to send auto top-up success email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+    log(`Auto top-up success email sent to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending auto top-up success email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send auto top-up failed email
+ */
+export async function sendAutoTopupFailedEmail(
+  to: string,
+  attemptedAmount: string,
+  reason: string
+): Promise<EmailResult> {
+  if (!resend) return { success: false, error: 'Email service not configured.' };
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Action required: Auto top-up of ${attemptedAmount} failed`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Auto Top-Up Failed</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: ${emailStyles.fontFamily}; background-color: ${emailStyles.bgLight}; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgLight}; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+          <tr>
+            <td style="padding: 24px 32px; background-color: #1f2937; border-radius: 8px 8px 0 0; text-align: center;">
+              <img src="${logoUrl}" alt="OzVPS" width="140" height="auto" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${emailStyles.bgWhite}; border-radius: 0 0 8px 8px; border: 1px solid ${emailStyles.borderColor}; border-top: none;">
+                <tr>
+                  <td style="padding: 40px;">
+                    <h1 style="margin: 0 0 8px; color: ${emailStyles.textDark}; font-size: 24px; font-weight: 600;">Auto Top-Up Failed</h1>
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 15px; line-height: 1.6;">
+                      We attempted to automatically top up your wallet but the payment was unsuccessful. Your servers may be at risk of suspension.
+                    </p>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid ${emailStyles.borderColor}; border-radius: 6px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor};">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Attempted Amount</span>
+                        </td>
+                        <td style="padding: 14px 20px; border-bottom: 1px solid ${emailStyles.borderColor}; text-align: right;">
+                          <strong style="color: #dc2626; font-size: 16px;">${attemptedAmount}</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 14px 20px;">
+                          <span style="color: ${emailStyles.textMuted}; font-size: 13px;">Reason</span>
+                        </td>
+                        <td style="padding: 14px 20px; text-align: right;">
+                          <span style="color: ${emailStyles.textDark}; font-size: 14px;">${reason}</span>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin: 0 0 24px; color: ${emailStyles.textMuted}; font-size: 14px; line-height: 1.6;">
+                      Please top up your wallet manually or update your saved payment method to avoid service interruption.
+                    </p>
+                    <a href="${appUrl}/billing" style="display: inline-block; padding: 14px 28px; background-color: #dc2626; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                      Top Up Now
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 20px; text-align: center;">
+              <p style="margin: 0 0 8px; color: ${emailStyles.textLight}; font-size: 13px;">© ${new Date().getFullYear()} OzVPS Pty Ltd. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+      text: `Auto Top-Up Failed\n\nWe attempted to top up your wallet but the payment failed.\n\nAttempted Amount: ${attemptedAmount}\nReason: ${reason}\n\nPlease top up manually: ${appUrl}/billing\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+
+    if (error) {
+      log(`Failed to send auto top-up failed email to ${to}: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+    log(`Auto top-up failed email sent to ${to}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending auto top-up failed email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}

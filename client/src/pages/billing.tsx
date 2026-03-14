@@ -1074,6 +1074,40 @@ export default function BillingPage() {
               )}
             </div>
 
+            {/* Low-balance warning — shown when wallet can't cover upcoming chargeable servers */}
+            {(() => {
+              const chargeable = upcomingChargesData?.upcoming.filter(
+                c => !c.freeServer && (c.status === 'active' || c.status === 'paid')
+              ) ?? [];
+              const totalUpcoming = chargeable.reduce((sum, c) => sum + c.monthlyPriceCents, 0);
+              const balance = wallet?.balanceCents ?? 0;
+              const shortfall = totalUpcoming - balance;
+              if (!wallet || loadingWallet || loadingUpcomingCharges || shortfall <= 0) return null;
+              const shortServers = chargeable.filter(c => {
+                // Accumulate running balance to identify which servers won't get paid
+                return balance < c.monthlyPriceCents;
+              });
+              return (
+                <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
+                  <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-warning">Insufficient wallet balance</p>
+                    <p className="text-xs text-warning/80 mt-0.5">
+                      Your balance ({formatCurrency(balance)}) is {formatCurrency(shortfall)} short of your total monthly charges ({formatCurrency(totalUpcoming)}).
+                      {shortServers.length > 0 && ` ${shortServers.length} server${shortServers.length > 1 ? 's' : ''} may be suspended when payment is due.`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="flex-shrink-0 h-8 text-xs"
+                    onClick={() => setTopupDialogOpen(true)}
+                  >
+                    Top Up
+                  </Button>
+                </div>
+              );
+            })()}
+
             {/* Tabbed Content - DO Style Underlined Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
               <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start w-full">

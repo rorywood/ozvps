@@ -153,6 +153,9 @@ export const serverBilling = pgTable("server_billing", {
   adminSuspendedAt: timestamp("admin_suspended_at"),
   adminSuspendedReason: text("admin_suspended_reason"),
 
+  // Billing reminder deduplication - tracks last reminder so we don't spam
+  lastReminderSentAt: timestamp("last_reminder_sent_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

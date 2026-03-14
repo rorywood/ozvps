@@ -4,7 +4,8 @@ import { eq, and, lte, isNull, or, not, gte, lt, sql } from 'drizzle-orm';
 import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
-import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail } from './email';
+import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail, sendAutoTopupSuccessEmail, sendAutoTopupFailedEmail } from './email';
+import { getUncachableStripeClient } from './stripeClient';
 
 // Check if a user's account is suspended
 async function isUserAccountSuspended(auth0UserId: string): Promise<boolean> {
@@ -189,6 +190,112 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
   });
 }
 
+// Attempt to automatically charge the user's saved payment method to top up their wallet.
+// Returns true if the top-up succeeded and the wallet now has enough to cover neededCents.
+async function attemptAutoTopup(auth0UserId: string, neededCents: number): Promise<boolean> {
+  try {
+    const [wallet] = await db.select().from(wallets)
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .limit(1);
+
+    if (!wallet?.autoTopupEnabled || !wallet.autoTopupPaymentMethodId || !wallet.stripeCustomerId) {
+      return false;
+    }
+
+    const topupAmount = wallet.autoTopupAmountCents || 2000;
+
+    // Only proceed if topping up will actually cover the charge
+    if (wallet.balanceCents + topupAmount < neededCents) {
+      log(`Auto top-up amount (${formatCurrency(topupAmount)}) insufficient to cover charge (${formatCurrency(neededCents)}) for ${auth0UserId}`, 'billing');
+      return false;
+    }
+
+    const stripe = await getUncachableStripeClient();
+
+    let paymentMethod;
+    try {
+      paymentMethod = await stripe.paymentMethods.retrieve(wallet.autoTopupPaymentMethodId);
+    } catch {
+      log(`Auto top-up: failed to retrieve payment method for ${auth0UserId}`, 'billing');
+      return false;
+    }
+
+    if (paymentMethod.customer !== wallet.stripeCustomerId) {
+      log(`Auto top-up: payment method doesn't belong to customer for ${auth0UserId}`, 'billing');
+      return false;
+    }
+
+    // Reject expired cards
+    const now = new Date();
+    const expYear = paymentMethod.card?.exp_year || 0;
+    const expMonth = paymentMethod.card?.exp_month || 0;
+    if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+      log(`Auto top-up: card expired for ${auth0UserId}`, 'billing');
+      return false;
+    }
+
+    // Per-minute idempotency key prevents double-charges if billing job overlaps
+    const idempotencyKey = `autotopup_${auth0UserId}_${Math.floor(Date.now() / 60000)}`;
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: topupAmount,
+      currency: 'aud',
+      customer: wallet.stripeCustomerId,
+      payment_method: wallet.autoTopupPaymentMethodId,
+      off_session: true,
+      confirm: true,
+      description: 'Auto wallet top-up',
+      metadata: { auth0_user_id: auth0UserId, type: 'wallet_topup', source: 'auto_topup' },
+    }, { idempotencyKey });
+
+    if (paymentIntent.status !== 'succeeded') {
+      log(`Auto top-up payment declined for ${auth0UserId}: ${paymentIntent.status}`, 'billing');
+      const email = await getUserEmail(auth0UserId);
+      if (email) {
+        await sendAutoTopupFailedEmail(email, formatCurrency(topupAmount), 'Payment was declined').catch(() => {});
+      }
+      return false;
+    }
+
+    // Credit wallet — inside a transaction with idempotency check
+    const cardBrand = paymentMethod.card?.brand
+      ? paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1)
+      : undefined;
+
+    await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(walletTransactions)
+        .where(eq(walletTransactions.stripePaymentIntentId, paymentIntent.id));
+      if (existing) {
+        log(`Auto top-up: payment ${paymentIntent.id} already credited, skipping duplicate`, 'billing');
+        return;
+      }
+      await tx.update(wallets)
+        .set({ balanceCents: sql`${wallets.balanceCents} + ${topupAmount}`, updatedAt: new Date() })
+        .where(eq(wallets.auth0UserId, auth0UserId));
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: 'credit',
+        amountCents: topupAmount,
+        stripePaymentIntentId: paymentIntent.id,
+        metadata: { source: 'auto_topup', cardBrand, cardLast4: paymentMethod.card?.last4, reason: 'Auto wallet top-up' },
+      });
+    });
+
+    log(`Auto top-up successful for ${auth0UserId}: ${formatCurrency(topupAmount)}`, 'billing');
+
+    const email = await getUserEmail(auth0UserId);
+    if (email) {
+      const [updatedWallet] = await db.select().from(wallets).where(eq(wallets.auth0UserId, auth0UserId)).limit(1);
+      await sendAutoTopupSuccessEmail(email, formatCurrency(topupAmount), formatCurrency(updatedWallet?.balanceCents ?? 0)).catch(() => {});
+    }
+
+    return true;
+  } catch (error: any) {
+    log(`Auto top-up error for ${auth0UserId}: ${error.message}`, 'billing');
+    return false;
+  }
+}
+
 // Main billing job - runs every 10 minutes
 export async function runBillingJob(): Promise<void> {
   const now = new Date();
@@ -222,10 +329,22 @@ export async function runBillingJob(): Promise<void> {
         continue;
       }
 
-      const charged = await chargeServer(billing);
+      let charged = await chargeServer(billing);
+
+      // If charge failed due to insufficient balance, try auto top-up then retry once
+      if (!charged) {
+        const autoTopupOk = await attemptAutoTopup(billing.auth0UserId, billing.monthlyPriceCents);
+        if (autoTopupOk) {
+          charged = await chargeServer(billing);
+          if (charged) {
+            log(`Auto top-up enabled charge of server ${billing.virtfusionServerId}`, 'billing');
+            continue;
+          }
+        }
+      }
 
       if (!charged) {
-        // Payment failed - mark as unpaid and set suspension date
+        // Payment failed (and auto top-up couldn't cover it) - mark as unpaid and set suspension date
         if (billing.status !== 'unpaid') {
           const suspendAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
@@ -428,10 +547,10 @@ async function cleanupOrphanedBillingRecords(): Promise<void> {
 export async function sendBillingReminders(): Promise<void> {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  // Only send one reminder per server per day — billing job runs every 10 minutes
+  // so without this guard each server would get ~144 emails per day
+  const twentyHoursAgo = new Date(now.getTime() - 20 * 60 * 60 * 1000);
 
-  // Find servers due in the next 24 hours that haven't been reminded yet today
-  // We use a simple approach: only remind for servers that are 'active' or 'paid' status
-  // Skip complimentary servers - they don't need payment reminders
   const serversDueSoon = await db.select().from(serverBilling)
     .where(
       and(
@@ -440,9 +559,14 @@ export async function sendBillingReminders(): Promise<void> {
           eq(serverBilling.status, 'paid')
         ),
         eq(serverBilling.autoRenew, true),
-        eq(serverBilling.freeServer, false), // Skip complimentary servers
+        eq(serverBilling.freeServer, false),
         gte(serverBilling.nextBillAt, now),
-        lt(serverBilling.nextBillAt, tomorrow)
+        lt(serverBilling.nextBillAt, tomorrow),
+        // Skip if we already sent a reminder in the last 20 hours
+        or(
+          isNull(serverBilling.lastReminderSentAt),
+          lt(serverBilling.lastReminderSentAt, twentyHoursAgo)
+        )
       )
     );
 
@@ -467,6 +591,11 @@ export async function sendBillingReminders(): Promise<void> {
         formatDate(billing.nextBillAt),
         formatCurrency(walletBalance)
       );
+
+      // Mark reminder sent so we don't spam on the next billing job run
+      await db.update(serverBilling)
+        .set({ lastReminderSentAt: new Date(), updatedAt: new Date() })
+        .where(eq(serverBilling.id, billing.id));
 
       log(`Sent billing reminder for server ${billing.virtfusionServerId}`, 'billing');
     } catch (error: any) {
