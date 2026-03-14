@@ -195,26 +195,36 @@ export default function ServerList() {
             </p>
           </Card>
         ) : filteredServers.length === 0 ? (
-          <Card padding="lg" className="flex flex-col items-center justify-center text-center" data-testid="empty-servers-state">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-              <ServerIcon className="h-10 w-10 text-primary" />
+          <Card padding="lg" className="flex flex-col items-center justify-center text-center py-14" data-testid="empty-servers-state">
+            <div className="relative mb-8">
+              <div className="h-24 w-24 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <ServerIcon className="h-12 w-12 text-primary" />
+              </div>
+              <div className="absolute -inset-4 rounded-3xl bg-primary/5 -z-10 blur-xl" />
             </div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">
+            <h3 className="text-2xl font-semibold text-foreground mb-3">
               {searchQuery ? 'No Matching Servers' : 'No Servers Yet'}
             </h3>
-            <p className="text-muted-foreground max-w-md mb-6">
+            <p className="text-muted-foreground max-w-sm mb-8 text-sm leading-relaxed">
               {searchQuery
                 ? `No servers match "${searchQuery}". Try a different search term.`
-                : "You don't have any VPS servers yet. Deploy a server to get started."
+                : "Deploy your first VPS in seconds. Australian infrastructure, instant setup, no lock-in contracts."
               }
             </p>
             {!searchQuery && (
-              <Button variant="outline" data-testid="button-order-server" asChild>
-                <Link href="/deploy">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Deploy a Server
-                </Link>
-              </Button>
+              <>
+                <Button data-testid="button-order-server" asChild className="btn-glow mb-8">
+                  <Link href="/deploy">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Deploy Your First Server
+                  </Link>
+                </Button>
+                <div className="flex items-center gap-6 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-success inline-block" />Brisbane, AU</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary inline-block" />From $7/mo</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-info inline-block" />No lock-in</span>
+                </div>
+              </>
             )}
           </Card>
         ) : (

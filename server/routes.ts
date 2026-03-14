@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendTicketConfirmationEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendTicketConfirmationEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
@@ -7413,8 +7413,20 @@ export async function registerRoutes(
       const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
       await dbStorage.updateTicket(ticketId, { status: newStatus });
 
-      // Notify guest ticket author by email
-      if (!ticket.auth0UserId && ticket.guestEmail && ticket.guestAccessToken) {
+      // Notify ticket author by email
+      if (ticket.auth0UserId) {
+        // Logged-in user — look up their email from Auth0
+        auth0Client.getUserById(ticket.auth0UserId).then(auth0User => {
+          if (auth0User?.email) {
+            sendTicketAdminReplyEmail(auth0User.email, ticketId, ticket.ticketNumber ?? ticketId, ticket.title, parseResult.data.message).catch(err => {
+              log(`Failed to send ticket reply notification for ticket #${ticketId}: ${err.message}`, 'email');
+            });
+          }
+        }).catch(err => {
+          log(`Failed to get Auth0 user for ticket reply notification #${ticketId}: ${err.message}`, 'email');
+        });
+      } else if (ticket.guestEmail && ticket.guestAccessToken) {
+        // Guest ticket
         sendGuestTicketAdminReplyEmail(ticket.guestEmail, ticketId, ticket.ticketNumber ?? ticketId, ticket.title, ticket.guestAccessToken, parseResult.data.message).catch(err => {
           log(`Failed to send guest ticket reply notification for ticket #${ticketId}: ${err.message}`, 'email');
         });

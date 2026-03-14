@@ -525,6 +525,56 @@ export async function sendServerSuspendedEmail(
 }
 
 /**
+ * Send billing receipt after successful monthly charge
+ */
+export async function sendBillingReceiptEmail(
+  to: string,
+  serverName: string,
+  amountDollars: string,
+  nextBillDate: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send billing receipt email', 'email');
+    return { success: false, error: 'Email service not configured.' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+  const dateStr = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const body = `
+    <p style="margin:0 0 4px;color:${green};font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Payment Successful</p>
+    <h1 style="margin:0 0 12px;color:${textDark};font-size:22px;font-weight:700;">Billing Receipt</h1>
+    <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Your monthly payment for <strong style="color:${textDark};">${serverName}</strong> has been processed successfully.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
+      ${row('Date', dateStr)}
+      ${row('Server', serverName)}
+      ${row('Amount', amountDollars)}
+      ${row('Next Bill Date', nextBillDate, true)}
+    </table>
+
+    ${btn(`${appUrl}/billing`, 'View Billing History')}
+    <p style="margin:0;color:${textMuted};font-size:13px;line-height:1.6;">If you have any questions, <a href="${appUrl}/support" style="color:${blue};text-decoration:none;">contact our support team</a>.</p>`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: [to],
+      subject: `Payment receipt for ${serverName}`,
+      html: baseEmail(body, logoUrl),
+      text: `Billing Receipt\n\nServer: ${serverName}\nDate: ${dateStr}\nAmount: ${amountDollars}\nNext Bill Date: ${nextBillDate}\n\nView billing history: ${appUrl}/billing\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+    if (error) { log(`Failed to send billing receipt email to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
+    log(`Billing receipt sent to ${to} for ${serverName}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending billing receipt email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send admin notification of new support ticket
  */
 export async function sendAdminTicketNotificationEmail(
@@ -756,6 +806,61 @@ export async function sendGuestTicketAdminReplyEmail(
     return { success: true, messageId: data?.id };
   } catch (err: any) {
     log(`Error sending guest ticket reply notification to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Notify logged-in user that admin has replied to their ticket
+ */
+export async function sendTicketAdminReplyEmail(
+  to: string,
+  ticketId: number,
+  ticketNumber: number,
+  title: string,
+  adminReplyMessage: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send ticket reply notification', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const ticketUrl = `${appUrl}/support/${ticketId}`;
+  const logoUrl = getLogoUrl();
+  const preview = adminReplyMessage.length > 300 ? adminReplyMessage.slice(0, 300) + '...' : adminReplyMessage;
+
+  const body = `
+    <h1 style="margin:0 0 12px;color:${textDark};font-size:22px;font-weight:700;">New Reply on Your Ticket</h1>
+    <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Our support team has replied to your ticket. Click below to view the conversation and respond.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
+      ${row('Ticket', `#${ticketNumber}`)}
+      ${row('Subject', title, true)}
+    </table>
+
+    <div style="background:#f9fafb;border:1px solid ${border};border-radius:8px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0 0 8px;color:${textMuted};font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reply Preview</p>
+      <p style="margin:0;color:${textDark};font-size:14px;line-height:1.6;white-space:pre-wrap;">${preview}</p>
+    </div>
+
+    ${btn(ticketUrl, 'View & Reply')}
+    <p style="margin:0;color:${textMuted};font-size:13px;line-height:1.6;">You can also reply directly to this email to respond to the ticket.</p>`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      replyTo: `support+${ticketId}@ozvps.com.au`,
+      subject: `[Ticket #${ticketNumber}] ${title}`,
+      html: baseEmail(body, logoUrl),
+      text: `New Reply on Your Ticket\n\nTicket: #${ticketNumber}\nSubject: ${title}\n\nOur support team has replied. View and reply here:\n${ticketUrl}\n\nOr reply directly to this email.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+    if (error) { log(`Failed to send ticket reply notification to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
+    log(`Ticket reply notification sent to ${to} for ticket #${ticketId}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending ticket reply notification to ${to}: ${err.message}`, 'email');
     return { success: false, error: err.message };
   }
 }

@@ -4,7 +4,7 @@ import { eq, and, lte, isNull, or, not, gte, lt, sql } from 'drizzle-orm';
 import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
-import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail, sendAutoTopupSuccessEmail, sendAutoTopupFailedEmail } from './email';
+import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail, sendAutoTopupSuccessEmail, sendAutoTopupFailedEmail, sendBillingReceiptEmail } from './email';
 import { getUncachableStripeClient } from './stripeClient';
 
 // Check if a user's account is suspended
@@ -186,6 +186,17 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       .where(eq(serverBilling.id, billing.id));
 
     log(`Charged server ${billing.virtfusionServerId}: $${billing.monthlyPriceCents / 100}`, 'billing');
+
+    // Send billing receipt email (non-blocking)
+    getUserEmail(billing.auth0UserId).then(email => {
+      if (email) {
+        const amountDollars = `$${(billing.monthlyPriceCents / 100).toFixed(2)}`;
+        sendBillingReceiptEmail(email, serverName, amountDollars, newNextBillAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })).catch(err => {
+          log(`Failed to send billing receipt email to ${email}: ${err.message}`, 'billing');
+        });
+      }
+    }).catch(() => {});
+
     return true;
   });
 }

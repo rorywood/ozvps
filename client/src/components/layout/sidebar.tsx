@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  Server, 
+import {
+  LayoutDashboard,
+  Server,
   Settings,
   LogOut,
   Menu,
@@ -11,7 +11,8 @@ import {
   ChevronUp,
   Zap,
   Wallet,
-  ShieldCheck
+  ShieldCheck,
+  MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/deploy", icon: Zap, label: "Deploy" },
   { href: "/billing", icon: Wallet, label: "Billing" },
+  { href: "/support", icon: MessageSquare, label: "Support" },
   { href: "/account", icon: Settings, label: "Account" },
 ];
 
@@ -165,6 +167,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     retry: false,
   });
 
+  const { data: ticketCounts } = useQuery<{ open: number; waitingUser: number; total: number }>({
+    queryKey: ['ticket-counts'],
+    queryFn: () => api.getSupportTicketCounts(),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
   const isAdmin = userData?.user?.isAdmin ?? false;
 
   const logoutMutation = useMutation({
@@ -192,6 +201,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
           const isActive = location === item.href || (item.href !== "/dashboard" && location.startsWith(item.href));
+          const unreadCount = item.href === "/support" ? (ticketCounts?.waitingUser ?? 0) : 0;
           return (
             <Link key={item.href} href={item.href}>
               <div
@@ -206,6 +216,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
               >
                 <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
                 {item.label}
+                {unreadCount > 0 && (
+                  <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-destructive text-[10px] font-semibold text-white flex items-center justify-center px-1">
+                    {unreadCount}
+                  </span>
+                )}
               </div>
             </Link>
           );
@@ -232,7 +247,20 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         )}
       </div>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-1">
+        <a
+          href="https://status.ozvps.com.au"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+          data-testid="link-status-page"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+          </span>
+          System Status
+        </a>
         <button
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
