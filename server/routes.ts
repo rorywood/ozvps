@@ -532,6 +532,22 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     // Update last activity timestamp
     await storage.updateSessionActivity(sessionId);
 
+    // Optional IP binding: reject sessions where the IP has changed
+    // Enable with SESSION_VALIDATE_IP=true (requires TRUST_PROXY=true to work correctly behind nginx)
+    if (process.env.SESSION_VALIDATE_IP === 'true' && session.ipAddress) {
+      const currentIp = getClientIp(req);
+      if (currentIp !== session.ipAddress) {
+        log(`Session IP mismatch for ${session.email}: expected ${session.ipAddress}, got ${currentIp}`, 'security');
+        await storage.deleteSession(sessionId);
+        res.clearCookie(SESSION_COOKIE);
+        res.clearCookie(CSRF_COOKIE);
+        return res.status(401).json({
+          error: 'Your session is no longer valid. Please sign in again.',
+          code: 'SESSION_IP_MISMATCH'
+        });
+      }
+    }
+
     // Check if user is blocked (read from database for most up-to-date status)
     if (session.auth0UserId) {
       const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId);
