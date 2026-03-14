@@ -1555,13 +1555,20 @@ export default function ServerDetail() {
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Plan</p>
                   <p className="text-sm font-semibold text-foreground">{server.billing?.planName || server.plan?.name || 'Unknown Plan'}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {server.billing?.freeServer || server.billing?.isTrial
-                      ? server.billing?.isTrial ? 'Trial' : 'Free'
-                      : server.billing?.monthlyPriceCents
-                        ? `$${(server.billing.monthlyPriceCents / 100).toFixed(2)}/mo`
-                        : null}
-                  </p>
+                  {server.billing?.freeServer || server.billing?.isTrial ? (
+                    <p className="text-sm font-semibold text-emerald-400 mt-1">
+                      {server.billing?.isTrial ? 'Trial' : 'Free'}
+                    </p>
+                  ) : server.billing?.monthlyPriceCents ? (
+                    <div className="flex items-baseline gap-1 mt-2">
+                      <span className="text-2xl font-bold text-foreground">
+                        ${Math.floor(server.billing.monthlyPriceCents / 100)}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        .{String(server.billing.monthlyPriceCents % 100).padStart(2, '0')}<span className="text-xs">/mo</span>
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="border-t border-border pt-4">
