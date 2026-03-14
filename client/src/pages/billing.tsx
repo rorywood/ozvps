@@ -1083,9 +1083,13 @@ export default function BillingPage() {
               const balance = wallet?.balanceCents ?? 0;
               const shortfall = totalUpcoming - balance;
               if (!wallet || loadingWallet || loadingUpcomingCharges || shortfall <= 0) return null;
+              let runningBalance = balance;
               const shortServers = chargeable.filter(c => {
-                // Accumulate running balance to identify which servers won't get paid
-                return balance < c.monthlyPriceCents;
+                if (runningBalance >= c.monthlyPriceCents) {
+                  runningBalance -= c.monthlyPriceCents;
+                  return false;
+                }
+                return true;
               });
               return (
                 <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">

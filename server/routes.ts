@@ -2339,7 +2339,7 @@ export async function registerRoutes(
                               'restart';
 
       const result = await virtfusionClient.powerAction(req.params.id, virtfusionAction as any);
-      auditUserAction(req, req.userSession!.auth0UserId!, req.userSession!.email, `server_power_${action}`, 'server', req.params.id, { action });
+      await auditUserAction(req, req.userSession!.auth0UserId!, req.userSession!.email, `server_power_${action}`, 'server', req.params.id, { action });
       res.json(result);
     } catch (error: any) {
       log(`Error performing power action on server ${req.params.id}: ${error.message}`, 'api');
@@ -6536,7 +6536,7 @@ export async function registerRoutes(
       }
 
       // Audit log server creation
-      auditUserAction(req, auth0UserId, req.userSession!.email, UserActions.SERVER_CREATE, 'server', serverResult.serverId.toString(), {
+      await auditUserAction(req, auth0UserId, req.userSession!.email, UserActions.SERVER_CREATE, 'server', serverResult.serverId.toString(), {
         planId,
         hostname: req.body.hostname,
         orderId: order.id,
