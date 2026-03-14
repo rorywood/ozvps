@@ -26,35 +26,55 @@
 
 ### Fonts
 ```css
---font-sans: 'Inter', sans-serif;        /* Body text */
---font-display: 'Outfit', sans-serif;    /* Headings */
---font-mono: 'JetBrains Mono', monospace; /* Code/IPs */
+--font-sans: 'Poppins', sans-serif;          /* Body / UI text */
+--font-display: 'Lilita One', cursive;        /* h1 page titles only */
+--font-mono: 'JetBrains Mono', monospace;     /* Code / IPs */
 ```
+> **Important:** Lilita One is applied to `h1` only. h2–h6 use Poppins (font-semibold). Lilita One has no weight variants — always renders at 400.
 
 ### Dark Theme Colors (Default)
 ```css
-/* Backgrounds */
---background: hsl(216 33% 6%);        /* #0a0d14 - darkest */
---card: hsl(216 28% 7%);              /* #0d1117 - cards/surfaces */
---popover: hsl(215 21% 11%);          /* #161b22 - elevated */
+/* Backgrounds — matches ozvps.com.au */
+--background: hsl(222 50% 4%);        /* deep navy */
+--card:       hsl(222 40% 8%);        /* card surface */
+--sidebar:    hsl(220 20% 6%);        /* sidebar */
+--popover:    hsl(220 30% 10%);       /* elevated popover */
 
 /* Text */
---foreground: hsl(0 0% 100%);         /* White - primary text */
---muted-foreground: hsl(0 0% 65%);    /* #a6a6a6 - secondary text */
+--foreground:         hsl(0 0% 95%);
+--muted-foreground:   hsl(220 10% 65%);
 
-/* Primary - OzVPS Blue */
---primary: hsl(210 100% 50%);         /* #0080ff */
+/* Primary — OzVPS Blue */
+--primary: hsl(209 100% 50%);         /* #0085FF */
 
-/* Accent - Cyan */
---accent-foreground: hsl(190 100% 50%); /* #00d4ff */
+/* Accent — Cyan */
+--accent-foreground: hsl(199 95% 48%);
 
 /* Borders */
---border: hsl(0 0% 100% / 0.08);      /* white at 8% opacity */
+--border: hsl(220 15% 18%);           /* solid navy-blue tinted border */
 
 /* Status Colors */
---success: hsl(160 84% 39%);          /* emerald */
+--success:     hsl(160 84% 39%);      /* emerald */
 --destructive: hsl(0 84% 60%);        /* red */
---warning: hsl(14 100% 60%);          /* orange */
+--warning:     hsl(45 100% 51%);      /* #FFAD02 — brand yellow */
+--info:        hsl(199 95% 48%);      /* cyan */
+```
+
+### Background Effect
+The body uses the ozvps.com.au dot grid + blue glow:
+```css
+background-image:
+  radial-gradient(ellipse 90% 40% at 50% -2%, hsl(209 100% 50% / 0.13) 0%, transparent 100%),
+  radial-gradient(circle, hsl(0 0% 100% / 0.035) 1px, transparent 1px);
+background-size: auto, 28px 28px;
+background-attachment: fixed;
+```
+
+### Border Radius
+```css
+--radius-sm: 0.375rem;  /* 6px */
+--radius-md: 0.625rem;  /* 10px */
+--radius-lg: 0.9375rem; /* 15px */
 ```
 
 ### Component Patterns
@@ -62,8 +82,8 @@
 /* Standard Card */
 <div className="bg-card rounded-xl p-6 border border-border">
 
-/* Glass Card (special effects) */
-<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl">
+/* Glass Card */
+<div className="glass-card p-6">  {/* use .glass-card utility class */}
 
 /* Section Label */
 <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Label</p>
@@ -85,15 +105,16 @@
 </div>
 ```
 
-### Border Radius
-```css
---radius-sm: 0.25rem;  /* rounded */
---radius-md: 0.5rem;   /* rounded-lg */
---radius-lg: 0.75rem;  /* rounded-xl */
-```
+### Utility Classes (index.css)
+- `.glass-card` — `rgba(255,255,255,0.03)` bg + `backdrop-blur-xl` + border
+- `.glass-card-hover` — same + hover border/glow transition
+- `.text-gradient` — blue→cyan gradient text (matches ozvps.com.au hero)
+- `.btn-glow` — `box-shadow: 0 4px 14px -3px hsl(209 100% 50% / 0.4)`
+- `.glow-primary` / `.glow-primary-hover` — subtle blue box-shadow
 
 ### Key Style File
 - `client/src/index.css` - All theme variables, component classes, typography
+- `client/index.html` - Google Fonts: Poppins, Lilita One, JetBrains Mono
 
 ## Key Files
 - `scripts/ozvps` - Control panel CLI (v4.2.0, git-based updates with auto db:push)
@@ -105,10 +126,11 @@
 - `server/cancellation-processor.ts` - Server cancellation with orphan cleanup
 - `server/trial-processor.ts` - Trial expiration and cleanup (runs via billing processor)
 - `server/webhookHandlers.ts` - Stripe webhook processing
-- `server/email.ts` - All email templates (ticket confirmation, guest ticket, admin notification, etc.)
+- `server/email.ts` - All email templates (white/light themed, shared baseEmail helper)
 - `client/src/lib/api.ts` - Frontend API client with `secureFetch`
 - `client/src/pages/server-detail.tsx` - Server detail page with React Query
-- `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page
+- `client/src/pages/contact.tsx` - Public contact form (sales + abuse, no login required)
+- `client/src/pages/guest-ticket.tsx` - Public guest ticket viewing page (token-based)
 - `client/src/contexts/provision-tracker.tsx` - Global provision tracking context (localStorage + polling)
 - `client/src/components/provision-progress-widget.tsx` - Floating bottom-right provisioning widget
 - `admin-server/routes/servers.ts` - Admin server management (provision, delete, suspend, transfer)
@@ -120,139 +142,100 @@
 - `client/src/hooks/use-reinstall-task.ts` - Per-page build status polling hook (server-detail checklist)
 - `client/src/components/setup-progress-checklist.tsx` - Provisioning checklist UI component
 - `client/public/novnc/` - Native noVNC v1.5.0 files with OzVPS branding
-- `shared/schema.ts` - Database schema (tickets support guest tickets with `guestEmail`, `guestAccessToken`)
+- `shared/schema.ts` - Database schema (tickets have `ticketNumber` random 6-digit display field)
 - `shared/version.ts` - Version number and changelog
 - `admin-client/src/pages/Deletions.tsx` - Admin page for approving/recovering server deletion requests
 - `admin-client/src/pages/AuditLogs.tsx` - Admin audit log viewer (admin actions + user events, tabbed)
 - `admin-server/routes/audit.ts` - GET /audit/admin and GET /audit/users endpoints
 - `admin-server/utils/audit-log.ts` - `logAdminAction()`, `auditSuccess()`, `auditFailure()` helpers
 - `server/user-audit.ts` - `auditUserAction()`, `logUserAction()`, `UserActions` constants
+- `admin-client/src/components/ui/select.tsx` - Custom dark dropdown (replaces native `<select>`)
 
 ## Recent Session Work (2026-03-14)
 
 ### Completed This Session
-1. **Audit Logs Admin Page** - Full audit log viewer at `/audit-logs` in admin panel:
-   - Two tabs: Admin Actions (`adminAuditLogs` table) and User Events (`userAuditLogs` table)
-   - Filter by email, action, status; paginated 50/page
-   - `admin-server/routes/audit.ts` - GET `/audit/admin` and GET `/audit/users` endpoints
-   - `admin-client/src/pages/AuditLogs.tsx` - tabbed UI with status badges, IP, reason columns
-   - Both `adminAuditLogs` (72 write calls across 7 admin route files) and `userAuditLogs` were already fully instrumented
-   - Added missing audit calls: server power actions (boot/reboot/shutdown/poweroff) and server deploy/create
+1. **Public Contact Form** (`client/src/pages/contact.tsx`) — sales + abuse only, no login:
+   - Support portal layout: sticky nav, two-column grid (form + sidebar), FAQ accordion
+   - Category selector cards, name+email row, subject, message with char counter
+   - Success screen shows random ticket number + View Ticket button
+   - Route: `/contact` added to `PUBLIC_AUTH_ROUTES` in `App.tsx`
 
-2. **Disk Debug Log Removed** - `server/virtfusion.ts` was logging full disk JSON every 1 second per active server (massive log spam). Removed.
+2. **Guest Ticket View** (`client/src/pages/guest-ticket.tsx`) — token-based, no login:
+   - Chat-bubble style messages (support left/blue, user right)
+   - Ticket header: status badge, category, metadata grid
+   - Reply box with email hint; sticky nav with logo + Sign In button
 
-3. **Real Disk Usage** - `server/virtfusion.ts` now reads QEMU guest agent `fsinfo` for real in-VM filesystem usage:
-   - Prioritises root `/` filesystem, excludes pseudo-filesystems (squashfs, tmpfs, proc, etc.)
-   - Falls back to libvirt physical block device stats if guest agent not available
-   - Disk label in server-detail sidebar changed back to "Disk" (now shows real used/total)
+3. **Random Ticket Numbers** — `ticketNumber` column on `tickets` table:
+   - `shared/schema.ts`: `ticketNumber: integer("ticket_number").unique()`
+   - `server/storage.ts`: `createTicket()` generates random 6-digit number with collision retry
+   - Used for display everywhere; internal DB `id` still used for email `replyTo` threading
+   - **Requires `db:push` on server** — `cd /tmp && ozvps --update && ozvps --db-push`
 
-4. **Bug Fixes**:
-   - Missing `await` on power action `auditUserAction()` — logs could be lost on crash
-   - Missing `await` on deploy `auditUserAction()` — same issue
-   - Low-balance warning server count: was comparing each server against full wallet balance instead of running balance — now uses decreasing `runningBalance` to correctly count which servers actually won't get paid
+4. **Admin Deletion Fix** — deletion approval no longer waits 40 minutes:
+   - Was: `scheduledAt.setHours(scheduledAt.getHours() + 1)` — 1 hour forced wait
+   - Now: `const scheduledAt = new Date()` — processes on next 30s cycle
 
-5. **Session IP Validation** - Optional `SESSION_VALIDATE_IP=true` env var:
-   - When enabled, rejects any request where session's bound IP differs from current request IP
-   - Protects against stolen session cookies used from different network
-   - Disabled by default (mobile/dynamic IP users would get logged out)
-   - Auto-added to `.env` on next `ozvps --update` via script change in `scripts/ozvps`
-   - Requires `TRUST_PROXY=true` to work correctly behind nginx
+5. **Admin Ticket Dropdowns Fixed** — native `<select>` always rendered white:
+   - Created `admin-client/src/components/ui/select.tsx` — custom dark dropdown
+   - Replaced all 4 native selects in `admin-client/src/pages/Tickets.tsx`
 
-6. **Server Plan Price Display** - Monthly price shown in server detail sidebar under plan name:
-   - Large bold dollar amount (`$7`) with smaller `.00/mo` suffix
-   - Free/Trial servers show "Free" or "Trial" in emerald green
-   - File: `client/src/pages/server-detail.tsx`
+6. **Email Templates Fixed** (`server/email.ts`):
+   - **Logo now visible in Outlook**: added `bgcolor="#0d1117"` HTML attribute to header `<td>` (Outlook ignores CSS `background-color` but respects the attribute)
+   - **VML button**: Outlook-native rounded button via `<!--[if mso]>` conditional
+   - **`color-scheme: light only`**: prevents dark mode email clients from inverting the white logo
+   - All 18 templates use shared `baseEmail()` → dark navy header, blue accent bar, white body
 
-7. **Login & Register Page Improvements**:
-   - Password show/hide toggle (Eye/EyeOff) on both pages
-   - Inline "Forgot password?" link on login page
-   - Blue top accent border on form card
-   - Status strip on left panel (pulsing dot + "All systems operational · Brisbane, AU")
-   - Files: `client/src/pages/login.tsx`, `client/src/pages/register.tsx`
+7. **Rate Limits Loosened** (`server/routes.ts`, `server/index.ts`):
+   | Limiter | Before | After |
+   |---|---|---|
+   | Login | 5/15min | 15/15min |
+   | Deployment | 3/min | 5/min |
+   | Contact form | 3/hr | 10/hr |
+   | Global API | 300/min | 600/min |
 
-8. **Email Template Redesign** - All 18 email templates rewritten with clean white design:
-   - Replaced dark `#1f2937` header with white card + 4px blue top accent line
-   - Shared `baseEmail()` helper + `row()`, `credRow()`, `alertBox()`, `btn()` utility functions
-   - Clean, informative content — simple and professional
-   - File: `server/email.ts` (reduced from ~3000 to ~470 lines)
+8. **Design System Updated** — panel now matches ozvps.com.au:
+   - Fonts: Inter→Poppins (body), Outfit→Lilita One (h1 only), JetBrains Mono unchanged
+   - Background: deeper navy `hsl(222 50% 4%)` + dot grid + blue top glow (fixed)
+   - Primary: `hsl(209 100% 50%)` #0085FF | Border: `hsl(220 15% 18%)`
+   - Warning color: amber→`hsl(45 100% 51%)` #FFAD02 brand yellow
+   - Border radius: 6/10/15px
+   - New utility classes: `.text-gradient`, `.btn-glow`
+   - Files: `client/src/index.css`, `client/index.html`
 
-### Previous Session (2026-03-13)
-1. **Transaction Labels Improved** - Admin wallet adjustments now show meaningful titles
-2. **Provision Widget Auto-Dismiss Fixed** - Interval-based check fires even after polling stops
-3. **Server-Detail Checklist Auto-Dismiss** - 20s auto-dismiss after complete, no button click needed
-4. **Admin Deletion Approval Workflow** - pending_approval → admin approves/recovers → Deletions page
-5. **Provisioning Checklist Progress Fixed** - Server-side buildStartTimes map, time-based simulation
+9. **Register Page Copy** — updated headline + pricing:
+   - "Join OzVPS Today" → "Australian Cloud Hosting"
+   - Plans from $5/mo → $7/mo
 
-### Previous Session (2026-03-13 - Earlier)
-1. **Email OTP Timing-Safe Comparison** - Fixed timing attack vulnerability:
-   - OTP comparison now uses `crypto.timingSafeEqual()` with Buffer comparison
-   - Only compares when buffer lengths match (prevents length oracle attacks)
-   - File: `server/routes.ts`
-
-2. **Single-Use Email Verification Tokens** - Tokens can no longer be reused:
-   - Backend returns 400 with `alreadyVerified: true` on reuse (was 200 success)
-   - Frontend `verify-email.tsx` handles three states: success / already-used / error
-   - `already-used` state shows "Go to Login" button
-   - Error state shows "Request a new verification email" button linking to `/verify-email`
-
-3. **Admin Panel Complete Redesign** - Total visual overhaul matching OzVPS dark theme:
-   - `admin-client/src/index.css` - Complete rewrite with OzVPS brand colors
-   - `admin-client/src/components/Layout.tsx` - New sidebar with blue active states, page titles, user info at bottom
-   - New UI component library: `button.tsx`, `dialog.tsx`, `badge.tsx`, `input.tsx`, `label.tsx`, `textarea.tsx`
-   - `admin-client/src/components/ui/confirm-dialog.tsx` - Reusable ConfirmDialog (replaces `confirm()`)
-   - `admin-client/src/components/ui/prompt-dialog.tsx` - Reusable PromptDialog (replaces `prompt()`)
-   - Replaced ALL native browser `confirm()`/`prompt()` calls across 6 pages:
-     - Users.tsx: suspend, block, revoke sessions, adjust wallet
-     - Servers.tsx: suspend, end trial, delete
-     - Billing.tsx: cleanup orphaned, end trial, suspend server
-     - Tickets.tsx: delete ticket
-     - PromoCodes.tsx: delete promo code
-     - Whitelist.tsx: add IP (with label), delete entry
-   - Applied OzVPS dark theme to Dashboard, Health, Logs, Security pages
-
-4. **Admin Center Link Fix** - Was pointing to internal `/admin` route (404):
-   - Fixed in `client/src/components/layout/sidebar.tsx`
-   - Fixed in `client/src/components/layout/top-nav.tsx` (desktop + mobile)
-   - Changed to `https://admin.ozvps.com.au` with `<a target="_blank">` tag
-
-5. **Global Provision Progress Tracker** - Provisioning persists across all pages:
-   - `client/src/contexts/provision-tracker.tsx` - React context with localStorage persistence
-   - Polls VirtFusion build status every 3 seconds for all active provisions
-   - Survives page navigation and browser refresh
-   - Auto-dismisses completed servers after 30 seconds
-   - `client/src/components/provision-progress-widget.tsx` - Floating bottom-right widget
-     - Collapsible header showing count of provisioning/ready servers
-     - Per-server: icon, name, status label, animated progress bar
-     - "View Server" button to navigate to server detail page
-     - Dismiss button (hover to reveal)
-   - `client/src/App.tsx` - ProvisionTrackerProvider wraps the entire app
-   - `client/src/pages/deploy.tsx` - Calls `startProvision()` on successful deploy
-
-6. **Billing Safety Fixes** - Two bugs fixed in `server/billing.ts`:
-   - **Idempotency check order**: Moved check to AFTER wallet `FOR UPDATE` lock
-     - Previously: check → lock (concurrent txs could both pass before blocking)
-     - Now: lock → check (second tx sees ledger entry after first commits)
-     - Prevents unique constraint violation errors in logs
-   - **Unsuspend failure refund loop**: When VirtFusion fails to unsuspend after charging:
-     - Now deletes the billing ledger entry when refunding
-     - Keeps nextBillAt as future date (not reverted to past)
-     - Allows next billing cycle to retry with a fresh charge attempt
-     - Previously: ledger entry remained, future retries hit idempotency and passed
-       without charging, then refunded again → free money bug
+### Previous Session (2026-03-14 — earlier)
+1. **Audit Logs Admin Page** — `/audit-logs` with two tabs (Admin Actions + User Events)
+2. **Disk Debug Log Removed** — was logging full disk JSON every 1s per server
+3. **Real Disk Usage** — QEMU guest agent `fsinfo`, root `/` partition, libvirt fallback
+4. **Session IP Validation** — `SESSION_VALIDATE_IP=true` env var (disabled by default)
+5. **Server Plan Price Display** — monthly price in server detail sidebar
+6. **Login & Register Improvements** — password toggle, forgot password link, status strip
 
 ### Previous Sessions (condensed)
-- **Native noVNC Console** - Replaced react-vnc with native noVNC v1.5.0
-- **Rate Limiting UX** - `isRateLimited` flag separate from `isSystemDown`
-- **reCAPTCHA** - Admin config page + visible shield icon on auth forms
-- **Security fixes** - `crypto.randomInt()` for OTP, server-side name bans, path traversal, X-Forwarded-For spoofing, error disclosure
-- **Trial Servers** - Full implementation: DB columns, admin provision UI, trial processor, TRIAL/TRIAL ENDED badges
-- **Email verification overhaul** - Single-use tokens, must verify before dashboard, works cross-device
-- **Admin 2FA bypass** - `ADMIN_BYPASS_2FA=true` env var for emergency recovery
-- **System Health Check** - Blocks login when VirtFusion API or DB is down
-- **Billing bug fixes** - Promo refund mismatch (FREE MONEY BUG), race conditions, unsuspend refund
-- **Promotional codes** - Fully implemented
-- **Email support system** - Inbound webhook at `/api/hooks/resend-inbound`, guest tickets, email threading
-- **Profile picture upload** - Base64 upload in account settings
+- **Email template redesign** — clean white design, shared baseEmail helper, 18 templates
+- **Admin panel redesign** — dark theme, no native dialogs, OzVPS branding
+- **Transaction labels** — admin wallet adjustments show meaningful titles
+- **Provision widget auto-dismiss** — interval-based, fires even after polling stops
+- **Admin deletion approval workflow** — pending_approval → admin approves/recovers
+- **Billing safety fixes** — idempotency check order, unsuspend refund loop
+- **Email OTP timing-safe** — crypto.timingSafeEqual
+- **Single-use verification tokens** — 400 on reuse, UI shows already-used state
+- **Native noVNC console** — full sidebar controls, OzVPS branding
+- **reCAPTCHA admin config** — admin config page, visible shield icon on forms
+- **Trial servers** — DB columns, admin provision UI, trial processor, TRIAL badges
+- **Email support system** — inbound webhook, guest tickets, email replies
+- **Promotional codes** — fully implemented
+- **Profile picture upload** — Base64 upload in account settings
+
+## Ticket System
+- **Guest tickets**: `guestEmail` + `guestAccessToken` (64 hex chars = 32 random bytes) — no login
+- **Ticket number**: `ticketNumber` (random 6-digit, unique) for display; DB `id` used internally for email threading
+- **Reply-to format**: `support+{ticketId}@ozvps.com.au` — uses real DB `id` for inbound webhook parsing
+- **Public categories**: `sales` and `abuse` only (no `support` or `accounts` for public)
+- **Admin reply → guest email**: `sendGuestTicketAdminReplyEmail()` fires when admin replies to a guest ticket
 
 ## Billing System Architecture
 **chargeServer() flow (server/billing.ts):**
@@ -299,6 +282,7 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 - `button.tsx`, `dialog.tsx`, `badge.tsx`, `input.tsx`, `label.tsx`, `textarea.tsx`
 - `confirm-dialog.tsx` - Reusable ConfirmDialog (replaces all native `confirm()`)
 - `prompt-dialog.tsx` - Reusable PromptDialog (replaces all native `prompt()`)
+- `select.tsx` - Custom dark dropdown (replaces native `<select>` which always renders white)
 
 ## Provisioning Architecture
 **Two separate polling systems** — both use `api.getBuildStatus(serverId)`:
@@ -320,22 +304,22 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 - `commissionStatus`: 0=queued, 1=building, 2=paused, 3=complete (authoritative)
 - `state`: raw VirtFusion state — often **empty string** during commissioned=1 (unreliable)
 - `phase`: simplified ('queued'|'building'|'complete'|'error') — DO NOT use for step mapping
-- `buildingStartedAt`: server-tracked timestamp (ms) when commissioned=1 was first seen — use this for progress simulation
+- `buildingStartedAt`: server-tracked timestamp (ms) when commissioned=1 was first seen
 
-**Provisioning progress approach** (VirtFusion gives no granular phases during building):
-- Server (`routes.ts`) maintains `buildStartTimes: Map<string, number>` — records when each server first hits commissioned=1
-- This timestamp is returned as `buildingStartedAt` in build-status responses
-- Clients simulate checklist progress from elapsed seconds: 0-20s=provisioning, 20-60s=imaging, 60-150s=installing, 150s+=configuring
+**Provisioning progress approach:**
+- Server (`routes.ts`) maintains `buildStartTimes: Map<string, number>`
+- Clients simulate checklist: 0-20s=provisioning, 20-60s=imaging, 60-150s=installing, 150s+=configuring
 
 **Server deletion status flow:**
-`pending_approval` (awaiting admin) → `pending` (approved, waiting scheduledAt) → `processing` (VirtFusion deleting) → `completed`
+`pending_approval` → `pending` → `processing` → `completed`
 Or: `pending_approval` → `revoked` (admin recovered it)
 
 ## Email System
 - **Inbound**: MX record → `inbound-smtp.ap-northeast-1.amazonaws.com` (priority 10)
 - **Webhook**: `https://app.ozvps.com.au/api/hooks/resend-inbound`
-- **Reply-to format**: `support+{ticketId}@ozvps.com.au`
-- **Templates**: White/light themed (dark mode breaks emails in clients)
+- **Reply-to format**: `support+{ticketId}@ozvps.com.au` (real DB id, not ticketNumber)
+- **Templates**: White/light themed — dark mode breaks emails in clients
+- **Logo**: white PNG on transparent bg — needs `bgcolor="#0d1117"` on header `<td>` for Outlook
 
 ## Current Version
 - **App Version**: 1.11.0
@@ -348,6 +332,7 @@ Or: `pending_approval` → `revoked` (admin recovered it)
 4. **Updates get old cached code** - Now uses git, not zip downloads
 5. **"Server not found" flash** - Fixed: don't show error if cached data exists
 6. **Stuck cancellations** - Auto-cleaned if server already deleted from VirtFusion
+7. **Email logo invisible** - Logo is white PNG; needs `bgcolor="#0d1117"` on header `<td>` (Outlook ignores CSS background-color)
 
 ## Update Commands
 ```bash
@@ -366,38 +351,34 @@ git push origin main
 ```
 
 ## TODO / Known Issues
-- [ ] Security features - implement lockout logic and audit logging (tables exist in DB, logic pending)
-- [x] Email templates redesign - DONE (clean white design, shared baseEmail helper, 18 templates rewritten)
-- [x] Login/register improvements - DONE (password toggle, blue top accent, status strip)
-- [x] Disk usage - DONE (QEMU guest agent `fsinfo`, root `/` partition, libvirt fallback)
-- [x] Audit logging admin UI - DONE (adminAuditLogs + userAuditLogs, Audit Logs page at /audit-logs)
-- [x] Session IP validation - DONE (SESSION_VALIDATE_IP=true, auto-set on next update)
-- [x] Transaction labels - DONE (adjustment_credit/debit show admin description, By: admin email)
-- [x] Provision widget auto-dismiss - DONE (interval-based, fires even after polling stops)
-- [x] Server checklist auto-dismiss - DONE (20s after complete, no button click required)
-- [x] Admin deletion approval - DONE (pending_approval → admin approves/recovers → Deletions page)
-- [x] Provisioning checklist stuck at queued - DONE (server-side buildStartTimes map, time-based simulation)
-- [x] Admin panel redesign - DONE (dark theme, no native dialogs, OzVPS branding)
-- [x] Admin Center link fix - DONE (was pointing to /admin, now https://admin.ozvps.com.au)
-- [x] Global provision tracker - DONE (localStorage persistence, polls across all pages)
-- [x] Billing race condition fix - DONE (idempotency check after lock, unsuspend refund loop fixed)
-- [x] Email OTP timing attack - DONE (crypto.timingSafeEqual)
-- [x] Single-use verification tokens - DONE (400 on reuse, UI shows already-used state)
-- [x] Security audit - DONE (path traversal, X-Forwarded-For, error disclosure, input validation, crypto RNG)
-- [x] Native noVNC console - DONE (full sidebar controls, OzVPS branding)
-- [x] reCAPTCHA admin config - DONE
-- [x] Trial servers - DONE
-- [x] Email support system - DONE (inbound webhook, guest tickets, email replies)
-- [x] Promotional codes - DONE
+- [ ] Security features — lockout logic (tables exist in DB, logic pending)
+- [x] Design system update — DONE (matches ozvps.com.au: Poppins, Lilita One h1, dot grid, #0085FF, #FFAD02)
+- [x] Random ticket numbers — DONE (ticketNumber column, 6-digit random, unique) — **needs db:push on server**
+- [x] Public contact form — DONE (sales + abuse, guest tickets, FAQ, success screen)
+- [x] Guest ticket view — DONE (token-based, chat bubbles, reply box)
+- [x] Email logo fix — DONE (bgcolor attribute for Outlook, VML button, color-scheme:light only)
+- [x] Rate limits loosened — DONE (login 15/15min, API 600/min, contact 10/hr)
+- [x] Admin deletion immediate — DONE (no longer waits 1 hour)
+- [x] Admin ticket dropdowns — DONE (custom Select component, was white with native select)
+- [x] Email templates redesign — DONE (white design, dark header, shared helpers)
+- [x] Login/register improvements — DONE (password toggle, status strip, blue accent)
+- [x] Disk usage — DONE (QEMU guest agent fsinfo, root partition, libvirt fallback)
+- [x] Audit logging admin UI — DONE (adminAuditLogs + userAuditLogs, Audit Logs page)
+- [x] Session IP validation — DONE (SESSION_VALIDATE_IP=true)
+- [x] Admin panel redesign — DONE (dark theme, no native dialogs)
+- [x] Billing race condition fix — DONE
+- [x] Trial servers — DONE
+- [x] Email support system — DONE
+- [x] Promotional codes — DONE
 
 ## Notes for Claude
 - User prefers direct, concise responses
 - Push fixes to `main` branch only (no dev branch for production)
-- User gets frustrated with repeated issues - triple-check fixes
+- User gets frustrated with repeated issues — triple-check fixes
 - The `.ozvps-branch` file on servers determines which branch to pull from
 - Email templates must be white/light themed (dark mode breaks emails)
-- **ALWAYS `git pull origin main` before starting work** - Sync latest from remote to avoid overwriting changes made elsewhere
-- **LOCKED - DO NOT MODIFY WITHOUT ASKING:**
+- **ALWAYS `git pull origin main` before starting work** — sync latest to avoid overwriting changes
+- **LOCKED — DO NOT MODIFY WITHOUT ASKING:**
   - Login page (`client/src/pages/login.tsx`)
   - Register page (`client/src/pages/register.tsx`)
   - Email verification (`client/src/pages/verify-email.tsx`)
