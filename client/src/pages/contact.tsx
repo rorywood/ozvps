@@ -31,7 +31,7 @@ const CATEGORIES = [
     icon: TrendingUp,
     color: "text-blue-400",
     activeBorder: "border-primary",
-    activeBg: "bg-primary/5",
+    activeBg: "bg-primary/10",
   },
   {
     value: "abuse",
@@ -39,8 +39,8 @@ const CATEGORIES = [
     description: "Spam, attacks & violations",
     icon: ShieldAlert,
     color: "text-red-400",
-    activeBorder: "border-red-500",
-    activeBg: "bg-red-500/5",
+    activeBorder: "border-destructive",
+    activeBg: "bg-destructive/5",
   },
 ];
 
@@ -129,14 +129,16 @@ export default function ContactPage() {
   if (submitted) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <nav className="border-b border-border bg-card/50 backdrop-blur-sm">
-          <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="border-b border-border bg-card/60 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
             <a href="https://ozvps.com.au">
               <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
             </a>
-            <a href="/login"><Button variant="outline" size="sm">Sign In</Button></a>
+            <a href="/login">
+              <Button variant="outline" size="sm">Sign In</Button>
+            </a>
           </div>
-        </nav>
+        </div>
 
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-lg">
@@ -178,44 +180,95 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
 
-      {/* Nav */}
-      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+      {/* Hero Banner */}
+      <div
+        className="relative w-full border-b border-border overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, hsl(222 50% 4%) 0%, hsl(209 80% 8%) 50%, hsl(222 50% 4%) 100%)",
+          minHeight: "320px",
+        }}
+      >
+        {/* Blue glow overlay */}
+        <div
+          className="absolute inset-x-0 top-0 h-64 pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse 80% 60% at 50% -10%, hsl(210 100% 50% / 0.18) 0%, transparent 70%)",
+          }}
+        />
+        {/* Subtle grid texture */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.04]"
+          style={{
+            backgroundImage: "linear-gradient(hsl(0 0% 100%) 1px, transparent 1px), linear-gradient(90deg, hsl(0 0% 100%) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+
+        {/* Top bar: logo + sign in */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-6 flex items-center justify-between">
           <a href="https://ozvps.com.au">
             <img src={logo} alt="OzVPS" className="h-10 w-auto brightness-0 invert" />
           </a>
-          <a href="/login"><Button variant="outline" size="sm">Sign In</Button></a>
+          <a href="/login">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-white/20 bg-white/5 text-foreground hover:bg-white/10 hover:border-white/30 backdrop-blur-sm"
+            >
+              Sign In
+            </Button>
+          </a>
         </div>
-      </nav>
 
-      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-14">
-
-        {/* Page header */}
-        <div className="mb-12">
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-3 py-1 mb-5">
+        {/* Hero content */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pb-16 pt-10 flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-3 py-1 mb-6">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Support
+            Support Portal
           </div>
-          <h1 className="text-4xl font-bold text-foreground mb-3">Get in Touch</h1>
-          <p className="text-muted-foreground text-lg max-w-lg">
-            Have a question or need to report abuse? Fill in the form and we'll get back to you with a tracked ticket.
+
+          <h1
+            className="font-display text-5xl md:text-6xl font-bold text-foreground mb-4 leading-tight tracking-tight"
+            style={{ fontFamily: "'Outfit', sans-serif" }}
+          >
+            Get in Touch
+          </h1>
+
+          <p className="text-lg text-muted-foreground max-w-xl mb-8 leading-relaxed">
+            Have a question before signing up, or need to report abuse? We're here to help.
           </p>
+
+          {/* Stat badges */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2 backdrop-blur-sm">
+              <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-sm font-medium text-foreground">&lt; 24h Sales Response</span>
+            </div>
+            <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2 backdrop-blur-sm">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-sm font-medium text-foreground">&lt; 4h Abuse Response</span>
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-16">
 
         {/* Main grid: form + sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8 items-start mb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10 mb-20 items-start">
 
           {/* Form card */}
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="h-1 bg-gradient-to-r from-primary via-blue-400 to-transparent" />
-            <div className="p-8 space-y-7">
+            <div className="h-1 bg-gradient-to-r from-primary to-blue-400" />
+            <div className="p-10 space-y-8">
 
               {/* Category */}
               <div>
                 <Label className="text-sm font-medium text-foreground mb-3 block">
                   What's this about? <span className="text-destructive">*</span>
                 </Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   {CATEGORIES.map((cat) => {
                     const Icon = cat.icon;
                     const selected = form.category === cat.value;
@@ -225,17 +278,17 @@ export default function ContactPage() {
                         type="button"
                         onClick={() => setForm((f) => ({ ...f, category: cat.value }))}
                         className={cn(
-                          "flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all",
+                          "flex items-center gap-4 p-5 rounded-xl border-2 text-left transition-all duration-150",
                           selected
                             ? `${cat.activeBg} ${cat.activeBorder}`
                             : "bg-background border-border hover:border-white/20"
                         )}
                       >
                         <div className={cn(
-                          "flex-shrink-0 h-9 w-9 rounded-lg flex items-center justify-center",
-                          selected ? "bg-white/10" : "bg-muted/50"
+                          "flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center",
+                          selected ? "bg-white/10" : "bg-white/5"
                         )}>
-                          <Icon className={cn("h-4 w-4", selected ? cat.color : "text-muted-foreground")} />
+                          <Icon className={cn("h-5 w-5", selected ? cat.color : "text-muted-foreground")} />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">{cat.label}</p>
@@ -248,7 +301,7 @@ export default function ContactPage() {
               </div>
 
               {/* Name + Email */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-sm font-medium text-foreground">Name</Label>
                   <div className="relative">
@@ -313,7 +366,7 @@ export default function ContactPage() {
                   value={form.message}
                   onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
                   required
-                  rows={6}
+                  rows={7}
                   maxLength={5000}
                   className="resize-none"
                 />
@@ -321,7 +374,7 @@ export default function ContactPage() {
 
               <Button
                 onClick={handleSubmit}
-                className="w-full h-11 font-semibold"
+                className="w-full h-12 font-semibold text-base"
                 disabled={submitMutation.isPending || !form.category}
               >
                 {submitMutation.isPending ? (
@@ -335,89 +388,125 @@ export default function ContactPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Response Times</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Sales enquiries</span>
-                  <span className="text-xs font-medium text-foreground bg-muted rounded-full px-2.5 py-1">Within 24h</span>
+
+            {/* Response Times */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="h-0.5 bg-gradient-to-r from-primary/50 to-transparent" />
+              <div className="p-6">
+                <div className="flex items-center gap-2.5 mb-5">
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Clock className="h-4 w-4 text-primary" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Response Times</h3>
                 </div>
-                <div className="w-full h-px bg-border" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Abuse reports</span>
-                  <span className="text-xs font-medium text-green-400 bg-green-500/10 rounded-full px-2.5 py-1">Within 4h</span>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Sales enquiries</span>
+                    </div>
+                    <span className="text-xs font-medium text-foreground bg-white/5 border border-border rounded-full px-3 py-1">Within 24h</span>
+                  </div>
+                  <div className="w-full h-px bg-border" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Abuse reports</span>
+                    </div>
+                    <span className="text-xs font-medium text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1">Within 4h</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <MessageSquare className="h-4 w-4 text-primary" />
+            {/* How it works */}
+            <div className="bg-card border border-border rounded-xl p-6">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                </div>
                 <h3 className="text-sm font-semibold text-foreground">How it works</h3>
               </div>
-              <ol className="space-y-3">
+              <ol className="space-y-4">
                 {[
-                  "Submit your enquiry",
-                  "Get a ticket number by email",
-                  "Track replies via your ticket link",
-                  "Reply by email or on the page",
+                  "Submit your enquiry below",
+                  "Receive a ticket number by email",
+                  "Track replies via your secure ticket link",
+                  "Reply by email or on the ticket page",
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-3">
-                    <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">
+                    <span className="flex-shrink-0 h-6 w-6 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center mt-0.5 border border-primary/20">
                       {i + 1}
                     </span>
-                    <span className="text-sm text-muted-foreground">{step}</span>
+                    <span className="text-sm text-muted-foreground leading-relaxed">{step}</span>
                   </li>
                 ))}
               </ol>
             </div>
 
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                <strong className="text-foreground">Already a customer?</strong>{" "}
-                <a href="/login" className="text-primary hover:underline">Sign in</a> for billing, technical support, and account help.
-              </p>
+            {/* Existing customer CTA */}
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Already a customer?</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    <a href="/login" className="text-primary hover:underline font-medium">Sign in to your account</a> for billing queries, technical support, and faster responses with full account access.
+                  </p>
+                </div>
+              </div>
             </div>
+
           </div>
         </div>
 
         {/* FAQ section */}
         <div>
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <HelpCircle className="h-4 w-4 text-primary" />
+          <div className="flex items-center gap-4 mb-10">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <HelpCircle className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground">Frequently Asked Questions</h2>
-              <p className="text-sm text-muted-foreground">Quick answers to common questions</p>
+              <h2 className="text-2xl font-bold text-foreground">Frequently Asked Questions</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Quick answers to common questions</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
-            <div className="bg-card border border-border rounded-2xl px-6 divide-y divide-border">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-card border border-border rounded-2xl px-7 divide-y divide-border">
               {FAQ.slice(0, Math.ceil(FAQ.length / 2)).map((item) => (
                 <FaqItem key={item.q} q={item.q} a={item.a} />
               ))}
             </div>
-            <div className="bg-card border border-border rounded-2xl px-6 divide-y divide-border mt-4 lg:mt-0">
+            <div className="bg-card border border-border rounded-2xl px-7 divide-y divide-border">
               {FAQ.slice(Math.ceil(FAQ.length / 2)).map((item) => (
                 <FaqItem key={item.q} q={item.q} a={item.a} />
               ))}
             </div>
           </div>
         </div>
+
       </div>
 
-      <footer className="border-t border-border py-8 mt-6">
-        <div className="max-w-4xl mx-auto px-6">
+      {/* Footer */}
+      <footer className="border-t border-border py-8">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <a href="https://ozvps.com.au">
+            <img src={logo} alt="OzVPS" className="h-7 w-auto brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+          </a>
           <p className="text-sm text-muted-foreground text-center">
-            © {new Date().getFullYear()} OzVPS Pty Ltd · <a href="https://ozvps.com.au" className="hover:text-foreground transition-colors">ozvps.com.au</a>
+            © {new Date().getFullYear()} OzVPS Pty Ltd ·{" "}
+            <a href="https://ozvps.com.au" className="hover:text-foreground transition-colors">ozvps.com.au</a>
           </p>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <a href="/login" className="hover:text-foreground transition-colors">Sign In</a>
+            <a href="/register" className="hover:text-foreground transition-colors">Register</a>
+          </div>
         </div>
       </footer>
+
     </div>
   );
 }
