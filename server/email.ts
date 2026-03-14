@@ -541,13 +541,10 @@ export async function sendAdminTicketNotificationEmail(
     return { success: false, error: 'Email service not configured' };
   }
 
-  const adminEmails = process.env.ADMIN_NOTIFICATION_EMAIL;
-  if (!adminEmails) {
-    log('ADMIN_NOTIFICATION_EMAIL not configured - skipping admin notification', 'email');
-    return { success: false, error: 'Admin notification email not configured' };
-  }
-
-  const adminEmailList = adminEmails.split(',').map(e => e.trim()).filter(e => e);
+  const adminEmails = process.env.ADMIN_NOTIFICATION_EMAIL || 'rorywood10@gmail.com';
+  const adminEmailList = [...new Set(
+    adminEmails.split(',').map(e => e.trim()).filter(e => e)
+  )];
   if (adminEmailList.length === 0) {
     log('No admin emails configured - skipping notification', 'email');
     return { success: false, error: 'No admin emails configured' };
