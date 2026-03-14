@@ -796,7 +796,7 @@ export async function registerRoutes(
 
   const loginRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 login attempts per window
+    max: 15, // 15 login attempts per window (allows for typos without locking out)
     message: { error: 'Too many login attempts. Please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -805,7 +805,7 @@ export async function registerRoutes(
 
   const deploymentRateLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 3, // 3 deployments per minute
+    max: 5, // 5 deployments per minute
     message: { error: 'Too many deployment requests. Please wait before deploying again.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -868,7 +868,7 @@ export async function registerRoutes(
 
   const contactRateLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // 3 public contact submissions per hour per IP
+    max: 10, // 10 public contact submissions per hour per IP
     message: { error: 'Too many contact requests. Please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,

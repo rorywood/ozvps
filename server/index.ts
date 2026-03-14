@@ -177,7 +177,7 @@ const authLimiter = rateLimit({
 // Note: Dashboard polls every 500ms-2s, so needs generous limit
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 300, // 300 requests per minute (allows aggressive polling + user actions)
+  max: 600, // 600 requests per minute (allows aggressive polling + multiple tabs + user actions)
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,

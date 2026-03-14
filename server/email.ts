@@ -37,48 +37,58 @@ function getLogoUrl(): string {
 /** Shared email shell — dark branded header with logo, white content area, clean footer */
 function baseEmail(bodyHtml: string, logoUrl: string): string {
   const year = new Date().getFullYear();
-  const headerBg = '#0d1117';
-  const headerBorder = '#21262d';
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
-  <meta name="supported-color-schemes" content="light">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <!--[if !mso]><!-->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <!--<![endif]-->
   <title>OzVPS</title>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .email-body { background-color: #f9fafb !important; }
+      .email-wrapper { background-color: #f9fafb !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:${bgLight};font-family:${ff};-webkit-font-smoothing:antialiased;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${bgLight};padding:40px 16px;">
+<body class="email-body" style="margin:0;padding:0;background-color:#f9fafb;font-family:${ff};-webkit-font-smoothing:antialiased;mso-line-height-rule:exactly;">
+  <!--[if mso]><table width="100%" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+  <table class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;padding:40px 16px;">
     <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;">
+      <td align="center" valign="top">
+        <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;">
 
           <!-- Dark header with logo -->
           <tr>
-            <td style="background-color:${headerBg};border-radius:12px 12px 0 0;border:1px solid ${headerBorder};border-bottom:none;padding:28px 40px;text-align:center;">
-              <img src="${logoUrl}" alt="OzVPS" width="130" height="auto" style="display:block;margin:0 auto;max-width:130px;">
+            <td align="center" bgcolor="#0d1117" style="background-color:#0d1117;border-radius:12px 12px 0 0;border-top:1px solid #21262d;border-left:1px solid #21262d;border-right:1px solid #21262d;padding:28px 40px;">
+              <!--[if mso]><table cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#0d1117" style="background-color:#0d1117;padding:28px 40px;"><![endif]-->
+              <img src="${logoUrl}" alt="OzVPS" width="130" border="0" style="display:block;height:auto;max-width:130px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;">
+              <!--[if mso]></td></tr></table><![endif]-->
             </td>
           </tr>
 
           <!-- Blue accent bar -->
           <tr>
-            <td style="background:linear-gradient(90deg,#2563eb,#3b82f6,#60a5fa);height:3px;font-size:0;line-height:0;border-left:1px solid ${headerBorder};border-right:1px solid ${headerBorder};">&nbsp;</td>
+            <td bgcolor="#2563eb" height="3" style="background:linear-gradient(90deg,#1d4ed8,#2563eb,#3b82f6);background-color:#2563eb;height:3px;font-size:1px;line-height:1px;border-left:1px solid #21262d;border-right:1px solid #21262d;">&nbsp;</td>
           </tr>
 
           <!-- White card body -->
           <tr>
-            <td style="background-color:#ffffff;border:1px solid ${border};border-top:none;padding:40px;">
+            <td bgcolor="#ffffff" style="background-color:#ffffff;border-left:1px solid ${border};border-right:1px solid ${border};padding:40px 40px 32px;">
               ${bodyHtml}
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="background-color:#ffffff;border:1px solid ${border};border-top:1px solid ${border};border-radius:0 0 12px 12px;padding:20px 40px 28px;text-align:center;">
-              <p style="margin:0 0 6px;color:${textLight};font-size:13px;font-weight:500;">© ${year} OzVPS Pty Ltd</p>
-              <p style="margin:0;color:${textLight};font-size:12px;">
-                Australian owned &amp; operated · Brisbane, QLD ·
+            <td bgcolor="#ffffff" align="center" style="background-color:#ffffff;border:1px solid ${border};border-top:1px solid ${border};border-radius:0 0 12px 12px;padding:20px 40px 28px;">
+              <p style="margin:0 0 6px;color:${textLight};font-size:13px;font-weight:500;line-height:1.5;">© ${year} OzVPS Pty Ltd</p>
+              <p style="margin:0;color:${textLight};font-size:12px;line-height:1.5;">
+                Australian owned &amp; operated &middot; Brisbane, QLD &middot;
                 <a href="https://ozvps.com.au" style="color:${blue};text-decoration:none;">ozvps.com.au</a>
               </p>
             </td>
@@ -88,6 +98,7 @@ function baseEmail(bodyHtml: string, logoUrl: string): string {
       </td>
     </tr>
   </table>
+  <!--[if mso]></td></tr></table><![endif]-->
 </body>
 </html>`;
 }
@@ -126,19 +137,21 @@ function alertBox(type: 'info' | 'warning' | 'danger', heading: string, text: st
   </table>`;
 }
 
-/** CTA button */
+/** CTA button — VML fallback for Outlook */
 function btn(href: string, label: string, color = blue): string {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
     <tr>
-      <td align="center">
-        <table cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="border-radius:8px;background-color:${color};box-shadow:0 2px 8px rgba(37,99,235,0.35);">
-              <a href="${href}" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px;letter-spacing:0.2px;">${label} &rarr;</a>
-            </td>
-          </tr>
-        </table>
-        <p style="margin:10px 0 0;color:${textLight};font-size:11px;">Button not working? <a href="${href}" style="color:${blue};text-decoration:none;word-break:break-all;">${href}</a></p>
+      <td align="center" style="padding:0;">
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:50px;v-text-anchor:middle;width:220px;" arcsize="16%" stroke="f" fillcolor="${color}">
+          <w:anchorlock/>
+          <center style="color:#ffffff;font-family:${ff};font-size:15px;font-weight:700;">${label} &#8594;</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
+        <a href="${href}" style="background-color:${color};border-radius:8px;color:#ffffff;display:inline-block;font-family:${ff};font-size:15px;font-weight:700;line-height:50px;text-align:center;text-decoration:none;width:220px;-webkit-text-size-adjust:none;mso-hide:all;">${label} &#8594;</a>
+        <!--<![endif]-->
+        <p style="margin:10px 0 0;color:${textLight};font-size:11px;line-height:1.5;">Button not working? <a href="${href}" style="color:${blue};text-decoration:none;word-break:break-all;">${href}</a></p>
       </td>
     </tr>
   </table>`;
