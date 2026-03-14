@@ -7103,7 +7103,7 @@ export async function registerRoutes(
 
       // Validate title
       const cleanTitle = typeof title === 'string' ? title.trim() : '';
-      if (cleanTitle.length < 5) return res.status(400).json({ error: 'Subject must be at least 5 characters.' });
+      if (cleanTitle.length < 2) return res.status(400).json({ error: 'Subject is required.' });
       if (cleanTitle.length > 200) return res.status(400).json({ error: 'Subject must be 200 characters or less.' });
 
       // Validate message

@@ -128,10 +128,17 @@ function alertBox(type: 'info' | 'warning' | 'danger', heading: string, text: st
 
 /** CTA button */
 function btn(href: string, label: string, color = blue): string {
-  return `<table cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
     <tr>
-      <td style="border-radius:6px;background-color:${color};">
-        <a href="${href}" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">${label}</a>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="border-radius:8px;background-color:${color};box-shadow:0 2px 8px rgba(37,99,235,0.35);">
+              <a href="${href}" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px;letter-spacing:0.2px;">${label} &rarr;</a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:10px 0 0;color:${textLight};font-size:11px;">Button not working? <a href="${href}" style="color:${blue};text-decoration:none;word-break:break-all;">${href}</a></p>
       </td>
     </tr>
   </table>`;
