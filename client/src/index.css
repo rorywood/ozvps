@@ -7,8 +7,8 @@
 
 /* Define theme tokens that reference CSS custom properties */
 @theme inline {
-  --font-sans: 'Inter', sans-serif;
-  --font-display: 'Outfit', sans-serif;
+  --font-sans: 'Poppins', sans-serif;
+  --font-display: 'Lilita One', cursive;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Reference CSS custom properties for runtime theming */
@@ -44,9 +44,9 @@
   --color-chart-4: var(--theme-chart-4);
   --color-chart-5: var(--theme-chart-5);
 
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
+  --radius-sm: 0.375rem;   /* 6px */
+  --radius-md: 0.625rem;   /* 10px */
+  --radius-lg: 0.9375rem;  /* 15px */
 
   --animate-in: fade-in 0.2s ease-out;
   --animate-out: fade-out 0.2s ease-in;
@@ -65,25 +65,50 @@
 
   /* Glassmorphic card styles */
   .glass-card {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    @apply rounded-xl;
   }
 
   .glass-card-hover {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    @apply rounded-xl transition-all duration-300;
+  }
+  .glass-card-hover:hover {
+    border-color: hsl(209 100% 50% / 0.3);
+    box-shadow: 0 4px 20px -4px hsl(209 100% 50% / 0.2);
   }
 
   /* Glow effects */
   .glow-primary {
-    box-shadow: 0 0 40px rgba(var(--theme-primary), 0.15);
+    box-shadow: 0 0 24px hsl(209 100% 50% / 0.15);
   }
 
   .glow-primary-hover:hover {
-    box-shadow: 0 0 40px rgba(var(--theme-primary), 0.25);
+    box-shadow: 0 0 24px hsl(209 100% 50% / 0.25);
   }
 
-  /* Primary text with subtle glow in dark mode */
+  /* Gradient text — matches ozvps.com.au */
+  .text-gradient {
+    background: linear-gradient(135deg, #0085FF 0%, hsl(199, 95%, 48%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Primary text with subtle glow */
   .text-glow {
-    text-shadow: 0 0 30px rgba(var(--theme-primary), 0.3);
+    text-shadow: 0 0 30px hsl(209 100% 50% / 0.3);
+  }
+
+  /* Button glow shadow */
+  .btn-glow {
+    box-shadow: 0 4px 14px -3px hsl(209 100% 50% / 0.4);
   }
 }
 
@@ -97,121 +122,136 @@
   :root.dark {
     color-scheme: dark;
 
-    /* OzVPS Dark Mode Colors - matching ozvps.com.au */
-    --theme-background: hsl(216 33% 6%);           /* #0a0d14 - darkest background */
-    --theme-foreground: hsl(0 0% 100%);            /* #ffffff - text primary */
-    --theme-card: hsl(216 28% 7%);                 /* #0d1117 - surface/card */
-    --theme-card-foreground: hsl(0 0% 92%);        /* #ebebeb - text secondary */
-    --theme-sidebar: hsl(216 33% 6%);              /* #0a0d14 - same as background */
-    --theme-popover: hsl(215 21% 11%);             /* #161b22 - card elevated */
-    --theme-popover-foreground: hsl(0 0% 92%);     /* #ebebeb - text secondary */
+    /* OzVPS Dark Mode — matches ozvps.com.au */
+    --theme-background: hsl(222 50% 4%);
+    --theme-foreground: hsl(0 0% 95%);
+    --theme-card: hsl(222 40% 8%);
+    --theme-card-foreground: hsl(0 0% 92%);
+    --theme-sidebar: hsl(220 20% 6%);
+    --theme-popover: hsl(220 30% 10%);
+    --theme-popover-foreground: hsl(0 0% 92%);
 
-    /* Primary - OzVPS Blue #0080ff */
-    --theme-primary: hsl(210 100% 50%);
+    /* Primary — OzVPS Blue #0085FF */
+    --theme-primary: hsl(209 100% 50%);
     --theme-primary-foreground: hsl(0 0% 100%);
 
-    /* Secondary - card elevated color */
-    --theme-secondary: hsl(215 21% 11%);           /* #161b22 */
+    /* Secondary */
+    --theme-secondary: hsl(220 20% 12%);
     --theme-secondary-foreground: hsl(0 0% 92%);
 
-    /* Muted - for subtle backgrounds */
-    --theme-muted: hsl(215 21% 11%);               /* #161b22 */
-    --theme-muted-foreground: hsl(0 0% 65%);       /* #a6a6a6 - text muted */
+    /* Muted */
+    --theme-muted: hsl(220 15% 12%);
+    --theme-muted-foreground: hsl(220 10% 65%);
 
-    /* Accent - cyan accent for special elements */
-    --theme-accent: hsl(215 21% 11%);
-    --theme-accent-foreground: hsl(190 100% 50%);  /* #00d4ff - cyan accent */
+    /* Accent — cyan */
+    --theme-accent: hsl(220 20% 12%);
+    --theme-accent-foreground: hsl(199 95% 48%);
 
-    /* Destructive - red */
+    /* Destructive */
     --theme-destructive: hsl(0 84% 60%);
     --theme-destructive-foreground: hsl(0 0% 100%);
 
-    /* Borders - subtle white/5 to white/10 */
-    --theme-border: hsl(0 0% 100% / 0.08);
-    --theme-input: hsl(0 0% 100% / 0.08);
-    --theme-ring: hsl(210 100% 50%);               /* #0080ff */
+    /* Borders */
+    --theme-border: hsl(220 15% 18%);
+    --theme-input: hsl(220 15% 18%);
+    --theme-ring: hsl(209 100% 50%);
 
-    /* Status Colors */
-    --theme-success: hsl(160 84% 39%);             /* emerald-500 */
+    /* Status */
+    --theme-success: hsl(160 84% 39%);
     --theme-success-foreground: hsl(0 0% 100%);
-    --theme-warning: hsl(14 100% 60%);
-    --theme-warning-foreground: hsl(0 0% 100%);
-    --theme-info: hsl(190 100% 50%);               /* #00d4ff - cyan */
+    --theme-warning: hsl(45 100% 51%);       /* #FFAD02 — brand yellow */
+    --theme-warning-foreground: hsl(222 50% 4%);
+    --theme-info: hsl(199 95% 48%);
     --theme-info-foreground: hsl(0 0% 100%);
 
     /* Chart colors */
-    --theme-chart-1: hsl(210 100% 50%);            /* #0080ff - primary blue */
-    --theme-chart-2: hsl(160 84% 39%);             /* emerald-500 */
-    --theme-chart-3: hsl(14 100% 60%);
-    --theme-chart-4: hsl(190 100% 50%);            /* #00d4ff - cyan */
-    --theme-chart-5: hsl(45 93% 47%);
+    --theme-chart-1: hsl(209 100% 50%);
+    --theme-chart-2: hsl(160 84% 39%);
+    --theme-chart-3: hsl(45 100% 51%);
+    --theme-chart-4: hsl(199 95% 48%);
+    --theme-chart-5: hsl(0 84% 60%);
   }
 
   /* Light theme */
   :root.light {
     color-scheme: light;
 
-    /* DigitalOcean-style Light Mode - Pure white, dark navy text for better contrast */
-    --theme-background: hsl(0 0% 100%);
+    /* Soft blue-tinted light mode */
+    --theme-background: hsl(216 40% 96%);
     --theme-foreground: hsl(219 30% 10%);
     --theme-card: hsl(0 0% 100%);
     --theme-card-foreground: hsl(219 30% 10%);
-    --theme-sidebar: hsl(214 15% 97%);
+    --theme-sidebar: hsl(214 20% 93%);
     --theme-popover: hsl(0 0% 100%);
     --theme-popover-foreground: hsl(219 30% 10%);
 
-    /* Primary - Bright blue */
-    --theme-primary: hsl(211 100% 50%);
+    /* Primary */
+    --theme-primary: hsl(209 100% 50%);
     --theme-primary-foreground: hsl(0 0% 100%);
 
-    /* Secondary - light gray */
-    --theme-secondary: hsl(214 20% 95%);
+    /* Secondary */
+    --theme-secondary: hsl(214 20% 92%);
     --theme-secondary-foreground: hsl(219 95% 15%);
 
-    /* Muted - subtle gray */
-    --theme-muted: hsl(214 15% 95%);
+    /* Muted */
+    --theme-muted: hsl(214 15% 92%);
     --theme-muted-foreground: hsl(215 15% 45%);
 
     /* Accent */
-    --theme-accent: hsl(214 20% 95%);
+    --theme-accent: hsl(214 20% 92%);
     --theme-accent-foreground: hsl(219 95% 15%);
 
-    /* Destructive - bright red */
+    /* Destructive */
     --theme-destructive: hsl(0 84% 60%);
     --theme-destructive-foreground: hsl(0 0% 100%);
 
-    /* Borders - very subtle gray */
-    --theme-border: hsl(214 15% 91%);
-    --theme-input: hsl(214 15% 91%);
-    --theme-ring: hsl(211 100% 50%);
+    /* Borders */
+    --theme-border: hsl(214 15% 86%);
+    --theme-input: hsl(214 15% 86%);
+    --theme-ring: hsl(209 100% 50%);
 
-    /* Chart colors - same as dark */
-    --theme-chart-1: hsl(211 100% 50%);
-    --theme-chart-2: hsl(145 80% 33%);
-    --theme-chart-3: hsl(14 100% 60%);
-    --theme-chart-4: hsl(271 81% 56%);
-    --theme-chart-5: hsl(45 93% 47%);
-
-    /* Status colors - same as dark */
+    /* Status */
     --theme-success: hsl(145 80% 33%);
     --theme-success-foreground: hsl(0 0% 100%);
-    --theme-warning: hsl(14 100% 60%);
+    --theme-warning: hsl(45 100% 45%);
     --theme-warning-foreground: hsl(0 0% 100%);
-    --theme-info: hsl(199 95% 48%);
+    --theme-info: hsl(199 95% 40%);
     --theme-info-foreground: hsl(0 0% 100%);
+
+    /* Chart */
+    --theme-chart-1: hsl(209 100% 50%);
+    --theme-chart-2: hsl(145 80% 33%);
+    --theme-chart-3: hsl(45 100% 45%);
+    --theme-chart-4: hsl(199 95% 40%);
+    --theme-chart-5: hsl(0 84% 60%);
   }
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
     font-feature-settings: "kern" 1;
-    letter-spacing: -0.011em;
+    /* Dot grid + blue top glow — matches ozvps.com.au dark mode */
+    background-image:
+      radial-gradient(ellipse 90% 40% at 50% -2%, hsl(209 100% 50% / 0.13) 0%, transparent 100%),
+      radial-gradient(circle, hsl(0 0% 100% / 0.035) 1px, transparent 1px);
+    background-size: auto, 28px 28px;
+    background-attachment: fixed;
   }
 
-  /* Typography hierarchy - DO style */
+  /* Light mode overrides the background */
+  :root.light body {
+    background-image:
+      radial-gradient(ellipse 80% 30% at 50% 0%, hsl(209 100% 50% / 0.08) 0%, transparent 100%),
+      radial-gradient(circle, hsl(209 100% 50% / 0.07) 1px, transparent 1px);
+    background-size: auto, 28px 28px;
+  }
+
+  /* Typography */
   h1 {
-    @apply text-3xl font-bold tracking-tight text-foreground;
-    letter-spacing: -0.025em;
+    /* Lilita One for top-level page headings only */
+    font-family: 'Lilita One', cursive;
+    @apply text-3xl tracking-normal text-foreground;
+    font-weight: 400; /* Lilita One has no weight variants — 400 is its bold */
   }
 
   h2 {
@@ -222,16 +262,15 @@
     @apply text-xl font-semibold text-foreground;
   }
 
-  /* Labels - uppercase and tracked */
+  h4, h5, h6 {
+    @apply font-semibold text-foreground;
+  }
+
   label {
     @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display tracking-tight;
-  }
-
-  /* Override noVNC canvas cursor - force visible cursor on hover */
+  /* Override noVNC canvas cursor */
   [data-testid="vnc-container"] canvas,
   [data-testid="vnc-container"] > canvas,
   [data-testid="vnc-container"] div canvas,
@@ -246,7 +285,7 @@
     cursor: crosshair !important;
   }
 
-  /* Hide reCAPTCHA v3 badge - branding is shown on forms instead */
+  /* Hide reCAPTCHA v3 badge */
   .grecaptcha-badge {
     visibility: hidden !important;
     opacity: 0 !important;
