@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +58,7 @@ export default function LoginPage() {
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
 
   const [showUserNotFound, setShowUserNotFound] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const formatDisplayName = (name?: string, email?: string): string => {
     if (name) {
@@ -441,6 +442,12 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
+
+            {/* Status strip */}
+            <div className="mt-8 flex items-center gap-2 text-xs text-[#525252]">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>All systems operational · Brisbane, AU</span>
+            </div>
           </div>
 
           {/* Footer */}
@@ -463,6 +470,7 @@ export default function LoginPage() {
                 data-testid="img-logo-mobile"
               />
             </Link>
+            <p className="text-sm text-[#737373] mt-2">Australian cloud servers, ready in 60 seconds</p>
           </div>
 
           {/* System Unavailable Banner */}
@@ -485,7 +493,7 @@ export default function LoginPage() {
           )}
 
           {/* Form Card */}
-          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${systemUnavailable ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 border-t-2 border-t-[hsl(210_100%_50%)] rounded-2xl p-8 shadow-2xl shadow-black/20 ${systemUnavailable ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-2xl font-bold text-white mb-2">
@@ -560,19 +568,35 @@ export default function LoginPage() {
 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-[#ebebeb]">Password</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="password" className="text-sm font-medium text-[#ebebeb]">Password</Label>
+                    <Link href="/forgot-password" className="text-xs text-[#737373] hover:text-primary transition-colors" data-testid="link-forgot-password">
+                      Forgot password?
+                    </Link>
+                  </div>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
-                      className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                      className="pl-12 pr-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setError(""); }}
                       autoComplete="current-password"
                       data-testid="input-password"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                      ) : (
+                        <Eye className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -602,7 +626,7 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {/* Submit Button & Forgot Password */}
+                {/* Submit Button */}
                 <div className="space-y-3 pt-2">
                   <Button
                     type="submit"
@@ -628,15 +652,6 @@ export default function LoginPage() {
                       "Sign in"
                     )}
                   </Button>
-                  <div className="text-center">
-                    <Link
-                      href="/forgot-password"
-                      className="text-sm text-[#a6a6a6] hover:text-primary transition-colors"
-                      data-testid="link-forgot-password"
-                    >
-                      Forgot your password?
-                    </Link>
-                  </div>
                 </div>
 
                 {/* reCAPTCHA Notice */}

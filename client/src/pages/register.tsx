@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Shield, Zap, Server, XCircle, ArrowLeft, RefreshCw, DatabaseIcon } from "lucide-react";
+import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle2, Shield, Zap, Server, XCircle, ArrowLeft, RefreshCw, DatabaseIcon, Eye, EyeOff } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -175,6 +175,8 @@ export default function RegisterPage() {
 
   const [honeypot, setHoneypot] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Username ban checking
   const isNameBanned = (n: string): boolean => /darius/i.test(n);
@@ -575,12 +577,16 @@ export default function RegisterPage() {
           <div>
             <div className="mb-16">
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
-                Start Your<br />
-                <span className="text-primary">Cloud Journey</span>
+                Join OzVPS<br />
+                <span className="text-primary">Today</span>
               </h1>
               <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
                 Join thousands of developers and businesses who trust OzVPS for reliable cloud infrastructure.
               </p>
+              <div className="inline-flex items-center gap-2 mt-4 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-sm text-primary font-medium">
+                <Zap className="h-3.5 w-3.5" />
+                Plans from $5/mo · No contracts
+              </div>
             </div>
 
             {/* Features */}
@@ -614,6 +620,12 @@ export default function RegisterPage() {
                   <p className="text-sm text-[#737373]">DDoS protection included</p>
                 </div>
               </div>
+            </div>
+
+            {/* Status strip */}
+            <div className="mt-8 flex items-center gap-2 text-xs text-[#525252]">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>All systems operational · Brisbane, AU</span>
             </div>
           </div>
 
@@ -656,6 +668,7 @@ export default function RegisterPage() {
                     data-testid="img-logo-mobile"
                   />
                 </Link>
+                <p className="text-sm text-[#737373] mt-2">Australian cloud servers, ready in 60 seconds</p>
               </div>
 
               {/* Database Unavailable Banner */}
@@ -678,7 +691,7 @@ export default function RegisterPage() {
               )}
 
               {/* Form Card */}
-              <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`bg-[#0d1117]/80 backdrop-blur-xl border border-white/10 border-t-2 border-t-[hsl(210_100%_50%)] rounded-2xl p-8 shadow-2xl shadow-black/20 ${isDatabaseDown ? 'opacity-50 pointer-events-none' : ''}`}>
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold text-white mb-2">
@@ -829,14 +842,25 @@ export default function RegisterPage() {
                           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="password"
-                            type="password"
+                            type={showPassword ? "text" : "password"}
                             placeholder="Create a password"
-                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 pr-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             autoComplete="new-password"
                             data-testid="input-password"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                            ) : (
+                              <Eye className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                            )}
+                          </button>
                         </div>
                         {strength && (
                           <div className="space-y-1.5 pt-1">
@@ -857,14 +881,25 @@ export default function RegisterPage() {
                           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#737373] pointer-events-none" />
                           <Input
                             id="confirmPassword"
-                            type="password"
+                            type={showConfirmPassword ? "text" : "password"}
                             placeholder="Confirm your password"
-                            className="pl-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
+                            className="pl-12 pr-12 h-12 bg-[#161b22]/50 border-white/10 text-white placeholder:text-[#525252] focus:border-primary/50 focus:ring-primary/20 rounded-xl"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             autoComplete="new-password"
                             data-testid="input-confirm-password"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2"
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                            ) : (
+                              <Eye className="h-5 w-5 text-[#737373] hover:text-white cursor-pointer transition-colors" />
+                            )}
+                          </button>
                         </div>
                         {confirmPassword && password === confirmPassword && (
                           <div className="flex items-center gap-1.5 text-xs text-green-400 pt-1">
