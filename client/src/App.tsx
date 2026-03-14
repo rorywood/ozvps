@@ -28,6 +28,7 @@ import Billing from "@/pages/billing";
 import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
 import GuestTicket from "@/pages/guest-ticket";
+import ContactPage from "@/pages/contact";
 import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
@@ -36,7 +37,7 @@ import { ProvisionTrackerProvider } from "@/contexts/provision-tracker";
 
 
 // Public routes that handle their own DB error UI or don't require auth
-const PUBLIC_AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing', '/verify-email', '/support/guest'];
+const PUBLIC_AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing', '/verify-email', '/support/guest', '/contact'];
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -126,6 +127,9 @@ function Router() {
       </Route>
       <Route path="/support/guest/:accessToken">
         <GuestTicket />
+      </Route>
+      <Route path="/contact">
+        <ContactPage />
       </Route>
       <Route path="/pricing">
         <Pricing />

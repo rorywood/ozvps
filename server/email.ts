@@ -688,6 +688,61 @@ export async function sendGuestTicketConfirmationEmail(
 }
 
 /**
+ * Notify guest ticket author that admin has replied
+ */
+export async function sendGuestTicketAdminReplyEmail(
+  to: string,
+  ticketId: number,
+  title: string,
+  accessToken: string,
+  adminReplyMessage: string
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send guest ticket reply notification', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const ticketUrl = `${appUrl}/support/guest/${accessToken}`;
+  const logoUrl = getLogoUrl();
+  const preview = adminReplyMessage.length > 300 ? adminReplyMessage.slice(0, 300) + '...' : adminReplyMessage;
+
+  const body = `
+    <h1 style="margin:0 0 12px;color:${textDark};font-size:22px;font-weight:700;">New Reply on Your Ticket</h1>
+    <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Our support team has replied to your ticket. Click below to view the conversation and respond.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
+      ${row('Ticket', `#${ticketId}`)}
+      ${row('Subject', title, true)}
+    </table>
+
+    <div style="background:#f9fafb;border:1px solid ${border};border-radius:8px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0 0 8px;color:${textMuted};font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reply Preview</p>
+      <p style="margin:0;color:${textDark};font-size:14px;line-height:1.6;white-space:pre-wrap;">${preview}</p>
+    </div>
+
+    ${btn(ticketUrl, 'View & Reply')}
+    <p style="margin:0;color:${textMuted};font-size:13px;line-height:1.6;">You can also reply directly to this email to respond to the ticket.</p>`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      replyTo: `support+${ticketId}@ozvps.com.au`,
+      subject: `[Ticket #${ticketId}] ${title}`,
+      html: baseEmail(body, logoUrl),
+      text: `New Reply on Your Ticket\n\nTicket: #${ticketId}\nSubject: ${title}\n\nOur support team has replied. View and reply here:\n${ticketUrl}\n\nOr reply directly to this email.\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+    if (error) { log(`Failed to send guest ticket reply notification to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
+    log(`Guest ticket reply notification sent to ${to} for ticket #${ticketId}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending guest ticket reply notification to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send two-factor authentication code email
  */
 export async function sendTwoFactorCodeEmail(

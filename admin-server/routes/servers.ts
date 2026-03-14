@@ -1283,15 +1283,14 @@ export function registerServersRoutes(router: Router) {
         return res.status(404).json({ error: 'No pending approval cancellation found for this server' });
       }
 
-      const scheduledAt = new Date();
-      scheduledAt.setHours(scheduledAt.getHours() + 1);
+      const scheduledAt = new Date(); // process immediately on next cycle
 
       await db.update(serverCancellations)
         .set({ status: 'pending', scheduledDeletionAt: scheduledAt })
         .where(eq(serverCancellations.id, cancellation.id));
 
       console.log(`[admin] Cancellation approved for server ${serverId} by ${session.email}`);
-      res.json({ success: true, message: 'Deletion approved and scheduled for 1 hour from now' });
+      res.json({ success: true, message: 'Deletion approved' });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to approve cancellation' });
     }

@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
@@ -864,6 +864,15 @@ export async function registerRoutes(
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const contactRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 3, // 3 public contact submissions per hour per IP
+    message: { error: 'Too many contact requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => getClientIp(req),
   });
 
   // Apply CSRF protection to all API routes
@@ -7073,6 +7082,144 @@ export async function registerRoutes(
   });
 
   // ==========================================
+  // SUPPORT TICKET ROUTES - PUBLIC / GUEST
+  // ==========================================
+
+  // Public contact form - sales and abuse enquiries only (no auth required)
+  app.post('/api/support/contact', contactRateLimiter, async (req, res) => {
+    try {
+      const { name, email, category, title, message } = req.body;
+
+      // Only sales and abuse allowed for public contact
+      if (!['sales', 'abuse'].includes(category)) {
+        return res.status(400).json({ error: 'Invalid category. Only sales and abuse enquiries accepted here.' });
+      }
+
+      // Validate email
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) {
+        return res.status(400).json({ error: 'A valid email address is required.' });
+      }
+
+      // Validate title
+      const cleanTitle = typeof title === 'string' ? title.trim() : '';
+      if (cleanTitle.length < 5) return res.status(400).json({ error: 'Subject must be at least 5 characters.' });
+      if (cleanTitle.length > 200) return res.status(400).json({ error: 'Subject must be 200 characters or less.' });
+
+      // Validate message
+      const cleanMessage = typeof message === 'string' ? message.trim() : '';
+      if (cleanMessage.length < 20) return res.status(400).json({ error: 'Message must be at least 20 characters.' });
+      if (cleanMessage.length > 5000) return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
+
+      const cleanName = name ? String(name).trim().slice(0, 100) || null : null;
+
+      // Generate unique access token for this guest ticket
+      const accessToken = randomBytes(32).toString('hex');
+
+      const ticket = await dbStorage.createTicket({
+        guestEmail: cleanEmail,
+        guestAccessToken: accessToken,
+        title: cleanTitle,
+        category,
+        priority: 'normal',
+      });
+
+      await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: cleanEmail, // use email as authorId for guests
+        authorEmail: cleanEmail,
+        authorName: cleanName,
+        message: cleanMessage,
+      });
+
+      log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
+
+      // Send confirmation to user (non-blocking)
+      sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, cleanTitle, accessToken, cleanName).catch(err => {
+        log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
+      });
+
+      // Send admin notification (non-blocking)
+      sendAdminTicketNotificationEmail(ticket.id, cleanTitle, category, 'normal', cleanMessage, cleanEmail, cleanName).catch(err => {
+        log(`Failed to send admin notification for guest ticket #${ticket.id}: ${err.message}`, 'email');
+      });
+
+      res.json({ ticketId: ticket.id, accessToken });
+    } catch (error: any) {
+      log(`Error creating guest ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to submit your enquiry. Please try again.' });
+    }
+  });
+
+  // Get a guest ticket by access token (no auth required)
+  app.get('/api/support/guest/:accessToken', async (req, res) => {
+    try {
+      const { accessToken } = req.params;
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const messages = await dbStorage.getTicketMessages(ticket.id);
+      res.json({ ticket, messages });
+    } catch (error: any) {
+      log(`Error fetching guest ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a guest ticket (no auth required)
+  app.post('/api/support/guest/:accessToken/messages', ticketRateLimiter, async (req, res) => {
+    try {
+      const { accessToken } = req.params;
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      if (ticket.status === 'closed') {
+        return res.status(400).json({ error: 'This ticket is closed.' });
+      }
+
+      const rawMessage = req.body?.message;
+      if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
+        return res.status(400).json({ error: 'Message is required.' });
+      }
+      if (rawMessage.trim().length > 5000) {
+        return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
+      }
+
+      const newMessage = await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: ticket.guestEmail!,
+        authorEmail: ticket.guestEmail!,
+        authorName: null,
+        message: rawMessage.trim(),
+      });
+
+      // Reopen resolved ticket on user reply, otherwise set to waiting_admin
+      const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
+      await dbStorage.updateTicket(ticket.id, { status: newStatus });
+
+      log(`Guest reply added to ticket #${ticket.id} by ${ticket.guestEmail}`, 'support');
+      res.status(201).json({ message: newMessage });
+    } catch (error: any) {
+      log(`Error adding guest reply: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  // ==========================================
   // SUPPORT TICKET ROUTES - ADMIN FACING
   // ==========================================
 
@@ -7239,6 +7386,13 @@ export async function registerRoutes(
       // Update ticket status - default to waiting_user when admin replies
       const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
       await dbStorage.updateTicket(ticketId, { status: newStatus });
+
+      // Notify guest ticket author by email
+      if (!ticket.auth0UserId && ticket.guestEmail && ticket.guestAccessToken) {
+        sendGuestTicketAdminReplyEmail(ticket.guestEmail, ticketId, ticket.title, ticket.guestAccessToken, parseResult.data.message).catch(err => {
+          log(`Failed to send guest ticket reply notification for ticket #${ticketId}: ${err.message}`, 'email');
+        });
+      }
 
       log(`Admin reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
       res.status(201).json({ message });
