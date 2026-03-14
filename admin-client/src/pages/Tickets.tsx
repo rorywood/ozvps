@@ -4,6 +4,7 @@ import { ticketsApi } from "../lib/api";
 import { toast } from "sonner";
 import { MessageSquare, Send, X, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { Select } from "../components/ui/select";
 
 export default function Tickets() {
   const [statusFilter, setStatusFilter] = useState("open");
@@ -121,19 +122,20 @@ export default function Tickets() {
         {/* Ticket List */}
         <div className="lg:col-span-1">
           <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full mb-4 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none"
-            >
-              <option value="">All Statuses</option>
-              <option value="open">Open (not closed)</option>
-              <option value="new">New</option>
-              <option value="waiting_admin">Waiting Admin</option>
-              <option value="waiting_user">Waiting User</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
-            </select>
+              onChange={setStatusFilter}
+              className="w-full mb-4"
+              options={[
+                { value: "", label: "All Statuses" },
+                { value: "open", label: "Open (not closed)" },
+                { value: "new", label: "New" },
+                { value: "waiting_admin", label: "Waiting Admin" },
+                { value: "waiting_user", label: "Waiting User" },
+                { value: "resolved", label: "Resolved" },
+                { value: "closed", label: "Closed" },
+              ]}
+            />
 
             {isLoading ? (
               <div className="flex justify-center py-8">
@@ -227,57 +229,53 @@ export default function Tickets() {
               <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-white/5 rounded-lg">
                 <div>
                   <label className="block text-xs text-white/40 mb-1">Status</label>
-                  <select
+                  <Select
                     value={selectedTicket.ticket.status}
-                    onChange={(e) => {
-                      const newStatus = e.target.value;
-                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, status: newStatus } });
-                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { status: newStatus } });
+                    onChange={(val) => {
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, status: val } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { status: val } });
                     }}
-                    className="w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:outline-none"
-                  >
-                    <option value="new">New</option>
-                    <option value="open">Open</option>
-                    <option value="waiting_user">Waiting User</option>
-                    <option value="waiting_admin">Waiting Admin</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
+                    options={[
+                      { value: "new", label: "New" },
+                      { value: "open", label: "Open" },
+                      { value: "waiting_user", label: "Waiting User" },
+                      { value: "waiting_admin", label: "Waiting Admin" },
+                      { value: "resolved", label: "Resolved" },
+                      { value: "closed", label: "Closed" },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 mb-1">Priority</label>
-                  <select
+                  <Select
                     value={selectedTicket.ticket.priority}
-                    onChange={(e) => {
-                      const newPriority = e.target.value;
-                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, priority: newPriority } });
-                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { priority: newPriority } });
+                    onChange={(val) => {
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, priority: val } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { priority: val } });
                     }}
-                    className="w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:outline-none"
-                  >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
+                    options={[
+                      { value: "low", label: "Low" },
+                      { value: "normal", label: "Normal" },
+                      { value: "high", label: "High" },
+                      { value: "urgent", label: "Urgent" },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 mb-1">Category</label>
-                  <select
+                  <Select
                     value={selectedTicket.ticket.category}
-                    onChange={(e) => {
-                      const newCategory = e.target.value;
-                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, category: newCategory } });
-                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { category: newCategory } });
+                    onChange={(val) => {
+                      setSelectedTicket({ ...selectedTicket, ticket: { ...selectedTicket.ticket, category: val } });
+                      updateMutation.mutate({ id: selectedTicket.ticket.id, data: { category: val } });
                     }}
-                    className="w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:outline-none"
-                  >
-                    <option value="general">General</option>
-                    <option value="billing">Billing</option>
-                    <option value="technical">Technical</option>
-                    <option value="sales">Sales</option>
-                    <option value="abuse">Abuse</option>
-                  </select>
+                    options={[
+                      { value: "sales", label: "Sales" },
+                      { value: "support", label: "Support" },
+                      { value: "accounts", label: "Accounts" },
+                      { value: "abuse", label: "Abuse" },
+                    ]}
+                  />
                 </div>
               </div>
 
