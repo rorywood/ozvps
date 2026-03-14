@@ -18,7 +18,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendTicketConfirmationEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
@@ -7113,39 +7113,65 @@ export async function registerRoutes(
 
       const cleanName = name ? String(name).trim().slice(0, 100) || null : null;
 
-      // Generate unique access token for this guest ticket
+      // Check if this email belongs to an existing account — if so, attach to their account
+      let auth0UserId: string | null = null;
+      let resolvedName = cleanName;
+      try {
+        const existingUser = await auth0Client.getUserByEmail(cleanEmail);
+        if (existingUser) {
+          auth0UserId = existingUser.user_id;
+          // Use their account name if they didn't provide one
+          if (!resolvedName && existingUser.name) resolvedName = existingUser.name;
+          log(`Contact form: matched email ${cleanEmail} to existing account ${auth0UserId}`, 'support');
+        }
+      } catch (err: any) {
+        // Auth0 lookup failure is non-fatal — fall back to guest ticket
+        log(`Contact form: Auth0 lookup failed for ${cleanEmail}, creating guest ticket: ${err.message}`, 'support');
+      }
+
+      // Generate access token (used for guest tickets; ignored if linked to account)
       const accessToken = randomBytes(32).toString('hex');
 
-      const ticket = await dbStorage.createTicket({
-        guestEmail: cleanEmail,
-        guestAccessToken: accessToken,
-        title: cleanTitle,
-        category,
-        priority: 'normal',
-      });
+      const ticket = await dbStorage.createTicket(
+        auth0UserId
+          ? { auth0UserId, title: cleanTitle, category, priority: 'normal' }
+          : { guestEmail: cleanEmail, guestAccessToken: accessToken, title: cleanTitle, category, priority: 'normal' }
+      );
 
       await dbStorage.createTicketMessage({
         ticketId: ticket.id,
         authorType: 'user',
-        authorId: cleanEmail, // use email as authorId for guests
+        authorId: auth0UserId ?? cleanEmail,
         authorEmail: cleanEmail,
-        authorName: cleanName,
+        authorName: resolvedName,
         message: cleanMessage,
       });
 
-      log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
+      if (auth0UserId) {
+        log(`Ticket #${ticket.id} created via public contact form and linked to account ${auth0UserId} (${category})`, 'support');
+      } else {
+        log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
+      }
 
-      // Send confirmation to user (non-blocking)
-      sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, ticket.ticketNumber!, cleanTitle, accessToken, cleanName).catch(err => {
-        log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
-      });
+      // Send confirmation email
+      if (auth0UserId) {
+        // Linked to an account — send standard ticket confirmation and direct them to sign in
+        sendTicketConfirmationEmail(cleanEmail, ticket.id, cleanTitle, category, 'normal', resolvedName).catch(err => {
+          log(`Failed to send ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
+        });
+      } else {
+        // Guest — send confirmation with token link
+        sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, ticket.ticketNumber!, cleanTitle, accessToken, resolvedName).catch(err => {
+          log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
+        });
+      }
 
       // Send admin notification (non-blocking)
-      sendAdminTicketNotificationEmail(ticket.id, cleanTitle, category, 'normal', cleanMessage, cleanEmail, cleanName).catch(err => {
-        log(`Failed to send admin notification for guest ticket #${ticket.id}: ${err.message}`, 'email');
+      sendAdminTicketNotificationEmail(ticket.id, cleanTitle, category, 'normal', cleanMessage, cleanEmail, resolvedName).catch(err => {
+        log(`Failed to send admin notification for ticket #${ticket.id}: ${err.message}`, 'email');
       });
 
-      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken });
+      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken, linkedToAccount: !!auth0UserId });
     } catch (error: any) {
       log(`Error creating guest ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to submit your enquiry. Please try again.' });

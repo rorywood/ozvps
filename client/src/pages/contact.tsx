@@ -95,7 +95,7 @@ export default function ContactPage() {
   const { toast } = useToast();
 
   const [form, setForm] = useState({ name: "", email: "", category: "", title: "", message: "" });
-  const [submitted, setSubmitted] = useState<{ ticketId: number; ticketNumber: number; accessToken: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ ticketId: number; ticketNumber: number; accessToken: string; linkedToAccount?: boolean } | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof form) => {
@@ -150,20 +150,35 @@ export default function ContactPage() {
                 </div>
                 <h1 className="text-2xl font-bold text-foreground mb-2">Ticket Submitted</h1>
                 <p className="text-muted-foreground mb-8">
-                  We've emailed <span className="text-foreground font-medium">{form.email}</span> with your ticket details and a link to track replies.
+                  {submitted.linkedToAccount ? (
+                    <>We found an account for <span className="text-foreground font-medium">{form.email}</span>. This ticket has been added to your account — sign in to view it.</>
+                  ) : (
+                    <>We've emailed <span className="text-foreground font-medium">{form.email}</span> with your ticket details and a link to track replies.</>
+                  )}
                 </p>
                 <div className="bg-background border border-border rounded-xl p-6 mb-8">
                   <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your ticket number</p>
                   <p className="text-5xl font-bold text-foreground font-mono">#{submitted.ticketNumber ?? submitted.ticketId}</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <a href={`/support/guest/${submitted.accessToken}`} className="flex-1">
-                    <Button className="w-full"><MessageSquare className="mr-2 h-4 w-4" />View Ticket</Button>
-                  </a>
-                  <a href="https://ozvps.com.au" className="flex-1">
-                    <Button variant="outline" className="w-full"><ExternalLink className="mr-2 h-4 w-4" />Back to OzVPS</Button>
-                  </a>
-                </div>
+                {submitted.linkedToAccount ? (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <a href="/login" className="flex-1">
+                      <Button className="w-full"><MessageSquare className="mr-2 h-4 w-4" />Sign In to View Ticket</Button>
+                    </a>
+                    <a href="https://ozvps.com.au" className="flex-1">
+                      <Button variant="outline" className="w-full"><ExternalLink className="mr-2 h-4 w-4" />Back to OzVPS</Button>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <a href={`/support/guest/${submitted.accessToken}`} className="flex-1">
+                      <Button className="w-full"><MessageSquare className="mr-2 h-4 w-4" />View Ticket</Button>
+                    </a>
+                    <a href="https://ozvps.com.au" className="flex-1">
+                      <Button variant="outline" className="w-full"><ExternalLink className="mr-2 h-4 w-4" />Back to OzVPS</Button>
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
             <p className="text-center text-xs text-muted-foreground mt-6">
