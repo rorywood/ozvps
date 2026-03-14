@@ -141,7 +141,10 @@
 
 2. **Disk Debug Log Removed** - `server/virtfusion.ts` was logging full disk JSON every 1 second per active server (massive log spam). Removed.
 
-3. **Disk Label Clarified** - "Disk" renamed to "Disk Allocated" with tooltip in server-detail sidebar (shows QCOW2 allocation, not actual filesystem usage)
+3. **Real Disk Usage** - `server/virtfusion.ts` now reads QEMU guest agent `fsinfo` for real in-VM filesystem usage:
+   - Prioritises root `/` filesystem, excludes pseudo-filesystems (squashfs, tmpfs, proc, etc.)
+   - Falls back to libvirt physical block device stats if guest agent not available
+   - Disk label in server-detail sidebar changed back to "Disk" (now shows real used/total)
 
 4. **Bug Fixes**:
    - Missing `await` on power action `auditUserAction()` — logs could be lost on crash
@@ -159,6 +162,19 @@
    - Large bold dollar amount (`$7`) with smaller `.00/mo` suffix
    - Free/Trial servers show "Free" or "Trial" in emerald green
    - File: `client/src/pages/server-detail.tsx`
+
+7. **Login & Register Page Improvements**:
+   - Password show/hide toggle (Eye/EyeOff) on both pages
+   - Inline "Forgot password?" link on login page
+   - Blue top accent border on form card
+   - Status strip on left panel (pulsing dot + "All systems operational · Brisbane, AU")
+   - Files: `client/src/pages/login.tsx`, `client/src/pages/register.tsx`
+
+8. **Email Template Redesign** - All 18 email templates rewritten with clean white design:
+   - Replaced dark `#1f2937` header with white card + 4px blue top accent line
+   - Shared `baseEmail()` helper + `row()`, `credRow()`, `alertBox()`, `btn()` utility functions
+   - Clean, informative content — simple and professional
+   - File: `server/email.ts` (reduced from ~3000 to ~470 lines)
 
 ### Previous Session (2026-03-13)
 1. **Transaction Labels Improved** - Admin wallet adjustments now show meaningful titles
@@ -350,8 +366,11 @@ git push origin main
 ```
 
 ## TODO / Known Issues
-- [x] Disk usage - DONE. Uses `remoteState.agent.fsinfo` (QEMU guest agent) for real in-VM filesystem usage. Prioritises root `/` partition; falls back to libvirt `physical` if guest agent not available.
-- [x] Audit logging - DONE (adminAuditLogs + userAuditLogs fully instrumented, Audit Logs admin page at /audit-logs)
+- [ ] Security features - implement lockout logic and audit logging (tables exist in DB, logic pending)
+- [x] Email templates redesign - DONE (clean white design, shared baseEmail helper, 18 templates rewritten)
+- [x] Login/register improvements - DONE (password toggle, blue top accent, status strip)
+- [x] Disk usage - DONE (QEMU guest agent `fsinfo`, root `/` partition, libvirt fallback)
+- [x] Audit logging admin UI - DONE (adminAuditLogs + userAuditLogs, Audit Logs page at /audit-logs)
 - [x] Session IP validation - DONE (SESSION_VALIDATE_IP=true, auto-set on next update)
 - [x] Transaction labels - DONE (adjustment_credit/debit show admin description, By: admin email)
 - [x] Provision widget auto-dismiss - DONE (interval-based, fires even after polling stops)
