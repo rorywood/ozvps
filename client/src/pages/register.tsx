@@ -577,15 +577,15 @@ export default function RegisterPage() {
           <div>
             <div className="mb-16">
               <h1 className="text-5xl font-bold mb-6 tracking-tight text-white leading-tight">
-                Join OzVPS<br />
-                <span className="text-primary">Today</span>
+                Australian<br />
+                <span className="text-primary">Cloud Hosting</span>
               </h1>
               <p className="text-xl text-[#a6a6a6] leading-relaxed max-w-md">
-                Join thousands of developers and businesses who trust OzVPS for reliable cloud infrastructure.
+                High-performance VPS hosting built for Australian businesses. Brisbane-based infrastructure with low latency.
               </p>
               <div className="inline-flex items-center gap-2 mt-4 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-sm text-primary font-medium">
                 <Zap className="h-3.5 w-3.5" />
-                Plans from $5/mo · No contracts
+                Plans from $7/mo · No contracts
               </div>
             </div>
 
