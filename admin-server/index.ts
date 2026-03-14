@@ -22,6 +22,7 @@ import { registerVirtFusionRoutes } from "./routes/virtfusion";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerPromoCodeRoutes } from "./routes/promo-codes";
 import { registerSecurityRoutes } from "./routes/security";
+import { registerAuditRoutes } from "./routes/audit";
 import { setupLogWebSocket } from "./websocket/logs";
 
 const app = express();
@@ -167,6 +168,7 @@ app.use((req, res, next) => {
   registerSettingsRoutes(protectedRouter);
   registerPromoCodeRoutes(protectedRouter);
   registerSecurityRoutes(protectedRouter);
+  registerAuditRoutes(protectedRouter);
 
   app.use('/api', protectedRouter);
 

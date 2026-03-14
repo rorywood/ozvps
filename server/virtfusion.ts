@@ -752,9 +752,6 @@ export class VirtFusionClient {
       let diskTotalBytes = 0;
       const disk = remoteState.disk || {};
 
-      // Log disk structure for debugging (temporarily)
-      log(`Disk data for server ${serverId}: ${JSON.stringify(disk)}`, 'virtfusion');
-
       // Disk is an object with disk names as keys (e.g., "vda", "sda")
       const diskKeys = Object.keys(disk);
       for (const key of diskKeys) {

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Tag,
   Trash2,
+  ClipboardList,
   LogOut,
   Menu,
   X,
@@ -36,6 +37,7 @@ const navItems = [
   { path: "/tickets", icon: MessageSquare, label: "Tickets" },
   { path: "/health", icon: Activity, label: "Health" },
   { path: "/logs", icon: FileText, label: "Logs" },
+  { path: "/audit-logs", icon: ClipboardList, label: "Audit Logs" },
   { path: "/security", icon: ShieldCheck, label: "Security" },
   { path: "/whitelist", icon: Shield, label: "IP Whitelist" },
 ];
@@ -51,6 +53,7 @@ const pageTitles: Record<string, string> = {
   "/tickets": "Support Tickets",
   "/health": "System Health",
   "/logs": "Logs",
+  "/audit-logs": "Audit Logs",
   "/security": "Security Settings",
   "/whitelist": "IP Whitelist",
 };
