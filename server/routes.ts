@@ -848,6 +848,15 @@ export async function registerRoutes(
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
   });
 
+  const profilePictureRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // 5 uploads per minute per user
+    message: { error: 'Too many profile picture uploads. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
   const bugReportRateLimiter = rateLimit({
     windowMs: 90 * 1000, // 90 seconds
     max: 1, // 1 bug report per 90 seconds
@@ -3423,7 +3432,7 @@ export async function registerRoutes(
 
   // Upload profile picture (base64)
   // Use a higher body limit for this endpoint (15MB to accommodate 10MB image + base64 overhead)
-  app.post('/api/user/profile-picture', express.json({ limit: '15mb' }), authMiddleware, async (req, res) => {
+  app.post('/api/user/profile-picture', express.json({ limit: '15mb' }), profilePictureRateLimiter, authMiddleware, async (req, res) => {
     try {
       const session = req.userSession!;
       const { image } = req.body; // Base64 image string
@@ -3432,39 +3441,53 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'No image provided' });
       }
 
-      // Validate base64 image
+      // Validate base64 image data URL format
       const matches = image.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/);
       if (!matches) {
         return res.status(400).json({ error: 'Invalid image format. Use JPEG, PNG, GIF, or WebP.' });
       }
 
-      const [, extension, base64Data] = matches;
-      const buffer = Buffer.from(base64Data, 'base64');
+      const [, , base64Data] = matches;
+      const inputBuffer = Buffer.from(base64Data, 'base64');
 
-      // Check file size (10MB limit)
+      // Check raw upload size (10MB limit before processing)
       const maxSize = 10 * 1024 * 1024; // 10MB
-      if (buffer.length > maxSize) {
+      if (inputBuffer.length > maxSize) {
         return res.status(400).json({ error: 'Image too large. Maximum size is 10MB.' });
+      }
+
+      // SECURITY: Process through Sharp to:
+      // 1. Verify the buffer is actually a valid image (throws if not)
+      // 2. Re-encode to JPEG — strips all metadata (EXIF, embedded scripts, etc.)
+      // 3. Resize to max 400x400 to prevent storage abuse
+      let processedBuffer: Buffer;
+      try {
+        processedBuffer = await sharp(inputBuffer)
+          .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85, progressive: true })
+          .toBuffer();
+      } catch {
+        return res.status(400).json({ error: 'Invalid image file. Please upload a valid image.' });
       }
 
       // Create uploads directory if it doesn't exist
       const fs = await import('fs/promises');
-      const path = await import('path');
-      const uploadsDir = path.join(process.cwd(), 'uploads', 'profile-pictures');
+      const pathModule = await import('path');
+      const uploadsDir = pathModule.join(process.cwd(), 'uploads', 'profile-pictures');
       await fs.mkdir(uploadsDir, { recursive: true });
 
-      // Generate unique filename
-      const filename = `${session.auth0UserId!.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${extension}`;
-      const filepath = path.join(uploadsDir, filename);
+      // Generate unique filename — always .jpg since we re-encode to JPEG
+      const safeUserId = session.auth0UserId!.replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `${safeUserId}_${Date.now()}.jpg`;
+      const filepath = pathModule.join(uploadsDir, filename);
 
       // Delete old profile picture if exists
       const wallet = await dbStorage.getWallet(session.auth0UserId!);
       if (wallet?.profilePictureUrl) {
         const oldFilename = wallet.profilePictureUrl.replace('/uploads/profile-pictures/', '');
         // SECURITY: Validate filename to prevent path traversal
-        if (oldFilename && !oldFilename.includes('..') && !oldFilename.includes('/') && !oldFilename.includes('\\') && !path.isAbsolute(oldFilename)) {
-          const oldFilepath = path.join(uploadsDir, oldFilename);
-          // Double-check the resolved path is within uploads directory
+        if (oldFilename && !oldFilename.includes('..') && !oldFilename.includes('/') && !oldFilename.includes('\\') && !pathModule.isAbsolute(oldFilename)) {
+          const oldFilepath = pathModule.join(uploadsDir, oldFilename);
           if (oldFilepath.startsWith(uploadsDir)) {
             try {
               await fs.unlink(oldFilepath);
@@ -3475,8 +3498,8 @@ export async function registerRoutes(
         }
       }
 
-      // Save the file
-      await fs.writeFile(filepath, buffer);
+      // Save the sanitized, re-encoded file
+      await fs.writeFile(filepath, processedBuffer);
 
       // Update database with new URL
       const profilePictureUrl = `/uploads/profile-pictures/${filename}`;
