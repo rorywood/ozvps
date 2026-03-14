@@ -350,7 +350,7 @@ git push origin main
 ```
 
 ## TODO / Known Issues
-- [ ] Disk usage - VirtFusion `allocation` field is QCOW2 image allocation, not actual filesystem usage. No VirtFusion API field currently provides true in-VM filesystem usage. Label updated to "Disk Allocated" to be honest about this.
+- [x] Disk usage - DONE. Uses `remoteState.agent.fsinfo` (QEMU guest agent) for real in-VM filesystem usage. Prioritises root `/` partition; falls back to libvirt `physical` if guest agent not available.
 - [x] Audit logging - DONE (adminAuditLogs + userAuditLogs fully instrumented, Audit Logs admin page at /audit-logs)
 - [x] Session IP validation - DONE (SESSION_VALIDATE_IP=true, auto-set on next update)
 - [x] Transaction labels - DONE (adjustment_credit/debit show admin description, By: admin email)

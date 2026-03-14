@@ -752,26 +752,33 @@ export class VirtFusionClient {
       let diskTotalBytes = 0;
       const disk = remoteState.disk || {};
 
-      // Log full remoteState once per server so we can see all available fields
-      if (!virtfusionClient._remoteStateLogged) virtfusionClient._remoteStateLogged = new Set();
-      if (!virtfusionClient._remoteStateLogged.has(serverId)) {
-        virtfusionClient._remoteStateLogged.add(serverId);
-        log(`[disk-debug] remoteState keys for server ${serverId}: ${JSON.stringify(Object.keys(remoteState))}`, 'virtfusion');
-        log(`[disk-debug] disk data: ${JSON.stringify(disk)}`, 'virtfusion');
-        log(`[disk-debug] agent data: ${JSON.stringify(remoteState.agent)}`, 'virtfusion');
-        if (remoteState.filesystems) log(`[disk-debug] filesystems: ${JSON.stringify(remoteState.filesystems)}`, 'virtfusion');
-      }
+      // Use QEMU guest agent fsinfo for real in-VM filesystem usage if available
+      const fsinfo: any[] = remoteState.agent?.fsinfo || [];
+      // Exclude pseudo/virtual filesystems — only count real block-device-backed partitions
+      const EXCLUDED_FS_TYPES = new Set(['squashfs', 'tmpfs', 'proc', 'sysfs', 'devtmpfs', 'cgroup', 'cgroup2', 'overlay', 'hugetlbfs', 'mqueue', 'debugfs', 'tracefs', 'securityfs', 'pstore', 'bpf', 'autofs', 'efivarfs']);
+      const realFs = fsinfo.filter((f: any) => f['total-bytes'] > 0 && !EXCLUDED_FS_TYPES.has(f.type));
 
-      // Disk is an object with disk names as keys (e.g., "vda", "sda")
-      const diskKeys = Object.keys(disk);
-      for (const key of diskKeys) {
-        const diskData = disk[key];
-        if (diskData && diskData.capacity) {
-          const capacity = parseInt(diskData.capacity, 10) || 0;
-          // Try to get actual filesystem usage first (allocation), fall back to physical (image size)
-          const used = parseInt(diskData.allocation, 10) || parseInt(diskData.physical, 10) || 0;
-          diskTotalBytes += capacity;
-          diskUsedBytes += used;
+      if (realFs.length > 0) {
+        // Prefer root filesystem if present, otherwise sum all real partitions
+        const rootFs = realFs.find((f: any) => f.mountpoint === '/');
+        if (rootFs) {
+          diskUsedBytes = rootFs['used-bytes'] || 0;
+          diskTotalBytes = rootFs['total-bytes'] || 0;
+        } else {
+          for (const f of realFs) {
+            diskUsedBytes += f['used-bytes'] || 0;
+            diskTotalBytes += f['total-bytes'] || 0;
+          }
+        }
+      } else {
+        // Fallback: use libvirt block device stats (physical = current QCOW2 file size)
+        const diskKeys = Object.keys(disk);
+        for (const key of diskKeys) {
+          const diskData = disk[key];
+          if (diskData && diskData.capacity) {
+            diskTotalBytes += parseInt(diskData.capacity, 10) || 0;
+            diskUsedBytes += parseInt(diskData.physical, 10) || parseInt(diskData.allocation, 10) || 0;
+          }
         }
       }
       

@@ -2123,7 +2123,7 @@ export default function ServerDetail() {
               {/* Disk Card */}
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Shows disk image allocation, not actual filesystem usage">Disk Allocated</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disk</h3>
                   {server.status === 'running' && !powerActionPending && !consoleLock.isLocked ? (
                     <span className="text-lg font-bold text-foreground" data-testid="text-disk-percent">
                       {liveStats ? `${liveStats.disk_usage.toFixed(1)}%` : '—'}
