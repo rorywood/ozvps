@@ -123,43 +123,51 @@
 - `shared/schema.ts` - Database schema (tickets support guest tickets with `guestEmail`, `guestAccessToken`)
 - `shared/version.ts` - Version number and changelog
 - `admin-client/src/pages/Deletions.tsx` - Admin page for approving/recovering server deletion requests
+- `admin-client/src/pages/AuditLogs.tsx` - Admin audit log viewer (admin actions + user events, tabbed)
+- `admin-server/routes/audit.ts` - GET /audit/admin and GET /audit/users endpoints
+- `admin-server/utils/audit-log.ts` - `logAdminAction()`, `auditSuccess()`, `auditFailure()` helpers
+- `server/user-audit.ts` - `auditUserAction()`, `logUserAction()`, `UserActions` constants
 
-## Recent Session Work (2026-03-13 - Session 2)
+## Recent Session Work (2026-03-14)
 
 ### Completed This Session
-1. **Transaction Labels Improved** - Admin wallet adjustments now show meaningful titles:
-   - `adjustment_credit`/`adjustment_debit` types now show the admin's typed description as the title
-   - Sub-line shows "Note: [reason] · By: [admin email]" instead of nothing
-   - Admin Users panel: same rich display with server name, reason, adjustedBy fields
-   - Admin wallet adjust endpoint: fixed to use atomic SQL (`balanceCents + amount`) instead of read-then-write race condition
-   - Files: `client/src/pages/billing.tsx`, `admin-client/src/pages/Users.tsx`, `admin-server/routes/users.ts`
+1. **Audit Logs Admin Page** - Full audit log viewer at `/audit-logs` in admin panel:
+   - Two tabs: Admin Actions (`adminAuditLogs` table) and User Events (`userAuditLogs` table)
+   - Filter by email, action, status; paginated 50/page
+   - `admin-server/routes/audit.ts` - GET `/audit/admin` and GET `/audit/users` endpoints
+   - `admin-client/src/pages/AuditLogs.tsx` - tabbed UI with status badges, IP, reason columns
+   - Both `adminAuditLogs` (72 write calls across 7 admin route files) and `userAuditLogs` were already fully instrumented
+   - Added missing audit calls: server power actions (boot/reboot/shutdown/poweroff) and server deploy/create
 
-2. **Provision Widget Auto-Dismiss Fixed** - Widget now actually disappears after 30 seconds:
-   - Was using a `useEffect` dependent on provisions state changing — but polling stops when complete so state never changed again
-   - Fixed with a dedicated 5-second `setInterval` that always checks for stale completed provisions
-   - File: `client/src/contexts/provision-tracker.tsx`
+2. **Disk Debug Log Removed** - `server/virtfusion.ts` was logging full disk JSON every 1 second per active server (massive log spam). Removed.
 
-3. **Server-Detail Checklist Auto-Dismiss** - No longer requires clicking "Continue to Server":
-   - Added 20-second auto-dismiss when `reinstallTask.status === 'complete'`
-   - Automatically clears sessionStorage flags and invalidates queries
+3. **Disk Label Clarified** - "Disk" renamed to "Disk Allocated" with tooltip in server-detail sidebar (shows QCOW2 allocation, not actual filesystem usage)
+
+4. **Bug Fixes**:
+   - Missing `await` on power action `auditUserAction()` — logs could be lost on crash
+   - Missing `await` on deploy `auditUserAction()` — same issue
+   - Low-balance warning server count: was comparing each server against full wallet balance instead of running balance — now uses decreasing `runningBalance` to correctly count which servers actually won't get paid
+
+5. **Session IP Validation** - Optional `SESSION_VALIDATE_IP=true` env var:
+   - When enabled, rejects any request where session's bound IP differs from current request IP
+   - Protects against stolen session cookies used from different network
+   - Disabled by default (mobile/dynamic IP users would get logged out)
+   - Auto-added to `.env` on next `ozvps --update` via script change in `scripts/ozvps`
+   - Requires `TRUST_PROXY=true` to work correctly behind nginx
+
+6. **Server Plan Price Display** - Monthly price shown in server detail sidebar under plan name:
+   - Large bold dollar amount (`$7`) with smaller `.00/mo` suffix
+   - Free/Trial servers show "Free" or "Trial" in emerald green
    - File: `client/src/pages/server-detail.tsx`
 
-4. **Admin Deletion Approval Workflow** - Server deletions now require admin approval:
-   - User requests deletion → status `pending_approval` (NOT processed by cancellation processor)
-   - Server-detail shows orange "Pending Admin Review" card with support ticket link
-   - New admin panel **Deletions** page lists all pending requests
-   - Admin can **Approve** (schedules deletion 1 hour from now → status `pending`) or **Recover** (revokes → server stays alive)
-   - Files: `server/routes.ts`, `server/storage.ts`, `admin-server/routes/servers.ts`, `admin-client/src/pages/Deletions.tsx`, `client/src/pages/server-detail.tsx`
-   - `serverCancellations.status` values: `pending_approval` → `pending` → `processing` → `completed` (or `revoked`)
+### Previous Session (2026-03-13)
+1. **Transaction Labels Improved** - Admin wallet adjustments now show meaningful titles
+2. **Provision Widget Auto-Dismiss Fixed** - Interval-based check fires even after polling stops
+3. **Server-Detail Checklist Auto-Dismiss** - 20s auto-dismiss after complete, no button click needed
+4. **Admin Deletion Approval Workflow** - pending_approval → admin approves/recovers → Deletions page
+5. **Provisioning Checklist Progress Fixed** - Server-side buildStartTimes map, time-based simulation
 
-5. **Provisioning Checklist Progress Fixed** - Checklist steps now actually progress:
-   - Root cause: `getServerBuildStatus` returns simplified `phase` ('queued'|'building'|'complete'|'error') AND raw `state` from VirtFusion ('provisioning', 'installing', etc.)
-   - Both `use-reinstall-task.ts` and `provision-tracker.tsx` were mapping `phase` — 'building' never matched any step keyword so progress was stuck
-   - Fix: now uses `state || phase` so VirtFusion's actual states drive the checklist steps
-   - Steps: queued → provisioning → imaging → installing → configuring → complete
-   - Files: `client/src/hooks/use-reinstall-task.ts`, `client/src/contexts/provision-tracker.tsx`
-
-### Previous Session (2026-03-13 - Session 1)
+### Previous Session (2026-03-13 - Earlier)
 1. **Email OTP Timing-Safe Comparison** - Fixed timing attack vulnerability:
    - OTP comparison now uses `crypto.timingSafeEqual()` with Buffer comparison
    - Only compares when buffer lengths match (prevents length oracle attacks)
@@ -294,9 +302,14 @@ Separate admin panel at `admin.ozvps.com.au` on port 5001.
 
 **VirtFusion build status fields** (`getServerBuildStatus`):
 - `commissionStatus`: 0=queued, 1=building, 2=paused, 3=complete (authoritative)
-- `state`: raw VirtFusion state ('queued', 'provisioning', 'installing', 'running', etc.)
+- `state`: raw VirtFusion state — often **empty string** during commissioned=1 (unreliable)
 - `phase`: simplified ('queued'|'building'|'complete'|'error') — DO NOT use for step mapping
-- **Always map using `state || phase`** — `state` has the granular VirtFusion values
+- `buildingStartedAt`: server-tracked timestamp (ms) when commissioned=1 was first seen — use this for progress simulation
+
+**Provisioning progress approach** (VirtFusion gives no granular phases during building):
+- Server (`routes.ts`) maintains `buildStartTimes: Map<string, number>` — records when each server first hits commissioned=1
+- This timestamp is returned as `buildingStartedAt` in build-status responses
+- Clients simulate checklist progress from elapsed seconds: 0-20s=provisioning, 20-60s=imaging, 60-150s=installing, 150s+=configuring
 
 **Server deletion status flow:**
 `pending_approval` (awaiting admin) → `pending` (approved, waiting scheduledAt) → `processing` (VirtFusion deleting) → `completed`
@@ -337,13 +350,14 @@ git push origin main
 ```
 
 ## TODO / Known Issues
-- [ ] Security features - implement lockout logic and audit logging (tables exist in DB, logic pending)
-- [ ] Disk usage - VirtFusion returns disk image size, not actual filesystem usage (need to investigate different field)
+- [ ] Disk usage - VirtFusion `allocation` field is QCOW2 image allocation, not actual filesystem usage. No VirtFusion API field currently provides true in-VM filesystem usage. Label updated to "Disk Allocated" to be honest about this.
+- [x] Audit logging - DONE (adminAuditLogs + userAuditLogs fully instrumented, Audit Logs admin page at /audit-logs)
+- [x] Session IP validation - DONE (SESSION_VALIDATE_IP=true, auto-set on next update)
 - [x] Transaction labels - DONE (adjustment_credit/debit show admin description, By: admin email)
 - [x] Provision widget auto-dismiss - DONE (interval-based, fires even after polling stops)
 - [x] Server checklist auto-dismiss - DONE (20s after complete, no button click required)
 - [x] Admin deletion approval - DONE (pending_approval → admin approves/recovers → Deletions page)
-- [x] Provisioning checklist stuck at queued - DONE (use state || phase, not just phase)
+- [x] Provisioning checklist stuck at queued - DONE (server-side buildStartTimes map, time-based simulation)
 - [x] Admin panel redesign - DONE (dark theme, no native dialogs, OzVPS branding)
 - [x] Admin Center link fix - DONE (was pointing to /admin, now https://admin.ozvps.com.au)
 - [x] Global provision tracker - DONE (localStorage persistence, polls across all pages)
