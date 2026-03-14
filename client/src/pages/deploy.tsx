@@ -903,43 +903,55 @@ export default function DeployPage() {
                   )}
 
                   {/* Pricing */}
-                  <div className="border-t border-border pt-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Monthly price</span>
-                      <span className={cn(
-                        "font-mono font-medium",
-                        promoValidation?.valid ? "text-muted-foreground line-through" : "text-foreground"
+                  <div className="border-t border-border pt-4">
+                    <div className="rounded-xl bg-background border border-border overflow-hidden">
+                      <div className="divide-y divide-border">
+                        <div className="flex justify-between items-center px-4 py-3">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide">Monthly</span>
+                          <span className={cn(
+                            "text-sm font-semibold font-mono",
+                            promoValidation?.valid ? "text-muted-foreground line-through" : "text-foreground"
+                          )}>
+                            {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
+                          </span>
+                        </div>
+                        {promoValidation?.valid && promoValidation.discountCents && (
+                          <div className="flex justify-between items-center px-4 py-3">
+                            <span className="text-xs text-success uppercase tracking-wide">
+                              Discount {promoValidation.discountType === 'percentage' ? `(${promoValidation.discountValue}%)` : ''}
+                            </span>
+                            <span className="text-sm font-semibold font-mono text-success">
+                              -{formatCurrency(promoValidation.discountCents)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center px-4 py-3">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide">Wallet balance</span>
+                          <span className={cn(
+                            "text-sm font-semibold font-mono",
+                            canAfford ? "text-success" : "text-destructive"
+                          )}>
+                            {loadingWallet ? (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Loading...
+                              </span>
+                            ) : formatCurrency(wallet?.balanceCents || 0)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={cn(
+                        "flex justify-between items-center px-4 py-3.5",
+                        canAfford ? "bg-primary/10 border-t border-primary/20" : "bg-destructive/10 border-t border-destructive/20"
                       )}>
-                        {selectedPlan ? formatCurrency(selectedPlan.priceMonthly) : "—"}
-                      </span>
-                    </div>
-                    {promoValidation?.valid && promoValidation.discountCents && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-success">Discount ({promoValidation.discountType === 'percentage' ? `${promoValidation.discountValue}%` : 'Fixed'})</span>
-                        <span className="font-mono font-medium text-success">
-                          -{formatCurrency(promoValidation.discountCents)}
+                        <span className="text-sm font-semibold text-foreground">Due now</span>
+                        <span className={cn(
+                          "text-xl font-bold font-mono",
+                          canAfford ? "text-primary" : "text-destructive"
+                        )}>
+                          {selectedPlan ? formatCurrency(finalPrice) : "—"}
                         </span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Balance</span>
-                      <span className={cn(
-                        "font-mono font-medium",
-                        canAfford ? "text-success" : "text-foreground"
-                      )}>
-                        {loadingWallet ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Loading...
-                          </span>
-                        ) : formatCurrency(wallet?.balanceCents || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-border">
-                      <span className="font-medium text-foreground">Due now</span>
-                      <span className="font-mono font-bold text-xl text-primary">
-                        {selectedPlan ? formatCurrency(finalPrice) : "—"}
-                      </span>
                     </div>
                   </div>
 
