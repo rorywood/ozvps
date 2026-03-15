@@ -727,11 +727,19 @@ export default function ServerDetail() {
     }
   });
 
+  // Overdue warning: billing payment due but nextBillAt is in the past (computed early — needed for wallet query)
+  const billingOverdueDaysEarly = (() => {
+    const b = server?.billing;
+    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return 0;
+    const days = Math.floor((Date.now() - new Date(b.nextBillAt).getTime()) / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  })();
+
   // Wallet query for reactivation - fetch when server has any outstanding payment
   const { data: walletData, refetch: refetchWallet } = useQuery({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
-    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid' || billingOverdueDays > 0,
+    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid' || billingOverdueDaysEarly > 0,
   });
 
   // Reactivate server mutation
@@ -1154,13 +1162,8 @@ export default function ServerDetail() {
   const isTrialEnded = server?.billing?.isTrial === true && server?.billing?.trialEndedAt != null;
   const isActiveTrial = server?.billing?.isTrial === true && !server?.billing?.trialEndedAt;
 
-  // Overdue warning: billing payment due but nextBillAt is in the past (billing job hasn't run yet or charge pending)
-  const billingOverdueDays = (() => {
-    const b = server?.billing;
-    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return 0;
-    const days = Math.floor((Date.now() - new Date(b.nextBillAt).getTime()) / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 0;
-  })();
+  // Reuse early calculation (declared above wallet query to avoid "used before assigned" error)
+  const billingOverdueDays = billingOverdueDaysEarly;
 
   // Determine if server is still being provisioned/built
   // Show checklist if ANY of these conditions are true:
