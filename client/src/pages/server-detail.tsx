@@ -2078,15 +2078,16 @@ export default function ServerDetail() {
 
         {/* Header Section */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex flex-col gap-2">
+            {/* Row 1: back button + name + status */}
+            <div className="flex items-center gap-3">
                <Link href="/servers">
                 <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
               {isEditingName ? (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2">
                   <Input
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
@@ -2121,20 +2122,19 @@ export default function ServerDetail() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2">
                   <h1
                     className={cn(
-                      "text-2xl font-display font-bold text-foreground tracking-tight truncate",
+                      "text-2xl font-display font-bold text-foreground tracking-tight",
                       !isSuspended && "cursor-pointer hover:text-foreground/80 transition-colors"
                     )}
                     onClick={!isSuspended ? handleStartEditName : undefined}
                     data-testid="text-server-name"
-                    title={server.name}
                   >
                     {server.name}
                   </h1>
                   {cancellationData?.cancellation && (
-                    <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1" data-testid="badge-pending-cancellation">
+                    <span className="text-[10px] uppercase font-bold px-2 py-1 rounded border bg-orange-500/20 border-orange-500/30 text-orange-400 flex items-center gap-1 shrink-0" data-testid="badge-pending-cancellation">
                       <Calendar className="h-3 w-3" />
                       PENDING CANCELLATION
                     </span>
@@ -2142,7 +2142,7 @@ export default function ServerDetail() {
                 </div>
               )}
               {(powerActionPending || isTransitioning || consoleLock.isLocked) ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
                   <span className="text-xs text-orange-400 font-medium">
                     {consoleLock.isLocked && consoleLock.action === 'boot' ? 'Starting...' :
@@ -2161,15 +2161,16 @@ export default function ServerDetail() {
                 </div>
               ) : (
                 <div className={cn(
-                  "h-2.5 w-2.5 rounded-full shadow-[0_0_8px]",
-                  displayStatus === 'running' ? "bg-green-500 shadow-green-500/50" : 
+                  "h-2.5 w-2.5 rounded-full shadow-[0_0_8px] shrink-0",
+                  displayStatus === 'running' ? "bg-green-500 shadow-green-500/50" :
                   displayStatus === 'stopped' ? "bg-red-500 shadow-red-500/50" :
                   "bg-yellow-500 shadow-yellow-500/50"
                 )} data-testid="status-indicator" />
               )}
             </div>
-            
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium shrink-0">
+
+            {/* Row 2: IP, location, OS */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium pl-8">
               <div className="flex items-center gap-2 shrink-0">
                 <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
                 <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
@@ -2186,14 +2187,14 @@ export default function ServerDetail() {
                 <span className="text-foreground">{server.location.name}</span>
               </div>
               {server.image && (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
                     alt={server.image.name}
                     className="h-4 w-4 object-contain shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
-                  <span className="text-foreground truncate">{server.image.name}</span>
+                  <span className="text-foreground">{server.image.name}</span>
                 </div>
               )}
             </div>
