@@ -170,8 +170,10 @@ async function doProxy(
   };
 
   // Connect to VirtFusion's websockify.
+  // Must specify 'binary' subprotocol — websockify requires this to send/receive raw binary frames.
+  // Without it, websockify closes the connection immediately (policy violation).
   // Create reader BEFORE open fires so no messages are missed.
-  const serverWs = new WebSocket(wsUrl);
+  const serverWs = new WebSocket(wsUrl, ['binary']);
   const serverReader = createReader(serverWs);
   const clientReader = createReader(clientWs);
 
@@ -290,11 +292,11 @@ async function doProxy(
       serverWs.send(clientLeftover);
     }
 
-    serverWs.on('message', (data) => {
-      if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data as Buffer);
+    serverWs.on('message', (data, isBinary) => {
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data as Buffer, { binary: isBinary });
     });
-    clientWs.on('message', (data) => {
-      if (serverWs.readyState === WebSocket.OPEN) serverWs.send(data as Buffer);
+    clientWs.on('message', (data, isBinary) => {
+      if (serverWs.readyState === WebSocket.OPEN) serverWs.send(data as Buffer, { binary: isBinary });
     });
 
     serverWs.on('close', () => cleanup());
