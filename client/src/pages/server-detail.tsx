@@ -727,11 +727,11 @@ export default function ServerDetail() {
     }
   });
 
-  // Wallet query for reactivation - only fetch when server is suspended/unpaid
+  // Wallet query for reactivation - fetch when server has any outstanding payment
   const { data: walletData, refetch: refetchWallet } = useQuery({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
-    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid',
+    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid' || billingOverdueDays > 0,
   });
 
   // Reactivate server mutation
@@ -1690,24 +1690,44 @@ export default function ServerDetail() {
 
 
         {/* At Risk Warning Banner — active billing but nextBillAt is past */}
-        {billingOverdueDays > 0 && !isSuspended && (
-          <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-amber-300">Payment Overdue — Server at Risk of Suspension</h3>
-                <p className="text-sm text-amber-300/80">
-                  Your server payment is {billingOverdueDays} day{billingOverdueDays !== 1 ? 's' : ''} overdue. Please add funds to avoid suspension.
-                </p>
+        {billingOverdueDays > 0 && !isSuspended && (() => {
+          const amountDue = server.billing?.monthlyPriceCents ?? 0;
+          const walletBalance = walletData?.wallet?.balanceCents ?? 0;
+          const canPay = walletBalance >= amountDue;
+          return (
+            <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-amber-300">Payment Overdue — Server at Risk of Suspension</h3>
+                  <p className="text-sm text-amber-300/80">
+                    {billingOverdueDays} day{billingOverdueDays !== 1 ? 's' : ''} overdue.
+                    Amount due: <span className="font-medium">${(amountDue / 100).toFixed(2)}</span>
+                    {walletData && (
+                      <> · Wallet: <span className={canPay ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>${(walletBalance / 100).toFixed(2)}</span></>
+                    )}
+                  </p>
+                </div>
               </div>
+              {canPay ? (
+                <Button
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-black font-semibold shrink-0"
+                  onClick={() => serverId && reactivateMutation.mutate(serverId)}
+                  disabled={reactivateMutation.isPending}
+                >
+                  {reactivateMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Paying...</> : 'Pay Now'}
+                </Button>
+              ) : (
+                <Link href="/billing">
+                  <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 shrink-0">
+                    Add Funds
+                  </Button>
+                </Link>
+              )}
             </div>
-            <Link href="/billing">
-              <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 shrink-0">
-                Add Funds
-              </Button>
-            </Link>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Overdue/Unpaid Banner */}
         {server.billing?.status === 'unpaid' && !isSuspended && (

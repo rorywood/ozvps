@@ -3034,9 +3034,12 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'This server has complimentary hosting and cannot be reactivated through billing. Please contact support.' });
       }
 
-      // Check if server is suspended or unpaid
-      if (billingRecord.status !== 'suspended' && billingRecord.status !== 'unpaid') {
-        return res.status(400).json({ error: 'Server is not suspended or unpaid' });
+      // Check if server actually has an outstanding payment
+      const now = new Date();
+      const isOverdue = (billingRecord.status === 'active' || billingRecord.status === 'paid') && billingRecord.nextBillAt < now;
+      const needsPayment = billingRecord.status === 'suspended' || billingRecord.status === 'unpaid' || isOverdue;
+      if (!needsPayment) {
+        return res.status(400).json({ error: 'Server has no outstanding payment' });
       }
 
       // Get wallet balance
