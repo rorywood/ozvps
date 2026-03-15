@@ -331,12 +331,22 @@ export default function GuestTicketPage() {
               </form>
             </div>
           ) : (
-            <div className="border-t border-border p-5 bg-background/50 text-center">
-              <p className="text-sm text-muted-foreground">
-                This ticket is closed. Email{" "}
-                <a href="mailto:support@ozvps.com.au" className="text-primary hover:underline">support@ozvps.com.au</a>
-                {" "}if you need further help.
-              </p>
+            <div className="border-t border-border p-5 bg-background/50">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-10 w-10 rounded-full bg-muted/50 border border-border flex items-center justify-center">
+                  <XCircle className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-1">This ticket is closed</p>
+                  <p className="text-sm text-muted-foreground">Need further help? Open a new ticket and our team will assist you.</p>
+                </div>
+                <a href="/contact">
+                  <Button size="sm" variant="outline">
+                    <MessageSquare className="mr-2 h-3.5 w-3.5" />
+                    Open a New Ticket
+                  </Button>
+                </a>
+              </div>
             </div>
           )}
         </div>

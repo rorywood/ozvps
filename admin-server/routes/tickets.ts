@@ -3,6 +3,8 @@ import { db } from "../../server/db";
 import { tickets, ticketMessages, userMappings, adminTicketUpdateSchema, ticketMessageSchema } from "../../shared/schema";
 import { eq, desc, and, or, sql, isNull, ne } from "drizzle-orm";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
+import { auth0Client } from "../../server/auth0";
+import { sendTicketAdminReplyEmail, sendGuestTicketAdminReplyEmail } from "../../server/email";
 
 export function registerTicketsRoutes(router: Router) {
   // Get ticket counts by status
@@ -140,6 +142,7 @@ export function registerTicketsRoutes(router: Router) {
       }
 
       const { message } = parsed.data;
+      const isInternalNote = req.body.isInternalNote === true;
 
       // Check ticket exists
       const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
@@ -157,23 +160,43 @@ export function registerTicketsRoutes(router: Router) {
           authorEmail: session.email,
           authorName: session.name,
           message,
+          isInternalNote,
         })
         .returning();
 
-      // Update ticket
-      await db
-        .update(tickets)
-        .set({
-          status: "waiting_user",
-          lastMessageAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(tickets.id, id));
+      // Internal notes don't change status or send emails
+      if (!isInternalNote) {
+        await db
+          .update(tickets)
+          .set({
+            status: "waiting_user",
+            lastMessageAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(tickets.id, id));
+
+        // Notify ticket author by email
+        if (ticket.auth0UserId) {
+          auth0Client.getUserById(ticket.auth0UserId).then(auth0User => {
+            if (auth0User?.email) {
+              sendTicketAdminReplyEmail(auth0User.email, id, ticket.ticketNumber ?? id, ticket.title, message).catch(err => {
+                console.log(`[admin-tickets] Failed to send reply email for ticket ${id}: ${err.message}`);
+              });
+            }
+          }).catch(err => {
+            console.log(`[admin-tickets] Failed to get Auth0 user for reply email on ticket ${id}: ${err.message}`);
+          });
+        } else if (ticket.guestEmail && ticket.guestAccessToken) {
+          sendGuestTicketAdminReplyEmail(ticket.guestEmail, id, ticket.ticketNumber ?? id, ticket.title, ticket.guestAccessToken, message).catch(err => {
+            console.log(`[admin-tickets] Failed to send guest reply email for ticket ${id}: ${err.message}`);
+          });
+        }
+      }
 
       // Audit log
       await auditSuccess(req, "ticket.message", "ticket", String(id));
 
-      console.log(`[admin-tickets] Message added to ticket ${id} by ${session.email}`);
+      console.log(`[admin-tickets] ${isInternalNote ? 'Internal note' : 'Reply'} added to ticket ${id} by ${session.email}`);
 
       res.json({ message: newMessage });
     } catch (error: any) {
