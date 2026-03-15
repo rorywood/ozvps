@@ -158,6 +158,10 @@ export function validateEnvironment(): ValidationResult {
       warnings.push('RESEND_API_KEY not set - password reset emails will not work');
     }
 
+    if (process.env.SESSION_VALIDATE_IP !== 'true') {
+      warnings.push('SESSION_VALIDATE_IP not set to true - sessions are not IP-bound (session hijacking risk)');
+    }
+
     // Check for example/placeholder values
     const placeholderPatterns = ['your_', 'example', 'changeme', 'test123'];
     for (const key of required) {
