@@ -245,8 +245,10 @@ async function attemptAutoTopup(auth0UserId: string, neededCents: number): Promi
       return false;
     }
 
-    // Per-minute idempotency key prevents double-charges if billing job overlaps
-    const idempotencyKey = `autotopup_${auth0UserId}_${Math.floor(Date.now() / 60000)}`;
+    // Daily idempotency key — matches billing-processor.ts so both systems deduplicate
+    // against the same Stripe key and can't double-charge on the same day
+    const today = new Date().toISOString().split('T')[0];
+    const idempotencyKey = `auto_topup_${auth0UserId}_${today}`;
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: topupAmount,
@@ -455,26 +457,24 @@ export async function runBillingJob(): Promise<void> {
       // This covers both B1 (suspendAt overdue) and B2 (long overdue) servers.
       const chargeAttempt = await chargeServer(billing);
       if (chargeAttempt) {
-        // Re-fetch to get the updated nextBillAt
-        const [updatedBilling] = await db.select().from(serverBilling)
-          .where(eq(serverBilling.id, billing.id));
-
-        if (updatedBilling && updatedBilling.nextBillAt && updatedBilling.nextBillAt > now) {
-          log(`Server ${billing.virtfusionServerId} charge succeeded (nextBillAt: ${updatedBilling.nextBillAt.toISOString()}), skipping suspension`, 'billing');
-          // If server was suspended in VirtFusion, unsuspend it now that payment succeeded
-          if (billing.status === 'suspended') {
-            try {
-              await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
-              log(`Unsuspended server ${billing.virtfusionServerId} after successful charge`, 'billing');
-            } catch (unsuspendErr: any) {
-              log(`Could not unsuspend server ${billing.virtfusionServerId} after charge: ${unsuspendErr.message}`, 'billing');
-            }
+        // Charge succeeded (new charge or idempotency — either way, money was collected).
+        // Never suspend when a charge returns true.
+        log(`Server ${billing.virtfusionServerId} charge succeeded, skipping suspension`, 'billing');
+        // If server was suspended in VirtFusion, unsuspend it now that payment is confirmed
+        if (billing.status === 'suspended') {
+          try {
+            await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+            log(`Unsuspended server ${billing.virtfusionServerId} after successful charge`, 'billing');
+          } catch (unsuspendErr: any) {
+            log(`Could not unsuspend server ${billing.virtfusionServerId} after charge: ${unsuspendErr.message}`, 'billing');
           }
-          continue;
+          // Ensure billing status reflects payment regardless of whether chargeServer
+          // updated it (idempotency path skips the DB update inside chargeServer)
+          await db.update(serverBilling)
+            .set({ status: 'paid', suspendAt: null, updatedAt: new Date() })
+            .where(eq(serverBilling.id, billing.id));
         }
-        // Charge succeeded but nextBillAt is still in the past (server was severely overdue
-        // and one month's advance still leaves it overdue). Mark as unpaid and suspend.
-        log(`Server ${billing.virtfusionServerId} charge succeeded but nextBillAt still overdue (${updatedBilling?.nextBillAt?.toISOString()}), proceeding to suspend`, 'billing');
+        continue;
       } else {
         log(`Server ${billing.virtfusionServerId} charge failed (insufficient balance), proceeding to suspend`, 'billing');
       }
@@ -643,65 +643,71 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
       // For suspended/unpaid servers, use reactivation mode (next bill = 1 month from now)
       const charged = await chargeServer(billing, true);
 
-      if (charged && billing.status === 'suspended') {
-        // Unsuspend the server in VirtFusion with retry logic
-        let unsuspendSuccess = false;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
-            log(`Reactivated server ${billing.virtfusionServerId} (attempt ${attempt})`, 'billing');
-            unsuspendSuccess = true;
-            break;
-          } catch (unsuspendError: any) {
-            log(`Unsuspend attempt ${attempt}/3 failed for server ${billing.virtfusionServerId}: ${unsuspendError.message}`, 'billing');
-            if (attempt < 3) {
-              // Wait 2 seconds before retry
-              await new Promise(resolve => setTimeout(resolve, 2000));
+      if (charged) {
+        if (billing.status === 'suspended') {
+          // Unsuspend the server in VirtFusion with retry logic
+          let unsuspendSuccess = false;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+              log(`Reactivated server ${billing.virtfusionServerId} (attempt ${attempt})`, 'billing');
+              unsuspendSuccess = true;
+              break;
+            } catch (unsuspendError: any) {
+              log(`Unsuspend attempt ${attempt}/3 failed for server ${billing.virtfusionServerId}: ${unsuspendError.message}`, 'billing');
+              if (attempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
             }
           }
+
+          if (unsuspendSuccess) {
+            // Ensure billing status is 'paid' and suspendAt is cleared even if chargeServer
+            // returned via idempotency (idempotency path skips the DB update inside chargeServer)
+            await db.update(serverBilling)
+              .set({ status: 'paid', suspendAt: null, updatedAt: new Date() })
+              .where(eq(serverBilling.id, billing.id));
+            log(`Server ${billing.virtfusionServerId} billing status updated to paid after reactivation`, 'billing');
+          } else {
+            // All retries failed — refund the charge and revert billing status
+            log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
+
+            const serverName = await getServerName(billing.virtfusionServerId);
+
+            // Refund the wallet - add back the charged amount
+            await db.update(wallets)
+              .set({
+                balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
+                updatedAt: new Date(),
+              })
+              .where(eq(wallets.auth0UserId, billing.auth0UserId));
+
+            // Record refund transaction
+            await db.insert(walletTransactions).values({
+              auth0UserId: billing.auth0UserId,
+              type: 'refund',
+              amountCents: billing.monthlyPriceCents,
+              metadata: {
+                serverId: billing.virtfusionServerId,
+                serverName,
+                reason: 'Server unsuspend failed after 3 attempts - auto refund',
+              },
+            });
+
+            // Remove the ledger entry so future retries can charge again
+            const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
+            await db.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+
+            // Revert billing status to suspended
+            await db.update(serverBilling)
+              .set({ status: 'suspended', updatedAt: new Date() })
+              .where(eq(serverBilling.id, billing.id));
+
+            log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+          }
         }
-
-        if (!unsuspendSuccess) {
-          // All retries failed - refund the charge and revert billing status
-          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
-
-          const serverName = await getServerName(billing.virtfusionServerId);
-
-          // Refund the wallet - add back the charged amount
-          await db.update(wallets)
-            .set({
-              balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(wallets.auth0UserId, billing.auth0UserId));
-
-          // Record refund transaction
-          await db.insert(walletTransactions).values({
-            auth0UserId: billing.auth0UserId,
-            type: 'refund',
-            amountCents: billing.monthlyPriceCents,
-            metadata: {
-              serverId: billing.virtfusionServerId,
-              serverName,
-              reason: 'Server unsuspend failed after 3 attempts - auto refund',
-            },
-          });
-
-          // Remove the ledger entry so future retries can charge again
-          const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-          await db.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
-
-          // Revert billing status to suspended - keep the updated nextBillAt (future date)
-          // so the next retry uses a fresh idempotency key
-          await db.update(serverBilling)
-            .set({
-              status: 'suspended',
-              updatedAt: new Date(),
-            })
-            .where(eq(serverBilling.id, billing.id));
-
-          log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
-        }
+        // For unpaid (not yet VirtFusion-suspended) servers, chargeServer already updated
+        // billing status to 'paid' — nothing else to do.
       }
     } catch (error: any) {
       log(`Error reactivating server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
