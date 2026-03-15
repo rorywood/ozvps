@@ -45,7 +45,73 @@
     <link rel="preload" as="image" href="app/images/warning.svg">
 
     <script type="module" crossorigin="anonymous" src="app/error-handler.js"></script>
-    <script type="module" crossorigin="anonymous" src="app/ui.js?v=7"></script>
+
+    <!--
+      OzVPS Console Loader
+      - Exchanges one-time vncToken for credentials via /api/vnc-session/:token (requires auth cookie)
+      - Credentials stay in memory only — never in URL or browser history
+      - Disables VNC via sendBeacon on tab close
+      - Dynamically loads noVNC ui.js only after credentials are ready
+    -->
+    <script type="module">
+      const params = new URLSearchParams(window.location.search);
+      const vncToken = params.get('vncToken');
+      const serverId = params.get('serverId');
+
+      // Disable VNC when the tab is closed or navigated away from
+      if (serverId) {
+        window.addEventListener('pagehide', () => {
+          navigator.sendBeacon('/api/servers/' + encodeURIComponent(serverId) + '/vnc/disable');
+        });
+      }
+
+      if (vncToken) {
+        // Exchange one-time token for credentials (requires valid auth session cookie)
+        let creds;
+        try {
+          const r = await fetch('/api/vnc-session/' + encodeURIComponent(vncToken), { credentials: 'include' });
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error || 'Console session expired or invalid.');
+          }
+          creds = await r.json();
+        } catch (e) {
+          // Show noVNC error overlay with a friendly message
+          const errEl = document.getElementById('noVNC_fallback_error');
+          const msgEl = document.getElementById('noVNC_fallback_errormsg');
+          if (errEl) errEl.classList.add('noVNC_open');
+          if (msgEl) {
+            const div = document.createElement('div');
+            div.className = 'noVNC_message';
+            div.textContent = (e instanceof Error ? e.message : String(e)) + ' Please close this window and open a new console session.';
+            msgEl.appendChild(div);
+          }
+          document.documentElement.classList.remove('noVNC_loading');
+          throw e; // Stop execution — do not load noVNC
+        }
+
+        // Parse the WebSocket URL and inject connection params that noVNC reads
+        const wsUrl = new URL(creds.wsUrl);
+        let path = wsUrl.pathname.replace(/^\//, '');
+        if (wsUrl.search) path += wsUrl.search;
+
+        const qp = new URLSearchParams(window.location.search);
+        qp.set('host', wsUrl.hostname);
+        qp.set('port', wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'));
+        qp.set('encrypt', wsUrl.protocol === 'wss:' ? '1' : '0');
+        qp.set('autoconnect', '1');
+        qp.set('resize', 'scale');
+        qp.set('reconnect', '0');
+        qp.delete('vncToken'); // Remove token — credentials are now in memory only
+
+        const hp = new URLSearchParams({ path, password: creds.password });
+        // Replace URL without reload: credentials only in hash fragment, token removed
+        history.replaceState(null, '', window.location.pathname + '?' + qp.toString() + '#' + hp.toString());
+      }
+
+      // Load noVNC UI — reads connection params from URL hash set above
+      await import('./app/ui.js?v=7');
+    </script>
 </head>
 
 <body>

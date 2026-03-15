@@ -10,38 +10,14 @@ import { useConsoleLock } from "@/hooks/use-console-lock";
 import { ConsoleLockedOverlay } from "@/components/console-locked-overlay";
 import { useAuth } from "@/hooks/use-auth";
 
-// Build noVNC URL from WebSocket URL and password
-function buildNoVncUrl(wsUrl: string, password: string): string {
-  const url = new URL(wsUrl);
-  const host = url.hostname;
-  const port = url.port || (url.protocol === 'wss:' ? '443' : '80');
-  const encrypt = url.protocol === 'wss:' ? '1' : '0';
-
-  // Path needs to include query string if present (e.g., /websockify?token=xyz)
-  // Remove leading slash as noVNC adds it
-  let path = url.pathname.replace(/^\//, '');
-  if (url.search) {
-    path += url.search; // Append ?token=... etc
-  }
-
-  // Use hash fragment for password (more secure - not sent to server in logs)
+// Build noVNC URL — credentials are NOT embedded in the URL.
+// noVNC will exchange the vncToken for credentials via /api/vnc-session/:token (requires auth cookie).
+function buildNoVncUrl(vncToken: string, serverId: string): string {
   const queryParams = new URLSearchParams({
-    host,
-    port,
-    encrypt,
-    autoconnect: '1',
-    resize: 'scale',
-    reconnect: '1',
-    reconnect_delay: '2000',
+    vncToken,   // One-time token: noVNC fetches actual credentials from our API
+    serverId,   // Used by cleanup script on page close
   });
-
-  // Password and path go in hash fragment for security
-  const hashParams = new URLSearchParams({
-    path,
-    password,
-  });
-
-  return `/novnc/vnc.html?${queryParams.toString()}#${hashParams.toString()}`;
+  return `/novnc/vnc.html?${queryParams.toString()}`;
 }
 
 export default function ServerConsole() {
@@ -65,7 +41,7 @@ export default function ServerConsole() {
     },
     enabled: !!serverId && !consoleLock.isLocked && !user?.accountSuspended,
     refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,         // Always fetch a fresh token — never reuse a cached console URL
   });
 
   // Set window title for popout
@@ -75,10 +51,10 @@ export default function ServerConsole() {
     }
   }, [isPopout, serverId]);
 
-  // Redirect to noVNC when we have the console data
+  // Redirect to noVNC when we have the console token
   useEffect(() => {
-    if (consoleData?.embedded && consoleData?.vnc?.wsUrl && !redirected) {
-      const noVncUrl = buildNoVncUrl(consoleData.vnc.wsUrl, consoleData.vnc.password);
+    if (consoleData?.embedded && consoleData?.vncToken && !redirected) {
+      const noVncUrl = buildNoVncUrl(consoleData.vncToken, serverId || '');
       setRedirected(true);
       window.location.href = noVncUrl;
     }
@@ -166,7 +142,7 @@ export default function ServerConsole() {
   }
 
   // Show redirecting state while we navigate to noVNC
-  if (consoleData?.embedded && consoleData?.vnc?.wsUrl) {
+  if (consoleData?.embedded && consoleData?.vncToken) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="p-12 flex flex-col items-center">

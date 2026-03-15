@@ -24,6 +24,19 @@ import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
 import path from "path";
 
+// VNC security: one-time credential tokens (exchanged by noVNC on load, then deleted)
+const vncSessionTokens = new Map<string, {
+  wsUrl: string;
+  password: string;
+  serverId: string;
+  auth0UserId: string;
+  expiresAt: number;
+}>();
+
+// VNC auto-disable timers: kill VNC access 30 minutes after console is opened
+const vncAutoDisableTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const VNC_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 // Helper to validate IP address format (prevents header injection)
 function isValidIp(ip: string): boolean {
   // IPv4 pattern
@@ -3285,17 +3298,33 @@ export async function registerRoutes(
         // Build WebSocket URL from panel URL
         const panelHost = new URL(panelUrl).host;
         const wsUrl = `wss://${panelHost}${vncAccess.wss.url}`;
-        
+
         log(`Embedded VNC WebSocket URL: ${wsUrl}`, 'api');
-        
+
+        // SECURITY: Store credentials server-side as a one-time token.
+        // The noVNC page exchanges this token (with auth cookie) to get credentials.
+        // Raw wsUrl/password never appear in any URL or browser history.
+        const vncToken = randomBytes(32).toString('hex');
+        vncSessionTokens.set(vncToken, {
+          wsUrl,
+          password: vncAccess.password,
+          serverId,
+          auth0UserId: session.auth0UserId!,
+          expiresAt: Date.now() + 5 * 60 * 1000, // 5 min to exchange token
+        });
+
+        // Auto-disable VNC after 30 minutes (reset timer if user opens a new console)
+        const existingTimer = vncAutoDisableTimers.get(serverId);
+        if (existingTimer) clearTimeout(existingTimer);
+        vncAutoDisableTimers.set(serverId, setTimeout(() => {
+          virtfusionClient.disableVnc(serverId).catch(() => {});
+          vncAutoDisableTimers.delete(serverId);
+          log(`VNC auto-disabled for server ${serverId} after ${VNC_SESSION_TTL_MS / 60000}min TTL`, 'security');
+        }, VNC_SESSION_TTL_MS));
+
         return res.json({
           embedded: true,
-          vnc: {
-            wsUrl,
-            password: vncAccess.password,
-            ip: vncAccess.ip,
-            port: vncAccess.port
-          }
+          vncToken,
         });
       }
       
@@ -3343,6 +3372,38 @@ export async function registerRoutes(
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
     }
+  });
+
+  // Exchange a one-time VNC session token for actual credentials.
+  // Requires auth — only the session that created the token can redeem it.
+  app.get('/api/vnc-session/:token', authMiddleware, async (req, res) => {
+    const token = req.params.token;
+    const session = req.userSession!;
+
+    const vncSession = vncSessionTokens.get(token);
+    if (!vncSession) {
+      return res.status(404).json({ error: 'Invalid or expired console token. Please request a new console session.' });
+    }
+
+    // Verify the token belongs to this authenticated user
+    if (vncSession.auth0UserId !== session.auth0UserId) {
+      log(`VNC token theft attempt: token owned by ${vncSession.auth0UserId}, used by ${session.auth0UserId}`, 'security');
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check token expiry (5 min to exchange after console-url is called)
+    if (Date.now() > vncSession.expiresAt) {
+      vncSessionTokens.delete(token);
+      return res.status(410).json({ error: 'Console token has expired. Please close this window and open a new console session.' });
+    }
+
+    // One-time use: delete token immediately after returning credentials
+    vncSessionTokens.delete(token);
+
+    return res.json({
+      wsUrl: vncSession.wsUrl,
+      password: vncSession.password,
+    });
   });
 
   app.get('/api/user/profile', authMiddleware, async (req, res) => {

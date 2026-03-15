@@ -419,18 +419,19 @@ class ApiClient {
     return response.json();
   }
 
-  async getConsoleUrl(id: string): Promise<{ 
+  async getConsoleUrl(id: string): Promise<{
     url?: string;
     authUrl?: string;
     vncUrl?: string;
     twoStep?: boolean;
     embedded?: boolean;
-    vnc?: { 
+    vncToken?: string;    // One-time token: exchanged by noVNC for credentials via /api/vnc-session/:token
+    vnc?: {
       wsUrl?: string;
-      ip: string; 
-      port: number; 
-      password: string; 
-    }; 
+      ip: string;
+      port: number;
+      password: string;
+    };
   }> {
     const response = await secureFetch(`${this.baseUrl}/servers/${id}/console-url`, {
       method: 'POST',
