@@ -89,7 +89,12 @@ export default function ServerList() {
     billingStatuses[s.id]?.adminSuspended === true
   );
   const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
-  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0;
+  const overdueActiveServers = servers.filter(s => {
+    const b = billingStatuses[s.id];
+    if (!b || b.status !== 'active' || b.isTrial || b.freeServer || !b.nextBillAt) return false;
+    return new Date(b.nextBillAt) < new Date();
+  });
+  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
 
   useSyncPowerActions(servers);
 
@@ -132,11 +137,11 @@ export default function ServerList() {
 
         {/* Overdue Servers Alert (billing-related only) */}
         {hasOverdueServers && (
-          <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
+          <div className={`border rounded-lg p-4 ${billingSuspendedServers.length > 0 || unpaidServers.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-amber-500/40 bg-amber-500/10'}`}>
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${billingSuspendedServers.length > 0 || unpaidServers.length > 0 ? 'text-destructive' : 'text-amber-400'}`} />
               <div className="flex-1">
-                <h3 className="font-semibold text-destructive mb-1">Payment Required</h3>
+                <h3 className={`font-semibold mb-1 ${billingSuspendedServers.length > 0 || unpaidServers.length > 0 ? 'text-destructive' : 'text-amber-300'}`}>Payment Required</h3>
                 <p className="text-sm text-muted-foreground mb-2">
                   {billingSuspendedServers.length > 0 && (
                     <span className="block">
@@ -148,8 +153,13 @@ export default function ServerList() {
                       <span className="text-warning font-medium">{unpaidServers.length} server{unpaidServers.length > 1 ? 's' : ''} unpaid</span> and will be suspended soon.
                     </span>
                   )}
+                  {overdueActiveServers.length > 0 && (
+                    <span className="block mt-1">
+                      <span className="text-amber-400 font-medium">{overdueActiveServers.length} server{overdueActiveServers.length > 1 ? 's' : ''} overdue</span> and at risk of suspension.
+                    </span>
+                  )}
                 </p>
-                <Button size="sm" variant="destructive" asChild>
+                <Button size="sm" variant={billingSuspendedServers.length > 0 || unpaidServers.length > 0 ? 'destructive' : 'outline'} className={billingSuspendedServers.length > 0 || unpaidServers.length > 0 ? '' : 'border-amber-500/50 text-amber-300 hover:bg-amber-500/20'} asChild>
                   <Link href="/billing">
                     <Wallet className="h-4 w-4 mr-2" />
                     Add Funds
