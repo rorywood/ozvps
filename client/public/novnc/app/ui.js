@@ -337,10 +337,8 @@ const UI = {
             .addEventListener('click', UI.toggleClipboardPanel);
         document.getElementById("noVNC_clipboard_text")
             .addEventListener('change', UI.clipboardSend);
-        document.getElementById("noVNC_clipboard_paste_button")
-            .addEventListener('click', UI.clipboardPasteFromBrowser);
         document.getElementById("noVNC_clipboard_send_button")
-            .addEventListener('click', UI.clipboardSendAndPaste);
+            .addEventListener('click', UI.clipboardTypeText);
     },
 
     // Add a call to save settings when the element changes,
@@ -987,41 +985,42 @@ const UI = {
         Log.Debug("<< UI.clipboardSend");
     },
 
-    // Send clipboard text to server AND simulate Ctrl+V to paste it
-    clipboardSendAndPaste() {
+    // Type each character individually via sendKey — reliable across all VNC servers
+    clipboardTypeText() {
         const text = document.getElementById('noVNC_clipboard_text').value;
         if (!text || !UI.rfb) return;
 
-        // Update server clipboard
-        UI.rfb.clipboardPasteFrom(text);
-
-        // Simulate Ctrl+V so it pastes into the focused application
-        setTimeout(() => {
-            UI.rfb.sendKey(0xffe3, "ControlLeft", true);   // Ctrl down
-            UI.rfb.sendKey(0x76,   "KeyV",        true);   // V down
-            UI.rfb.sendKey(0x76,   "KeyV",        false);  // V up
-            UI.rfb.sendKey(0xffe3, "ControlLeft", false);  // Ctrl up
-        }, 100);
-
-        // Close the panel so user can see the paste happen
         UI.closeClipboardPanel();
-    },
 
-    clipboardPasteFromBrowser() {
-        if (!navigator.clipboard || !navigator.clipboard.readText) {
-            // Fallback: focus the textarea so user can paste manually
-            const ta = document.getElementById('noVNC_clipboard_text');
-            ta.focus();
-            ta.placeholder = 'Browser clipboard access denied — press Ctrl+V here, then click Send to server';
-            return;
+        const DELAY = 20; // ms between keystrokes
+        let delay = 50;   // initial delay so panel closes first
+
+        for (let i = 0; i < text.length; i++) {
+            const codePoint = text.codePointAt(i);
+            if (codePoint > 0xffff) { i++; } // skip low surrogate
+
+            let keysym;
+            if (codePoint === 13 || codePoint === 10) {
+                keysym = 0xff0d; // Return/Enter
+            } else if (codePoint === 9) {
+                keysym = 0xff09; // Tab
+            } else if (codePoint >= 0x20 && codePoint <= 0x7e) {
+                keysym = codePoint; // Printable ASCII — keysym equals char code
+            } else if (codePoint > 0x7e) {
+                keysym = 0x01000000 | codePoint; // Unicode keysym
+            } else {
+                continue; // skip other control chars
+            }
+
+            ((ks) => {
+                setTimeout(() => {
+                    UI.rfb.sendKey(ks, null, true);
+                    UI.rfb.sendKey(ks, null, false);
+                }, delay);
+            })(keysym);
+
+            delay += DELAY;
         }
-        navigator.clipboard.readText().then(text => {
-            document.getElementById('noVNC_clipboard_text').value = text;
-        }).catch(() => {
-            const ta = document.getElementById('noVNC_clipboard_text');
-            ta.focus();
-            ta.placeholder = 'Clipboard access denied — press Ctrl+V here, then click Send to server';
-        });
     },
 
 /* ------^-------
