@@ -404,9 +404,10 @@ export async function runBillingJob(): Promise<void> {
       )
     );
 
-  // B2: Also suspend any server that is 7+ days overdue (nextBillAt is 7+ days in the past)
-  // This catches servers that may have been missed or have null/incorrect suspendAt
-  // Check all non-paid statuses (active, unpaid) - not just unpaid
+  // B2: Safety net — catch servers 7+ days overdue that Step A may have missed
+  // (e.g. due to a transient error). Excludes 'paid' to prevent double-charging
+  // servers that Step A already handled this run. Requires autoRenew=true so
+  // servers that opted out are never caught here.
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   log(`B2 check: looking for servers with nextBillAt <= ${sevenDaysAgo.toISOString()}`, 'billing');
 
@@ -415,9 +416,9 @@ export async function runBillingJob(): Promise<void> {
       and(
         or(
           eq(serverBilling.status, 'unpaid'),
-          eq(serverBilling.status, 'active'),
-          eq(serverBilling.status, 'paid')
+          eq(serverBilling.status, 'active')
         ),
+        eq(serverBilling.autoRenew, true),
         eq(serverBilling.freeServer, false),
         lte(serverBilling.nextBillAt, sevenDaysAgo) // 7+ days overdue
       )
@@ -449,32 +450,41 @@ export async function runBillingJob(): Promise<void> {
 
       log(`Processing overdue server ${billing.virtfusionServerId}: status=${billing.status}, nextBillAt=${billing.nextBillAt?.toISOString()}`, 'billing');
 
-      // For servers that are still 'active' or 'paid' (caught by B2), try to charge first
-      // If charge succeeds AND nextBillAt is updated to the future, skip suspension
-      if (billing.status === 'active' || billing.status === 'paid') {
-        log(`Server ${billing.virtfusionServerId} is 7+ days overdue but status is '${billing.status}', attempting charge first`, 'billing');
-        const charged = await chargeServer(billing);
-        if (charged) {
-          // Re-fetch the billing record to check if nextBillAt was actually updated
-          const [updatedBilling] = await db.select().from(serverBilling)
-            .where(eq(serverBilling.id, billing.id));
-
-          if (updatedBilling && updatedBilling.nextBillAt && updatedBilling.nextBillAt > sevenDaysAgo) {
-            log(`Server ${billing.virtfusionServerId} charge succeeded and nextBillAt updated to ${updatedBilling.nextBillAt.toISOString()}, skipping suspension`, 'billing');
-            continue;
-          }
-          // Charge returned true (idempotency) but nextBillAt is still overdue - this means
-          // the admin manually set the date for testing. Proceed to suspend.
-          log(`Server ${billing.virtfusionServerId} charge returned success but nextBillAt still overdue (${updatedBilling?.nextBillAt?.toISOString()}), proceeding to suspend`, 'billing');
-        }
-        // Charge failed or nextBillAt still overdue, mark as unpaid before suspending
-        await db.update(serverBilling)
-          .set({
-            status: 'unpaid',
-            updatedAt: new Date(),
-          })
+      // ALWAYS attempt to charge before suspending — wallet may have been topped up since
+      // the server was first marked unpaid or since the last billing attempt.
+      // This covers both B1 (suspendAt overdue) and B2 (long overdue) servers.
+      const chargeAttempt = await chargeServer(billing);
+      if (chargeAttempt) {
+        // Re-fetch to get the updated nextBillAt
+        const [updatedBilling] = await db.select().from(serverBilling)
           .where(eq(serverBilling.id, billing.id));
-        log(`Server ${billing.virtfusionServerId} marked as unpaid, proceeding to suspend`, 'billing');
+
+        if (updatedBilling && updatedBilling.nextBillAt && updatedBilling.nextBillAt > now) {
+          log(`Server ${billing.virtfusionServerId} charge succeeded (nextBillAt: ${updatedBilling.nextBillAt.toISOString()}), skipping suspension`, 'billing');
+          // If server was suspended in VirtFusion, unsuspend it now that payment succeeded
+          if (billing.status === 'suspended') {
+            try {
+              await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+              log(`Unsuspended server ${billing.virtfusionServerId} after successful charge`, 'billing');
+            } catch (unsuspendErr: any) {
+              log(`Could not unsuspend server ${billing.virtfusionServerId} after charge: ${unsuspendErr.message}`, 'billing');
+            }
+          }
+          continue;
+        }
+        // Charge succeeded but nextBillAt is still in the past (server was severely overdue
+        // and one month's advance still leaves it overdue). Mark as unpaid and suspend.
+        log(`Server ${billing.virtfusionServerId} charge succeeded but nextBillAt still overdue (${updatedBilling?.nextBillAt?.toISOString()}), proceeding to suspend`, 'billing');
+      } else {
+        log(`Server ${billing.virtfusionServerId} charge failed (insufficient balance), proceeding to suspend`, 'billing');
+      }
+
+      // Mark as unpaid before suspending (covers active/paid/unpaid statuses)
+      if (billing.status !== 'unpaid' && billing.status !== 'suspended') {
+        await db.update(serverBilling)
+          .set({ status: 'unpaid', updatedAt: new Date() })
+          .where(eq(serverBilling.id, billing.id));
+        log(`Server ${billing.virtfusionServerId} marked as unpaid`, 'billing');
       }
 
       log(`Calling VirtFusion suspendServer for ${billing.virtfusionServerId}`, 'billing');
