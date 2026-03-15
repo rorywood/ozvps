@@ -657,10 +657,19 @@ export class VirtFusionClient {
   async unsuspendServer(serverId: string) {
     try {
       // First, unsuspend in VirtFusion to allow the server to be managed again
-      await this.request(`/servers/${serverId}/unsuspend`, {
-        method: 'POST',
-      });
-      log(`Server ${serverId} unsuspend request sent to VirtFusion`, 'virtfusion');
+      try {
+        await this.request(`/servers/${serverId}/unsuspend`, {
+          method: 'POST',
+        });
+        log(`Server ${serverId} unsuspend request sent to VirtFusion`, 'virtfusion');
+      } catch (unsuspendError: any) {
+        // 409 = server is not suspended in VirtFusion — already active, continue
+        if (unsuspendError.status === 409 || unsuspendError.message?.includes('409')) {
+          log(`Server ${serverId} not suspended in VirtFusion (409) — treating as already unsuspended`, 'virtfusion');
+        } else {
+          throw unsuspendError;
+        }
+      }
 
       // Give VirtFusion a moment to process the unsuspend
       await new Promise(resolve => setTimeout(resolve, 1000));

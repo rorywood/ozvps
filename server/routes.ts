@@ -2773,6 +2773,25 @@ export async function registerRoutes(
 
       const buildingStartedAt = buildStartTimes.get(serverId) ?? null;
 
+      // Compute step and percent server-side so clients don't need time-based simulation
+      let step: string;
+      let percent: number;
+      if (buildStatus.commissioned === 3 || buildStatus.isComplete) {
+        step = 'complete'; percent = 100;
+      } else if (buildStatus.isError) {
+        step = 'failed'; percent = 0;
+      } else if (buildStatus.commissioned === 0) {
+        step = 'queued'; percent = 5;
+      } else if (buildStatus.commissioned === 1 || buildStatus.isBuilding) {
+        const elapsedSec = buildingStartedAt ? (Date.now() - buildingStartedAt) / 1000 : 0;
+        if (elapsedSec < 20)       { step = 'provisioning'; percent = 20; }
+        else if (elapsedSec < 60)  { step = 'imaging';      percent = 40; }
+        else if (elapsedSec < 150) { step = 'installing';   percent = 65; }
+        else                       { step = 'configuring';  percent = 85; }
+      } else {
+        step = 'queued'; percent = 5;
+      }
+
       // If commissioned, invalidate cache BEFORE ownership check to prevent stale data
       if (buildStatus.commissioned === 3) {
         log(`Server ${serverId} is commissioned, invalidating cache BEFORE ownership check`, 'virtfusion');
@@ -2785,7 +2804,7 @@ export async function registerRoutes(
         return res.status(status || 403).json({ error: error || 'Access denied' });
       }
 
-      res.json({ ...buildStatus, buildingStartedAt });
+      res.json({ ...buildStatus, buildingStartedAt, step, percent });
     } catch (error: any) {
       log(`Error fetching build status for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch build status' });

@@ -81,22 +81,6 @@ function clearTaskState(serverId: string): void {
   }
 }
 
-function mapVirtFusionStatus(phase: string | undefined, buildFailed?: boolean): ReinstallStatus {
-  if (buildFailed) return 'failed';
-  if (!phase) return 'idle';
-  
-  const normalized = phase.toLowerCase();
-  if (normalized.includes('queue')) return 'queued';
-  if (normalized.includes('provision')) return 'provisioning';
-  if (normalized.includes('imag') || normalized.includes('download')) return 'imaging';
-  if (normalized.includes('install')) return 'installing';
-  if (normalized.includes('config')) return 'configuring';
-  if (normalized.includes('reboot') || normalized.includes('boot')) return 'rebooting';
-  if (normalized.includes('complete') || normalized.includes('done') || normalized.includes('finish')) return 'complete';
-  if (normalized.includes('fail') || normalized.includes('error')) return 'failed';
-  
-  return 'installing';
-}
 
 export function useReinstallTask(serverId: string) {
   const [state, setState] = useState<ReinstallTaskState>(() => {
@@ -128,7 +112,6 @@ export function useReinstallTask(serverId: string) {
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const pollCountRef = useRef(0);
   const lastStatusRef = useRef<ReinstallStatus>('idle');
-  const buildingStartedAtRef = useRef<number | null>(null); // when we first saw commissioned=1
 
   const addTimelineEvent = useCallback((status: ReinstallStatus, message?: string) => {
     if (status !== lastStatusRef.current) {
@@ -224,72 +207,26 @@ export function useReinstallTask(serverId: string) {
         return;
       }
 
-      // BUILDING: commissioned 0 or 1 = still building
+      // BUILDING: use step/percent computed server-side (no client-side time simulation needed)
       const commissioned = buildStatus.commissioned;
       const stillBuilding = commissioned === 0 || commissioned === 1 || commissioned === undefined || commissioned === null;
 
       if (stillBuilding) {
-        let newStatus: ReinstallStatus = 'provisioning';
+        const newStatus = ((buildStatus as any).step as ReinstallStatus) || 'provisioning';
+        const newPercent = (buildStatus as any).percent as number ?? STATUS_PERCENT_MAP[newStatus];
 
-        if (commissioned === 0) {
-          // Genuinely queued - not yet picked up by VirtFusion
-          newStatus = 'queued';
-          buildingStartedAtRef.current = null;
-        } else {
-          // commissioned=1 (or unknown) - VirtFusion is building but rarely gives granular state.
-          // Try to use raw state field first; fall back to time-based simulation.
-          const rawState = buildStatus.state || '';
-          const mappedFromState = rawState ? mapVirtFusionStatus(rawState) : 'idle';
-
-          if (mappedFromState !== 'idle' && mappedFromState !== 'queued' && mappedFromState !== 'provisioning') {
-            // VirtFusion gave us a meaningful specific state - use it
-            newStatus = mappedFromState;
-          } else {
-            // VirtFusion just says "building" or nothing - simulate progress by time.
-            // Server provides buildingStartedAt so elapsed time is accurate after page refresh.
-            const serverStartedAt = (buildStatus as any).buildingStartedAt as number | null;
-            if (serverStartedAt != null) {
-              buildingStartedAtRef.current = serverStartedAt;
-            } else if (!buildingStartedAtRef.current) {
-              buildingStartedAtRef.current = Date.now();
-            }
-            const elapsedMs = Date.now() - buildingStartedAtRef.current;
-            const elapsedSec = elapsedMs / 1000;
-
-            if (elapsedSec < 20) {
-              newStatus = 'provisioning';
-            } else if (elapsedSec < 60) {
-              newStatus = 'imaging';
-            } else if (elapsedSec < 150) {
-              newStatus = 'installing';
-            } else {
-              newStatus = 'configuring';
-            }
-          }
-        }
-
-        const newPercent = STATUS_PERCENT_MAP[newStatus];
-
-        // Only update if status changed (prevent unnecessary re-renders)
         setState(prev => {
-          if (prev.status === newStatus && prev.percent === newPercent) {
-            return prev; // No change, skip update
-          }
-
-          // NEVER GO BACKWARD: If new percent is less than current, keep current
+          // NEVER GO BACKWARD
           const finalPercent = newPercent < prev.percent ? prev.percent : newPercent;
-          const finalStatus = finalPercent === prev.percent ? prev.status : newStatus;
+          const finalStatus: ReinstallStatus = finalPercent === prev.percent ? prev.status : newStatus;
+
+          if (prev.status === finalStatus && prev.percent === finalPercent) return prev;
 
           if (finalStatus !== prev.status) {
             addTimelineEvent(finalStatus);
           }
 
-          const updated = {
-            ...prev,
-            status: finalStatus,
-            percent: finalPercent,
-          };
-
+          const updated = { ...prev, status: finalStatus, percent: finalPercent };
           saveTaskState(serverId, {
             isActive: true,
             taskId: prev.taskId,
@@ -299,7 +236,6 @@ export function useReinstallTask(serverId: string) {
             credentials: prev.credentials,
             rebootingStartTime: prev.rebootingStartTime,
           });
-
           return updated;
         });
       }

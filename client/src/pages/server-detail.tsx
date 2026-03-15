@@ -2078,8 +2078,8 @@ export default function ServerDetail() {
 
         {/* Header Section */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
                <Link href="/servers">
                 <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
                   <ArrowLeft className="h-4 w-4" />
@@ -2169,7 +2169,7 @@ export default function ServerDetail() {
               )}
             </div>
             
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium shrink-0">
               <div className="flex items-center gap-2 shrink-0">
                 <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
                 <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
