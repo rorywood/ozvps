@@ -34,7 +34,57 @@ export default function ServerList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Check if account is suspended - show blocked message
+  const { data: dashboardData, isLoading, isError } = useQuery({
+    queryKey: ['dashboard-overview'],
+    queryFn: () => api.getDashboardOverview(),
+    refetchInterval: 10000,
+  });
+
+  const servers = dashboardData?.servers || [];
+  const cancellations = dashboardData?.cancellations || {};
+  const billingStatuses = dashboardData?.billingStatuses || {};
+
+  // Find servers with billing issues — use s.billing (embedded on each server)
+  const billingSuspendedServers = servers.filter(s =>
+    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
+  );
+  const adminSuspendedServers = servers.filter(s =>
+    s.billing?.adminSuspended === true
+  );
+  const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
+  const overdueActiveServers = servers.filter(s => {
+    const b = s.billing;
+    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
+    return new Date(b.nextBillAt) < new Date();
+  });
+  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
+
+  // Fetch wallet when there are overdue/unpaid/suspended servers so we can show Pay Now vs Add Funds
+  const { data: walletData } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => api.getWallet(),
+    enabled: hasOverdueServers,
+  });
+
+  const overdueAmountDue = overdueActiveServers.reduce((sum, s) => sum + (s.billing?.monthlyPriceCents ?? 0), 0);
+  const walletBalance = walletData?.wallet?.balanceCents ?? 0;
+  const canPayOverdue = overdueAmountDue > 0 && walletBalance >= overdueAmountDue;
+
+  const payOverdueMutation = useMutation({
+    mutationFn: () => Promise.all(overdueActiveServers.map(s => api.reactivateServer(s.id))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      toast({ title: 'Payment Successful', description: 'Overdue servers have been charged.', variant: 'success' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Payment Failed', description: error.message || 'Failed to charge. Please try again.', variant: 'destructive' });
+    },
+  });
+
+  useSyncPowerActions(servers);
+
+  // Check if account is suspended - show blocked message (after all hooks)
   if (user?.accountSuspended) {
     return (
       <AppShell>
@@ -73,57 +123,6 @@ export default function ServerList() {
       </AppShell>
     );
   }
-
-  const { data: dashboardData, isLoading, isError } = useQuery({
-    queryKey: ['dashboard-overview'],
-    queryFn: () => api.getDashboardOverview(),
-    refetchInterval: 10000,
-  });
-
-  const servers = dashboardData?.servers || [];
-  const cancellations = dashboardData?.cancellations || {};
-  const billingStatuses = dashboardData?.billingStatuses || {};
-
-  // Find servers with billing issues — use s.billing (embedded on each server) not the separate billingStatuses map
-  const billingSuspendedServers = servers.filter(s =>
-    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
-  );
-  const adminSuspendedServers = servers.filter(s =>
-    s.billing?.adminSuspended === true
-  );
-  const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
-  const overdueActiveServers = servers.filter(s => {
-    const b = s.billing;
-    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
-    return new Date(b.nextBillAt) < new Date();
-  });
-  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
-
-  // Fetch wallet when there are overdue/unpaid/suspended servers so we can show Pay Now vs Add Funds
-  const { data: walletData } = useQuery({
-    queryKey: ['wallet'],
-    queryFn: () => api.getWallet(),
-    enabled: hasOverdueServers,
-  });
-
-  // Total amount due across all overdue servers (overdue active/paid only — suspended/unpaid handled separately)
-  const overdueAmountDue = overdueActiveServers.reduce((sum, s) => sum + (s.billing?.monthlyPriceCents ?? 0), 0);
-  const walletBalance = walletData?.wallet?.balanceCents ?? 0;
-  const canPayOverdue = overdueAmountDue > 0 && walletBalance >= overdueAmountDue;
-
-  const payOverdueMutation = useMutation({
-    mutationFn: () => Promise.all(overdueActiveServers.map(s => api.reactivateServer(s.id))),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      toast({ title: 'Payment Successful', description: 'Overdue servers have been charged.', variant: 'success' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Payment Failed', description: error.message || 'Failed to charge. Please try again.', variant: 'destructive' });
-    },
-  });
-
-  useSyncPowerActions(servers);
 
   // Filter servers based on search query
   const filteredServers = servers.filter(server => {
