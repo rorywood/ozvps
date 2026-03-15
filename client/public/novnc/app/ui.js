@@ -985,13 +985,15 @@ const UI = {
         Log.Debug("<< UI.clipboardSend");
     },
 
-    // Send clipboard text to remote using noVNC's virtual keyboard path.
-    // When a KeyboardEvent has no code (Unidentified), noVNC treats it as an
-    // on-screen keyboard key and sends press+release immediately via the
-    // normal keyboard pipeline. getKeysym() resolves the keysym from e.key.
+    // Send clipboard text to remote by dispatching synthetic keyboard events
+    // with proper DOM codes. This triggers noVNC's normal keyboard pipeline,
+    // using QEMUExtendedKeyEvent (scancode + keysym) for QEMU/KVM servers.
+    // Shifted characters (uppercase, !, @, # etc.) get explicit Shift events.
     clipboardTypeText() {
         const text = document.getElementById('noVNC_clipboard_text').value;
-        if (!text) {
+        const appendEnter = document.getElementById('noVNC_clipboard_enter').checked;
+
+        if (!text && !appendEnter) {
             UI.showStatus('Clipboard is empty', 'warn', 2000);
             return;
         }
@@ -1005,32 +1007,81 @@ const UI = {
         const canvas = UI.rfb._canvas;
         canvas.focus({ preventScroll: true });
 
-        UI.showStatus('Typing ' + text.length + ' char' + (text.length !== 1 ? 's' : '') + '...', 'normal', text.length * 25 + 1000);
+        // Map each character to { key, code, shift }
+        // key  = DOM KeyboardEvent.key value
+        // code = DOM KeyboardEvent.code value (gives QEMU a proper scancode)
+        // shift = whether ShiftLeft must be held
+        const CM = {
+            ' ':['Space','Space',0],
+            '\n':['Enter','Enter',0], '\r':['Enter','Enter',0], '\t':['Tab','Tab',0],
+            '0':['0','Digit0',0],'1':['1','Digit1',0],'2':['2','Digit2',0],
+            '3':['3','Digit3',0],'4':['4','Digit4',0],'5':['5','Digit5',0],
+            '6':['6','Digit6',0],'7':['7','Digit7',0],'8':['8','Digit8',0],
+            '9':['9','Digit9',0],
+            'a':['a','KeyA',0],'b':['b','KeyB',0],'c':['c','KeyC',0],
+            'd':['d','KeyD',0],'e':['e','KeyE',0],'f':['f','KeyF',0],
+            'g':['g','KeyG',0],'h':['h','KeyH',0],'i':['i','KeyI',0],
+            'j':['j','KeyJ',0],'k':['k','KeyK',0],'l':['l','KeyL',0],
+            'm':['m','KeyM',0],'n':['n','KeyN',0],'o':['o','KeyO',0],
+            'p':['p','KeyP',0],'q':['q','KeyQ',0],'r':['r','KeyR',0],
+            's':['s','KeyS',0],'t':['t','KeyT',0],'u':['u','KeyU',0],
+            'v':['v','KeyV',0],'w':['w','KeyW',0],'x':['x','KeyX',0],
+            'y':['y','KeyY',0],'z':['z','KeyZ',0],
+            'A':['A','KeyA',1],'B':['B','KeyB',1],'C':['C','KeyC',1],
+            'D':['D','KeyD',1],'E':['E','KeyE',1],'F':['F','KeyF',1],
+            'G':['G','KeyG',1],'H':['H','KeyH',1],'I':['I','KeyI',1],
+            'J':['J','KeyJ',1],'K':['K','KeyK',1],'L':['L','KeyL',1],
+            'M':['M','KeyM',1],'N':['N','KeyN',1],'O':['O','KeyO',1],
+            'P':['P','KeyP',1],'Q':['Q','KeyQ',1],'R':['R','KeyR',1],
+            'S':['S','KeyS',1],'T':['T','KeyT',1],'U':['U','KeyU',1],
+            'V':['V','KeyV',1],'W':['W','KeyW',1],'X':['X','KeyX',1],
+            'Y':['Y','KeyY',1],'Z':['Z','KeyZ',1],
+            '!':['!','Digit1',1],'@':['@','Digit2',1],'#':['#','Digit3',1],
+            '$':['$','Digit4',1],'%':['%','Digit5',1],'^':['^','Digit6',1],
+            '&':['&','Digit7',1],'*':['*','Digit8',1],'(':['(','Digit9',1],
+            ')':[')',  'Digit0',1],
+            '-':['-','Minus',0],'_':['_','Minus',1],
+            '=':['=','Equal',0],'+': ['+','Equal',1],
+            '[':['[','BracketLeft',0],'{': ['{','BracketLeft',1],
+            ']':[']','BracketRight',0],'}': ['}','BracketRight',1],
+            '\\':['\\','Backslash',0],'|': ['|','Backslash',1],
+            ';':[';','Semicolon',0],':': [':','Semicolon',1],
+            "'":[  "'", 'Quote',0],'"': ['"','Quote',1],
+            '`':['`','Backquote',0],'~': ['~','Backquote',1],
+            ',': [',','Comma',0],   '<': ['<','Comma',1],
+            '.': ['.','Period',0],  '>': ['>','Period',1],
+            '/': ['/','Slash',0],   '?': ['?','Slash',1],
+        };
 
-        const DELAY = 25;
+        const fire = (key, code, down) => canvas.dispatchEvent(
+            new KeyboardEvent(down ? 'keydown' : 'keyup', { key, code, bubbles: true, cancelable: true })
+        );
+
+        const chars = text ? [...text] : [];
+        if (appendEnter) chars.push('\n');
+
+        const DELAY = 30;
         let delay = 50;
 
-        for (let i = 0; i < text.length; i++) {
-            const ch = text[i];
-            // Map newline/tab to their DOM key names; everything else uses the char itself.
-            // noVNC's getKeysym() resolves the X11 keysym from e.key via Unicode lookup.
-            const key = (ch === '\n' || ch === '\r') ? 'Enter' : (ch === '\t' ? 'Tab' : ch);
+        for (const ch of chars) {
+            const m = CM[ch];
+            if (!m) continue; // skip unmapped chars
+            const [key, code, shift] = m;
 
-            ((k) => {
+            ((k, c, s) => {
                 setTimeout(() => {
-                    // Dispatching keydown without a code property gives code='Unidentified'.
-                    // noVNC's _handleKeyDown treats Unidentified as a virtual keyboard key
-                    // and immediately sends both press and release — no keyup needed.
-                    canvas.dispatchEvent(new KeyboardEvent('keydown', {
-                        key: k,
-                        bubbles: true,
-                        cancelable: true,
-                    }));
+                    if (s) fire('Shift', 'ShiftLeft', true);
+                    fire(k, c, true);
+                    fire(k, c, false);
+                    if (s) fire('Shift', 'ShiftLeft', false);
                 }, delay);
-            })(key);
+            })(key, code, shift);
 
             delay += DELAY;
         }
+
+        const charCount = chars.length;
+        UI.showStatus('Typing ' + charCount + ' char' + (charCount !== 1 ? 's' : '') + '...', 'normal', charCount * 30 + 1000);
     },
 
 /* ------^-------

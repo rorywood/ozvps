@@ -45,7 +45,7 @@
     <link rel="preload" as="image" href="app/images/warning.svg">
 
     <script type="module" crossorigin="anonymous" src="app/error-handler.js"></script>
-    <script type="module" crossorigin="anonymous" src="app/ui.js?v=5"></script>
+    <script type="module" crossorigin="anonymous" src="app/ui.js?v=6"></script>
 </head>
 
 <body>
@@ -136,8 +136,11 @@
                     Paste (Ctrl+V) your text below, then click Send.
                 </p>
                 <textarea id="noVNC_clipboard_text" rows=5></textarea>
-                <div style="display:flex; gap:6px; margin-top:8px;">
-                    <button type="button" id="noVNC_clipboard_send_button" style="width:100%; padding:8px 10px; background:#1a7a35; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">↵ Send to remote</button>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                    <label style="display:flex; align-items:center; gap:5px; font-size:12px; color:#aaa; cursor:pointer; white-space:nowrap;">
+                        <input type="checkbox" id="noVNC_clipboard_enter" style="cursor:pointer;"> +Enter
+                    </label>
+                    <button type="button" id="noVNC_clipboard_send_button" style="flex:1; padding:8px 10px; background:#1a7a35; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">↵ Send to remote</button>
                 </div>
             </div>
             </div>
