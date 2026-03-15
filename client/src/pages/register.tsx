@@ -527,21 +527,12 @@ export default function RegisterPage() {
     setLocation("/verify-email");
   };
 
-  const passwordStrength = () => {
-    if (!password) return null;
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (password.length >= 12) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-
-    if (strength <= 2) return { label: "Weak", color: "bg-red-500", textColor: "text-red-400", width: "w-1/3" };
-    if (strength <= 3) return { label: "Medium", color: "bg-yellow-500", textColor: "text-yellow-400", width: "w-2/3" };
-    return { label: "Strong", color: "bg-green-500", textColor: "text-green-400", width: "w-full" };
-  };
-
-  const strength = passwordStrength();
+  const passwordRequirements = password ? [
+    { label: "At least 8 characters",    met: password.length >= 8 },
+    { label: "One uppercase letter",      met: /[A-Z]/.test(password) },
+    { label: "One number",               met: /[0-9]/.test(password) },
+    { label: "One special character",    met: /[^A-Za-z0-9]/.test(password) },
+  ] : null;
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-[#0a0d14] via-[#0d1117] to-[#0a0d14]">
@@ -862,14 +853,17 @@ export default function RegisterPage() {
                             )}
                           </button>
                         </div>
-                        {strength && (
-                          <div className="space-y-1.5 pt-1">
-                            <div className="h-1.5 bg-[#161b22] rounded-full overflow-hidden">
-                              <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300`} />
-                            </div>
-                            <p className="text-xs text-[#737373]">
-                              Password strength: <span className={strength.textColor}>{strength.label}</span>
-                            </p>
+                        {passwordRequirements && (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
+                            {passwordRequirements.map(req => (
+                              <div key={req.label} className={`flex items-center gap-1.5 text-xs transition-colors ${req.met ? 'text-green-400' : 'text-[#737373]'}`}>
+                                {req.met
+                                  ? <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                                  : <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                                }
+                                {req.label}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
