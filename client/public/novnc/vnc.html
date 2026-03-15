@@ -48,68 +48,20 @@
 
     <!--
       OzVPS Console Loader
-      Two modes:
-      1. Server-side injection (preferred): Express injects window.__ozvpsVncConfig before this
-         script runs — no client-side fetch needed. URL is /api/servers/:id/vnc-console.
-      2. Token exchange (fallback): URL contains ?vncToken=... and this script exchanges it
-         via /api/vnc-session/:token (requires auth session cookie).
+      This page is served by Express (/api/servers/:id/vnc-console) with
+      window.__ozvpsVncConfig injected server-side. The config contains a
+      short-lived proxy token path — no password, no VirtFusion credentials.
+      VNC authentication is handled entirely server-side by our WebSocket proxy.
     -->
     <script type="module">
-      // Mode 1: credentials were injected server-side — skip all fetching
-      if (!window.__ozvpsVncConfig?.password) {
-        // Mode 2: exchange one-time vncToken for credentials
-        const params = new URLSearchParams(window.location.search);
-        const vncToken = params.get('vncToken');
-        const serverId = params.get('serverId');
-
-        if (!vncToken) {
-          window.location.replace('/');
-          throw new Error('No console token — redirecting to app.');
-        }
-
-        let creds;
-        try {
-          const r = await fetch('/api/vnc-session/' + encodeURIComponent(vncToken), { credentials: 'include' });
-          if (!r.ok) {
-            const body = await r.json().catch(() => ({}));
-            throw new Error(body.error || 'Console session expired or invalid.');
-          }
-          creds = await r.json();
-        } catch (e) {
-          const errEl = document.getElementById('noVNC_fallback_error');
-          const msgEl = document.getElementById('noVNC_fallback_errormsg');
-          if (errEl) errEl.classList.add('noVNC_open');
-          if (msgEl) {
-            const div = document.createElement('div');
-            div.className = 'noVNC_message';
-            div.textContent = (e instanceof Error ? e.message : String(e)) + ' Please close this window and open a new console session.';
-            msgEl.appendChild(div);
-          }
-          document.documentElement.classList.remove('noVNC_loading');
-          throw e;
-        }
-
-        // Store all config in memory — nothing written to URL
-        const wsUrl = new URL(creds.wsUrl);
-        let wsPath = wsUrl.pathname.replace(/^\//, '');
-        if (wsUrl.search) wsPath += wsUrl.search;
-        window.__ozvpsVncConfig = {
-          host: wsUrl.hostname,
-          port: wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'),
-          encrypt: wsUrl.protocol === 'wss:' ? '1' : '0',
-          path: wsPath,
-          password: creds.password,
-          autoconnect: '1',
-          resize: 'scale',
-          reconnect: '0',
-          serverId: serverId || '',
-        };
-        // Scrub the token from the URL — the clean URL reveals nothing useful
-        history.replaceState(null, '', window.location.pathname);
+      // Require server-side config injection — direct URL access is not supported
+      if (!window.__ozvpsVncConfig) {
+        window.location.replace('/');
+        throw new Error('No console config — redirecting to app.');
       }
 
       // Register cleanup: disable VNC when tab is closed or navigated away from
-      const sid = window.__ozvpsVncConfig?.serverId;
+      const sid = window.__ozvpsVncConfig.serverId;
       if (sid) {
         window.addEventListener('pagehide', () => {
           navigator.sendBeacon('/api/servers/' + encodeURIComponent(sid) + '/vnc/disable');
@@ -117,7 +69,8 @@
       }
 
       // Load noVNC — reads all config from window.__ozvpsVncConfig (via patched webutil.js)
-      await import('./app/ui.js?v=8');
+      // noVNC will connect to our WebSocket proxy; no password needed client-side.
+      await import('./app/ui.js?v=9');
     </script>
 </head>
 

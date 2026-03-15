@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
+import { handleVncUpgrade, vncProxySessions } from "./vnc-proxy";
 import crypto, { createHmac, timingSafeEqual, randomBytes } from "crypto";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
@@ -792,6 +793,15 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // VNC WebSocket proxy: intercept upgrade requests for /api/vnc-ws/:token
+  // This must be registered early so it runs before any other upgrade handlers.
+  httpServer.on('upgrade', (req, socket, head) => {
+    handleVncUpgrade(req, socket as any, head).catch((err) => {
+      log(`VNC upgrade handler error: ${err.message}`, 'vnc');
+      socket.destroy();
+    });
+  });
 
   // Rate limiters for sensitive endpoints
   const mfaRateLimiter = rateLimit({
@@ -3479,20 +3489,36 @@ export async function registerRoutes(
         return res.status(500).send('<p>Console unavailable. Please try again.</p>');
       }
 
-      // Inject two things:
-      // 1. <base href="/novnc/"> at the START of <head> — fixes ALL relative asset paths
-      //    (stylesheets, images, scripts) to resolve from /novnc/ instead of /api/servers/N/
-      // 2. window.__ozvpsVncConfig before </head> — holds all VNC credentials in memory only
-      const config = {
-        host: wsUrl.hostname,
-        port: wsUrl.port || '443',
-        path: wsPath,
+      // Create a short-lived proxy session token.
+      // The browser only gets this opaque token — NOT the VirtFusion password or wsUrl.
+      // When noVNC connects via WebSocket (/api/vnc-ws/:token), our proxy:
+      //   1. Validates and deletes the token (one-time use)
+      //   2. Connects to VirtFusion server-side
+      //   3. Handles VNC authentication (DES challenge-response) using stored password
+      //   4. Presents "None" auth to noVNC — no password ever sent to browser
+      const proxyToken = randomBytes(32).toString('hex'); // 64-char hex
+      vncProxySessions.set(proxyToken, {
+        wsUrl: wsUrl.toString(),
         password: vncAccess.password,
+        auth0UserId: session.auth0UserId!,
+        serverId,
+        expiresAt: Date.now() + 2 * 60 * 1000, // 2 min to initiate WebSocket
+      });
+
+      // Inject two things:
+      // 1. <base href="/novnc/"> at START of <head> — fixes all relative asset paths
+      // 2. window.__ozvpsVncConfig — contains NO password, only the proxy token path
+      const appHost = req.hostname;
+      const config = {
+        host: appHost,
+        port: '443',
+        path: `api/vnc-ws/${proxyToken}`,  // Our WebSocket proxy — no creds visible
         encrypt: '1',
         autoconnect: '1',
         resize: 'scale',
         reconnect: '0',
         serverId,
+        // NO password field — browser never receives it
       };
       html = html.replace('<head>', '<head>\n<base href="/novnc/">');
       const configScript = `<script>window.__ozvpsVncConfig = ${JSON.stringify(config)};</script>`;
