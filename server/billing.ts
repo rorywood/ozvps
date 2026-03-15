@@ -644,6 +644,17 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
       const charged = await chargeServer(billing, true);
 
       if (charged) {
+        // Always advance nextBillAt to 1 month from now on reactivation.
+        // chargeServer(billing, true) does this on a real charge, but the idempotency
+        // path returns true early without updating the DB. Force-update here so the
+        // billing date is always reset and the billing job doesn't keep finding this
+        // server on every run.
+        const newNextBillAt = addMonth(new Date());
+        await db.update(serverBilling)
+          .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
+          .where(eq(serverBilling.id, billing.id));
+        log(`Server ${billing.virtfusionServerId} billing reset: status=paid, nextBillAt=${newNextBillAt.toISOString()}`, 'billing');
+
         if (billing.status === 'suspended') {
           // Unsuspend the server in VirtFusion with retry logic
           let unsuspendSuccess = false;
@@ -661,20 +672,12 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
             }
           }
 
-          if (unsuspendSuccess) {
-            // Ensure billing status is 'paid' and suspendAt is cleared even if chargeServer
-            // returned via idempotency (idempotency path skips the DB update inside chargeServer)
-            await db.update(serverBilling)
-              .set({ status: 'paid', suspendAt: null, updatedAt: new Date() })
-              .where(eq(serverBilling.id, billing.id));
-            log(`Server ${billing.virtfusionServerId} billing status updated to paid after reactivation`, 'billing');
-          } else {
+          if (!unsuspendSuccess) {
             // All retries failed — refund the charge and revert billing status
             log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
 
             const serverName = await getServerName(billing.virtfusionServerId);
 
-            // Refund the wallet - add back the charged amount
             await db.update(wallets)
               .set({
                 balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
@@ -682,7 +685,6 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
               })
               .where(eq(wallets.auth0UserId, billing.auth0UserId));
 
-            // Record refund transaction
             await db.insert(walletTransactions).values({
               auth0UserId: billing.auth0UserId,
               type: 'refund',
@@ -694,11 +696,12 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
               },
             });
 
-            // Remove the ledger entry so future retries can charge again
+            // Remove the ledger entry so future retries can charge again with a fresh key
             const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
             await db.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
 
-            // Revert billing status to suspended
+            // Revert to suspended — nextBillAt stays at newNextBillAt so the next
+            // retry uses a fresh idempotency key and charges correctly
             await db.update(serverBilling)
               .set({ status: 'suspended', updatedAt: new Date() })
               .where(eq(serverBilling.id, billing.id));
@@ -706,8 +709,6 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
             log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
           }
         }
-        // For unpaid (not yet VirtFusion-suspended) servers, chargeServer already updated
-        // billing status to 'paid' — nothing else to do.
       }
     } catch (error: any) {
       log(`Error reactivating server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
