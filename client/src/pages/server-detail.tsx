@@ -55,7 +55,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { OsTemplateRow } from "@/components/os-template-row";
 import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
-import { ReinstallProgressPanel } from "@/components/reinstall-progress-panel";
 import { SetupProgressChecklist } from "@/components/setup-progress-checklist";
 import { useReinstallTask } from "@/hooks/use-reinstall-task";
 import { useConsoleLock } from "@/hooks/use-console-lock";
@@ -1180,28 +1179,24 @@ export default function ServerDetail() {
 
   // If server is being provisioned, show full-page provisioning view (DO style)
   if (isSettingUp) {
+    const setupServerName = server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server';
     return (
       <AppShell>
-        <div className="max-w-3xl mx-auto py-12 space-y-8">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
+        <div className="max-w-lg mx-auto py-12 space-y-6">
+          <div className="flex items-center gap-3">
             <Link href="/servers">
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
-              </h1>
-              <p className="text-sm text-muted-foreground">{server?.primaryIp}</p>
+              <h1 className="text-xl font-bold text-foreground">{setupServerName}</h1>
+              <p className="text-sm text-muted-foreground">{server?.primaryIp || 'Provisioning…'}</p>
             </div>
           </div>
-
-          {/* Full-page provisioning view */}
           <SetupProgressChecklist
             state={reinstallTask}
-            serverName={server?.name && !/^Server\s+\d+$/i.test(server.name.trim()) ? server.name : 'New Server'}
+            serverName={setupServerName}
             onDismiss={() => {
               reinstallTask.reset();
               updateSetupMode(false);
@@ -1228,8 +1223,46 @@ export default function ServerDetail() {
     );
   }
 
-  // If server has a pending_approval cancellation, show pending review state
-  if (activeCancellation?.status === 'pending_approval') {
+  // Reinstall in progress — full-page experience (same as initial setup)
+  if (reinstallTask.isActive && !isSetupMode) {
+    return (
+      <AppShell>
+        <div className="max-w-lg mx-auto py-12 space-y-6">
+          <div className="flex items-center gap-3">
+            <Link href="/servers">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">{server.name}</h1>
+              <p className="text-sm text-muted-foreground">{server.primaryIp}</p>
+            </div>
+          </div>
+          <SetupProgressChecklist
+            state={reinstallTask}
+            serverName={server.name}
+            isReinstall
+            onDismiss={() => {
+              reinstallTask.reset();
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+              setActiveTab('overview');
+            }}
+            onClose={() => {
+              reinstallTask.reset();
+              queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+              queryClient.invalidateQueries({ queryKey: ['servers'] });
+            }}
+          />
+        </div>
+      </AppShell>
+    );
+  }
+
+  // If server has a pending_approval cancellation for IMMEDIATE mode, show locked state
+  // Scheduled mode pending_approval: fall through to normal page so user can cancel
+  if (activeCancellation?.status === 'pending_approval' && activeCancellation?.mode === 'immediate') {
     return (
       <AppShell>
         <div className="max-w-2xl mx-auto py-12">
@@ -1261,10 +1294,10 @@ export default function ServerDetail() {
                 <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-1">
-                    Deletion Request Pending Admin Review
+                    Immediate Deletion Pending Admin Review
                   </h3>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Your request to delete <span className="font-medium text-foreground">{server.name}</span> has been received and is awaiting admin approval before proceeding.
+                    Your request to immediately delete <span className="font-medium text-foreground">{server.name}</span> has been received and is awaiting admin approval before proceeding.
                   </p>
                   <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 space-y-2">
                     <p className="text-sm font-medium text-orange-300">Made a mistake?</p>
@@ -2436,34 +2469,7 @@ export default function ServerDetail() {
           <TabsContent value="destroy" className="space-y-6 animate-in fade-in duration-300">
 
             {/* Reinstall Section */}
-            {reinstallTask.isActive && !isSetupMode ? (
-              // Show progress panel when reinstalling
-              <Card className="overflow-hidden border-blue-500/30">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <RefreshCw className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white">Reinstalling Server</h3>
-                      <p className="text-sm text-white/80">{server.name}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <ReinstallProgressPanel
-                    state={reinstallTask}
-                    onDismiss={() => {
-                      reinstallTask.reset();
-                      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-                      setActiveTab('overview');
-                    }}
-                  />
-                </div>
-              </Card>
-            ) : (
-              // Show normal reinstall card
-              <Card className="p-6 border-destructive/30">
+            <Card className="p-6 border-destructive/30">
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-blue-500/20 rounded-xl">
@@ -2538,8 +2544,7 @@ export default function ServerDetail() {
                     </p>
                   )}
                 </div>
-              </Card>
-            )}
+            </Card>
 
             {/* Destroy Server Section - DigitalOcean Style */}
             <Card className="p-6 border-destructive/50">
@@ -2579,7 +2584,11 @@ export default function ServerDetail() {
                           </div>
                           <div>
                             <h3 className="text-xl font-bold text-amber-400">Scheduled for Destruction</h3>
-                            <p className="text-sm text-muted-foreground">You can cancel this before the scheduled date</p>
+                            <p className="text-sm text-muted-foreground">
+                              {cancellationData.cancellation.status === 'pending_approval'
+                                ? 'Pending admin review — you can still cancel this request'
+                                : 'You can cancel this before the scheduled date'}
+                            </p>
                           </div>
                         </div>
 
