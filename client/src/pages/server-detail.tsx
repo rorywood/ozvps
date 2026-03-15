@@ -127,7 +127,7 @@ export default function ServerDetail() {
       </AppShell>
     );
   }
-  const [reinstallDialogOpen, setReinstallDialogOpen] = useState(false);
+  const [showReinstallPage, setShowReinstallPage] = useState(false);
   const [selectedOs, setSelectedOs] = useState<string>("");
   const [hostname, setHostname] = useState<string>("");
   const [hostnameError, setHostnameError] = useState<string>("");
@@ -296,10 +296,10 @@ export default function ServerDetail() {
     enabled: !!serverId
   });
 
-  const { data: osTemplates } = useQuery({
+  const { data: osTemplates, isLoading: loadingReinstallTemplates } = useQuery({
     queryKey: ['reinstall-templates', serverId],
     queryFn: () => api.getReinstallTemplates(serverId || ''),
-    enabled: !!serverId && reinstallDialogOpen
+    enabled: !!serverId && showReinstallPage
   });
   
   // Fetch OS templates for initial setup (when server needs setup)
@@ -570,7 +570,7 @@ export default function ServerDetail() {
       setHostnameError("");
       setOsSearchQuery("");
       setSelectedCategory("All");
-      setReinstallDialogOpen(false);
+      setShowReinstallPage(false);
       
       // Mark as reinstall mode (not initial setup)
       updateSetupMode(false);
@@ -1411,6 +1411,240 @@ export default function ServerDetail() {
               </li>
             </ul>
           </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Reinstall OS picker — full-page experience
+  if (showReinstallPage) {
+    const selectedTemplate = allTemplates.find(t => t.id.toString() === selectedOs);
+    const closeReinstallPage = () => {
+      setShowReinstallPage(false);
+      setSelectedOs("");
+      setHostname("");
+      setHostnameError("");
+      setOsSearchQuery("");
+      setSelectedCategory("All");
+    };
+
+    return (
+      <AppShell>
+        <div className="max-w-7xl mx-auto py-6 px-2 sm:px-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                onClick={closeReinstallPage}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Reinstall Server</h1>
+                <p className="text-sm text-muted-foreground font-mono">
+                  {server.name} · {server.primaryIp}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Two-column layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8 items-start">
+            {/* LEFT: OS selection */}
+            <div className="space-y-4">
+              <h2 className="text-base font-semibold text-foreground">
+                Choose an Operating System
+              </h2>
+
+              {/* Search + category filter */}
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={osSearchQuery}
+                    onChange={(e) => setOsSearchQuery(e.target.value)}
+                    placeholder="Search templates..."
+                    className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                    data-testid="input-os-search"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                        selectedCategory === cat
+                          ? "bg-primary text-foreground"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                      data-testid={`button-category-${cat.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* OS grid */}
+              {loadingReinstallTemplates ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-24 rounded-xl bg-muted/30 border border-border animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : filteredTemplates.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredTemplates.map((template) => (
+                    <ReinstallOsCard
+                      key={template.uuid || template.id}
+                      template={template}
+                      isSelected={selectedOs === template.id.toString()}
+                      onSelect={() => setSelectedOs(template.id.toString())}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16 text-muted-foreground">
+                  <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-muted-foreground/40" />
+                  <p className="font-medium">No templates found</p>
+                  {osSearchQuery && (
+                    <p className="text-sm mt-1">Try a different search term</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: Configuration sidebar */}
+            <div className="lg:sticky lg:top-6 space-y-4">
+              {/* Server info */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
+                  Server
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-muted rounded-lg">
+                    <Server className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground truncate">{server.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {server.primaryIp}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hostname */}
+              <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground">
+                    Hostname <span className="text-destructive">*</span>
+                  </label>
+                  {server?.name && hostname !== server.name && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHostname(server.name);
+                        setHostnameError('');
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="button-use-current-hostname"
+                    >
+                      Use current
+                    </button>
+                  )}
+                </div>
+                <Input
+                  value={hostname}
+                  onChange={(e) => handleHostnameChange(e.target.value)}
+                  placeholder="e.g., myserver"
+                  className={cn(
+                    "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground",
+                    hostnameError && "border-destructive/50 focus-visible:ring-destructive"
+                  )}
+                  data-testid="input-hostname"
+                />
+                {hostnameError ? (
+                  <p className="text-xs text-destructive">{hostnameError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Letters, numbers, hyphens only
+                  </p>
+                )}
+              </div>
+
+              {/* Selected OS */}
+              <div className={cn(
+                "bg-card border rounded-xl p-4 transition-all",
+                selectedTemplate ? "border-primary/40" : "border-border opacity-50"
+              )}>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
+                  Selected OS
+                </p>
+                {selectedTemplate ? (
+                  <div className="flex items-center gap-3">
+                    <ReinstallOsLogo template={selectedTemplate} size="sm" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground text-sm truncate">
+                        {selectedTemplate.name}
+                      </div>
+                      {(selectedTemplate.version || selectedTemplate.variant) && (
+                        <div className="text-xs text-muted-foreground">
+                          {[selectedTemplate.version, selectedTemplate.variant ? `(${selectedTemplate.variant})` : null].filter(Boolean).join(' ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">None selected</p>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-destructive">All data will be erased</p>
+                  <p className="text-muted-foreground text-xs mt-0.5">
+                    Make sure to back up any important files before continuing.
+                  </p>
+                </div>
+              </div>
+
+              {/* Install button */}
+              <Button
+                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-base disabled:opacity-50"
+                onClick={handleReinstall}
+                disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
+                data-testid="button-confirm-reinstall"
+              >
+                {reinstallMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Installing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-5 w-5 mr-2" />
+                    Reinstall Server
+                  </>
+                )}
+              </Button>
+              {!selectedOs && (
+                <p className="text-xs text-muted-foreground text-center -mt-2">
+                  Select an OS to continue
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </AppShell>
     );
@@ -2523,9 +2757,8 @@ export default function ServerDetail() {
                         : "bg-blue-600 hover:bg-blue-700 text-white"
                     )}
                     onClick={() => {
-                      // Pre-fill hostname with current server name
                       setHostname(server?.name || '');
-                      setReinstallDialogOpen(true);
+                      setShowReinstallPage(true);
                     }}
                     disabled={isSuspended || isTrialEnded || !!cancellationData?.cancellation}
                     data-testid="button-reinstall"
@@ -2791,169 +3024,6 @@ export default function ServerDetail() {
       </div>
       {/* End of main wrapper (space-y-6 pb-20) */}
 
-      {/* Reinstall Dialog - Searchable Template Picker */}
-      <Dialog open={reinstallDialogOpen} onOpenChange={(open) => {
-        setReinstallDialogOpen(open);
-        if (!open) {
-          setSelectedOs("");
-          setHostname("");
-          setHostnameError("");
-          setOsSearchQuery("");
-          setSelectedCategory("All");
-        }
-      }}>
-        <DialogContent className="bg-background border-border text-foreground max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="p-6 pb-4 border-b border-border">
-            <DialogTitle className="text-xl">Reinstall Server</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Select an operating system to install on your server.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Warning Banner */}
-          <div className="mx-6 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-red-400">Warning: All data will be erased</p>
-              <p className="text-xs text-red-400/80 mt-0.5">
-                Reinstalling will completely wipe the disk. Make sure to backup any important data first.
-              </p>
-            </div>
-          </div>
-
-          {/* Hostname Input - Required */}
-          <div className="px-6 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-foreground">
-                Hostname <span className="text-red-400">*</span>
-              </label>
-              {server?.name && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHostname(server.name);
-                    setHostnameError('');
-                  }}
-                  className={cn(
-                    "text-xs px-2 py-1 rounded transition-colors",
-                    hostname === server?.name
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  )}
-                  data-testid="button-use-current-hostname"
-                >
-                  {hostname === server?.name ? 'Using current hostname' : 'Use current hostname'}
-                </button>
-              )}
-            </div>
-            <Input
-              value={hostname}
-              onChange={(e) => handleHostnameChange(e.target.value)}
-              placeholder="e.g., myserver"
-              className={cn(
-                "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground",
-                hostnameError && "border-red-500/50 focus-visible:ring-red-500"
-              )}
-              data-testid="input-hostname"
-            />
-            {hostnameError ? (
-              <p className="text-xs text-red-400 mt-1">{hostnameError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">
-                Enter a hostname (e.g., server01) or full domain (e.g., server01.example.com)
-              </p>
-            )}
-          </div>
-          
-          {/* Search and Category Filter */}
-          <div className="px-6 pt-4 space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={osSearchQuery}
-                onChange={(e) => setOsSearchQuery(e.target.value)}
-                placeholder="Search templates..."
-                className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
-                data-testid="input-os-search"
-              />
-            </div>
-            
-            <div className="flex flex-wrap gap-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                    selectedCategory === cat
-                      ? "bg-primary text-foreground"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                  data-testid={`button-category-${cat.toLowerCase().replace(/[^a-z]/g, '-')}`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Template List */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {filteredTemplates.length > 0 ? (
-              <div className="space-y-2">
-                {filteredTemplates.map((template) => (
-                  <OsTemplateRow
-                    key={template.uuid || template.id}
-                    template={template}
-                    isSelected={selectedOs === template.id.toString()}
-                    onSelect={() => setSelectedOs(template.id.toString())}
-                  />
-                ))}
-              </div>
-            ) : osTemplates && osTemplates.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-yellow-500" />
-                <p className="font-medium">No OS templates available</p>
-                <p className="text-sm mt-1">There are no templates available for this server.</p>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <p>No operating systems found matching your search.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Footer with Install Button */}
-          <div className="border-t border-border p-6">
-            <Button
-              className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold text-white disabled:opacity-50"
-              onClick={handleReinstall}
-              disabled={!selectedOs || !isHostnameValid || reinstallMutation.isPending}
-              data-testid="button-confirm-reinstall"
-            >
-              {reinstallMutation.isPending ? (
-                <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  Installing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-5 w-5 mr-2" />
-                  Reinstall Server
-                </>
-              )}
-            </Button>
-            {!isHostnameValid && hostname.trim() === '' && (
-              <p className="text-xs text-muted-foreground text-center mt-2">
-                Enter a hostname to continue
-              </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Provisioning dialog removed - now showing full-page view */}
-
       {/* Password Reset Dialog */}
       <Dialog
         open={passwordResetDialogOpen}
@@ -3206,6 +3276,82 @@ export default function ServerDetail() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+// ── Reinstall page OS tile ──────────────────────────────────────────────────
+
+function ReinstallOsCard({
+  template,
+  isSelected,
+  onSelect,
+}: {
+  template: OsTemplateType;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const logoUrl = imgError ? FALLBACK_LOGO : getOsLogoUrl(template);
+  const displayVersion = [
+    template.version,
+    template.variant ? `(${template.variant})` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "relative flex flex-col items-center gap-2.5 p-4 rounded-xl border-2 transition-all text-center w-full",
+        isSelected
+          ? "border-primary bg-primary/10 shadow-sm shadow-primary/10"
+          : "border-border bg-card hover:border-primary/40 hover:bg-muted/30"
+      )}
+      data-testid={`button-os-${template.id}`}
+    >
+      {isSelected && (
+        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+          <Check className="w-3 h-3 text-white" />
+        </div>
+      )}
+      <img
+        src={logoUrl}
+        alt={template.name}
+        loading="lazy"
+        onError={() => setImgError(true)}
+        className="w-10 h-10 object-contain"
+      />
+      <div className="w-full">
+        <div className="text-sm font-medium text-foreground leading-tight">
+          {template.name}
+        </div>
+        {displayVersion && (
+          <div className="text-xs text-muted-foreground mt-0.5">{displayVersion}</div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function ReinstallOsLogo({
+  template,
+  size = 'md',
+}: {
+  template: OsTemplateType;
+  size?: 'sm' | 'md';
+}) {
+  const [imgError, setImgError] = useState(false);
+  const logoUrl = imgError ? FALLBACK_LOGO : getOsLogoUrl(template);
+  const sizeClass = size === 'sm' ? 'w-7 h-7' : 'w-10 h-10';
+  return (
+    <img
+      src={logoUrl}
+      alt={template.name}
+      loading="lazy"
+      onError={() => setImgError(true)}
+      className={cn(sizeClass, 'object-contain flex-shrink-0')}
+    />
   );
 }
 
