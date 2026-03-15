@@ -990,9 +990,18 @@ const UI = {
     // Passing null as code falls back to legacy keyEvent which QEMU ignores.
     clipboardTypeText() {
         const text = document.getElementById('noVNC_clipboard_text').value;
-        if (!text || !UI.rfb) return;
+        if (!text) {
+            UI.showStatus('Clipboard is empty', 'warn', 2000);
+            return;
+        }
+        if (!UI.rfb) {
+            UI.showStatus('Not connected to remote', 'error', 3000);
+            return;
+        }
 
         UI.closeClipboardPanel();
+        UI.rfb.focus({ preventScroll: true });
+        UI.showStatus('Typing ' + text.length + ' character' + (text.length > 1 ? 's' : '') + '...', 'normal', text.length * 30 + 1000);
 
         // Full ASCII printable map: keysym, DOM code, needs-shift
         const CM = {
