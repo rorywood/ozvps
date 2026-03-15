@@ -95,18 +95,24 @@
         let path = wsUrl.pathname.replace(/^\//, '');
         if (wsUrl.search) path += wsUrl.search;
 
-        const qp = new URLSearchParams(window.location.search);
+        // SECURITY: Store sensitive credentials in memory only — never in URL or hash.
+        // webutil.js getConfigVar() checks window.__ozvpsVncConfig first.
+        window.__ozvpsVncConfig = {
+          path,
+          password: creds.password,
+        };
+
+        // Build clean URL with only non-sensitive connection params (host/port/encrypt)
+        const qp = new URLSearchParams();
         qp.set('host', wsUrl.hostname);
         qp.set('port', wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'));
         qp.set('encrypt', wsUrl.protocol === 'wss:' ? '1' : '0');
         qp.set('autoconnect', '1');
         qp.set('resize', 'scale');
         qp.set('reconnect', '0');
-        qp.delete('vncToken'); // Remove token — credentials are now in memory only
-
-        const hp = new URLSearchParams({ path, password: creds.password });
-        // Replace URL without reload: credentials only in hash fragment, token removed
-        history.replaceState(null, '', window.location.pathname + '?' + qp.toString() + '#' + hp.toString());
+        qp.set('serverId', serverId || '');
+        // Replace URL with no hash — password and WebSocket path are in memory only
+        history.replaceState(null, '', window.location.pathname + '?' + qp.toString());
       }
 
       // Load noVNC UI — reads connection params from URL hash set above

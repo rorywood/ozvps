@@ -58,8 +58,13 @@ export function getHashVar(name, defVal) {
 
 // Read a variable from the fragment or the query string
 // Fragment takes precedence
+// OzVPS: window.__ozvpsVncConfig takes highest precedence — keeps credentials out of URL
 export function getConfigVar(name, defVal) {
     "use strict";
+    if (window.__ozvpsVncConfig && Object.prototype.hasOwnProperty.call(window.__ozvpsVncConfig, name)) {
+        return window.__ozvpsVncConfig[name];
+    }
+
     const val = getHashVar(name);
 
     if (val === null) {
