@@ -6627,7 +6627,9 @@ export async function registerRoutes(
         log(`Provisioning failed for order ${order.id}: ${provisionError.message}`, 'api');
 
         // Refund the wallet - server was never created
-        await dbStorage.refundToWallet(auth0UserId, plan.priceMonthly, {
+        // Use finalPriceCents (not plan.priceMonthly) to refund exactly what was charged,
+        // which may be less if a promo code was applied.
+        await dbStorage.refundToWallet(auth0UserId, finalPriceCents, {
           reason: 'provisioning_failed',
           orderId: order.id,
         });
