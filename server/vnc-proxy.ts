@@ -2,13 +2,10 @@
  * OzVPS VNC WebSocket Proxy
  *
  * Proxies the VNC console WebSocket connection between noVNC (browser) and
- * VirtFusion's websockify. Critically, the VNC authentication (RFB protocol
- * type 2 DES challenge-response) is handled entirely server-side using the
- * stored password — the browser never receives or needs the password.
+ * VirtFusion's websockify. VNC authentication (RFB type 2 DES challenge-response)
+ * is handled entirely server-side — the browser never receives the password.
  *
  * noVNC is presented with "None" security (type 1) — no password required.
- * The server handles VirtFusion auth, then passes all subsequent RFB bytes
- * through unmodified.
  */
 
 import WebSocket, { WebSocketServer } from 'ws';
@@ -18,7 +15,6 @@ import type { Socket } from 'net';
 import { log } from './log';
 
 // Short-lived proxy sessions: opaque token → VirtFusion credentials
-// Browser only ever sees the token (embedded in WebSocket path), never the password.
 export const vncProxySessions = new Map<string, {
   wsUrl: string;
   password: string;
@@ -27,7 +23,7 @@ export const vncProxySessions = new Map<string, {
   expiresAt: number;
 }>();
 
-// Clean up any expired sessions
+// Clean up expired sessions every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [token, s] of vncProxySessions) {
@@ -39,10 +35,6 @@ setInterval(() => {
 // RFB / VNC authentication helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Prepare an 8-byte DES key from the VNC password.
- * VNC's DES variant reverses the bit order within each byte.
- */
 function makeVncDesKey(password: string): Buffer {
   const key = Buffer.alloc(8, 0);
   for (let i = 0; i < 8 && i < password.length; i++) {
@@ -56,7 +48,6 @@ function makeVncDesKey(password: string): Buffer {
   return key;
 }
 
-/** Encrypt a 16-byte VNC challenge with the password using DES-ECB. */
 function vncEncryptChallenge(challenge: Buffer, password: string): Buffer {
   const key = makeVncDesKey(password);
   const cipher = crypto.createCipheriv('des-ecb', key, Buffer.alloc(0));
@@ -67,8 +58,6 @@ function vncEncryptChallenge(challenge: Buffer, password: string): Buffer {
 // ---------------------------------------------------------------------------
 // Buffered async reader for WebSocket data
 // ---------------------------------------------------------------------------
-// WebSocket messages are variable-length, but RFB expects exact byte counts.
-// This reader buffers incoming data and lets us await exactly N bytes.
 
 function createReader(ws: WebSocket) {
   let buf = Buffer.alloc(0);
@@ -93,6 +82,7 @@ function createReader(ws: WebSocket) {
   }
 
   const onMessage = (data: Buffer | string) => {
+    // Handle both binary frames (Buffer) and base64 text frames (legacy websockify)
     const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data as string, 'base64');
     buf = Buffer.concat([buf, chunk]);
     drain();
@@ -109,7 +99,6 @@ function createReader(ws: WebSocket) {
         drain();
       });
     },
-    /** Stop buffering and return any unread data (call before switching to direct proxy). */
     stop(): Buffer {
       ws.off('message', onMessage);
       const remaining = buf;
@@ -123,11 +112,6 @@ function createReader(ws: WebSocket) {
 // WebSocket upgrade handler
 // ---------------------------------------------------------------------------
 
-/**
- * Handle an HTTP upgrade request for /api/vnc-ws/:token.
- * Returns true if the request was handled (whether successfully or not),
- * false if the URL does not match our pattern.
- */
 export async function handleVncUpgrade(
   req: IncomingMessage,
   socket: Socket,
@@ -138,19 +122,29 @@ export async function handleVncUpgrade(
   if (!match) return false;
 
   const token = match[1];
+  log(`VNC upgrade: token=${token.slice(0, 8)}...`, 'vnc');
+
   const session = vncProxySessions.get(token);
 
-  if (!session || Date.now() > session.expiresAt) {
-    vncProxySessions.delete(token);
+  if (!session) {
+    log(`VNC upgrade: token not found (already used or expired)`, 'vnc');
     socket.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n');
     socket.destroy();
     return true;
   }
 
-  // One-time use — delete immediately so the token can't be replayed
-  vncProxySessions.delete(token);
+  if (Date.now() > session.expiresAt) {
+    log(`VNC upgrade: token expired for server ${session.serverId}`, 'vnc');
+    vncProxySessions.delete(token);
+    socket.write('HTTP/1.1 410 Gone\r\nContent-Length: 0\r\n\r\n');
+    socket.destroy();
+    return true;
+  }
 
+  // One-time use
+  vncProxySessions.delete(token);
   const { wsUrl, password, serverId } = session;
+  log(`VNC upgrade: accepted for server ${serverId}, connecting to VirtFusion...`, 'vnc');
 
   const wss = new WebSocketServer({ noServer: true });
   wss.handleUpgrade(req, socket, head, (clientWs) => {
@@ -160,118 +154,132 @@ export async function handleVncUpgrade(
   return true;
 }
 
-/** Main proxy logic, runs after the client WebSocket upgrade is accepted. */
+/** Main proxy logic — called after the browser WebSocket upgrade is accepted. */
 async function doProxy(
   clientWs: WebSocket,
   wsUrl: string,
   password: string,
   serverId: string,
 ): Promise<void> {
-  // Connect to VirtFusion's websockify immediately.
-  // Create the reader BEFORE open fires so no messages are missed.
-  const serverWs = new WebSocket(wsUrl);
-  const serverReader = createReader(serverWs);
-  const clientReader = createReader(clientWs);
-
+  let done = false;
   const cleanup = (reason?: string) => {
+    if (done) return;
+    done = true;
     if (clientWs.readyState !== WebSocket.CLOSED) clientWs.close(1011, reason || 'Console ended');
     if (serverWs.readyState !== WebSocket.CLOSED) serverWs.close();
   };
 
-  clientWs.on('error', () => cleanup());
+  // Connect to VirtFusion's websockify.
+  // Create reader BEFORE open fires so no messages are missed.
+  const serverWs = new WebSocket(wsUrl);
+  const serverReader = createReader(serverWs);
+  const clientReader = createReader(clientWs);
+
   serverWs.on('error', (err) => {
-    log(`VNC proxy server error (server ${serverId}): ${err.message}`, 'vnc');
+    if (!done) log(`VNC proxy: VirtFusion error for server ${serverId}: ${err.message}`, 'vnc');
     cleanup('VNC server connection failed');
   });
+  clientWs.on('error', () => cleanup());
 
   try {
-    // Wait for the VirtFusion WebSocket to open
+    // Wait for VirtFusion WebSocket to open
     await new Promise<void>((resolve, reject) => {
       serverWs.once('open', resolve);
       serverWs.once('error', reject);
     });
+    log(`VNC proxy: connected to VirtFusion for server ${serverId}`, 'vnc');
 
-    // -------------------------------------------------------------------------
-    // Phase 1: Authenticate with VirtFusion (server side)
-    // -------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Phase 1: Authenticate with VirtFusion server-side
+    // -----------------------------------------------------------------------
 
-    // Version handshake — accept whatever version VirtFusion sends, respond with 3.8
+    // Version handshake — ALL data sent as binary Buffers (never strings)
     const serverVersionBuf = await serverReader.read(12);
-    const serverVersionStr = serverVersionBuf.toString('ascii');
-    const isRfb33 = serverVersionStr.startsWith('RFB 003.003');
-    serverWs.send('RFB 003.008\n');
+    const serverVersionStr = serverVersionBuf.toString('ascii').trim();
+    log(`VNC proxy: VirtFusion RFB version: ${serverVersionStr}`, 'vnc');
+
+    const isRfb33 = serverVersionStr === 'RFB 003.003';
+    serverWs.send(Buffer.from('RFB 003.008\n'));
 
     let chosenSecType: number;
 
     if (isRfb33) {
-      // RFB 3.3: server dictates security type (4 bytes), no client selection
-      const secType = (await serverReader.read(4)).readUInt32BE(0);
+      // RFB 3.3: server sends 4-byte security type directly
+      const secTypeBuf = await serverReader.read(4);
+      const secType = secTypeBuf.readUInt32BE(0);
+      log(`VNC proxy: RFB 3.3 security type: ${secType}`, 'vnc');
       if (secType === 0) {
         const errLen = (await serverReader.read(4)).readUInt32BE(0);
-        const errMsg = (await serverReader.read(errLen)).toString('utf8');
-        throw new Error(`VirtFusion refused: ${errMsg}`);
+        const errMsg = errLen > 0 ? (await serverReader.read(errLen)).toString('utf8') : 'unknown';
+        throw new Error(`VirtFusion refused connection: ${errMsg}`);
       }
       chosenSecType = secType;
+      // RFB 3.3: no security type selection from client
     } else {
       // RFB 3.7/3.8: server sends [count, type1, type2, ...]
       const secCount = (await serverReader.read(1))[0];
+      log(`VNC proxy: RFB 3.8 security types count: ${secCount}`, 'vnc');
       if (secCount === 0) {
         const errLen = (await serverReader.read(4)).readUInt32BE(0);
-        const errMsg = (await serverReader.read(errLen)).toString('utf8');
-        throw new Error(`VirtFusion refused: ${errMsg}`);
+        const errMsg = errLen > 0 ? (await serverReader.read(errLen)).toString('utf8') : 'unknown';
+        throw new Error(`VirtFusion refused connection: ${errMsg}`);
       }
       const secTypes = await serverReader.read(secCount);
+      log(`VNC proxy: security types offered: [${Array.from(secTypes).join(',')}]`, 'vnc');
 
-      // Prefer VNC auth (type 2) if available
+      // Prefer VNC auth (type 2), fall back to None (type 1)
       chosenSecType = 1;
       for (let i = 0; i < secCount; i++) {
         if (secTypes[i] === 2) { chosenSecType = 2; break; }
       }
+      log(`VNC proxy: selecting security type ${chosenSecType}`, 'vnc');
       serverWs.send(Buffer.from([chosenSecType]));
     }
 
     if (chosenSecType === 2) {
       // VNC Authentication: DES challenge-response
       const challenge = await serverReader.read(16);
+      log(`VNC proxy: received VNC auth challenge, responding with DES...`, 'vnc');
       serverWs.send(vncEncryptChallenge(challenge, password));
     }
-    // type 1 (None): no auth needed
 
-    // Security result (only in RFB 3.8, or 3.3 with VNC auth)
+    // Security result for RFB 3.8+ (and RFB 3.3 with VNC auth)
     if (!isRfb33 || chosenSecType === 2) {
       const result = await serverReader.read(4);
-      if (result.readUInt32BE(0) !== 0) {
-        // RFB 3.8 includes a reason string on failure
+      const resultCode = result.readUInt32BE(0);
+      if (resultCode !== 0) {
+        let errMsg = `code ${resultCode}`;
         try {
           const errLen = (await serverReader.read(4)).readUInt32BE(0);
-          const errMsg = (await serverReader.read(errLen)).toString('utf8');
-          throw new Error(`VNC auth failed: ${errMsg}`);
-        } catch {
-          throw new Error('VNC authentication failed');
-        }
+          if (errLen > 0 && errLen < 1024) {
+            errMsg = (await serverReader.read(errLen)).toString('utf8');
+          }
+        } catch {}
+        throw new Error(`VNC auth failed: ${errMsg}`);
       }
+      log(`VNC proxy: VirtFusion auth successful`, 'vnc');
     }
 
-    // -------------------------------------------------------------------------
-    // Phase 2: Negotiate with noVNC (client side) — present "None" auth
-    // -------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Phase 2: Negotiate with noVNC — present "None" auth (no password needed)
+    // -----------------------------------------------------------------------
+    log(`VNC proxy: starting client negotiation for server ${serverId}`, 'vnc');
 
-    // Send RFB version to noVNC
-    clientWs.send('RFB 003.008\n');
-    await clientReader.read(12); // client's version response
+    clientWs.send(Buffer.from('RFB 003.008\n'));
+    const clientVersionBuf = await clientReader.read(12);
+    log(`VNC proxy: noVNC sent version: ${clientVersionBuf.toString('ascii').trim()}`, 'vnc');
 
-    // Offer only security type 1 (None) — no password required
-    clientWs.send(Buffer.from([0x01, 0x01]));  // count=1, type=1
-    await clientReader.read(1);                 // client selects type 1
+    // Offer only security type 1 (None)
+    clientWs.send(Buffer.from([0x01, 0x01]));   // count=1, type=1 (None)
+    const clientChoice = await clientReader.read(1);
+    log(`VNC proxy: noVNC selected security type: ${clientChoice[0]}`, 'vnc');
 
     // Security result: OK
     clientWs.send(Buffer.from([0x00, 0x00, 0x00, 0x00]));
 
-    // -------------------------------------------------------------------------
-    // Phase 3: Bidirectional proxy — pass all RFB bytes through unchanged
-    // -------------------------------------------------------------------------
-
-    // Stop buffering; flush any data that accumulated during the handshake
+    // -----------------------------------------------------------------------
+    // Phase 3: Bidirectional proxy
+    // -----------------------------------------------------------------------
     const serverLeftover = serverReader.stop();
     const clientLeftover = clientReader.stop();
 
@@ -282,7 +290,6 @@ async function doProxy(
       serverWs.send(clientLeftover);
     }
 
-    // Direct proxy for all subsequent messages
     serverWs.on('message', (data) => {
       if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data as Buffer);
     });
@@ -290,13 +297,13 @@ async function doProxy(
       if (serverWs.readyState === WebSocket.OPEN) serverWs.send(data as Buffer);
     });
 
-    serverWs.on('close', () => { if (clientWs.readyState !== WebSocket.CLOSED) clientWs.close(); });
-    clientWs.on('close', () => { if (serverWs.readyState !== WebSocket.CLOSED) serverWs.close(); });
+    serverWs.on('close', () => cleanup());
+    clientWs.on('close', () => cleanup());
 
-    log(`VNC proxy active for server ${serverId}`, 'security');
+    log(`VNC proxy ACTIVE for server ${serverId}`, 'security');
 
   } catch (err: any) {
-    log(`VNC proxy auth failed for server ${serverId}: ${err.message}`, 'vnc');
+    log(`VNC proxy FAILED for server ${serverId}: ${err.message}`, 'vnc');
     cleanup('Console connection failed. Please try again.');
   }
 }

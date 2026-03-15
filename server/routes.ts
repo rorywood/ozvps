@@ -3511,8 +3511,13 @@ export async function registerRoutes(
       //    host/port/encrypt are intentionally OMITTED so noVNC uses window.location
       //    defaults (correct hostname regardless of NGINX proxying).
       html = html.replace('<head>', '<head>\n<base href="/novnc/">');
-      // Inject as JS (not JSON) so we can reference window.location for host/port/encrypt
+      // Inject as JS (not JSON) so host/port/encrypt use window.location at runtime.
+      // This prevents stale localStorage values from overriding the correct connection target.
+      // Only path (the proxy token) and serverId are hardcoded server-side.
       const configScript = `<script>window.__ozvpsVncConfig = {
+  host: window.location.hostname,
+  port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80'),
+  encrypt: window.location.protocol === 'https:' ? '1' : '0',
   path: ${JSON.stringify(`api/vnc-ws/${proxyToken}`)},
   autoconnect: '1',
   resize: 'scale',
