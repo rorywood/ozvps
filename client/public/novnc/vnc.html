@@ -90,19 +90,20 @@
           throw e; // Stop execution — do not load noVNC
         }
 
-        // Parse the WebSocket URL and inject connection params that noVNC reads
+        // Parse the WebSocket URL and build connection params
         const wsUrl = new URL(creds.wsUrl);
         let path = wsUrl.pathname.replace(/^\//, '');
         if (wsUrl.search) path += wsUrl.search;
 
-        // SECURITY: Store sensitive credentials in memory only — never in URL or hash.
-        // webutil.js getConfigVar() checks window.__ozvpsVncConfig first.
+        // Primary: store credentials in memory so webutil.js reads from __ozvpsVncConfig
+        // (our patch to webutil.js checks this before reading from URL/hash)
         window.__ozvpsVncConfig = {
           path,
           password: creds.password,
         };
 
-        // Build clean URL with only non-sensitive connection params (host/port/encrypt)
+        // Fallback: also put credentials in hash fragment in case webutil.js is cached
+        // without our patch. The hash is not sent to servers and only exists for this session.
         const qp = new URLSearchParams();
         qp.set('host', wsUrl.hostname);
         qp.set('port', wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'));
@@ -111,8 +112,8 @@
         qp.set('resize', 'scale');
         qp.set('reconnect', '0');
         qp.set('serverId', serverId || '');
-        // Replace URL with no hash — password and WebSocket path are in memory only
-        history.replaceState(null, '', window.location.pathname + '?' + qp.toString());
+        const hp = new URLSearchParams({ path, password: creds.password });
+        history.replaceState(null, '', window.location.pathname + '?' + qp.toString() + '#' + hp.toString());
       }
 
       // Load noVNC UI — reads connection params from URL hash set above

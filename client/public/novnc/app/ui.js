@@ -16,7 +16,7 @@ import KeyTable from "../core/input/keysym.js";
 import keysyms from "../core/input/keysymdef.js";
 import Keyboard from "../core/input/keyboard.js";
 import RFB from "../core/rfb.js";
-import * as WebUtil from "./webutil.js";
+import * as WebUtil from "./webutil.js?v=2";
 
 const PAGE_TITLE = "noVNC";
 
