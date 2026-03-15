@@ -2,13 +2,50 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../lib/api";
 import { toast } from "sonner";
-import { Search, User, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle, Send, Lock, ShieldOff, Trash2, AlertTriangle, XCircle } from "lucide-react";
+import {
+  Search, Wallet, Ban, RefreshCw, Mail, Key, LogOut, CheckCircle,
+  Send, Lock, ShieldOff, Trash2, AlertTriangle, XCircle, Loader2,
+  ArrowUpRight, ArrowDownLeft, MoreHorizontal, Users as UsersIcon,
+} from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { PromptDialog } from "../components/ui/prompt-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+
+function UserAvatar({ name, email, size = "md" }: { name?: string; email?: string; size?: "sm" | "md" | "lg" }) {
+  const initials = name
+    ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : (email?.[0] ?? "?").toUpperCase();
+  const sizeClass = size === "sm" ? "w-8 h-8 text-xs" : size === "lg" ? "w-12 h-12 text-base" : "w-9 h-9 text-sm";
+  return (
+    <div className={`${sizeClass} rounded-full bg-[hsl(210_100%_50%)/15] border border-[hsl(210_100%_50%)/25] flex items-center justify-center font-semibold text-[hsl(210_100%_65%)] shrink-0`}>
+      {initials}
+    </div>
+  );
+}
+
+function StatusBadge({ blocked, suspended }: { blocked?: boolean; suspended?: boolean }) {
+  if (blocked) return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[hsl(0_84%_60%)/15] text-[hsl(0_84%_70%)] text-xs font-medium rounded-full border border-[hsl(0_84%_60%)/25]">
+      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(0_84%_60%)] inline-block" />
+      Blocked
+    </span>
+  );
+  if (suspended) return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[hsl(14_100%_60%)/15] text-[hsl(14_100%_70%)] text-xs font-medium rounded-full border border-[hsl(14_100%_60%)/25]">
+      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(14_100%_60%)] inline-block" />
+      Suspended
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[hsl(160_84%_39%)/15] text-[hsl(160_84%_60%)] text-xs font-medium rounded-full border border-[hsl(160_84%_39%)/25]">
+      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(160_84%_39%)] inline-block" />
+      Active
+    </span>
+  );
+}
 
 export default function Users() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -17,8 +54,6 @@ export default function Users() {
   const [purgeConfirmText, setPurgeConfirmText] = useState("");
   const [purgeResults, setPurgeResults] = useState<any>(null);
   const [showPurgeResults, setShowPurgeResults] = useState(false);
-
-  // Dialog states replacing native dialogs
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
@@ -59,7 +94,7 @@ export default function Users() {
     mutationFn: ({ auth0UserId, blocked, reason }: { auth0UserId: string; blocked: boolean; reason?: string }) =>
       usersApi.blockUser(auth0UserId, blocked, reason),
     onSuccess: (_, variables) => {
-      toast.success(variables.blocked ? "Account blocked (cannot log in)" : "Account unblocked");
+      toast.success(variables.blocked ? "Account blocked" : "Account unblocked");
       queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
@@ -70,7 +105,7 @@ export default function Users() {
     mutationFn: ({ auth0UserId, suspended, reason }: { auth0UserId: string; suspended: boolean; reason?: string }) =>
       usersApi.suspendUser(auth0UserId, suspended, reason),
     onSuccess: (_, variables) => {
-      toast.success(variables.suspended ? "Account suspended (can log in but restricted)" : "Account unsuspended");
+      toast.success(variables.suspended ? "Account suspended" : "Account unsuspended");
       queryClient.invalidateQueries({ queryKey: ["user", selectedUser?.auth0UserId] });
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
@@ -95,11 +130,8 @@ export default function Users() {
       setPurgeConfirmText("");
       setPurgeResults(data);
       setShowPurgeResults(true);
-      if (data.success) {
-        toast.success("User purged successfully");
-      } else {
-        toast.warning("Purge completed with some errors");
-      }
+      if (data.success) toast.success("User purged");
+      else toast.warning("Purge completed with errors");
       setSelectedUser(null);
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
     },
@@ -115,399 +147,317 @@ export default function Users() {
   const handleAdjustWallet = () => {
     if (!userDetails?.user) return;
     const cents = Math.round(parseFloat(walletAmount) * 100);
-    if (isNaN(cents)) {
-      toast.error("Invalid amount");
-      return;
-    }
-    if (!walletDescription.trim()) {
-      toast.error("Description is required");
-      return;
-    }
-    adjustWalletMutation.mutate({
-      auth0UserId: userDetails.user.auth0UserId,
-      amountCents: cents,
-      description: walletDescription.trim(),
-    });
+    if (isNaN(cents)) { toast.error("Invalid amount"); return; }
+    if (!walletDescription.trim()) { toast.error("Description is required"); return; }
+    adjustWalletMutation.mutate({ auth0UserId: userDetails.user.auth0UserId, amountCents: cents, description: walletDescription.trim() });
     setShowAdjustWalletDialog(false);
     setWalletAmount("");
     setWalletDescription("");
   };
 
-  const formatCurrency = (cents: number) =>
+  const fmt = (cents: number) =>
     new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
+
+  const txLabel = (tx: any) => {
+    if (tx.type === "adjustment_credit") return tx.metadata?.description || "Credit Added";
+    if (tx.type === "adjustment_debit") return tx.metadata?.description || "Balance Deducted";
+    if (tx.type === "credit") return "Wallet Top-Up";
+    if (tx.type === "debit") return tx.metadata?.description || "Server Charge";
+    if (tx.type === "refund") return "Refund";
+    return tx.type?.replace(/_/g, " ");
+  };
 
   return (
     <div>
+      {/* Page header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Users</h1>
+        <div>
+          <h1 className="text-xl font-semibold text-white">Users</h1>
+          {allUsers?.pagination && (
+            <p className="text-sm text-white/40 mt-0.5">{allUsers.pagination.total} total accounts</p>
+          )}
+        </div>
         <button
           onClick={() => refetchUsers()}
           disabled={isFetching}
-          className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white/70 rounded-lg hover:bg-white/10 hover:text-white transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 text-white/60 rounded-lg hover:bg-white/8 hover:text-white transition-colors text-sm disabled:opacity-50"
         >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* User List Panel */}
-        <div className="lg:col-span-1">
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+        {/* ── User list ── */}
+        <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col overflow-hidden">
+          {/* Search */}
+          <div className="p-3 border-b border-white/8">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
               <input
                 type="text"
                 placeholder="Search by email or name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none text-white placeholder-white/30 transition-colors"
+                className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/8 rounded-lg focus:ring-1 focus:ring-[hsl(210_100%_50%)/50] outline-none text-white text-sm placeholder-white/25 transition-colors"
               />
             </div>
+          </div>
 
+          {/* List */}
+          <div className="flex-1 overflow-y-auto">
             {usersError && (
-              <div className="p-3 mb-4 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/30] rounded-lg text-[hsl(0_84%_70%)] text-sm">
-                Error loading users: {(usersError as any)?.message || "Unknown error"}
+              <div className="m-3 p-3 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/20] rounded-lg text-[hsl(0_84%_70%)] text-xs">
+                Error: {(usersError as any)?.message || "Failed to load users"}
               </div>
             )}
 
             {isLoadingList ? (
-              <div className="flex justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin text-white/40" />
+              <div className="flex items-center justify-center py-12 text-white/30">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            ) : displayUsers?.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-white/30 gap-2">
+                <UsersIcon className="h-8 w-8 opacity-30" />
+                <p className="text-sm">{searchQuery.length >= 2 ? "No users found" : "No users yet"}</p>
               </div>
             ) : (
-              <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
-                {displayUsers?.map((user: any) => (
-                  <button
-                    key={user.auth0UserId}
-                    onClick={() => setSelectedUser(user)}
-                    className={`w-full text-left p-3 rounded-lg transition-all ${
-                      selectedUser?.auth0UserId === user.auth0UserId
-                        ? "bg-[hsl(210_100%_50%)/10] border border-[hsl(210_100%_50%)/30]"
-                        : "bg-white/3 hover:bg-white/5 border border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 bg-white/8 rounded-full">
-                        <User className="h-4 w-4 text-white/50" />
-                      </div>
+              <div className="p-2 space-y-0.5">
+                {displayUsers?.map((user: any) => {
+                  const isSelected = selectedUser?.auth0UserId === user.auth0UserId;
+                  return (
+                    <button
+                      key={user.auth0UserId}
+                      onClick={() => setSelectedUser(user)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
+                        isSelected
+                          ? "bg-[hsl(210_100%_50%)/12] border border-[hsl(210_100%_50%)/25]"
+                          : "border border-transparent hover:bg-white/4"
+                      }`}
+                    >
+                      <UserAvatar name={user.name} email={user.email} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-white truncate">
+                        <p className={`text-sm font-medium truncate leading-tight ${isSelected ? "text-white" : "text-white/80"}`}>
                           {user.name || "No name"}
                         </p>
-                        <p className="text-sm text-white/50 truncate">{user.email}</p>
+                        <p className="text-xs text-white/40 truncate mt-0.5">{user.email}</p>
                       </div>
                       {user.blocked && (
-                        <span className="px-2 py-0.5 bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] text-xs rounded-full border border-[hsl(0_84%_60%)/30]">
-                          Blocked
-                        </span>
+                        <span className="shrink-0 w-2 h-2 rounded-full bg-[hsl(0_84%_60%)]" title="Blocked" />
                       )}
                       {user.suspended && !user.blocked && (
-                        <span className="px-2 py-0.5 bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] text-xs rounded-full border border-[hsl(14_100%_60%)/30]">
-                          Suspended
-                        </span>
+                        <span className="shrink-0 w-2 h-2 rounded-full bg-[hsl(14_100%_60%)]" title="Suspended" />
                       )}
-                    </div>
-                  </button>
-                ))}
-                {(!displayUsers || displayUsers.length === 0) && (
-                  <p className="text-center text-white/40 py-8">
-                    {searchQuery.length >= 2 ? "No users found" : "No users yet"}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {allUsers?.pagination && !searchQuery && (
-              <div className="mt-4 pt-4 border-t border-white/8 text-sm text-white/40 text-center">
-                {allUsers.pagination.total} user{allUsers.pagination.total !== 1 ? "s" : ""}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* User Details */}
-        <div className="lg:col-span-2">
-          {selectedUser ? (
-            <div className="space-y-6">
-              {/* User Info */}
+        {/* ── User detail ── */}
+        <div className="min-w-0">
+          {!selectedUser ? (
+            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-14 h-14 rounded-full bg-white/4 flex items-center justify-center mb-3">
+                <UsersIcon className="h-6 w-6 text-white/20" />
+              </div>
+              <p className="text-white/40 text-sm">Select a user to view details</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* ── Profile card ── */}
               <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-[hsl(210_100%_50%)/10] rounded-xl">
-                      <User className="h-6 w-6 text-[hsl(210_100%_60%)]" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-white">
+                {/* Header */}
+                <div className="flex items-start gap-4 mb-6">
+                  <UserAvatar name={selectedUser.name} email={selectedUser.email} size="lg" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg font-semibold text-white leading-tight">
                         {selectedUser.name || "No name"}
                       </h2>
-                      <p className="text-sm text-white/50">{selectedUser.email}</p>
+                      <StatusBadge blocked={selectedUser.blocked} suspended={selectedUser.suspended} />
                     </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {selectedUser.blocked && (
-                      <span className="px-3 py-1.5 bg-[hsl(0_84%_60%)/20] text-[hsl(0_84%_70%)] rounded-lg text-sm font-medium border border-[hsl(0_84%_60%)/30]">
-                        Blocked
-                      </span>
-                    )}
-                    {selectedUser.suspended && (
-                      <span className="px-3 py-1.5 bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] rounded-lg text-sm font-medium border border-[hsl(14_100%_60%)/30]">
-                        Suspended
-                      </span>
-                    )}
+                    <p className="text-sm text-white/50 mt-0.5">{selectedUser.email}</p>
                   </div>
                 </div>
 
                 {loadingUser ? (
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-4 bg-white/10 rounded w-3/4"></div>
-                    <div className="h-4 bg-white/10 rounded w-1/2"></div>
+                  <div className="space-y-2 animate-pulse">
+                    <div className="h-3 bg-white/8 rounded w-2/3" />
+                    <div className="h-3 bg-white/8 rounded w-1/2" />
+                    <div className="h-3 bg-white/8 rounded w-3/4" />
                   </div>
                 ) : userDetails?.user && (
-                  <div className="space-y-6">
-                    {/* Info Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Mail className="h-4 w-4 text-white/40" />
-                          <span className="text-sm font-medium text-white/60">Account</span>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-white/50">Email</span>
-                            <span className="font-medium text-white truncate ml-2">{userDetails.user.email}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/50">VirtFusion ID</span>
-                            <span className="font-mono text-white">{userDetails.user.virtFusionUserId || "Not linked"}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Key className="h-4 w-4 text-white/40" />
-                          <span className="text-sm font-medium text-white/60">Security</span>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-white/50">Email (Auth0)</span>
-                            <span className={`font-medium ${userDetails.user.emailVerifiedAuth0 ? "text-[hsl(160_84%_60%)]" : "text-[hsl(0_84%_70%)]"}`}>
-                              {userDetails.user.emailVerifiedAuth0 ? "Verified" : "Not Verified"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/50">Email (Override)</span>
-                            <span className={`font-medium ${userDetails.user.emailVerifiedOverride ? "text-[hsl(14_100%_70%)]" : "text-white/40"}`}>
-                              {userDetails.user.emailVerifiedOverride ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/50">2FA Status</span>
-                            <span className={`font-medium ${userDetails.user.twoFactorEnabled ? "text-[hsl(160_84%_60%)]" : "text-white/40"}`}>
-                              {userDetails.user.twoFactorEnabled ? "Enabled" : "Disabled"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/50">Active Sessions</span>
-                            <span className="font-medium text-white">{userDetails.user.activeSessions}</span>
-                          </div>
-                        </div>
-                      </div>
+                  <>
+                    {/* Info grid */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      <InfoRow label="VirtFusion ID" value={userDetails.user.virtFusionUserId || "Not linked"} mono />
+                      <InfoRow
+                        label="Email verification"
+                        value={
+                          userDetails.user.emailVerifiedAuth0 ? "Verified" :
+                          userDetails.user.emailVerifiedOverride ? "Manual override" : "Not verified"
+                        }
+                        valueColor={
+                          userDetails.user.emailVerifiedAuth0 ? "text-[hsl(160_84%_60%)]" :
+                          userDetails.user.emailVerifiedOverride ? "text-[hsl(14_100%_70%)]" : "text-[hsl(0_84%_70%)]"
+                        }
+                      />
+                      <InfoRow
+                        label="2FA"
+                        value={userDetails.user.twoFactorEnabled ? "Enabled" : "Disabled"}
+                        valueColor={userDetails.user.twoFactorEnabled ? "text-[hsl(160_84%_60%)]" : "text-white/40"}
+                      />
+                      <InfoRow
+                        label="Active sessions"
+                        value={String(userDetails.user.activeSessions)}
+                      />
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="pt-4 border-t border-white/8">
-                      <h3 className="text-sm font-medium text-white/60 mb-3">Actions</h3>
+                    {/* Actions */}
+                    <div className="pt-5 border-t border-white/6">
+                      <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-3">Actions</p>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => {
-                            if (userDetails.user.suspended) {
-                              suspendMutation.mutate({
-                                auth0UserId: userDetails.user.auth0UserId,
-                                suspended: false,
-                              });
-                            } else {
-                              setShowSuspendDialog(true);
-                            }
-                          }}
+                        {/* Suspend */}
+                        <ActionButton
+                          onClick={() => userDetails.user.suspended
+                            ? suspendMutation.mutate({ auth0UserId: userDetails.user.auth0UserId, suspended: false })
+                            : setShowSuspendDialog(true)
+                          }
                           disabled={suspendMutation.isPending}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
-                            userDetails.user.suspended
-                              ? "bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] hover:bg-[hsl(160_84%_39%)/20]"
-                              : "bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] hover:bg-[hsl(14_100%_60%)/20]"
-                          }`}
-                        >
-                          <Lock className="h-4 w-4" />
-                          {userDetails.user.suspended ? "Unsuspend Account" : "Suspend Account"}
-                        </button>
+                          pending={suspendMutation.isPending}
+                          variant={userDetails.user.suspended ? "success" : "warning"}
+                          icon={<Lock className="h-3.5 w-3.5" />}
+                          label={userDetails.user.suspended ? "Unsuspend" : "Suspend"}
+                        />
 
-                        <button
-                          onClick={() => {
-                            if (userDetails.user.blocked) {
-                              blockMutation.mutate({
-                                auth0UserId: userDetails.user.auth0UserId,
-                                blocked: false,
-                              });
-                            } else {
-                              setShowBlockDialog(true);
-                            }
-                          }}
+                        {/* Block */}
+                        <ActionButton
+                          onClick={() => userDetails.user.blocked
+                            ? blockMutation.mutate({ auth0UserId: userDetails.user.auth0UserId, blocked: false })
+                            : setShowBlockDialog(true)
+                          }
                           disabled={blockMutation.isPending}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
-                            userDetails.user.blocked
-                              ? "bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] hover:bg-[hsl(160_84%_39%)/20]"
-                              : "bg-[hsl(0_84%_60%)/10] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30] hover:bg-[hsl(0_84%_60%)/20]"
-                          }`}
-                        >
-                          <Ban className="h-4 w-4" />
-                          {userDetails.user.blocked ? "Unblock Account" : "Block Account"}
-                        </button>
+                          pending={blockMutation.isPending}
+                          variant={userDetails.user.blocked ? "success" : "danger"}
+                          icon={<Ban className="h-3.5 w-3.5" />}
+                          label={userDetails.user.blocked ? "Unblock" : "Block"}
+                        />
 
+                        {/* Email verification */}
                         {userDetails.user.emailVerifiedAuth0 ? (
-                          <div className="flex items-center gap-2 px-4 py-2 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg text-sm">
-                            <CheckCircle className="h-4 w-4" />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/20] rounded-lg text-xs font-medium">
+                            <CheckCircle className="h-3.5 w-3.5" />
                             Email Verified
-                          </div>
-                        ) : userDetails.user.emailVerifiedOverride ? (
-                          <div className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg text-sm">
-                            <CheckCircle className="h-4 w-4" />
-                            Manually Verified
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => usersApi.resendVerification(userDetails.user.auth0UserId).then(() => {
-                              toast.success("Verification email sent");
-                            }).catch((err: any) => {
-                              toast.error(err.message || "Failed to send verification email");
-                            })}
-                            className="flex items-center gap-2 px-4 py-2 bg-[hsl(270_70%_60%)/10] text-[hsl(270_70%_70%)] border border-[hsl(270_70%_60%)/30] rounded-lg hover:bg-[hsl(270_70%_60%)/20] transition-colors text-sm"
-                          >
-                            <Send className="h-4 w-4" />
-                            Resend Verification Email
-                          </button>
+                          </span>
+                        ) : !userDetails.user.emailVerifiedOverride && (
+                          <ActionButton
+                            onClick={() => usersApi.resendVerification(userDetails.user.auth0UserId)
+                              .then(() => toast.success("Verification email sent"))
+                              .catch((err: any) => toast.error(err.message || "Failed to send"))
+                            }
+                            variant="neutral"
+                            icon={<Send className="h-3.5 w-3.5" />}
+                            label="Resend Verification"
+                          />
                         )}
 
-                        <button
+                        {/* Revoke sessions */}
+                        <ActionButton
                           onClick={() => setShowRevokeDialog(true)}
-                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg hover:bg-[hsl(14_100%_60%)/20] transition-colors text-sm"
-                        >
-                          <LogOut className="h-4 w-4" />
-                          Revoke Sessions
-                        </button>
+                          variant="neutral"
+                          icon={<LogOut className="h-3.5 w-3.5" />}
+                          label="Revoke Sessions"
+                        />
+                      </div>
 
-                        <button
+                      {/* Danger zone */}
+                      <div className="mt-3 pt-3 border-t border-white/4 flex gap-2">
+                        <ActionButton
                           onClick={() => setShowPurgeConfirm(true)}
-                          className="flex items-center gap-2 px-4 py-2 bg-[hsl(0_84%_60%)/10] text-[hsl(0_84%_70%)] border border-[hsl(0_84%_60%)/30] rounded-lg hover:bg-[hsl(0_84%_60%)/20] transition-colors text-sm"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Purge User
-                        </button>
+                          variant="danger"
+                          icon={<Trash2 className="h-3.5 w-3.5" />}
+                          label="Purge User"
+                        />
                       </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
 
-              {/* Wallet */}
-              <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
-                <h2 className="text-base font-semibold text-white mb-4">Wallet</h2>
-                {userDetails?.user?.wallet && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-[hsl(160_84%_39%)/15] rounded-lg">
-                          <Wallet className="h-6 w-6 text-[hsl(160_84%_60%)]" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-white/50">Balance</p>
-                          <p className="text-2xl font-bold text-white">
-                            {formatCurrency(userDetails.user.wallet.balanceCents)}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setShowAdjustWalletDialog(true)}
-                        className="px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg font-medium hover:bg-[hsl(210_100%_45%)] transition-colors text-sm"
-                      >
-                        Adjust Balance
-                      </button>
-                    </div>
+              {/* ── Wallet card ── */}
+              {userDetails?.user?.wallet && (
+                <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-white/30 uppercase tracking-wider">Wallet Balance</p>
+                    <button
+                      onClick={() => setShowAdjustWalletDialog(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(210_100%_50%)/10] text-[hsl(210_100%_65%)] border border-[hsl(210_100%_50%)/20] rounded-lg hover:bg-[hsl(210_100%_50%)/20] transition-colors text-xs font-medium"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                      Adjust
+                    </button>
                   </div>
-                )}
-                {!userDetails?.user?.wallet && (
-                  <p className="text-white/40 text-center py-4">No wallet</p>
-                )}
-              </div>
+                  <p className="text-3xl font-bold text-white mt-1">
+                    {fmt(userDetails.user.wallet.balanceCents)}
+                  </p>
+                  <p className="text-xs text-white/30 mt-1">AUD prepaid credit</p>
+                </div>
+              )}
 
-              {/* Transactions */}
-              <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
-                <h2 className="text-base font-semibold text-white mb-4">Recent Transactions</h2>
-                {transactions?.transactions && transactions.transactions.length > 0 ? (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {transactions.transactions.slice(0, 30).map((tx: any) => (
-                      <div key={tx.id} className="p-3 bg-white/5 rounded-lg text-sm">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white">
-                            {tx.type === 'adjustment_credit'
-                              ? (tx.metadata?.description || 'Credit Added')
-                              : tx.type === 'adjustment_debit'
-                              ? (tx.metadata?.description || 'Balance Deducted')
-                              : tx.type === 'credit'
-                              ? 'Wallet Top-Up'
-                              : tx.type === 'debit'
-                              ? (tx.metadata?.description || 'Server Charge')
-                              : tx.type === 'refund'
-                              ? 'Refund'
-                              : tx.type?.replace(/_/g, " ")}
-                          </span>
-                          <span className={`font-semibold ${tx.amountCents >= 0 ? "text-[hsl(160_84%_60%)]" : "text-[hsl(0_84%_70%)]"}`}>
-                            {tx.amountCents >= 0 ? "+" : ""}{formatCurrency(tx.amountCents)}
-                          </span>
-                        </div>
-                        {tx.metadata?.reason && (
-                          <p className="text-white/60 text-xs mb-1">
-                            Note: {tx.metadata.reason}
-                          </p>
-                        )}
-                        {tx.metadata?.adjustedBy && (
-                          <p className="text-white/40 text-xs mb-1">
-                            By: {tx.metadata.adjustedBy}
-                          </p>
-                        )}
-                        {tx.metadata?.serverName && (
-                          <p className="text-white/40 text-xs">
-                            Server: {tx.metadata.serverName}
-                          </p>
-                        )}
-                        {tx.metadata?.stripePaymentIntentId && (
-                          <p className="text-white/40 text-xs font-mono">
-                            Stripe: {tx.metadata.stripePaymentIntentId.slice(0, 20)}...
-                          </p>
-                        )}
-                        <p className="text-white/30 text-xs mt-1">
-                          {new Date(tx.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-white/40 text-center py-4">No transactions</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-12 text-center">
-              <div className="inline-flex p-4 bg-white/5 rounded-full mb-4">
-                <User className="h-8 w-8 text-white/30" />
-              </div>
-              <p className="text-white/40">Select a user to view details</p>
+              {/* ── Transactions ── */}
+              {selectedUser && (
+                <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+                  <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-4">Recent Transactions</p>
+                  {transactions?.transactions?.length ? (
+                    <div className="space-y-1 max-h-72 overflow-y-auto -mx-1 px-1">
+                      {transactions.transactions.slice(0, 30).map((tx: any) => {
+                        const isCredit = tx.amountCents >= 0;
+                        return (
+                          <div key={tx.id} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/3 transition-colors">
+                            <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${isCredit ? "bg-[hsl(160_84%_39%)/15]" : "bg-[hsl(0_84%_60%)/10]"}`}>
+                              {isCredit
+                                ? <ArrowDownLeft className="h-3 w-3 text-[hsl(160_84%_60%)]" />
+                                : <ArrowUpRight className="h-3 w-3 text-[hsl(0_84%_70%)]" />
+                              }
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-white/85 truncate">{txLabel(tx)}</p>
+                                <p className={`text-sm font-semibold tabular-nums shrink-0 ${isCredit ? "text-[hsl(160_84%_60%)]" : "text-[hsl(0_84%_70%)]"}`}>
+                                  {isCredit ? "+" : ""}{fmt(tx.amountCents)}
+                                </p>
+                              </div>
+                              {tx.metadata?.reason && (
+                                <p className="text-xs text-white/40 mt-0.5 truncate">Note: {tx.metadata.reason}</p>
+                              )}
+                              {tx.metadata?.serverName && (
+                                <p className="text-xs text-white/30 truncate">Server: {tx.metadata.serverName}</p>
+                              )}
+                              {tx.metadata?.stripePaymentIntentId && (
+                                <p className="text-xs font-mono text-white/25 truncate">{tx.metadata.stripePaymentIntentId.slice(0, 24)}…</p>
+                              )}
+                              <p className="text-xs text-white/25 mt-0.5">
+                                {new Date(tx.createdAt).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/30 text-center py-6">No transactions</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Suspend Dialog */}
+      {/* ── Dialogs ── */}
       <PromptDialog
         open={showSuspendDialog}
         onOpenChange={setShowSuspendDialog}
@@ -517,18 +467,11 @@ export default function Users() {
         label="Suspension Reason"
         confirmText="Suspend"
         onConfirm={(reason) => {
-          if (userDetails?.user) {
-            suspendMutation.mutate({
-              auth0UserId: userDetails.user.auth0UserId,
-              suspended: true,
-              reason,
-            });
-          }
+          if (userDetails?.user) suspendMutation.mutate({ auth0UserId: userDetails.user.auth0UserId, suspended: true, reason });
         }}
         isPending={suspendMutation.isPending}
       />
 
-      {/* Block Dialog */}
       <PromptDialog
         open={showBlockDialog}
         onOpenChange={setShowBlockDialog}
@@ -538,18 +481,11 @@ export default function Users() {
         label="Block Reason"
         confirmText="Block"
         onConfirm={(reason) => {
-          if (userDetails?.user) {
-            blockMutation.mutate({
-              auth0UserId: userDetails.user.auth0UserId,
-              blocked: true,
-              reason,
-            });
-          }
+          if (userDetails?.user) blockMutation.mutate({ auth0UserId: userDetails.user.auth0UserId, blocked: true, reason });
         }}
         isPending={blockMutation.isPending}
       />
 
-      {/* Revoke Sessions Dialog */}
       <ConfirmDialog
         open={showRevokeDialog}
         onOpenChange={setShowRevokeDialog}
@@ -569,7 +505,6 @@ export default function Users() {
         }}
       />
 
-      {/* Adjust Wallet Dialog */}
       <Dialog open={showAdjustWalletDialog} onOpenChange={setShowAdjustWalletDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -594,188 +529,133 @@ export default function Users() {
                 type="text"
                 value={walletDescription}
                 onChange={(e) => setWalletDescription(e.target.value)}
-                placeholder="e.g., Manual credit adjustment"
+                placeholder="e.g., Courtesy credit adjustment"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setShowAdjustWalletDialog(false);
-                setWalletAmount("");
-                setWalletDescription("");
-              }}
-            >
+            <Button variant="ghost" onClick={() => { setShowAdjustWalletDialog(false); setWalletAmount(""); setWalletDescription(""); }}>
               Cancel
             </Button>
-            <Button
-              onClick={handleAdjustWallet}
-              disabled={!walletAmount || !walletDescription || adjustWalletMutation.isPending}
-            >
+            <Button onClick={handleAdjustWallet} disabled={!walletAmount || !walletDescription || adjustWalletMutation.isPending}>
               {adjustWalletMutation.isPending ? "Adjusting..." : "Adjust Balance"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Purge Confirmation Modal */}
+      {/* Purge confirm */}
       {showPurgeConfirm && userDetails?.user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-[hsl(0_84%_60%)/10] rounded-lg">
-                <AlertTriangle className="h-6 w-6 text-[hsl(0_84%_70%)]" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-2 bg-[hsl(0_84%_60%)/12] rounded-lg border border-[hsl(0_84%_60%)/20]">
+                <AlertTriangle className="h-5 w-5 text-[hsl(0_84%_70%)]" />
               </div>
-              <h3 className="text-lg font-bold text-white">Purge User</h3>
+              <div>
+                <h3 className="text-base font-semibold text-white">Purge User</h3>
+                <p className="text-xs text-white/40">{userDetails.user.email}</p>
+              </div>
             </div>
-
-            <div className="mb-4 p-3 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/30] rounded-lg">
-              <p className="text-[hsl(0_84%_70%)] text-sm font-medium">
-                This action is IRREVERSIBLE and will permanently delete:
-              </p>
-              <ul className="mt-2 text-sm text-[hsl(0_84%_70%)] list-disc list-inside space-y-1">
-                <li>All servers in VirtFusion</li>
-                <li>VirtFusion user account</li>
-                <li>Stripe customer & payment methods</li>
-                <li>Auth0 account</li>
-                <li>All local database records (wallet, billing, tickets, etc.)</li>
-              </ul>
+            <div className="mb-5 p-3 bg-[hsl(0_84%_60%)/8] border border-[hsl(0_84%_60%)/20] rounded-lg text-xs text-[hsl(0_84%_70%)] space-y-1">
+              <p className="font-medium mb-1.5">This permanently deletes:</p>
+              {["All servers in VirtFusion", "VirtFusion user account", "Stripe customer & payment methods", "Auth0 account", "All local DB records"].map((item) => (
+                <p key={item} className="flex items-center gap-1.5"><span className="opacity-50">•</span>{item}</p>
+              ))}
             </div>
-
-            <div className="mb-4">
-              <p className="text-sm text-white/70 mb-2">
-                User: <span className="font-semibold text-white">{userDetails.user.email}</span>
-              </p>
-              <p className="text-sm text-white/50 mb-3">
-                Type <span className="font-mono font-bold text-[hsl(0_84%_70%)]">PURGE</span> to confirm:
-              </p>
-              <input
-                type="text"
-                value={purgeConfirmText}
-                onChange={(e) => setPurgeConfirmText(e.target.value)}
-                placeholder="Type PURGE to confirm"
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-[hsl(0_84%_60%)/50] outline-none font-mono"
-                autoFocus
-              />
-            </div>
-
+            <p className="text-xs text-white/50 mb-2">
+              Type <span className="font-mono font-bold text-[hsl(0_84%_70%)]">PURGE</span> to confirm:
+            </p>
+            <input
+              type="text"
+              value={purgeConfirmText}
+              onChange={(e) => setPurgeConfirmText(e.target.value)}
+              placeholder="PURGE"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white font-mono text-sm focus:ring-1 focus:ring-[hsl(0_84%_60%)/50] outline-none mb-5"
+              autoFocus
+            />
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => {
-                  setShowPurgeConfirm(false);
-                  setPurgeConfirmText("");
-                }}
-                className="px-4 py-2 text-white/60 hover:text-white transition-colors"
+                onClick={() => { setShowPurgeConfirm(false); setPurgeConfirmText(""); }}
+                className="px-4 py-2 text-sm text-white/50 hover:text-white transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => purgeMutation.mutate(userDetails.user.auth0UserId)}
                 disabled={purgeConfirmText !== "PURGE" || purgeMutation.isPending}
-                className="px-4 py-2 bg-[hsl(0_84%_60%)] text-white rounded-lg font-medium hover:bg-[hsl(0_84%_55%)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="flex items-center gap-2 px-4 py-2 bg-[hsl(0_84%_60%)] text-white rounded-lg text-sm font-medium hover:bg-[hsl(0_84%_55%)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {purgeMutation.isPending ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Purging...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4" />
-                    Purge User Forever
-                  </>
-                )}
+                {purgeMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" />Purging...</> : <><Trash2 className="h-4 w-4" />Purge Forever</>}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Purge Results Modal */}
+      {/* Purge results */}
       {showPurgeResults && purgeResults && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${purgeResults.success ? 'bg-[hsl(160_84%_39%)/10]' : 'bg-[hsl(0_84%_60%)/10]'}`}>
-                {purgeResults.success ? (
-                  <CheckCircle className="h-6 w-6 text-[hsl(160_84%_60%)]" />
-                ) : (
-                  <XCircle className="h-6 w-6 text-[hsl(0_84%_70%)]" />
-                )}
+              <div className={`p-2 rounded-lg border ${purgeResults.success ? "bg-[hsl(160_84%_39%)/12] border-[hsl(160_84%_39%)/20]" : "bg-[hsl(0_84%_60%)/12] border-[hsl(0_84%_60%)/20]"}`}>
+                {purgeResults.success
+                  ? <CheckCircle className="h-5 w-5 text-[hsl(160_84%_60%)]" />
+                  : <XCircle className="h-5 w-5 text-[hsl(0_84%_70%)]" />
+                }
               </div>
-              <h3 className="text-lg font-bold text-white">
-                {purgeResults.success ? 'Purge Successful' : 'Purge Completed with Errors'}
+              <h3 className="text-base font-semibold text-white">
+                {purgeResults.success ? "Purge Successful" : "Purge Had Errors"}
               </h3>
             </div>
 
             {purgeResults.error ? (
-              <div className="mb-4 p-3 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/30] rounded-lg">
-                <p className="text-[hsl(0_84%_70%)] text-sm">{purgeResults.error}</p>
-              </div>
+              <p className="text-sm text-[hsl(0_84%_70%)] bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/20] rounded-lg p-3">{purgeResults.error}</p>
             ) : (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    {purgeResults.results?.auth0Deleted ? (
-                      <CheckCircle className="h-4 w-4 text-[hsl(160_84%_60%)]" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-[hsl(0_84%_70%)]" />
-                    )}
-                    <span className="text-white/70">Auth0 Account</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {purgeResults.results?.virtfusionUserDeleted ? (
-                      <CheckCircle className="h-4 w-4 text-[hsl(160_84%_60%)]" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-[hsl(0_84%_70%)]" />
-                    )}
-                    <span className="text-white/70">VirtFusion User</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {purgeResults.results?.stripeCustomerDeleted ? (
-                      <CheckCircle className="h-4 w-4 text-[hsl(160_84%_60%)]" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-[hsl(0_84%_70%)]" />
-                    )}
-                    <span className="text-white/70">Stripe Customer</span>
-                  </div>
+                <div className="grid grid-cols-1 gap-1.5 text-sm">
+                  {[
+                    { key: "auth0Deleted", label: "Auth0 Account" },
+                    { key: "virtfusionUserDeleted", label: "VirtFusion User" },
+                    { key: "stripeCustomerDeleted", label: "Stripe Customer" },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      {purgeResults.results?.[key]
+                        ? <CheckCircle className="h-4 w-4 text-[hsl(160_84%_60%)]" />
+                        : <XCircle className="h-4 w-4 text-[hsl(0_84%_70%)]" />
+                      }
+                      <span className="text-white/60">{label}</span>
+                    </div>
+                  ))}
                 </div>
-
                 {purgeResults.results?.localRecordsDeleted && (
-                  <div className="mt-3 p-3 bg-white/5 rounded-lg">
-                    <p className="text-xs font-medium text-white/40 mb-2">Local Records Deleted:</p>
-                    <div className="grid grid-cols-2 gap-1 text-xs text-white/60">
+                  <div className="p-3 bg-white/4 rounded-lg">
+                    <p className="text-xs font-medium text-white/40 mb-2">Local records deleted</p>
+                    <div className="grid grid-cols-2 gap-1 text-xs text-white/50">
                       {Object.entries(purgeResults.results.localRecordsDeleted).map(([key, value]) => (
-                        <div key={key} className="flex justify-between">
-                          <span>{key}:</span>
-                          <span className="font-mono">{String(value)}</span>
+                        <div key={key} className="flex justify-between gap-2">
+                          <span>{key}</span>
+                          <span className="font-mono text-white/70">{String(value)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-
                 {purgeResults.results?.errors?.length > 0 && (
-                  <div className="mt-3 p-3 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/30] rounded-lg">
-                    <p className="text-xs font-medium text-[hsl(0_84%_70%)] mb-2">Errors:</p>
-                    <ul className="text-xs text-[hsl(0_84%_70%)] list-disc list-inside space-y-1">
-                      {purgeResults.results.errors.map((err: string, i: number) => (
-                        <li key={i}>{err}</li>
-                      ))}
+                  <div className="p-3 bg-[hsl(0_84%_60%)/10] border border-[hsl(0_84%_60%)/20] rounded-lg">
+                    <p className="text-xs font-medium text-[hsl(0_84%_70%)] mb-1.5">Errors</p>
+                    <ul className="text-xs text-[hsl(0_84%_70%)] space-y-1">
+                      {purgeResults.results.errors.map((err: string, i: number) => <li key={i}>• {err}</li>)}
                     </ul>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="flex justify-end mt-4">
+            <div className="flex justify-end mt-5">
               <button
-                onClick={() => {
-                  setShowPurgeResults(false);
-                  setPurgeResults(null);
-                }}
-                className="px-4 py-2 bg-white/8 text-white/70 rounded-lg hover:bg-white/12 hover:text-white transition-colors"
+                onClick={() => { setShowPurgeResults(false); setPurgeResults(null); }}
+                className="px-4 py-2 bg-white/6 text-white/60 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-sm"
               >
                 Close
               </button>
@@ -784,5 +664,51 @@ export default function Users() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Sub-components ──
+
+function InfoRow({ label, value, mono, valueColor }: { label: string; value: string; mono?: boolean; valueColor?: string }) {
+  return (
+    <div className="p-3 bg-white/3 rounded-lg border border-white/5">
+      <p className="text-xs text-white/35 mb-1">{label}</p>
+      <p className={`text-sm font-medium truncate ${mono ? "font-mono" : ""} ${valueColor ?? "text-white/85"}`}>{value}</p>
+    </div>
+  );
+}
+
+type ActionVariant = "success" | "warning" | "danger" | "neutral";
+
+function ActionButton({
+  onClick,
+  disabled,
+  pending,
+  variant,
+  icon,
+  label,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  pending?: boolean;
+  variant: ActionVariant;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  const styles: Record<ActionVariant, string> = {
+    success: "bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border-[hsl(160_84%_39%)/25] hover:bg-[hsl(160_84%_39%)/18]",
+    warning: "bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border-[hsl(14_100%_60%)/25] hover:bg-[hsl(14_100%_60%)/18]",
+    danger:  "bg-[hsl(0_84%_60%)/10] text-[hsl(0_84%_70%)] border-[hsl(0_84%_60%)/25] hover:bg-[hsl(0_84%_60%)/18]",
+    neutral: "bg-white/5 text-white/60 border-white/10 hover:bg-white/8 hover:text-white/80",
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${styles[variant]}`}
+    >
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+      {label}
+    </button>
   );
 }
