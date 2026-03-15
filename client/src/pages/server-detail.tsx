@@ -2079,14 +2079,14 @@ export default function ServerDetail() {
         {/* Header Section */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
                <Link href="/servers">
-                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
+                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50" data-testid="button-back">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
               {isEditingName ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <Input
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
@@ -2102,7 +2102,7 @@ export default function ServerDetail() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-green-400 hover:bg-green-500/20"
+                    className="h-7 w-7 shrink-0 text-green-400 hover:bg-green-500/20"
                     onClick={handleSaveName}
                     disabled={isRenamingServer || !editedName.trim()}
                     data-testid="button-save-name"
@@ -2112,7 +2112,7 @@ export default function ServerDetail() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:bg-muted"
                     onClick={handleCancelEditName}
                     disabled={isRenamingServer}
                     data-testid="button-cancel-name"
@@ -2121,15 +2121,15 @@ export default function ServerDetail() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <h1 
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1
                     className={cn(
-                      "text-2xl font-display font-bold text-foreground tracking-tight",
+                      "text-2xl font-display font-bold text-foreground tracking-tight truncate",
                       !isSuspended && "cursor-pointer hover:text-foreground/80 transition-colors"
                     )}
                     onClick={!isSuspended ? handleStartEditName : undefined}
                     data-testid="text-server-name"
-                    title={!isSuspended ? "Click to rename" : undefined}
+                    title={server.name}
                   >
                     {server.name}
                   </h1>
@@ -2170,30 +2170,30 @@ export default function ServerDetail() {
             </div>
             
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
                 <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
-                <button 
-                  onClick={() => copyToClipboard(server.primaryIp)} 
+                <button
+                  onClick={() => copyToClipboard(server.primaryIp)}
                   className="text-muted-foreground hover:text-foreground"
                   data-testid="button-copy-ip"
                 >
                   <Copy className="h-3 w-3" />
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
                 <span className="text-foreground">{server.location.name}</span>
               </div>
               {server.image && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
                     alt={server.image.name}
-                    className="h-4 w-4 object-contain"
+                    className="h-4 w-4 object-contain shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
-                  <span className="text-foreground">{server.image.name}</span>
+                  <span className="text-foreground truncate">{server.image.name}</span>
                 </div>
               )}
             </div>
