@@ -44,25 +44,21 @@ function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { isDatabaseDown, isMaintenanceMode, isLoading: healthLoading } = useSystemHealth();
 
-  if (isMaintenanceMode) {
-    return <MaintenancePage />;
-  }
-
   // Check if we're on a public auth route (they have their own error handling)
   const isPublicAuthRoute = PUBLIC_AUTH_ROUTES.some(route => location.startsWith(route));
 
   // If system is down and we're NOT on a public auth route, redirect to login
-  // The login page has its own UI for displaying the system unavailable message
   useEffect(() => {
-    // Don't redirect while health check is still loading
     if (healthLoading) return;
-
     if (isDatabaseDown && !isPublicAuthRoute) {
-      // Clear any cached auth state and redirect to login
       queryClient.clear();
       window.location.href = '/login';
     }
   }, [isDatabaseDown, isPublicAuthRoute, healthLoading]);
+
+  if (isMaintenanceMode) {
+    return <MaintenancePage />;
+  }
 
   // Show spinner while health check is loading or while redirecting
   if (healthLoading || (isDatabaseDown && !isPublicAuthRoute)) {
