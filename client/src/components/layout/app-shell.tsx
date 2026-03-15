@@ -276,8 +276,8 @@ function Footer() {
 
   const envLabel = isDev ? "DEV" : "PROD";
   const envColor = isDev
-    ? "bg-yellow-500/20 text-yellow-600 border-yellow-500/50"
-    : "bg-green-500/20 text-green-600 border-green-500/50";
+    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+    : "bg-muted/50 text-muted-foreground/50 border-border/50";
 
   return (
     <footer className="border-t border-border/50 bg-card/30 backdrop-blur-sm">
