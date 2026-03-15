@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
+import { secureFetch } from "@/lib/api";
 
 const CATEGORIES = [
   {
@@ -99,7 +100,7 @@ export default function ContactPage() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      const response = await fetch("/api/support/contact", {
+      const response = await secureFetch("/api/support/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
