@@ -985,39 +985,85 @@ const UI = {
         Log.Debug("<< UI.clipboardSend");
     },
 
-    // Type each character individually via sendKey — reliable across all VNC servers
+    // Type each character individually via sendKey with proper DOM codes.
+    // QEMU/KVM VNC servers use QEMUExtendedKeyEvent (requires scancode from DOM code).
+    // Passing null as code falls back to legacy keyEvent which QEMU ignores.
     clipboardTypeText() {
         const text = document.getElementById('noVNC_clipboard_text').value;
         if (!text || !UI.rfb) return;
 
         UI.closeClipboardPanel();
 
-        const DELAY = 20; // ms between keystrokes
-        let delay = 50;   // initial delay so panel closes first
+        // Full ASCII printable map: keysym, DOM code, needs-shift
+        const CM = {
+            ' ':{k:0x20,c:'Space',s:0},
+            '0':{k:0x30,c:'Digit0',s:0},'1':{k:0x31,c:'Digit1',s:0},'2':{k:0x32,c:'Digit2',s:0},
+            '3':{k:0x33,c:'Digit3',s:0},'4':{k:0x34,c:'Digit4',s:0},'5':{k:0x35,c:'Digit5',s:0},
+            '6':{k:0x36,c:'Digit6',s:0},'7':{k:0x37,c:'Digit7',s:0},'8':{k:0x38,c:'Digit8',s:0},
+            '9':{k:0x39,c:'Digit9',s:0},
+            'a':{k:0x61,c:'KeyA',s:0},'b':{k:0x62,c:'KeyB',s:0},'c':{k:0x63,c:'KeyC',s:0},
+            'd':{k:0x64,c:'KeyD',s:0},'e':{k:0x65,c:'KeyE',s:0},'f':{k:0x66,c:'KeyF',s:0},
+            'g':{k:0x67,c:'KeyG',s:0},'h':{k:0x68,c:'KeyH',s:0},'i':{k:0x69,c:'KeyI',s:0},
+            'j':{k:0x6a,c:'KeyJ',s:0},'k':{k:0x6b,c:'KeyK',s:0},'l':{k:0x6c,c:'KeyL',s:0},
+            'm':{k:0x6d,c:'KeyM',s:0},'n':{k:0x6e,c:'KeyN',s:0},'o':{k:0x6f,c:'KeyO',s:0},
+            'p':{k:0x70,c:'KeyP',s:0},'q':{k:0x71,c:'KeyQ',s:0},'r':{k:0x72,c:'KeyR',s:0},
+            's':{k:0x73,c:'KeyS',s:0},'t':{k:0x74,c:'KeyT',s:0},'u':{k:0x75,c:'KeyU',s:0},
+            'v':{k:0x76,c:'KeyV',s:0},'w':{k:0x77,c:'KeyW',s:0},'x':{k:0x78,c:'KeyX',s:0},
+            'y':{k:0x79,c:'KeyY',s:0},'z':{k:0x7a,c:'KeyZ',s:0},
+            'A':{k:0x41,c:'KeyA',s:1},'B':{k:0x42,c:'KeyB',s:1},'C':{k:0x43,c:'KeyC',s:1},
+            'D':{k:0x44,c:'KeyD',s:1},'E':{k:0x45,c:'KeyE',s:1},'F':{k:0x46,c:'KeyF',s:1},
+            'G':{k:0x47,c:'KeyG',s:1},'H':{k:0x48,c:'KeyH',s:1},'I':{k:0x49,c:'KeyI',s:1},
+            'J':{k:0x4a,c:'KeyJ',s:1},'K':{k:0x4b,c:'KeyK',s:1},'L':{k:0x4c,c:'KeyL',s:1},
+            'M':{k:0x4d,c:'KeyM',s:1},'N':{k:0x4e,c:'KeyN',s:1},'O':{k:0x4f,c:'KeyO',s:1},
+            'P':{k:0x50,c:'KeyP',s:1},'Q':{k:0x51,c:'KeyQ',s:1},'R':{k:0x52,c:'KeyR',s:1},
+            'S':{k:0x53,c:'KeyS',s:1},'T':{k:0x54,c:'KeyT',s:1},'U':{k:0x55,c:'KeyU',s:1},
+            'V':{k:0x56,c:'KeyV',s:1},'W':{k:0x57,c:'KeyW',s:1},'X':{k:0x58,c:'KeyX',s:1},
+            'Y':{k:0x59,c:'KeyY',s:1},'Z':{k:0x5a,c:'KeyZ',s:1},
+            '!':{k:0x21,c:'Digit1',s:1},'@':{k:0x40,c:'Digit2',s:1},'#':{k:0x23,c:'Digit3',s:1},
+            '$':{k:0x24,c:'Digit4',s:1},'%':{k:0x25,c:'Digit5',s:1},'^':{k:0x5e,c:'Digit6',s:1},
+            '&':{k:0x26,c:'Digit7',s:1},'*':{k:0x2a,c:'Digit8',s:1},'(':{k:0x28,c:'Digit9',s:1},
+            ')':{k:0x29,c:'Digit0',s:1},
+            '-':{k:0x2d,c:'Minus',s:0},'_':{k:0x5f,c:'Minus',s:1},
+            '=':{k:0x3d,c:'Equal',s:0},'+':{k:0x2b,c:'Equal',s:1},
+            '[':{k:0x5b,c:'BracketLeft',s:0},'{':{k:0x7b,c:'BracketLeft',s:1},
+            ']':{k:0x5d,c:'BracketRight',s:0},'}':{k:0x7d,c:'BracketRight',s:1},
+            '\\':{k:0x5c,c:'Backslash',s:0},'|':{k:0x7c,c:'Backslash',s:1},
+            ';':{k:0x3b,c:'Semicolon',s:0},':':{k:0x3a,c:'Semicolon',s:1},
+            "'":{k:0x27,c:'Quote',s:0},'"':{k:0x22,c:'Quote',s:1},
+            '`':{k:0x60,c:'Backquote',s:0},'~':{k:0x7e,c:'Backquote',s:1},
+            ',':{k:0x2c,c:'Comma',s:0},'<':{k:0x3c,c:'Comma',s:1},
+            '.':{k:0x2e,c:'Period',s:0},'>':{k:0x3e,c:'Period',s:1},
+            '/':{k:0x2f,c:'Slash',s:0},'?':{k:0x3f,c:'Slash',s:1},
+        };
+        const XK_Shift_L = 0xffe1;
+        const DELAY = 30;
+        let delay = 50;
 
         for (let i = 0; i < text.length; i++) {
-            const codePoint = text.codePointAt(i);
-            if (codePoint > 0xffff) { i++; } // skip low surrogate
+            const ch = text[i];
+            let keysym, code, needShift;
 
-            let keysym;
-            if (codePoint === 13 || codePoint === 10) {
-                keysym = 0xff0d; // Return/Enter
-            } else if (codePoint === 9) {
-                keysym = 0xff09; // Tab
-            } else if (codePoint >= 0x20 && codePoint <= 0x7e) {
-                keysym = codePoint; // Printable ASCII — keysym equals char code
-            } else if (codePoint > 0x7e) {
-                keysym = 0x01000000 | codePoint; // Unicode keysym
+            if (ch === '\n' || ch === '\r') {
+                keysym = 0xff0d; code = 'Enter'; needShift = false;
+            } else if (ch === '\t') {
+                keysym = 0xff09; code = 'Tab'; needShift = false;
+            } else if (CM[ch]) {
+                keysym = CM[ch].k; code = CM[ch].c; needShift = !!CM[ch].s;
             } else {
-                continue; // skip other control chars
+                // Unicode fallback (no scancode — legacy keyEvent only)
+                const cp = ch.codePointAt(0);
+                if (cp > 0xffff) i++; // skip surrogate pair
+                keysym = 0x01000000 | cp; code = null; needShift = false;
             }
 
-            ((ks) => {
+            ((ks, c, ns) => {
                 setTimeout(() => {
-                    UI.rfb.sendKey(ks, null, true);
-                    UI.rfb.sendKey(ks, null, false);
+                    if (ns) UI.rfb.sendKey(XK_Shift_L, 'ShiftLeft', true);
+                    UI.rfb.sendKey(ks, c, true);
+                    UI.rfb.sendKey(ks, c, false);
+                    if (ns) UI.rfb.sendKey(XK_Shift_L, 'ShiftLeft', false);
                 }, delay);
-            })(keysym);
+            })(keysym, code, needShift);
 
             delay += DELAY;
         }
