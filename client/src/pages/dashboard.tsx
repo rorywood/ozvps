@@ -4,9 +4,10 @@ import { PageSection } from "@/components/layout/page-section";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useToast } from "@/hooks/use-toast";
 import {
   Server as ServerIcon,
   AlertCircle,
@@ -14,7 +15,8 @@ import {
   AlertTriangle,
   Wallet,
   Ban,
-  Gift
+  Gift,
+  Loader2
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
@@ -27,6 +29,8 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { getDisplayStatus } = usePowerActions();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Combined dashboard query - reduces 4 API calls to 1
   const { data: dashboardData, isLoading, error } = useQuery({
@@ -71,30 +75,47 @@ export default function Dashboard() {
     return daysUntil < 0 ? Math.abs(daysUntil) : 0;
   };
 
-  // Find servers with billing issues (exclude admin suspensions)
+  // Find servers with billing issues — use s.billing directly (reliable, same as server-detail)
   const billingSuspendedServers = servers.filter(s =>
-    billingStatuses[s.id]?.status === 'suspended' && !billingStatuses[s.id]?.adminSuspended
+    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
   );
   const adminSuspendedServers = servers.filter(s =>
-    billingStatuses[s.id]?.adminSuspended === true
+    s.billing?.adminSuspended === true
   );
-  const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
-  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0;
+  const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
 
-  // Find servers overdue by more than 2 days (critical)
-  const criticalOverdueServers = servers.filter(s => {
-    const billing = billingStatuses[s.id];
-    if (!billing || billing.freeServer || billing.adminSuspended) return false;
-    const daysOverdue = getDaysOverdue(billing.nextBillAt);
-    return daysOverdue > 2;
+  // Overdue: active/paid servers with past nextBillAt (billing job hasn't charged yet)
+  const overdueActiveServers = servers.filter(s => {
+    const b = s.billing;
+    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
+    return getDaysOverdue(b.nextBillAt) > 0;
   });
 
-  // Calculate total amount owed for critical overdue servers
+  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
+
+  // All servers needing payment (for the critical banner)
+  const criticalOverdueServers = [...billingSuspendedServers, ...unpaidServers, ...overdueActiveServers];
+
+  // Calculate total amount owed
   const totalAmountOwed = criticalOverdueServers.reduce((sum, s) => {
-    return sum + (billingStatuses[s.id]?.monthlyPriceCents || 0);
+    return sum + (s.billing?.monthlyPriceCents || 0);
   }, 0);
 
   const hasSufficientFunds = walletBalance >= totalAmountOwed;
+
+  const payOverdueMutation = useMutation({
+    mutationFn: () => Promise.all(
+      [...overdueActiveServers, ...unpaidServers, ...billingSuspendedServers].map(s => api.reactivateServer(s.id))
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      toast({ title: 'Payment Successful', description: 'Your servers have been charged.', variant: 'success' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Payment Failed', description: error.message || 'Failed to charge. Please try again.', variant: 'destructive' });
+    },
+  });
 
   useSyncPowerActions(servers);
 
@@ -166,10 +187,10 @@ export default function Dashboard() {
                 </p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {criticalOverdueServers.map(s => {
-                    const daysOverdue = getDaysOverdue(billingStatuses[s.id]?.nextBillAt);
+                    const daysOverdue = getDaysOverdue(s.billing?.nextBillAt);
                     return (
                       <span key={s.id} className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded">
-                        {s.name || `Server #${s.id}`} ({daysOverdue} days overdue)
+                        {s.name || `Server #${s.id}`}{daysOverdue > 0 ? ` (${daysOverdue} days overdue)` : ''}
                       </span>
                     );
                   })}
@@ -190,11 +211,15 @@ export default function Dashboard() {
                 </div>
                 <div className="flex gap-3 mt-4">
                   {hasSufficientFunds ? (
-                    <Button variant="destructive" asChild>
-                      <Link href="/billing">
-                        <Wallet className="h-4 w-4 mr-2" />
-                        Pay Now
-                      </Link>
+                    <Button
+                      variant="destructive"
+                      onClick={() => payOverdueMutation.mutate()}
+                      disabled={payOverdueMutation.isPending}
+                    >
+                      {payOverdueMutation.isPending
+                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Paying...</>
+                        : <><Wallet className="h-4 w-4 mr-2" />Pay Now</>
+                      }
                     </Button>
                   ) : (
                     <>
@@ -205,7 +230,7 @@ export default function Dashboard() {
                         </Link>
                       </Button>
                       <p className="text-xs text-amber-500 self-center">
-                        Insufficient funds - please add{' '}
+                        Insufficient funds — add{' '}
                         {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format((totalAmountOwed - walletBalance) / 100)}{' '}
                         to your wallet
                       </p>
