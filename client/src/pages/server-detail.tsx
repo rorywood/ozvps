@@ -1154,6 +1154,14 @@ export default function ServerDetail() {
   const isTrialEnded = server?.billing?.isTrial === true && server?.billing?.trialEndedAt != null;
   const isActiveTrial = server?.billing?.isTrial === true && !server?.billing?.trialEndedAt;
 
+  // Overdue warning: active billing but nextBillAt is in the past (billing job hasn't run yet or charge pending)
+  const billingOverdueDays = (() => {
+    const b = server?.billing;
+    if (!b || b.status !== 'active' || b.isTrial || b.freeServer || !b.nextBillAt) return 0;
+    const days = Math.floor((Date.now() - new Date(b.nextBillAt).getTime()) / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  })();
+
   // Determine if server is still being provisioned/built
   // Show checklist if ANY of these conditions are true:
   // 1. Server explicitly needs setup (commissioned=0)
@@ -1680,6 +1688,26 @@ export default function ServerDetail() {
             </div>
         )}
 
+
+        {/* At Risk Warning Banner — active billing but nextBillAt is past */}
+        {billingOverdueDays > 0 && !isSuspended && (
+          <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-amber-300">Payment Overdue — Server at Risk of Suspension</h3>
+                <p className="text-sm text-amber-300/80">
+                  Your server payment is {billingOverdueDays} day{billingOverdueDays !== 1 ? 's' : ''} overdue. Please add funds to avoid suspension.
+                </p>
+              </div>
+            </div>
+            <Link href="/billing">
+              <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 shrink-0">
+                Add Funds
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {/* Overdue/Unpaid Banner */}
         {server.billing?.status === 'unpaid' && !isSuspended && (
