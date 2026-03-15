@@ -23,6 +23,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
 import path from "path";
+import fs from "fs";
 
 // VNC security: one-time credential tokens (exchanged by noVNC on load, then deleted)
 const vncSessionTokens = new Map<string, {
@@ -3404,6 +3405,109 @@ export async function registerRoutes(
       wsUrl: vncSession.wsUrl,
       password: vncSession.password,
     });
+  });
+
+  // Serve the noVNC console page with credentials injected server-side.
+  // This eliminates all client-side token exchange and browser caching issues.
+  // Credentials are injected into the HTML by Express — they never appear in a URL.
+  app.get('/api/servers/:id/vnc-console', authMiddleware, async (req, res) => {
+    try {
+      const serverId = req.params.id;
+      const session = req.userSession!;
+
+      // Check account flags
+      const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId!);
+      if (userFlags?.blocked) {
+        return res.status(403).send('<p>Your account has been blocked. Please contact support.</p>');
+      }
+      if (userFlags?.suspended) {
+        return res.status(403).send('<p>Your account has been suspended. Server controls are disabled.</p>');
+      }
+
+      // Verify ownership
+      const { server, error: ownerError, status: ownerStatus } = await getServerWithOwnershipCheck(serverId, session.virtFusionUserId);
+      if (!server) {
+        return res.status(ownerStatus || 403).send(ownerError || 'Access denied');
+      }
+      if (server.suspended) {
+        return res.status(403).send('<p>Server is suspended. Console access is disabled.</p>');
+      }
+
+      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
+
+      // Enable VNC
+      try {
+        await virtfusionClient.enableVnc(serverId);
+      } catch (vncError: any) {
+        log(`Failed to enable VNC for server ${serverId}: ${vncError.message}`, 'api');
+      }
+
+      // Get VNC credentials
+      let vncAccess: any = null;
+      try {
+        vncAccess = await virtfusionClient.getServerVncAccess(serverId);
+      } catch (vncErr: any) {
+        log(`Failed to get VNC access for server ${serverId}: ${vncErr.message}`, 'api');
+      }
+
+      if (!vncAccess?.wss?.url || !vncAccess?.password) {
+        return res.status(503).send('<p>VNC console is not available for this server right now. The server may be powered off.</p>');
+      }
+
+      // Build WebSocket URL
+      const panelHost = new URL(panelUrl).host;
+      const wsUrl = new URL(`wss://${panelHost}${vncAccess.wss.url}`);
+      let wsPath = wsUrl.pathname.replace(/^\//, '');
+      if (wsUrl.search) wsPath += wsUrl.search;
+
+      // Set up 30-min auto-disable timer
+      const existingTimer = vncAutoDisableTimers.get(serverId);
+      if (existingTimer) clearTimeout(existingTimer);
+      vncAutoDisableTimers.set(serverId, setTimeout(() => {
+        virtfusionClient.disableVnc(serverId).catch(() => {});
+        vncAutoDisableTimers.delete(serverId);
+        log(`VNC auto-disabled for server ${serverId} after ${VNC_SESSION_TTL_MS / 60000}min TTL`, 'security');
+      }, VNC_SESSION_TTL_MS));
+
+      // Read vnc.html template from dist
+      const vncHtmlPath = path.resolve(__dirname, 'public/novnc/vnc.html');
+      let html: string;
+      try {
+        html = await fs.promises.readFile(vncHtmlPath, 'utf-8');
+      } catch (readErr: any) {
+        log(`Failed to read vnc.html: ${readErr.message}`, 'api');
+        return res.status(500).send('<p>Console unavailable. Please try again.</p>');
+      }
+
+      // Inject two things:
+      // 1. <base href="/novnc/"> at the START of <head> — fixes ALL relative asset paths
+      //    (stylesheets, images, scripts) to resolve from /novnc/ instead of /api/servers/N/
+      // 2. window.__ozvpsVncConfig before </head> — holds all VNC credentials in memory only
+      const config = {
+        host: wsUrl.hostname,
+        port: wsUrl.port || '443',
+        path: wsPath,
+        password: vncAccess.password,
+        encrypt: '1',
+        autoconnect: '1',
+        resize: 'scale',
+        reconnect: '0',
+        serverId,
+      };
+      html = html.replace('<head>', '<head>\n<base href="/novnc/">');
+      const configScript = `<script>window.__ozvpsVncConfig = ${JSON.stringify(config)};</script>`;
+      html = html.replace('</head>', configScript + '\n</head>');
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.send(html);
+
+      log(`VNC console served for server ${serverId} (user: ${session.auth0UserId})`, 'security');
+    } catch (error: any) {
+      log(`Error serving VNC console for server ${req.params.id}: ${error.message}`, 'api');
+      res.status(500).send('<p>Console unavailable. Please try again.</p>');
+    }
   });
 
   app.get('/api/user/profile', authMiddleware, async (req, res) => {

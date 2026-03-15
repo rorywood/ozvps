@@ -1,48 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRoute, useSearch } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Monitor, ArrowLeft, AlertCircle, Ban } from "lucide-react";
+import { Loader2, Ban } from "lucide-react";
 import { Link } from "wouter";
 import { useConsoleLock } from "@/hooks/use-console-lock";
 import { ConsoleLockedOverlay } from "@/components/console-locked-overlay";
 import { useAuth } from "@/hooks/use-auth";
-
-// Build noVNC URL — credentials are NOT embedded in the URL.
-// noVNC will exchange the vncToken for credentials via /api/vnc-session/:token (requires auth cookie).
-function buildNoVncUrl(vncToken: string, serverId: string): string {
-  const queryParams = new URLSearchParams({
-    vncToken,   // One-time token: noVNC fetches actual credentials from our API
-    serverId,   // Used by cleanup script on page close
-  });
-  return `/novnc/vnc.html?${queryParams.toString()}`;
-}
 
 export default function ServerConsole() {
   const [, params] = useRoute("/servers/:id/console");
   const searchString = useSearch();
   const serverId = params?.id;
   const { user } = useAuth();
-  const [redirected, setRedirected] = useState(false);
 
   // Check if this is a popout window
   const isPopout = searchString.includes('popout=true');
 
   // Console lock for 15 seconds after boot
   const consoleLock = useConsoleLock(serverId || '');
-
-  const { data: consoleData, isLoading, error, refetch } = useQuery({
-    queryKey: ['console-url', serverId],
-    queryFn: async () => {
-      const result = await api.getConsoleUrl(serverId || '');
-      return result;
-    },
-    enabled: !!serverId && !consoleLock.isLocked && !user?.accountSuspended,
-    refetchOnWindowFocus: false,
-    staleTime: 0,         // Always fetch a fresh token — never reuse a cached console URL
-  });
 
   // Set window title for popout
   useEffect(() => {
@@ -51,14 +27,11 @@ export default function ServerConsole() {
     }
   }, [isPopout, serverId]);
 
-  // Redirect to noVNC when we have the console token
+  // Navigate to the server-side VNC console once checks pass
   useEffect(() => {
-    if (consoleData?.embedded && consoleData?.vncToken && !redirected) {
-      const noVncUrl = buildNoVncUrl(consoleData.vncToken, serverId || '');
-      setRedirected(true);
-      window.location.href = noVncUrl;
-    }
-  }, [consoleData, redirected]);
+    if (!serverId || consoleLock.isLocked || user?.accountSuspended) return;
+    window.location.href = `/api/servers/${serverId}/vnc-console`;
+  }, [serverId, consoleLock.isLocked, user?.accountSuspended]);
 
   // Check if account is suspended - show blocked message
   if (user?.accountSuspended) {
@@ -99,81 +72,13 @@ export default function ServerConsole() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-12 flex flex-col items-center">
-          <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-          <p className="text-foreground font-medium mb-1">Initializing Console</p>
-          <p className="text-muted-foreground text-sm">Enabling VNC access...</p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-12 flex flex-col items-center max-w-md">
-          <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Console Error</h3>
-          <p className="text-muted-foreground text-center mb-4">
-            Failed to initialize VNC console. Please try again.
-          </p>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => refetch()} className="border-border hover:bg-muted/50 text-foreground" data-testid="button-retry">
-              Try Again
-            </Button>
-            {isPopout ? (
-              <Button variant="outline" onClick={() => window.close()} className="border-border hover:bg-muted/50 text-foreground" data-testid="button-close-window">
-                Close Window
-              </Button>
-            ) : (
-              <Link href={`/servers/${serverId}`}>
-                <Button variant="outline" className="border-border hover:bg-muted/50 text-foreground" data-testid="button-back-to-server">
-                  Back to Server
-                </Button>
-              </Link>
-            )}
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  // Show redirecting state while we navigate to noVNC
-  if (consoleData?.embedded && consoleData?.vncToken) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-12 flex flex-col items-center">
-          <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-          <p className="text-foreground font-medium mb-1">Opening Console</p>
-          <p className="text-muted-foreground text-sm">Redirecting to noVNC...</p>
-        </Card>
-      </div>
-    );
-  }
-
+  // Loading state while navigating
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <Card className="p-12 flex flex-col items-center max-w-md">
-        <Monitor className="h-12 w-12 text-primary mb-4" />
-        <h3 className="text-lg font-semibold text-foreground mb-2">Console Unavailable</h3>
-        <p className="text-muted-foreground text-center mb-4">
-          Unable to initialize VNC console. The server may be powered off or VNC may not be supported.
-        </p>
-        {isPopout ? (
-          <Button variant="outline" onClick={() => window.close()} className="border-border hover:bg-muted/50 text-foreground" data-testid="button-close-window">
-            Close Window
-          </Button>
-        ) : (
-          <Link href={`/servers/${serverId}`}>
-            <Button variant="outline" className="border-border hover:bg-muted/50 text-foreground" data-testid="button-back-to-server">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Server
-            </Button>
-          </Link>
-        )}
+      <Card className="p-12 flex flex-col items-center">
+        <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
+        <p className="text-foreground font-medium mb-1">Opening Console</p>
+        <p className="text-muted-foreground text-sm">Connecting to VNC...</p>
       </Card>
     </div>
   );

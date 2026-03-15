@@ -48,82 +48,76 @@
 
     <!--
       OzVPS Console Loader
-      - Exchanges one-time vncToken for credentials via /api/vnc-session/:token (requires auth cookie)
-      - Credentials stay in memory only — never in URL or browser history
-      - Disables VNC via sendBeacon on tab close
-      - Dynamically loads noVNC ui.js only after credentials are ready
+      Two modes:
+      1. Server-side injection (preferred): Express injects window.__ozvpsVncConfig before this
+         script runs — no client-side fetch needed. URL is /api/servers/:id/vnc-console.
+      2. Token exchange (fallback): URL contains ?vncToken=... and this script exchanges it
+         via /api/vnc-session/:token (requires auth session cookie).
     -->
     <script type="module">
-      const params = new URLSearchParams(window.location.search);
-      const vncToken = params.get('vncToken');
-      const serverId = params.get('serverId');
+      // Mode 1: credentials were injected server-side — skip all fetching
+      if (!window.__ozvpsVncConfig?.password) {
+        // Mode 2: exchange one-time vncToken for credentials
+        const params = new URLSearchParams(window.location.search);
+        const vncToken = params.get('vncToken');
+        const serverId = params.get('serverId');
 
-      // SECURITY GATE: this page must only be reached via a one-time vncToken.
-      // If there is no token (e.g. someone copied the URL after the token was consumed,
-      // or tried to open the page directly), redirect them to the app immediately
-      // before noVNC or any credentials are loaded.
-      if (!vncToken) {
-        window.location.replace('/');
-        throw new Error('No console token — redirecting to app.');
-      }
-
-      // Exchange one-time token for credentials (requires valid auth session cookie).
-      // If the user is not logged in or the token is expired/invalid, this fails.
-      let creds;
-      try {
-        const r = await fetch('/api/vnc-session/' + encodeURIComponent(vncToken), { credentials: 'include' });
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body.error || 'Console session expired or invalid.');
+        if (!vncToken) {
+          window.location.replace('/');
+          throw new Error('No console token — redirecting to app.');
         }
-        creds = await r.json();
-      } catch (e) {
-        const errEl = document.getElementById('noVNC_fallback_error');
-        const msgEl = document.getElementById('noVNC_fallback_errormsg');
-        if (errEl) errEl.classList.add('noVNC_open');
-        if (msgEl) {
-          const div = document.createElement('div');
-          div.className = 'noVNC_message';
-          div.textContent = (e instanceof Error ? e.message : String(e)) + ' Please close this window and open a new console session.';
-          msgEl.appendChild(div);
+
+        let creds;
+        try {
+          const r = await fetch('/api/vnc-session/' + encodeURIComponent(vncToken), { credentials: 'include' });
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error || 'Console session expired or invalid.');
+          }
+          creds = await r.json();
+        } catch (e) {
+          const errEl = document.getElementById('noVNC_fallback_error');
+          const msgEl = document.getElementById('noVNC_fallback_errormsg');
+          if (errEl) errEl.classList.add('noVNC_open');
+          if (msgEl) {
+            const div = document.createElement('div');
+            div.className = 'noVNC_message';
+            div.textContent = (e instanceof Error ? e.message : String(e)) + ' Please close this window and open a new console session.';
+            msgEl.appendChild(div);
+          }
+          document.documentElement.classList.remove('noVNC_loading');
+          throw e;
         }
-        document.documentElement.classList.remove('noVNC_loading');
-        throw e; // Stop execution — do not load noVNC
+
+        // Store all config in memory — nothing written to URL
+        const wsUrl = new URL(creds.wsUrl);
+        let wsPath = wsUrl.pathname.replace(/^\//, '');
+        if (wsUrl.search) wsPath += wsUrl.search;
+        window.__ozvpsVncConfig = {
+          host: wsUrl.hostname,
+          port: wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'),
+          encrypt: wsUrl.protocol === 'wss:' ? '1' : '0',
+          path: wsPath,
+          password: creds.password,
+          autoconnect: '1',
+          resize: 'scale',
+          reconnect: '0',
+          serverId: serverId || '',
+        };
+        // Scrub the token from the URL — the clean URL reveals nothing useful
+        history.replaceState(null, '', window.location.pathname);
       }
-
-      // Parse the WebSocket URL
-      const wsUrl = new URL(creds.wsUrl);
-      let path = wsUrl.pathname.replace(/^\//, '');
-      if (wsUrl.search) path += wsUrl.search;
-
-      // SECURITY: credentials stay in memory ONLY — never written to URL or hash.
-      // webutil.js getConfigVar() checks window.__ozvpsVncConfig before the URL.
-      window.__ozvpsVncConfig = {
-        path,
-        password: creds.password,
-      };
-
-      // Replace URL with clean params (no token, no hash, no credentials).
-      // Anyone who copies this URL gets nothing useful.
-      const qp = new URLSearchParams();
-      qp.set('host', wsUrl.hostname);
-      qp.set('port', wsUrl.port || (wsUrl.protocol === 'wss:' ? '443' : '80'));
-      qp.set('encrypt', wsUrl.protocol === 'wss:' ? '1' : '0');
-      qp.set('autoconnect', '1');
-      qp.set('resize', 'scale');
-      qp.set('reconnect', '0');
-      qp.set('serverId', serverId || '');
-      history.replaceState(null, '', window.location.pathname + '?' + qp.toString());
 
       // Register cleanup: disable VNC when tab is closed or navigated away from
-      if (serverId) {
+      const sid = window.__ozvpsVncConfig?.serverId;
+      if (sid) {
         window.addEventListener('pagehide', () => {
-          navigator.sendBeacon('/api/servers/' + encodeURIComponent(serverId) + '/vnc/disable');
+          navigator.sendBeacon('/api/servers/' + encodeURIComponent(sid) + '/vnc/disable');
         });
       }
 
-      // Load noVNC — reads host/port/encrypt from URL, path/password from __ozvpsVncConfig
-      await import('./app/ui.js?v=7');
+      // Load noVNC — reads all config from window.__ozvpsVncConfig (via patched webutil.js)
+      await import('./app/ui.js?v=8');
     </script>
 </head>
 
