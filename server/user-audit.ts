@@ -116,6 +116,7 @@ export const UserActions = {
   TWO_FA_DISABLE: "2fa_disable",
   TWO_FA_VERIFY: "2fa_verify",
   BACKUP_CODES_GENERATE: "backup_codes_generate",
+  EMAIL_2FA_CODE_SENT: "email_2fa_code_sent",
 
   // Server operations
   SERVER_CREATE: "server_create",

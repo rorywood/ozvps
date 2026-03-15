@@ -787,9 +787,9 @@ export async function registerRoutes(
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => {
-      // Rate limit by IP + user ID if available
+      // Rate limit by IP + user ID (check session first, then body for unauthenticated endpoints like /2fa/email/send)
       const ip = getClientIp(req);
-      const userId = (req as any).userSession?.auth0UserId || '';
+      const userId = (req as any).userSession?.auth0UserId || (req.body as any)?.auth0UserId || '';
       return `${ip}:${userId}`;
     },
   });
@@ -2006,7 +2006,7 @@ export async function registerRoutes(
   });
 
   // Verify email token - public endpoint (no auth required)
-  app.get('/api/auth/verify-email', async (req, res) => {
+  app.get('/api/auth/verify-email', loginRateLimiter, async (req, res) => {
     try {
       const { token } = req.query;
 
@@ -3996,6 +3996,7 @@ export async function registerRoutes(
       }
 
       log(`Email 2FA code sent to ${email}`, 'security');
+      await auditUserAction(req, auth0UserId, email, UserActions.EMAIL_2FA_CODE_SENT, 'session', auth0UserId);
       res.json({ success: true, message: 'Verification code sent' });
     } catch (error: any) {
       log(`Error sending 2FA email: ${error.message}`, 'api');
@@ -4012,14 +4013,16 @@ export async function registerRoutes(
       }
       
       await storage.setUserBlocked(auth0UserId, blocked, reason);
-      
+
       if (blocked) {
         await storage.revokeSessionsByAuth0UserId(auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
         log(`User ${auth0UserId} blocked and sessions revoked: ${reason || 'No reason provided'}`, 'admin');
+        await auditLog(req, 'user.block', 'user', auth0UserId, auth0UserId, { reason }, 'success');
       } else {
         log(`User ${auth0UserId} unblocked`, 'admin');
+        await auditLog(req, 'user.unblock', 'user', auth0UserId, auth0UserId, {}, 'success');
       }
-      
+
       res.json({ success: true });
     } catch (error: any) {
       log(`Error blocking user: ${error.message}`, 'api');
@@ -7334,7 +7337,7 @@ export async function registerRoutes(
         log(`Failed to send admin notification for ticket #${ticket.id}: ${err.message}`, 'email');
       });
 
-      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken, linkedToAccount: !!auth0UserId });
+      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken });
     } catch (error: any) {
       log(`Error creating guest ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to submit your enquiry. Please try again.' });
