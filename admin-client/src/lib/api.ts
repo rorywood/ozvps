@@ -308,7 +308,8 @@ export const ticketsApi = {
 
   get: (id: number) => api.get<{ ticket: any; messages: any[] }>(`/tickets/${id}`),
 
-  addMessage: (id: number, message: string) => api.post(`/tickets/${id}/messages`, { message }),
+  addMessage: (id: number, message: string, isInternalNote = false) =>
+    api.post(`/tickets/${id}/messages`, { message, isInternalNote }),
 
   update: (id: number, data: any) => api.patch(`/tickets/${id}`, data),
 

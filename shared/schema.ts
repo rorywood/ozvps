@@ -336,6 +336,7 @@ export const ticketMessages = pgTable("ticket_messages", {
   authorEmail: text("author_email").notNull(),
   authorName: text("author_name"),
   message: text("message").notNull(),
+  isInternalNote: boolean("is_internal_note").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -2091,11 +2091,15 @@ export const dbStorage = {
   },
 
   // Get messages for a ticket
-  async getTicketMessages(ticketId: number): Promise<TicketMessage[]> {
+  // includeInternalNotes=false filters out admin-only notes (for user/guest views)
+  async getTicketMessages(ticketId: number, includeInternalNotes = true): Promise<TicketMessage[]> {
+    const conditions = includeInternalNotes
+      ? eq(ticketMessages.ticketId, ticketId)
+      : and(eq(ticketMessages.ticketId, ticketId), eq(ticketMessages.isInternalNote, false));
     return db
       .select()
       .from(ticketMessages)
-      .where(eq(ticketMessages.ticketId, ticketId))
+      .where(conditions)
       .orderBy(ticketMessages.createdAt);
   },
 

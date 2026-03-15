@@ -6655,6 +6655,124 @@ export async function registerRoutes(
 
   // ================== Webhook Routes ==================
 
+  // Inbound email webhook — Resend forwards emails to support+{ticketId}@ozvps.com.au here
+  app.post('/api/hooks/resend-inbound', async (req, res) => {
+    try {
+      // Resend sends multipart/form-data or JSON depending on configuration
+      const payload = req.body;
+
+      // Extract the To address to find the ticket ID
+      // support+123@ozvps.com.au → ticketId = 123
+      const toAddresses: string[] = Array.isArray(payload.to)
+        ? payload.to
+        : typeof payload.to === 'string'
+        ? [payload.to]
+        : [];
+
+      let ticketId: number | null = null;
+      for (const addr of toAddresses) {
+        const match = addr.match(/support\+(\d+)@/i);
+        if (match) {
+          ticketId = parseInt(match[1], 10);
+          break;
+        }
+      }
+
+      if (!ticketId || isNaN(ticketId)) {
+        log(`Inbound email: no ticket ID found in To addresses: ${toAddresses.join(', ')}`, 'webhook');
+        return res.json({ ok: true }); // 200 so Resend doesn't retry
+      }
+
+      const ticket = await dbStorage.getTicketById(ticketId);
+      if (!ticket) {
+        log(`Inbound email: ticket #${ticketId} not found`, 'webhook');
+        return res.json({ ok: true });
+      }
+
+      if (ticket.status === 'closed') {
+        log(`Inbound email: ticket #${ticketId} is closed, ignoring reply`, 'webhook');
+        return res.json({ ok: true });
+      }
+
+      // Extract sender info
+      const fromRaw: string = payload.from || '';
+      const fromMatch = fromRaw.match(/^(?:"?([^"<]+)"?\s*)?<?([^>]+)>?$/);
+      const senderName = fromMatch?.[1]?.trim() || null;
+      const senderEmail = (fromMatch?.[2]?.trim() || fromRaw).toLowerCase();
+
+      // Extract plain text body — strip quoted text (lines starting with ">")
+      const rawText: string = payload.text || payload.plain || '';
+      const cleanBody = rawText
+        .split('\n')
+        .filter((line: string) => !line.startsWith('>') && !line.match(/^On .+wrote:$/))
+        .join('\n')
+        .replace(/\r\n/g, '\n')
+        .trim();
+
+      if (!cleanBody || cleanBody.length < 2) {
+        log(`Inbound email: empty body after stripping quotes for ticket #${ticketId}`, 'webhook');
+        return res.json({ ok: true });
+      }
+
+      // Determine if sender is the ticket owner (user or guest)
+      let authorType: 'user' | 'admin' = 'user';
+      let authorId = senderEmail;
+
+      if (ticket.auth0UserId) {
+        // Verify sender email matches the ticket owner
+        try {
+          const auth0User = await auth0Client.getUserById(ticket.auth0UserId);
+          if (!auth0User?.email || auth0User.email.toLowerCase() !== senderEmail) {
+            log(`Inbound email: sender ${senderEmail} doesn't match ticket owner ${auth0User?.email} for ticket #${ticketId}`, 'webhook');
+            return res.json({ ok: true });
+          }
+          authorId = ticket.auth0UserId;
+        } catch (e: any) {
+          log(`Inbound email: Auth0 lookup failed for ticket #${ticketId}: ${e.message}`, 'webhook');
+          return res.json({ ok: true });
+        }
+      } else if (ticket.guestEmail) {
+        // Guest ticket — verify sender matches guest email
+        if (ticket.guestEmail.toLowerCase() !== senderEmail) {
+          log(`Inbound email: sender ${senderEmail} doesn't match guest email ${ticket.guestEmail} for ticket #${ticketId}`, 'webhook');
+          return res.json({ ok: true });
+        }
+        authorId = senderEmail;
+      }
+
+      // Limit message length
+      const messageText = cleanBody.slice(0, 5000);
+
+      await dbStorage.createTicketMessage({
+        ticketId,
+        authorType,
+        authorId,
+        authorEmail: senderEmail,
+        authorName: senderName,
+        message: messageText,
+        isInternalNote: false,
+      });
+
+      // Reopen if resolved
+      if (ticket.status === 'resolved' || ticket.status === 'waiting_admin') {
+        await dbStorage.updateTicket(ticketId, { status: 'waiting_admin' });
+      } else if (ticket.status !== 'waiting_admin') {
+        await dbStorage.updateTicket(ticketId, { status: 'waiting_admin' });
+      }
+
+      // Notify admin of the email reply
+      sendAdminTicketNotificationEmail(ticketId, ticket.title, ticket.category as any, ticket.priority as any, messageText, senderEmail, senderName || null).catch(err => {
+        log(`Inbound email: failed to notify admin for ticket #${ticketId}: ${err.message}`, 'webhook');
+      });
+
+      log(`Inbound email: message added to ticket #${ticketId} from ${senderEmail}`, 'webhook');
+      res.json({ ok: true });
+    } catch (error: any) {
+      log(`Inbound email webhook error: ${error.message}`, 'webhook');
+      res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
   app.post('/api/hooks/auth0-user-deleted', async (req, res) => {
     try {
       const webhookSecret = process.env.AUTH0_WEBHOOK_SECRET;
@@ -6894,7 +7012,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get a specific ticket with messages
+  // Get a specific ticket with messages (user view — internal notes filtered out)
   app.get('/api/support/tickets/:id', authMiddleware, async (req, res) => {
     try {
       const auth0UserId = req.userSession!.auth0UserId;
@@ -6928,7 +7046,7 @@ export async function registerRoutes(
         }
       }
 
-      const messages = await dbStorage.getTicketMessages(ticketId);
+      const messages = await dbStorage.getTicketMessages(ticketId, false); // exclude internal notes from user view
 
       // Get server info if attached
       let server = null;
@@ -7196,7 +7314,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Ticket not found' });
       }
 
-      const messages = await dbStorage.getTicketMessages(ticket.id);
+      const messages = await dbStorage.getTicketMessages(ticket.id, false); // exclude internal notes from guest view
       res.json({ ticket, messages });
     } catch (error: any) {
       log(`Error fetching guest ticket: ${error.message}`, 'api');
@@ -7404,6 +7522,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Ticket not found' });
       }
 
+      const isInternalNote = req.body.isInternalNote === true;
+
       // Create the message
       const message = await dbStorage.createTicketMessage({
         ticketId,
@@ -7412,14 +7532,18 @@ export async function registerRoutes(
         authorEmail: req.userSession!.email,
         authorName: req.userSession!.name || null,
         message: parseResult.data.message,
+        isInternalNote,
       });
 
-      // Update ticket status - default to waiting_user when admin replies
-      const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
-      await dbStorage.updateTicket(ticketId, { status: newStatus });
+      // Internal notes don't change ticket status or trigger emails
+      if (!isInternalNote) {
+        // Update ticket status - default to waiting_user when admin replies
+        const newStatus = (req.body.status as TicketStatus) || 'waiting_user';
+        await dbStorage.updateTicket(ticketId, { status: newStatus });
+      }
 
-      // Notify ticket author by email
-      if (ticket.auth0UserId) {
+      // Notify ticket author by email (skip for internal notes)
+      if (!isInternalNote && ticket.auth0UserId) {
         // Logged-in user — look up their email from Auth0
         auth0Client.getUserById(ticket.auth0UserId).then(auth0User => {
           if (auth0User?.email) {
@@ -7430,14 +7554,14 @@ export async function registerRoutes(
         }).catch(err => {
           log(`Failed to get Auth0 user for ticket reply notification #${ticketId}: ${err.message}`, 'email');
         });
-      } else if (ticket.guestEmail && ticket.guestAccessToken) {
+      } else if (!isInternalNote && ticket.guestEmail && ticket.guestAccessToken) {
         // Guest ticket
         sendGuestTicketAdminReplyEmail(ticket.guestEmail, ticketId, ticket.ticketNumber ?? ticketId, ticket.title, ticket.guestAccessToken, parseResult.data.message).catch(err => {
           log(`Failed to send guest ticket reply notification for ticket #${ticketId}: ${err.message}`, 'email');
         });
       }
 
-      log(`Admin reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
+      log(`Admin ${isInternalNote ? 'note' : 'reply'} added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
       res.status(201).json({ message });
     } catch (error: any) {
       log(`Error replying to ticket: ${error.message}`, 'api');
