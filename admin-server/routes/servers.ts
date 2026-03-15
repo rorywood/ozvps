@@ -509,7 +509,7 @@ export function registerServersRoutes(router: Router) {
       res.json({ success: true });
     } catch (error: any) {
       console.log(`[admin-servers] Unsuspend error: ${error.message}`);
-      res.status(500).json({ error: "Failed to unsuspend server" });
+      res.status(500).json({ error: error.message || "Failed to unsuspend server" });
     }
   });
 
@@ -665,7 +665,7 @@ export function registerServersRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "server.admin-unsuspend", "server", error.message, req.params.serverId);
       console.log(`[admin-servers] Unsuspend error: ${error.message}`);
-      res.status(500).json({ error: "Failed to unsuspend server" });
+      res.status(500).json({ error: error.message || "Failed to unsuspend server" });
     }
   });
 

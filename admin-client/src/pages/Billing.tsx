@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock } from "lucide-react";
+import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock, Loader2 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 
 export default function Billing() {
@@ -268,8 +268,11 @@ export default function Billing() {
                     disabled={unsuspendMutation.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg text-sm hover:bg-[hsl(160_84%_39%)/20] transition-colors"
                   >
-                    <Play className="h-4 w-4" />
-                    Unsuspend
+                    {unsuspendMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" />Unsuspending...</>
+                    ) : (
+                      <><Play className="h-4 w-4" />Unsuspend</>
+                    )}
                   </button>
                 ) : (
                   <button

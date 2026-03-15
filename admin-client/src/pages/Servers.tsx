@@ -544,7 +544,9 @@ export default function Servers() {
                             disabled={unsuspendMutation.isPending}
                             className="flex items-center gap-2 px-4 py-2 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg hover:bg-[hsl(160_84%_39%)/20] transition-colors disabled:opacity-50 text-sm"
                           >
-                            Unsuspend
+                            {unsuspendMutation.isPending ? (
+                              <><Loader2 className="h-4 w-4 animate-spin" />Unsuspending...</>
+                            ) : "Unsuspend"}
                           </button>
                         ) : (
                           <button

@@ -336,7 +336,7 @@ export function registerBillingRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "billing.unsuspend", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Unsuspend error: ${error.message}`);
-      res.status(500).json({ error: "Failed to unsuspend server" });
+      res.status(500).json({ error: error.message || "Failed to unsuspend server" });
     }
   });
 
