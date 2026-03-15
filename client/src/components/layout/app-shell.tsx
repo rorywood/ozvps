@@ -296,6 +296,18 @@ function Footer() {
             <Link href="/billing" className="hover:text-foreground transition-colors">
               Billing
             </Link>
+            <a
+              href="https://status.ozvps.com.au"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors flex items-center gap-1.5"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+              </span>
+              Status
+            </a>
             <span className="text-border">|</span>
             <span className="text-xs">
               ABN 95 663 314 047
