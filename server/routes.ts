@@ -3507,21 +3507,18 @@ export async function registerRoutes(
 
       // Inject two things:
       // 1. <base href="/novnc/"> at START of <head> — fixes all relative asset paths
-      // 2. window.__ozvpsVncConfig — contains NO password, only the proxy token path
-      const appHost = req.hostname;
-      const config = {
-        host: appHost,
-        port: '443',
-        path: `api/vnc-ws/${proxyToken}`,  // Our WebSocket proxy — no creds visible
-        encrypt: '1',
-        autoconnect: '1',
-        resize: 'scale',
-        reconnect: '0',
-        serverId,
-        // NO password field — browser never receives it
-      };
+      // 2. window.__ozvpsVncConfig — only the proxy token path + non-sensitive settings
+      //    host/port/encrypt are intentionally OMITTED so noVNC uses window.location
+      //    defaults (correct hostname regardless of NGINX proxying).
       html = html.replace('<head>', '<head>\n<base href="/novnc/">');
-      const configScript = `<script>window.__ozvpsVncConfig = ${JSON.stringify(config)};</script>`;
+      // Inject as JS (not JSON) so we can reference window.location for host/port/encrypt
+      const configScript = `<script>window.__ozvpsVncConfig = {
+  path: ${JSON.stringify(`api/vnc-ws/${proxyToken}`)},
+  autoconnect: '1',
+  resize: 'scale',
+  reconnect: '0',
+  serverId: ${JSON.stringify(serverId)}
+};</script>`;
       html = html.replace('</head>', configScript + '\n</head>');
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
