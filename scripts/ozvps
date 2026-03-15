@@ -967,6 +967,12 @@ EOF
         success "Session IP validation enabled"
     fi
 
+    # Enable trust proxy if not already configured (required for correct IP detection behind nginx)
+    if ! grep -q "^TRUST_PROXY=" "$INSTALL_DIR/.env" 2>/dev/null; then
+        echo "TRUST_PROXY=true" >> "$INSTALL_DIR/.env"
+        success "Trust proxy enabled"
+    fi
+
     # Update NGINX error pages
     info "Updating NGINX error pages..."
     local error_pages_dir="/var/www/ozvps-errors"
