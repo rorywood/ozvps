@@ -81,16 +81,16 @@ export default function ServerList() {
   const cancellations = dashboardData?.cancellations || {};
   const billingStatuses = dashboardData?.billingStatuses || {};
 
-  // Find servers with billing issues (exclude admin suspensions)
+  // Find servers with billing issues — use s.billing (embedded on each server) not the separate billingStatuses map
   const billingSuspendedServers = servers.filter(s =>
-    billingStatuses[s.id]?.status === 'suspended' && !billingStatuses[s.id]?.adminSuspended
+    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
   );
   const adminSuspendedServers = servers.filter(s =>
-    billingStatuses[s.id]?.adminSuspended === true
+    s.billing?.adminSuspended === true
   );
-  const unpaidServers = servers.filter(s => billingStatuses[s.id]?.status === 'unpaid');
+  const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
   const overdueActiveServers = servers.filter(s => {
-    const b = billingStatuses[s.id];
+    const b = s.billing;
     if (!b || b.status !== 'active' || b.isTrial || b.freeServer || !b.nextBillAt) return false;
     return new Date(b.nextBillAt) < new Date();
   });
