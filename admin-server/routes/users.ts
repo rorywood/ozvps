@@ -532,7 +532,6 @@ export function registerUsersRoutes(router: Router) {
         metadata: {
           description,
           reason,
-          adjustedBy: session.email,
           adjustedByUserId: session.auth0UserId,
         },
       });

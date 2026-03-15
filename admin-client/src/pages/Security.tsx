@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { securityApi } from "../lib/api";
+import { securityApi, settingsApi } from "../lib/api";
 import { toast } from "sonner";
-import { Shield, Key, Save, TestTube, Check, X, AlertTriangle, ExternalLink } from "lucide-react";
+import { Shield, Key, Save, TestTube, Check, X, AlertTriangle, ExternalLink, Wrench } from "lucide-react";
+import { cn } from "../lib/utils";
 
 export default function Security() {
   const queryClient = useQueryClient();
@@ -12,6 +13,23 @@ export default function Security() {
   const [version, setVersion] = useState<'v2' | 'v3'>('v3');
   const [hasChanges, setHasChanges] = useState(false);
   const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+
+  const { isLoading: maintenanceLoading } = useQuery({
+    queryKey: ["maintenance-setting"],
+    queryFn: settingsApi.getMaintenance,
+    onSuccess: (data) => setMaintenanceEnabled(data.enabled),
+  });
+
+  const maintenanceMutation = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.updateMaintenance(enabled),
+    onSuccess: (data) => {
+      setMaintenanceEnabled(data.enabled);
+      toast.success(data.enabled ? "Maintenance mode enabled" : "Maintenance mode disabled");
+      queryClient.invalidateQueries({ queryKey: ["maintenance-setting"] });
+    },
+    onError: () => toast.error("Failed to update maintenance mode"),
+  });
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["recaptcha-settings"],
@@ -68,6 +86,61 @@ export default function Security() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-white mb-6">Security Settings</h1>
+
+      {/* Maintenance Mode */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-orange-500/20 rounded-lg mt-0.5">
+              <Wrench className="h-5 w-5 text-orange-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white">Maintenance Mode</h3>
+              <p className="text-sm text-white/50 mt-1 max-w-md">
+                When enabled, all visitors will see a maintenance page instead of the login screen. Existing sessions are unaffected.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            {maintenanceLoading ? (
+              <span className="text-xs text-white/40">Loading...</span>
+            ) : (
+              <>
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-xs font-medium border",
+                  maintenanceEnabled
+                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                    : "bg-green-500/20 text-green-400 border-green-500/30"
+                )}>
+                  {maintenanceEnabled ? "Active" : "Inactive"}
+                </span>
+                <button
+                  onClick={() => maintenanceMutation.mutate(!maintenanceEnabled)}
+                  disabled={maintenanceMutation.isPending}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50",
+                    maintenanceEnabled
+                      ? "bg-green-600 hover:bg-green-700 text-white"
+                      : "bg-red-600 hover:bg-red-700 text-white"
+                  )}
+                >
+                  {maintenanceMutation.isPending
+                    ? "Saving..."
+                    : maintenanceEnabled
+                    ? "Disable Maintenance"
+                    : "Enable Maintenance"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {maintenanceEnabled && (
+          <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-2 text-sm text-orange-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Maintenance mode is active. Users cannot access the platform.</span>
+          </div>
+        )}
+      </div>
 
       {/* reCAPTCHA Section */}
       <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6 mb-6">

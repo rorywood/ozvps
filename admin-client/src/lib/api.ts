@@ -368,6 +368,9 @@ export const settingsApi = {
   getRegistration: () => api.get<{ enabled: boolean }>("/settings/registration"),
   updateRegistration: (enabled: boolean) =>
     api.put<{ enabled: boolean }>("/settings/registration", { enabled }),
+  getMaintenance: () => api.get<{ enabled: boolean }>("/settings/maintenance"),
+  updateMaintenance: (enabled: boolean) =>
+    api.put<{ enabled: boolean }>("/settings/maintenance", { enabled }),
 };
 
 // Plans API (local database)

@@ -4,6 +4,7 @@ interface SystemHealth {
   status: 'ok' | 'error';
   errorCode?: 'DB_UNAVAILABLE' | 'VF_API_UNAVAILABLE' | 'SYSTEM_ERROR' | 'RATE_LIMITED';
   message?: string;
+  maintenanceMode?: boolean;
   services?: {
     database: boolean | null;
     virtfusion: boolean | null;
@@ -86,6 +87,8 @@ export function useSystemHealth() {
     data?.errorCode === 'SYSTEM_ERROR' ||
     (error !== null && !isLoading && !isRateLimited); // Health check failed completely
 
+  const isMaintenanceMode = data?.maintenanceMode === true;
+
   return {
     health: data,
     isLoading,
@@ -96,6 +99,7 @@ export function useSystemHealth() {
     isVirtFusionDown,
     isRateLimited,  // User hit rate limits - not a system problem
     isSystemDown,  // Use this to block login - covers ALL failure scenarios
+    isMaintenanceMode,
     errorMessage: data?.message || (error ? 'System is temporarily unavailable' : undefined),
     errorCode: data?.errorCode || (error ? 'SYSTEM_ERROR' : undefined),
   };

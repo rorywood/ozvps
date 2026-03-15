@@ -44,4 +44,40 @@ export function registerSettingsRoutes(router: Router): void {
       res.status(500).json({ error: "Failed to update registration setting" });
     }
   });
+
+  // Get maintenance mode setting
+  router.get("/settings/maintenance", async (req: Request, res: Response) => {
+    try {
+      const setting = await dbStorage.getSecuritySetting("maintenance_mode");
+      const enabled = setting ? setting.enabled : false;
+      res.json({ enabled });
+    } catch (error: any) {
+      console.log(`[admin-settings] Error fetching maintenance setting: ${error.message}`);
+      res.status(500).json({ error: "Failed to fetch maintenance setting" });
+    }
+  });
+
+  // Update maintenance mode setting
+  router.put("/settings/maintenance", async (req: Request, res: Response) => {
+    try {
+      const session = req.adminSession!;
+      const { enabled } = req.body;
+
+      if (typeof enabled !== "boolean") {
+        return res.status(400).json({ error: "enabled must be a boolean" });
+      }
+
+      await dbStorage.upsertSecuritySetting("maintenance_mode", null, enabled);
+
+      await auditSuccess(req, "settings.maintenance", "settings", "maintenance_mode", undefined, { enabled });
+
+      console.log(`[admin-settings] Maintenance mode ${enabled ? "enabled" : "disabled"} by ${session.email}`);
+
+      res.json({ enabled });
+    } catch (error: any) {
+      await auditFailure(req, "settings.maintenance", "settings", error.message);
+      console.log(`[admin-settings] Error updating maintenance setting: ${error.message}`);
+      res.status(500).json({ error: "Failed to update maintenance setting" });
+    }
+  });
 }

@@ -1553,7 +1553,7 @@ export default function BillingPage() {
                                       {(tx.metadata as Record<string, string>).reason && (
                                         <span><span className="text-primary">Note:</span> {(tx.metadata as Record<string, string>).reason} · </span>
                                       )}
-                                      <span className="text-primary">By:</span> {(tx.metadata as Record<string, string>).adjustedBy || 'Admin'}
+                                      <span className="text-primary">By:</span> OzVPS Admin
                                     </div>
                                   ) : null}
                                 </div>

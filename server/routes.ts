@@ -911,8 +911,13 @@ export async function registerRoutes(
         });
       }
 
+      // Check maintenance mode
+      const maintenanceSetting = await dbStorage.getSecuritySetting('maintenance_mode');
+      const maintenanceMode = maintenanceSetting ? maintenanceSetting.enabled : false;
+
       res.json({
         status: 'ok',
+        maintenanceMode,
         services: {
           database: true,
           virtfusion: true

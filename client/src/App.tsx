@@ -29,6 +29,7 @@ import Support from "@/pages/support";
 import SupportTicket from "@/pages/support-ticket";
 import GuestTicket from "@/pages/guest-ticket";
 import ContactPage from "@/pages/contact";
+import MaintenancePage from "@/pages/maintenance";
 import { api, setApiSessionErrorCallback } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
@@ -41,7 +42,11 @@ const PUBLIC_AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-p
 
 function SystemHealthCheck({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { isDatabaseDown, isLoading: healthLoading } = useSystemHealth();
+  const { isDatabaseDown, isMaintenanceMode, isLoading: healthLoading } = useSystemHealth();
+
+  if (isMaintenanceMode) {
+    return <MaintenancePage />;
+  }
 
   // Check if we're on a public auth route (they have their own error handling)
   const isPublicAuthRoute = PUBLIC_AUTH_ROUTES.some(route => location.startsWith(route));
