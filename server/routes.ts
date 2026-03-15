@@ -3054,11 +3054,18 @@ export async function registerRoutes(
 
       // Call retryUnpaidServers to handle the reactivation
       // This will charge the wallet, update billing status, and unsuspend if needed
-      // Note: This reactivates all unpaid servers for the user, not just this one
       await retryUnpaidServers(session.auth0UserId!);
 
-      // Fetch the updated billing record
+      // Fetch the updated billing record to verify the outcome
       const updatedRecord = await getServerBillingStatus(serverId, session.auth0UserId!);
+
+      // If the billing status is still suspended, the unsuspend failed (charge was refunded)
+      if (updatedRecord?.status === 'suspended') {
+        return res.status(500).json({
+          error: 'Payment was processed but the server could not be unsuspended. Your wallet has been refunded. Please try again or contact support.',
+          billingRecord: updatedRecord,
+        });
+      }
 
       log(`User ${session.email} reactivated server ${serverId}`, 'billing');
       res.json({

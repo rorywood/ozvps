@@ -674,13 +674,27 @@ export class VirtFusionClient {
       // Give VirtFusion a moment to process the unsuspend
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Verify the server is actually unsuspended
+      // Verify the server is actually unsuspended (explicit === true, undefined/null = not suspended)
       const verifyResponse = await this.request<{ data: any }>(`/servers/${serverId}`);
-      if (verifyResponse.data.suspended) {
-        log(`WARNING: Server ${serverId} still shows as suspended after unsuspend request`, 'virtfusion');
-        // Try again
-        await this.request(`/servers/${serverId}/unsuspend`, { method: 'POST' });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (verifyResponse.data.suspended === true) {
+        log(`WARNING: Server ${serverId} still suspended after first unsuspend — retrying`, 'virtfusion');
+        // Retry unsuspend (409 = already active, treat as success)
+        try {
+          await this.request(`/servers/${serverId}/unsuspend`, { method: 'POST' });
+        } catch (retryError: any) {
+          if (retryError.status === 409 || retryError.message?.includes('409')) {
+            log(`Server ${serverId} not suspended in VirtFusion on retry (409) — treating as unsuspended`, 'virtfusion');
+          } else {
+            throw retryError;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Final verification — if still suspended, throw so caller knows it failed
+        const finalVerify = await this.request<{ data: any }>(`/servers/${serverId}`);
+        if (finalVerify.data.suspended === true) {
+          throw new Error(`Server ${serverId} is still suspended in VirtFusion after multiple unsuspend attempts`);
+        }
       }
 
       // Then boot the server so the user doesn't have to manually power it on
