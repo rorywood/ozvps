@@ -903,6 +903,7 @@ export default function DeployPage() {
                   )}
 
                   {/* Pricing */}
+                  {selectedPlanId && selectedLocationCode && (
                   <div className="border-t border-border pt-4">
                     <div className="rounded-xl bg-background border border-border overflow-hidden">
                       <div className="divide-y divide-border">
@@ -954,16 +955,17 @@ export default function DeployPage() {
                       </div>
                     </div>
                   </div>
+                  )}
 
                   {/* Deploy Button */}
                   <div className="pt-2">
-                    {!selectedPlanId || !hostname || !selectedOsId ? (
+                    {!selectedPlanId || !selectedLocationCode || !hostname || !selectedOsId ? (
                       <Button
                         className="w-full h-11"
                         disabled
                         data-testid="button-deploy-disabled"
                       >
-                        {!selectedPlanId ? 'Select plan' : !hostname ? 'Enter hostname' : 'Select OS'}
+                        {!selectedPlanId ? 'Select plan' : !selectedLocationCode ? 'Select region' : !hostname ? 'Enter hostname' : 'Select OS'}
                       </Button>
                     ) : canAfford ? (
                       <Button
