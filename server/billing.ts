@@ -627,16 +627,25 @@ export async function sendBillingReminders(): Promise<void> {
 
 // Reactivation - retry billing for unpaid/suspended servers after top-up
 export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
+  const now = new Date();
   const unpaidServers = await db.select().from(serverBilling)
     .where(
       and(
         eq(serverBilling.auth0UserId, auth0UserId),
         eq(serverBilling.freeServer, false), // Skip complimentary servers
-        or(eq(serverBilling.status, 'unpaid'), eq(serverBilling.status, 'suspended'))
+        or(
+          eq(serverBilling.status, 'unpaid'),
+          eq(serverBilling.status, 'suspended'),
+          // Also catch active/paid servers whose nextBillAt has passed (billing job hasn't run yet)
+          and(
+            or(eq(serverBilling.status, 'active'), eq(serverBilling.status, 'paid')),
+            lte(serverBilling.nextBillAt, now)
+          )
+        )
       )
     );
 
-  log(`Found ${unpaidServers.length} unpaid/suspended servers for user ${auth0UserId}`, 'billing');
+  log(`Found ${unpaidServers.length} unpaid/suspended/overdue servers for user ${auth0UserId}`, 'billing');
 
   for (const billing of unpaidServers) {
     try {

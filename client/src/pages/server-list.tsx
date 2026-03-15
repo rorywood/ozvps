@@ -91,7 +91,7 @@ export default function ServerList() {
   const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
   const overdueActiveServers = servers.filter(s => {
     const b = s.billing;
-    if (!b || b.status !== 'active' || b.isTrial || b.freeServer || !b.nextBillAt) return false;
+    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
     return new Date(b.nextBillAt) < new Date();
   });
   const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;

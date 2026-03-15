@@ -1154,10 +1154,10 @@ export default function ServerDetail() {
   const isTrialEnded = server?.billing?.isTrial === true && server?.billing?.trialEndedAt != null;
   const isActiveTrial = server?.billing?.isTrial === true && !server?.billing?.trialEndedAt;
 
-  // Overdue warning: active billing but nextBillAt is in the past (billing job hasn't run yet or charge pending)
+  // Overdue warning: billing payment due but nextBillAt is in the past (billing job hasn't run yet or charge pending)
   const billingOverdueDays = (() => {
     const b = server?.billing;
-    if (!b || b.status !== 'active' || b.isTrial || b.freeServer || !b.nextBillAt) return 0;
+    if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return 0;
     const days = Math.floor((Date.now() - new Date(b.nextBillAt).getTime()) / (1000 * 60 * 60 * 24));
     return days > 0 ? days : 0;
   })();
