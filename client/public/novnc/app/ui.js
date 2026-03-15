@@ -340,7 +340,7 @@ const UI = {
         document.getElementById("noVNC_clipboard_paste_button")
             .addEventListener('click', UI.clipboardPasteFromBrowser);
         document.getElementById("noVNC_clipboard_send_button")
-            .addEventListener('click', UI.clipboardSend);
+            .addEventListener('click', UI.clipboardSendAndPaste);
     },
 
     // Add a call to save settings when the element changes,
@@ -983,8 +983,28 @@ const UI = {
     clipboardSend() {
         const text = document.getElementById('noVNC_clipboard_text').value;
         Log.Debug(">> UI.clipboardSend: " + text.substr(0, 40) + "...");
-        UI.rfb.clipboardPasteFrom(text);
+        if (UI.rfb) UI.rfb.clipboardPasteFrom(text);
         Log.Debug("<< UI.clipboardSend");
+    },
+
+    // Send clipboard text to server AND simulate Ctrl+V to paste it
+    clipboardSendAndPaste() {
+        const text = document.getElementById('noVNC_clipboard_text').value;
+        if (!text || !UI.rfb) return;
+
+        // Update server clipboard
+        UI.rfb.clipboardPasteFrom(text);
+
+        // Simulate Ctrl+V so it pastes into the focused application
+        setTimeout(() => {
+            UI.rfb.sendKey(0xffe3, "ControlLeft", true);   // Ctrl down
+            UI.rfb.sendKey(0x76,   "KeyV",        true);   // V down
+            UI.rfb.sendKey(0x76,   "KeyV",        false);  // V up
+            UI.rfb.sendKey(0xffe3, "ControlLeft", false);  // Ctrl up
+        }, 100);
+
+        // Close the panel so user can see the paste happen
+        UI.closeClipboardPanel();
     },
 
     clipboardPasteFromBrowser() {
