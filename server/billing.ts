@@ -686,34 +686,38 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
             log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
 
             const serverName = await getServerName(billing.virtfusionServerId);
-
-            await db.update(wallets)
-              .set({
-                balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
-                updatedAt: new Date(),
-              })
-              .where(eq(wallets.auth0UserId, billing.auth0UserId));
-
-            await db.insert(walletTransactions).values({
-              auth0UserId: billing.auth0UserId,
-              type: 'refund',
-              amountCents: billing.monthlyPriceCents,
-              metadata: {
-                serverId: billing.virtfusionServerId,
-                serverName,
-                reason: 'Server unsuspend failed after 3 attempts - auto refund',
-              },
-            });
-
-            // Remove the ledger entry so future retries can charge again with a fresh key
             const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-            await db.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
 
-            // Revert to suspended — nextBillAt stays at newNextBillAt so the next
-            // retry uses a fresh idempotency key and charges correctly
-            await db.update(serverBilling)
-              .set({ status: 'suspended', updatedAt: new Date() })
-              .where(eq(serverBilling.id, billing.id));
+            // Wrap all revert operations in a transaction so a partial failure
+            // cannot leave the ledger entry without the refund, or vice versa
+            await db.transaction(async (tx) => {
+              await tx.update(wallets)
+                .set({
+                  balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
+                  updatedAt: new Date(),
+                })
+                .where(eq(wallets.auth0UserId, billing.auth0UserId));
+
+              await tx.insert(walletTransactions).values({
+                auth0UserId: billing.auth0UserId,
+                type: 'refund',
+                amountCents: billing.monthlyPriceCents,
+                metadata: {
+                  serverId: billing.virtfusionServerId,
+                  serverName,
+                  reason: 'Server unsuspend failed after 3 attempts - auto refund',
+                },
+              });
+
+              // Remove the ledger entry so future retries can charge again with a fresh key
+              await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+
+              // Revert to suspended — nextBillAt stays at newNextBillAt so the next
+              // retry uses a fresh idempotency key and charges correctly
+              await tx.update(serverBilling)
+                .set({ status: 'suspended', updatedAt: new Date() })
+                .where(eq(serverBilling.id, billing.id));
+            });
 
             log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
           }
