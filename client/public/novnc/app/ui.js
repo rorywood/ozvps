@@ -337,6 +337,10 @@ const UI = {
             .addEventListener('click', UI.toggleClipboardPanel);
         document.getElementById("noVNC_clipboard_text")
             .addEventListener('change', UI.clipboardSend);
+        document.getElementById("noVNC_clipboard_paste_button")
+            .addEventListener('click', UI.clipboardPasteFromBrowser);
+        document.getElementById("noVNC_clipboard_send_button")
+            .addEventListener('click', UI.clipboardSend);
     },
 
     // Add a call to save settings when the element changes,
@@ -981,6 +985,23 @@ const UI = {
         Log.Debug(">> UI.clipboardSend: " + text.substr(0, 40) + "...");
         UI.rfb.clipboardPasteFrom(text);
         Log.Debug("<< UI.clipboardSend");
+    },
+
+    clipboardPasteFromBrowser() {
+        if (!navigator.clipboard || !navigator.clipboard.readText) {
+            // Fallback: focus the textarea so user can paste manually
+            const ta = document.getElementById('noVNC_clipboard_text');
+            ta.focus();
+            ta.placeholder = 'Browser clipboard access denied — press Ctrl+V here, then click Send to server';
+            return;
+        }
+        navigator.clipboard.readText().then(text => {
+            document.getElementById('noVNC_clipboard_text').value = text;
+        }).catch(() => {
+            const ta = document.getElementById('noVNC_clipboard_text');
+            ta.focus();
+            ta.placeholder = 'Clipboard access denied — press Ctrl+V here, then click Send to server';
+        });
     },
 
 /* ------^-------
