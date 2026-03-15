@@ -973,6 +973,15 @@ EOF
         success "Trust proxy enabled"
     fi
 
+    # Generate Resend inbound webhook secret if not already configured
+    if ! grep -q "^RESEND_WEBHOOK_SECRET=" "$INSTALL_DIR/.env" 2>/dev/null; then
+        local webhook_secret
+        webhook_secret=$(openssl rand -hex 32)
+        echo "RESEND_WEBHOOK_SECRET=$webhook_secret" >> "$INSTALL_DIR/.env"
+        success "Resend webhook secret generated"
+        warning "Update your Resend inbound webhook URL to include: ?secret=$webhook_secret"
+    fi
+
     # Update NGINX error pages
     info "Updating NGINX error pages..."
     local error_pages_dir="/var/www/ozvps-errors"

@@ -6688,6 +6688,16 @@ export async function registerRoutes(
   // Inbound email webhook — Resend forwards emails to support+{ticketId}@ozvps.com.au here
   app.post('/api/hooks/resend-inbound', async (req, res) => {
     try {
+      // Validate shared secret to prevent forged inbound email injection
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const provided = req.query.secret || req.headers['x-webhook-secret'];
+        if (!provided || !timingSafeEqual(Buffer.from(String(provided)), Buffer.from(webhookSecret))) {
+          log('Resend inbound webhook: invalid secret', 'webhook');
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+      }
+
       // Resend sends multipart/form-data or JSON depending on configuration
       const payload = req.body;
 
@@ -7332,7 +7342,7 @@ export async function registerRoutes(
   });
 
   // Get a guest ticket by access token (no auth required)
-  app.get('/api/support/guest/:accessToken', async (req, res) => {
+  app.get('/api/support/guest/:accessToken', ticketRateLimiter, async (req, res) => {
     try {
       const { accessToken } = req.params;
       if (!accessToken || accessToken.length < 32) {
