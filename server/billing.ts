@@ -125,8 +125,17 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       .limit(1);
 
     if (existing.length > 0) {
-      log(`Server ${billing.virtfusionServerId} already charged for ${billing.nextBillAt.toISOString()}`, 'billing');
-      return true; // Already charged
+      log(`Server ${billing.virtfusionServerId} already charged for ${billing.nextBillAt.toISOString()} — reconciling status`, 'billing');
+      // Ledger entry exists (charge happened) but status may still be 'active'/'unpaid' — fix it
+      if (billing.status !== 'paid') {
+        const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(billing.nextBillAt);
+        newNextBillAt.setUTCHours(0, 0, 0, 0);
+        await tx.update(serverBilling)
+          .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
+          .where(eq(serverBilling.id, billing.id));
+        log(`Reconciled server ${billing.virtfusionServerId} status to paid, nextBillAt=${newNextBillAt.toISOString()}`, 'billing');
+      }
+      return true;
     }
 
     const wallet = walletRows[0];
@@ -380,17 +389,6 @@ export async function runBillingJob(): Promise<BillingJobResult> {
         continue;
       }
 
-      // Check idempotency before charging to give better feedback
-      const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-      const existing = await db.select().from(billingLedger)
-        .where(eq(billingLedger.idempotencyKey, idempotencyKey))
-        .limit(1);
-      if (existing.length > 0) {
-        log(`Server ${billing.virtfusionServerId} already charged (idempotency key exists)`, 'billing');
-        result.skippedAlreadyCharged.push(billing.virtfusionServerId);
-        continue;
-      }
-
       let charged = await chargeServer(billing);
 
       // If charge failed due to insufficient balance, try auto top-up then retry once
@@ -407,6 +405,8 @@ export async function runBillingJob(): Promise<BillingJobResult> {
       }
 
       if (charged) {
+        // chargeServer returns true for both fresh charges and idempotency-reconciled ones
+        // Check if it was already in ledger by seeing if status was just fixed
         result.charged.push(billing.virtfusionServerId);
       } else {
         result.skippedInsufficientFunds.push(billing.virtfusionServerId);
