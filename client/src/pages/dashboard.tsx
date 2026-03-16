@@ -13,16 +13,15 @@ import {
   AlertCircle,
   ChevronRight,
   AlertTriangle,
-  Wallet,
   Ban,
-  Gift,
-  Loader2
+  Gift
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { usePowerActions, useSyncPowerActions } from "@/hooks/use-power-actions";
 import { cn } from "@/lib/utils";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { useAuth } from "@/hooks/use-auth";
+import { BillingBanner } from "@/components/billing-banner";
 
 export default function Dashboard() {
   useDocumentTitle('Dashboard');
@@ -64,50 +63,19 @@ export default function Dashboard() {
   const billingStatuses = dashboardData?.billingStatuses || {};
   const walletBalance = walletData?.wallet?.balanceCents || 0;
 
-  // Helper to calculate days overdue (uses UTC to avoid timezone/DST issues)
-  const getDaysOverdue = (nextBillAt?: string): number => {
-    if (!nextBillAt) return 0;
-    const billDate = new Date(nextBillAt);
-    const now = new Date();
-    const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-    const billDateUTC = Date.UTC(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
-    const daysUntil = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
-    return daysUntil < 0 ? Math.abs(daysUntil) : 0;
-  };
-
   // Find servers with billing issues — use s.billing directly (reliable, same as server-detail)
-  const billingSuspendedServers = servers.filter(s =>
-    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
-  );
   const adminSuspendedServers = servers.filter(s =>
     s.billing?.adminSuspended === true
   );
   const unpaidServers = servers.filter(s => s.billing?.status === 'unpaid');
-
-  // Overdue: active/paid servers with past nextBillAt (billing job hasn't charged yet)
+  const billingSuspendedServers = servers.filter(s =>
+    s.billing?.status === 'suspended' && !s.billing?.adminSuspended
+  );
   const overdueActiveServers = servers.filter(s => {
     const b = s.billing;
     if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
-    return getDaysOverdue(b.nextBillAt) > 0;
+    return new Date(b.nextBillAt) < new Date();
   });
-
-  const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
-
-  // Only show overdueActiveServers in the banner if the wallet can't cover them —
-  // if the wallet has enough, the billing job will charge automatically, no need to alarm the user.
-  const overdueActiveAmount = overdueActiveServers.reduce((sum, s) => sum + (s.billing?.monthlyPriceCents || 0), 0);
-  const canCoverOverdueActive = walletBalance >= overdueActiveAmount;
-  const overdueActiveForBanner = canCoverOverdueActive ? [] : overdueActiveServers;
-
-  // All servers needing user action (for the critical banner)
-  const criticalOverdueServers = [...billingSuspendedServers, ...unpaidServers, ...overdueActiveForBanner];
-
-  // Calculate total amount owed for the banner servers
-  const totalAmountOwed = criticalOverdueServers.reduce((sum, s) => {
-    return sum + (s.billing?.monthlyPriceCents || 0);
-  }, 0);
-
-  const hasSufficientFunds = walletBalance >= totalAmountOwed;
 
   const payOverdueMutation = useMutation({
     mutationFn: () => Promise.all(
@@ -178,75 +146,13 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Critical Overdue Banner - More than 2 days overdue */}
-        {criticalOverdueServers.length > 0 && (
-          <div className="border-2 border-red-500 rounded-lg p-5 bg-red-500/10">
-            <div className="flex items-start gap-4">
-              <div className="bg-red-500 rounded-full p-2 flex-shrink-0">
-                <AlertTriangle className="h-6 w-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-red-500 text-lg mb-2">Urgent: Payment Overdue</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  You have <span className="text-red-500 font-semibold">{criticalOverdueServers.length} server{criticalOverdueServers.length > 1 ? 's' : ''}</span> with
-                  payments overdue by more than 2 days. Your server{criticalOverdueServers.length > 1 ? 's' : ''} may be suspended or deleted if payment is not received.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {criticalOverdueServers.map(s => {
-                    const daysOverdue = getDaysOverdue(s.billing?.nextBillAt);
-                    return (
-                      <span key={s.id} className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded">
-                        {s.name || `Server #${s.id}`}{daysOverdue > 0 ? ` (${daysOverdue} days overdue)` : ''}
-                      </span>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-3 pt-2 border-t border-red-500/30">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Amount owed: </span>
-                    <span className="font-bold text-red-500">
-                      {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(totalAmountOwed / 100)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Wallet balance: </span>
-                    <span className={`font-bold ${hasSufficientFunds ? 'text-green-500' : 'text-amber-500'}`}>
-                      {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(walletBalance / 100)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-3 mt-4">
-                  {hasSufficientFunds ? (
-                    <Button
-                      variant="destructive"
-                      onClick={() => payOverdueMutation.mutate()}
-                      disabled={payOverdueMutation.isPending}
-                    >
-                      {payOverdueMutation.isPending
-                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Paying...</>
-                        : <><Wallet className="h-4 w-4 mr-2" />Pay Now</>
-                      }
-                    </Button>
-                  ) : (
-                    <>
-                      <Button variant="destructive" asChild>
-                        <Link href="/billing">
-                          <Wallet className="h-4 w-4 mr-2" />
-                          Top Up Wallet
-                        </Link>
-                      </Button>
-                      <p className="text-xs text-amber-500 self-center">
-                        Insufficient funds — add{' '}
-                        {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format((totalAmountOwed - walletBalance) / 100)}{' '}
-                        to your wallet
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <BillingBanner
+          servers={servers}
+          walletBalance={walletBalance}
+          walletLoaded={!!walletData}
+          onPayNow={payOverdueMutation.mutate}
+          payNowPending={payOverdueMutation.isPending}
+        />
 
         {/* Admin Suspended Servers Alert */}
         {adminSuspendedServers.length > 0 && (
@@ -266,42 +172,6 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">
                   Please contact support if you believe this is an error.
                 </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Overdue Servers Alert (billing-related only) */}
-        {hasOverdueServers && (
-          <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h3 className="font-semibold text-destructive mb-1">Payment Required</h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  {billingSuspendedServers.length > 0 && (
-                    <span className="block">
-                      <span className="text-destructive font-medium">{billingSuspendedServers.length} server{billingSuspendedServers.length > 1 ? 's' : ''} suspended</span> due to non-payment.
-                      {billingSuspendedServers.map(s => (
-                        <span key={s.id} className="text-muted-foreground"> • {s.name || `Server #${s.id}`}</span>
-                      ))}
-                    </span>
-                  )}
-                  {unpaidServers.length > 0 && (
-                    <span className="block mt-1">
-                      <span className="text-warning font-medium">{unpaidServers.length} server{unpaidServers.length > 1 ? 's' : ''} unpaid</span> and will be suspended soon.
-                      {unpaidServers.map(s => (
-                        <span key={s.id} className="text-muted-foreground"> • {s.name || `Server #${s.id}`}</span>
-                      ))}
-                    </span>
-                  )}
-                </p>
-                <Button size="sm" variant="destructive" asChild>
-                  <Link href="/billing">
-                    <Wallet className="h-4 w-4 mr-2" />
-                    Add Funds
-                  </Link>
-                </Button>
               </div>
             </div>
           </div>

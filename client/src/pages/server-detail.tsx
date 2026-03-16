@@ -44,7 +44,8 @@ import {
   Mail,
   Wallet,
   Ban,
-  Gift
+  Gift,
+  Info
 } from "lucide-react";
 import { Link, useRoute, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -739,7 +740,7 @@ export default function ServerDetail() {
   const { data: walletData, refetch: refetchWallet } = useQuery({
     queryKey: ['wallet'],
     queryFn: () => api.getWallet(),
-    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid' || billingOverdueDaysEarly > 0,
+    enabled: server?.billing?.status === 'suspended' || server?.billing?.status === 'unpaid' || (billingOverdueDaysEarly >= 0 && !server?.billing?.isTrial && !server?.billing?.freeServer && !!server?.billing?.nextBillAt),
   });
 
   // Reactivate server mutation
@@ -1692,44 +1693,78 @@ export default function ServerDetail() {
         )}
 
 
-        {/* At Risk Warning Banner — active billing but nextBillAt is past */}
-        {billingOverdueDays > 0 && !isSuspended && (() => {
+        {/* Billing Notice Banner — active billing due today or overdue */}
+        {!isSuspended && server.billing?.nextBillAt && !server.billing?.isTrial && !server.billing?.freeServer && server.billing?.status !== 'unpaid' && (() => {
           const amountDue = server.billing?.monthlyPriceCents ?? 0;
           const walletBalance = walletData?.wallet?.balanceCents ?? 0;
           const canPay = walletBalance >= amountDue;
-          return (
-            <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg p-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
-                <div>
-                  <h3 className="font-semibold text-amber-300">Payment Overdue — Server at Risk of Suspension</h3>
-                  <p className="text-sm text-amber-300/80">
-                    {billingOverdueDays} day{billingOverdueDays !== 1 ? 's' : ''} overdue.
-                    Amount due: <span className="font-medium">${(amountDue / 100).toFixed(2)}</span>
-                    {walletData && (
-                      <> · Wallet: <span className={canPay ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>${(walletBalance / 100).toFixed(2)}</span></>
-                    )}
-                  </p>
+          const billDate = new Date(server.billing.nextBillAt);
+          const now = new Date();
+          const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+          const billDateUTC = Date.UTC(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+          const daysUntil = Math.round((billDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
+
+          if (daysUntil === 0 && canPay) {
+            return (
+              <div className="border border-primary/30 bg-primary/8 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1">Payment Due Today</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Your wallet will be charged <span className="font-semibold text-foreground">${(amountDue / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span> today for this server. No action needed.
+                    </p>
+                  </div>
                 </div>
               </div>
-              {canPay ? (
-                <Button
-                  size="sm"
-                  className="bg-amber-500 hover:bg-amber-600 text-black font-semibold shrink-0"
-                  onClick={() => serverId && reactivateMutation.mutate(serverId)}
-                  disabled={reactivateMutation.isPending}
-                >
-                  {reactivateMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Paying...</> : 'Pay Now'}
-                </Button>
-              ) : (
-                <Link href="/billing">
-                  <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 shrink-0">
-                    Add Funds
-                  </Button>
-                </Link>
-              )}
-            </div>
-          );
+            );
+          }
+
+          if (daysUntil < 0 && canPay) {
+            return (
+              <div className="border border-primary/30 bg-primary/8 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1">Payment Processing</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Your wallet has sufficient funds. Payment will be processed automatically.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (daysUntil <= 0 && !canPay) {
+            return (
+              <div className="border border-warning/30 bg-warning/8 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1">
+                    <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Insufficient Funds</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Please add funds to avoid suspension.{" "}
+                        Amount due: <span className="font-semibold text-foreground">${(amountDue / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                        {walletData && (
+                          <> · Wallet: <span className="font-semibold text-destructive">${(walletBalance / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span></>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <Link href="/billing">
+                    <Button size="sm" className="shrink-0 bg-warning/15 border border-warning/40 text-warning hover:bg-warning/25">
+                      <Wallet className="h-3.5 w-3.5 mr-1.5" />
+                      Add Funds
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            );
+          }
+
+          return null;
         })()}
 
         {/* Overdue/Unpaid Banner */}
