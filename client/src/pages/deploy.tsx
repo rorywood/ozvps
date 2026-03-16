@@ -644,6 +644,10 @@ export default function DeployPage() {
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>{formatTransfer(plan.transferGb)}</span>
                           </div>
                           <div className="flex justify-between">
+                            <span className="text-muted-foreground">IPv4 Address</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>1 Included</span>
+                          </div>
+                          <div className="flex justify-between">
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="text-muted-foreground flex items-center gap-1">
@@ -655,10 +659,6 @@ export default function DeployPage() {
                               </TooltipContent>
                             </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>500 Mbps</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">IPv4 Address</span>
-                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>1 Included</span>
                           </div>
                         </div>
                       </button>
