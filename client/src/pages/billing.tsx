@@ -52,7 +52,7 @@ import { loadStripe, Stripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { useTheme } from "@/components/theme-provider";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, formatDateShort } from "@/lib/utils";
 
 interface Wallet {
   id: number;
@@ -103,13 +103,6 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-}
 
 function formatCardBrand(brand: string): string {
   return brand.charAt(0).toUpperCase() + brand.slice(1);

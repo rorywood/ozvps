@@ -179,6 +179,7 @@ function formatDate(dateString: string): string {
       day: "numeric",
       month: "short",
       year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+      timeZone: "Australia/Brisbane",
     });
   }
 }

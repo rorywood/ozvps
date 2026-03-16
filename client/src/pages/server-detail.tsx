@@ -52,7 +52,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import flagAU from "@/assets/flag-au.png";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, formatDateShort } from "@/lib/utils";
 import { OsTemplateRow } from "@/components/os-template-row";
 import { getOsCategory, getOsLogoUrl, FALLBACK_LOGO, type OsTemplate as OsTemplateType } from "@/lib/os-logos";
 import { SetupProgressChecklist } from "@/components/setup-progress-checklist";
@@ -1742,7 +1742,7 @@ export default function ServerDetail() {
                 <p className="text-sm text-red-300/80">
                   Your server payment is overdue. Please add funds to avoid suspension
                   {server.billing?.suspendAt && (
-                    <> by {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</>
+                    <> by {formatDateShort(server.billing.suspendAt)}</>
                   )}.
                 </p>
               </div>
@@ -1990,6 +1990,7 @@ export default function ServerDetail() {
                         year: 'numeric',
                         hour: 'numeric',
                         minute: '2-digit',
+                        timeZone: 'Australia/Brisbane',
                       })}
                     </p>
                   </div>
@@ -2085,11 +2086,7 @@ export default function ServerDetail() {
                         }`}>
                           {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : (
                             <>
-                              {nextBillDate.toLocaleDateString('en-AU', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
-                              })}
+                              {formatDate(nextBillDate.toISOString())}
                               <span className="text-muted-foreground font-normal ml-1">
                                 ({daysUntilBill} day{daysUntilBill !== 1 ? 's' : ''})
                               </span>
@@ -2114,7 +2111,7 @@ export default function ServerDetail() {
                       )}
                       {server.billing.status === 'unpaid' && server.billing.suspendAt && (
                         <p className="text-xs text-red-400/80 mt-1">
-                          Suspends {new Date(server.billing.suspendAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                          Suspends {formatDateShort(server.billing.suspendAt)}
                         </p>
                       )}
                     </div>
@@ -2532,8 +2529,8 @@ export default function ServerDetail() {
                 const remainingDisplay = remainingBytes !== null ? formatBytes(remainingBytes) : null;
                 const usagePercent = limitGB > 0 ? Math.min(100, (usedGBNum / limitGB) * 100) : 0;
                 
-                const periodStart = current?.periodStart ? new Date(current.periodStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
-                const periodEnd = current?.periodEnd ? new Date(current.periodEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+                const periodStart = current?.periodStart ? formatDateShort(current.periodStart) : null;
+                const periodEnd = current?.periodEnd ? formatDateShort(current.periodEnd) : null;
                 
                 return (
                   <div className="space-y-2">
@@ -2890,7 +2887,8 @@ export default function ServerDetail() {
                                   weekday: 'short',
                                   year: 'numeric',
                                   month: 'short',
-                                  day: 'numeric'
+                                  day: 'numeric',
+                                  timeZone: 'Australia/Brisbane',
                                 })}
                               </span>
                             </div>

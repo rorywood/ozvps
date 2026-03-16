@@ -213,7 +213,7 @@ export default function Account() {
     if (profile) {
       setName(profile.name || "");
       setEmail(profile.email || "");
-      setTimezone(profile.timezone || "");
+      setTimezone(profile.timezone || "Australia/Brisbane");
       setProfilePictureUrl(profile.profilePictureUrl || null);
     }
   }, [profile]);
@@ -524,7 +524,7 @@ export default function Account() {
                   ) : (
                     <div className="flex items-center gap-2 p-2 bg-card/30 rounded-md border border-border">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-foreground" data-testid="text-timezone">{profile?.timezone || 'Not set'}</span>
+                      <span className="text-foreground" data-testid="text-timezone">{profile?.timezone || 'Australia/Brisbane'}</span>
                     </div>
                   )}
                 </div>
@@ -992,7 +992,7 @@ export default function Account() {
                       <p className="text-sm text-muted-foreground">Last used</p>
                       <p className="font-medium text-foreground">
                         {twoFAStatus.lastUsedAt
-                          ? new Date(twoFAStatus.lastUsedAt).toLocaleString()
+                          ? new Date(twoFAStatus.lastUsedAt).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', dateStyle: 'medium', timeStyle: 'short' })
                           : 'Never'}
                       </p>
                     </div>
@@ -1000,7 +1000,7 @@ export default function Account() {
                       <p className="text-sm text-muted-foreground">Enabled</p>
                       <p className="font-medium text-foreground">
                         {twoFAStatus.verifiedAt
-                          ? new Date(twoFAStatus.verifiedAt).toLocaleDateString()
+                          ? new Date(twoFAStatus.verifiedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Brisbane', dateStyle: 'medium' })
                           : 'Unknown'}
                       </p>
                     </div>
