@@ -2253,10 +2253,10 @@ export default function ServerDetail() {
             </div>
 
             {/* Row 2: IP, location, OS */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground font-medium pl-8">
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border">IP</div>
-                <span className="text-foreground font-mono" data-testid="text-primary-ip">{server.primaryIp}</span>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground pl-8 mt-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border leading-none">IP</span>
+                <span className="text-foreground font-mono text-sm" data-testid="text-primary-ip">{server.primaryIp}</span>
                 <button
                   onClick={() => copyToClipboard(server.primaryIp)}
                   className="text-muted-foreground hover:text-foreground"
@@ -2265,19 +2265,19 @@ export default function ServerDetail() {
                   <Copy className="h-3 w-3" />
                 </button>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <img src={flagAU} alt="Australia" className="h-4 w-6 object-cover rounded-sm shadow-sm" />
+              <div className="flex items-center gap-1.5">
+                <img src={flagAU} alt="" className="h-3.5 w-5 object-cover rounded-sm" />
                 <span className="text-foreground">{server.location.name}</span>
               </div>
               {server.image && (
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5">
                   <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
-                    alt={server.image.name}
-                    className="h-4 w-4 object-contain shrink-0"
+                    alt=""
+                    className="h-3.5 w-3.5 object-contain shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
-                  <span className="text-foreground">{server.image.name}</span>
+                  <span className="text-foreground truncate max-w-[220px]" title={server.image.name}>{server.image.name}</span>
                 </div>
               )}
             </div>
