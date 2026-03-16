@@ -649,7 +649,14 @@ export function registerUsersRoutes(router: Router) {
       ];
 
       if (onlineOnly) {
-        conditions.push(gt(sessions.lastActiveAt, fifteenMinutesAgo));
+        // lastActiveAt is NULL for brand-new sessions that haven't hit the activity middleware yet
+        // fall back to createdAt so those sessions still show as online
+        conditions.push(
+          or(
+            gt(sessions.lastActiveAt, fifteenMinutesAgo),
+            and(isNull(sessions.lastActiveAt), gt(sessions.createdAt, fifteenMinutesAgo))
+          )
+        );
       }
 
       const rows = await db
