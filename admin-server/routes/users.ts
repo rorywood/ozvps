@@ -673,7 +673,7 @@ export function registerUsersRoutes(router: Router) {
         })
         .from(sessions)
         .where(and(...conditions))
-        .orderBy(desc(sessions.lastActiveAt))
+        .orderBy(desc(sql`COALESCE(${sessions.lastActiveAt}, ${sessions.createdAt})`))
         .limit(limit);
 
       res.json({ sessions: rows });

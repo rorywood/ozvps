@@ -2252,33 +2252,35 @@ export default function ServerDetail() {
               )}
             </div>
 
-            {/* Row 2: IP, location, OS */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground pl-8 mt-0.5">
-              <div className="flex items-center gap-1.5">
-                <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border leading-none">IP</span>
-                <span className="text-foreground font-mono text-sm" data-testid="text-primary-ip">{server.primaryIp}</span>
-                <button
-                  onClick={() => copyToClipboard(server.primaryIp)}
-                  className="text-muted-foreground hover:text-foreground"
-                  data-testid="button-copy-ip"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <img src={flagAU} alt="" className="h-3.5 w-5 object-cover rounded-sm" />
-                <span className="text-foreground">{server.location.name}</span>
-              </div>
+            {/* Row 2: IP · location · OS — single line, no wrap */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground pl-8 mt-1 min-w-0">
+              {/* IP */}
+              <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border leading-none shrink-0">IP</span>
+              <span className="text-foreground font-mono shrink-0" data-testid="text-primary-ip">{server.primaryIp}</span>
+              <button
+                onClick={() => copyToClipboard(server.primaryIp)}
+                className="text-muted-foreground hover:text-foreground shrink-0"
+                data-testid="button-copy-ip"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+              {/* separator */}
+              <span className="text-border shrink-0">·</span>
+              {/* location */}
+              <img src={flagAU} alt="" className="h-3.5 w-5 object-cover rounded-sm shrink-0" />
+              <span className="text-foreground shrink-0">{server.location.name}</span>
+              {/* OS */}
               {server.image && (
-                <div className="flex items-center gap-1.5">
+                <>
+                  <span className="text-border shrink-0">·</span>
                   <img
                     src={getOsLogoUrl({ id: server.image.id, name: server.image.name, distro: server.image.distro })}
                     alt=""
                     className="h-3.5 w-3.5 object-contain shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_LOGO; }}
                   />
-                  <span className="text-foreground truncate max-w-[220px]" title={server.image.name}>{server.image.name}</span>
-                </div>
+                  <span className="text-foreground truncate min-w-0" title={server.image.name}>{server.image.name}</span>
+                </>
               )}
             </div>
           </div>
