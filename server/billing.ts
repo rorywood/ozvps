@@ -74,6 +74,8 @@ export async function createServerBilling(params: {
 }): Promise<void> {
   const deployedAt = params.deployedAt || new Date();
   const nextBillAt = addMonth(deployedAt);
+  // Normalize to midnight UTC so billing job (8am UTC) always picks it up on the correct day
+  nextBillAt.setUTCHours(0, 0, 0, 0);
 
   await db.insert(serverBilling).values({
     auth0UserId: params.auth0UserId,
@@ -178,6 +180,7 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     // For reactivation (unsuspending), set next bill to 1 month from now
     // For regular billing, set next bill to 1 month from the previous due date
     const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(billing.nextBillAt);
+    newNextBillAt.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
     await tx.update(serverBilling)
       .set({
         status: 'paid',
@@ -317,6 +320,11 @@ export async function runBillingJob(): Promise<void> {
 
   log('Starting billing job...', 'billing');
 
+  // Compare against end of today (UTC) so servers due any time today are charged,
+  // regardless of the exact time-of-day stored in nextBillAt.
+  const endOfToday = new Date(now);
+  endOfToday.setUTCHours(23, 59, 59, 999);
+
   // Step A: Charge due servers
   // Include 'active' status - new servers start as 'active' and need to be billed
   // Skip complimentary (free) servers - they don't get charged
@@ -330,7 +338,7 @@ export async function runBillingJob(): Promise<void> {
         ),
         eq(serverBilling.autoRenew, true),
         eq(serverBilling.freeServer, false), // Skip complimentary servers
-        lte(serverBilling.nextBillAt, now)
+        lte(serverBilling.nextBillAt, endOfToday)
       )
     );
 
@@ -661,6 +669,7 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
         // billing date is always reset and the billing job doesn't keep finding this
         // server on every run.
         const newNextBillAt = addMonth(new Date());
+        newNextBillAt.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
         await db.update(serverBilling)
           .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
           .where(eq(serverBilling.id, billing.id));
