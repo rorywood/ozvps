@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { activityApi } from "../lib/api";
+import { activityApi, api } from "../lib/api";
 import { toast } from "sonner";
-import { WifiOff } from "lucide-react";
+import { WifiOff, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
-type Tab = "online" | "logins" | "feed";
+type Tab = "online" | "logins" | "feed" | "admin";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -362,6 +362,137 @@ function ActivityFeedTab() {
   );
 }
 
+// ── Admin Actions tab ─────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "success") return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-[hsl(160_84%_60%)]">
+      <CheckCircle className="h-3 w-3" />success
+    </span>
+  );
+  if (status === "failure") return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-[hsl(0_84%_70%)]">
+      <XCircle className="h-3 w-3" />failure
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[hsl(45_100%_51%)/15] text-[hsl(45_100%_60%)]">
+      <Clock className="h-3 w-3" />{status}
+    </span>
+  );
+}
+
+function AdminActionsTab() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["audit-admin", page, debouncedSearch],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), perPage: "50" });
+      if (debouncedSearch) params.set("adminEmail", debouncedSearch);
+      return api.get<{ logs: any[]; total: number }>(`/audit/admin?${params}`);
+    },
+    refetchInterval: 30000,
+  });
+
+  const logs = data?.logs ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / 50));
+
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    setPage(1);
+    // simple debounce
+    clearTimeout((handleSearch as any)._t);
+    (handleSearch as any)._t = setTimeout(() => setDebouncedSearch(val), 300);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+          <input
+            type="text"
+            placeholder="Filter by admin email..."
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-[hsl(210_100%_50%)] w-64"
+          />
+        </div>
+        <span className="text-xs text-white/30">{total.toLocaleString()} records</span>
+      </div>
+
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl overflow-hidden">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[hsl(210_100%_50%)]" />
+          </div>
+        ) : isError ? (
+          <div className="flex items-center justify-center h-40 text-red-400 text-sm">Failed to load admin actions</div>
+        ) : logs.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-white/30 text-sm">No admin actions found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/8 text-xs text-white/40 uppercase tracking-wide">
+                  <th className="text-left px-4 py-3 font-medium">Time</th>
+                  <th className="text-left px-4 py-3 font-medium">Admin</th>
+                  <th className="text-left px-4 py-3 font-medium">Action</th>
+                  <th className="text-left px-4 py-3 font-medium">Target</th>
+                  <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 font-medium">Reason / Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log: any) => (
+                  <tr key={log.id} className="border-b border-white/5 last:border-0 hover:bg-white/3 transition-colors">
+                    <td className="px-4 py-3 text-white/50 text-xs font-mono whitespace-nowrap">{formatDate(log.createdAt)}</td>
+                    <td className="px-4 py-3 text-xs">
+                      <div className="text-white/80">{log.adminEmail}</div>
+                      {log.ipAddress && <div className="text-white/30 font-mono">{log.ipAddress}</div>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <code className="text-[hsl(190_100%_60%)] text-xs bg-[hsl(190_100%_50%)/10] px-1.5 py-0.5 rounded">{log.action}</code>
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-xs">
+                      {log.targetType && <span className="text-white/40 mr-1">[{log.targetType}]</span>}
+                      {log.targetLabel || log.targetId || "—"}
+                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={log.status} /></td>
+                    <td className="px-4 py-3 text-xs max-w-xs">
+                      {log.errorMessage ? <span className="text-red-400">{log.errorMessage}</span> : log.reason || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-white/40">Page {page} of {totalPages}</p>
+          <div className="flex gap-2">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="p-2 rounded-lg bg-white/5 text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="p-2 rounded-lg bg-white/5 text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Activity() {
@@ -371,7 +502,7 @@ export default function Activity() {
     <div className="space-y-6">
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-white/5 rounded-lg w-fit">
-        {(["online", "logins", "feed"] as Tab[]).map((t) => (
+        {(["online", "logins", "feed", "admin"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -381,15 +512,15 @@ export default function Activity() {
                 : "text-white/60 hover:text-white"
             }`}
           >
-            {t === "online" ? "Online Now" : t === "logins" ? "Recent Logins" : "Activity Feed"}
+            {t === "online" ? "Online Now" : t === "logins" ? "Recent Logins" : t === "feed" ? "Activity Feed" : "Admin Actions"}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
       {tab === "online" && <OnlineNowTab />}
       {tab === "logins" && <RecentLoginsTab />}
       {tab === "feed" && <ActivityFeedTab />}
+      {tab === "admin" && <AdminActionsTab />}
     </div>
   );
 }
