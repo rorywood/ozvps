@@ -152,9 +152,11 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     });
 
     // Record in wallet transactions (for user visibility)
-    const transactionDescription = reactivation
+    // Only call it "reactivation" if the server was actually suspended — unpaid-but-running
+    // servers that get auto-charged after a top-up should just show as "Monthly billing"
+    const transactionDescription = (reactivation && billing.status === 'suspended')
       ? 'Server reactivation'
-      : 'Server renewal';
+      : 'Monthly billing';
 
     await tx.insert(walletTransactions).values({
       auth0UserId: billing.auth0UserId,
