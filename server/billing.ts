@@ -95,11 +95,23 @@ export async function createServerBilling(params: {
 // Charge a server's monthly fee
 // If reactivation=true, the next bill date is set to 1 month from now (for unsuspending)
 // If reactivation=false (default), the next bill date is set to 1 month from the previous due date
-async function chargeServer(billing: typeof serverBilling.$inferSelect, reactivation: boolean = false): Promise<boolean> {
+type ChargeServerResult = {
+  success: boolean;
+  chargedFresh: boolean;
+  currentBilling: typeof serverBilling.$inferSelect;
+  idempotencyKey?: string;
+  serverName?: string;
+};
+
+async function chargeServer(billing: typeof serverBilling.$inferSelect, reactivation: boolean = false): Promise<ChargeServerResult> {
   // Skip complimentary servers - they don't get charged
   if (billing.freeServer) {
     log(`Skipping charge for complimentary server ${billing.virtfusionServerId}`, 'billing');
-    return true; // Return true so it doesn't get marked as failed
+    return {
+      success: true,
+      chargedFresh: false,
+      currentBilling: billing,
+    };
   }
 
   // Get server name for transaction description
@@ -114,7 +126,11 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
 
     if (walletRows.length === 0) {
       log(`No wallet found for user ${billing.auth0UserId}`, 'billing');
-      return false;
+      return {
+        success: false,
+        chargedFresh: false,
+        currentBilling: billing,
+      };
     }
 
     // Re-read and lock the live billing row so stale callers can't undo a
@@ -126,14 +142,22 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
 
     if (currentBillingRows.length === 0) {
       log(`Billing record ${billing.id} disappeared before charge for server ${billing.virtfusionServerId}`, 'billing');
-      return false;
+      return {
+        success: false,
+        chargedFresh: false,
+        currentBilling: billing,
+      };
     }
 
     const currentBilling = currentBillingRows[0];
 
     if (currentBilling.freeServer) {
       log(`Skipping charge for complimentary server ${currentBilling.virtfusionServerId}`, 'billing');
-      return true;
+      return {
+        success: true,
+        chargedFresh: false,
+        currentBilling,
+      };
     }
 
     const billingWasUpdated =
@@ -147,7 +171,11 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       currentBilling.nextBillAt.getTime() > billing.nextBillAt.getTime()
     ) {
       log(`Server ${currentBilling.virtfusionServerId} was already settled by another process; skipping stale charge request`, 'billing');
-      return true;
+      return {
+        success: true,
+        chargedFresh: false,
+        currentBilling,
+      };
     }
 
     const idempotencyKey = `bill:${currentBilling.virtfusionServerId}:${currentBilling.nextBillAt.toISOString()}`;
@@ -161,7 +189,13 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       if (currentBilling.status === 'paid') {
         // Server is already paid for this period — skip to avoid double-charging
         log(`Server ${billing.virtfusionServerId} already paid for ${billing.nextBillAt.toISOString()} — skipping`, 'billing');
-        return true;
+        return {
+          success: true,
+          chargedFresh: false,
+          currentBilling,
+          idempotencyKey,
+          serverName,
+        };
       }
       // Ledger entry exists but status is not 'paid' — stale entry (DB was reset or admin changed status).
       // Delete the stale entry and charge fresh so the wallet is correctly debited.
@@ -174,7 +208,13 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
 
     if (wallet.balanceCents < currentBilling.monthlyPriceCents) {
       log(`Insufficient balance for server ${currentBilling.virtfusionServerId}: need ${currentBilling.monthlyPriceCents}, have ${wallet.balanceCents}`, 'billing');
-      return false; // Insufficient balance
+      return {
+        success: false,
+        chargedFresh: false,
+        currentBilling,
+        idempotencyKey,
+        serverName,
+      };
     }
 
     // Deduct from wallet
@@ -243,7 +283,50 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       }
     }).catch(() => {});
 
-    return true;
+    return {
+      success: true,
+      chargedFresh: true,
+      currentBilling: {
+        ...currentBilling,
+        status: 'paid',
+        nextBillAt: newNextBillAt,
+        suspendAt: null,
+        updatedAt: new Date(),
+      },
+      idempotencyKey,
+      serverName,
+    };
+  });
+}
+
+async function refundFailedUnsuspendCharge(
+  billing: typeof serverBilling.$inferSelect,
+  idempotencyKey: string,
+  serverName: string
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.update(wallets)
+      .set({
+        balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.auth0UserId, billing.auth0UserId));
+
+    await tx.insert(walletTransactions).values({
+      auth0UserId: billing.auth0UserId,
+      type: 'refund',
+      amountCents: billing.monthlyPriceCents,
+      metadata: {
+        serverId: billing.virtfusionServerId,
+        serverName,
+        reason: 'Server unsuspend failed after payment - auto refund',
+      },
+    });
+
+    await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+    await tx.update(serverBilling)
+      .set({ status: 'suspended', updatedAt: new Date() })
+      .where(eq(serverBilling.id, billing.id));
   });
 }
 
@@ -421,14 +504,14 @@ export async function runBillingJob(): Promise<BillingJobResult> {
         continue;
       }
 
-      let charged = await chargeServer(billing);
+      let chargeResult = await chargeServer(billing);
 
       // If charge failed due to insufficient balance, try auto top-up then retry once
-      if (!charged) {
+      if (!chargeResult.success) {
         const autoTopupOk = await attemptAutoTopup(billing.auth0UserId, billing.monthlyPriceCents);
         if (autoTopupOk) {
-          charged = await chargeServer(billing);
-          if (charged) {
+          chargeResult = await chargeServer(billing);
+          if (chargeResult.success) {
             log(`Auto top-up enabled charge of server ${billing.virtfusionServerId}`, 'billing');
             result.charged.push(billing.virtfusionServerId + ' (auto-topup)');
             continue;
@@ -436,7 +519,7 @@ export async function runBillingJob(): Promise<BillingJobResult> {
         }
       }
 
-      if (charged) {
+      if (chargeResult.success) {
         result.charged.push(billing.virtfusionServerId);
       } else {
         result.skippedInsufficientFunds.push(billing.virtfusionServerId);
@@ -540,7 +623,7 @@ export async function runBillingJob(): Promise<BillingJobResult> {
       // the server was first marked unpaid or since the last billing attempt.
       // This covers both B1 (suspendAt overdue) and B2 (long overdue) servers.
       const chargeAttempt = await chargeServer(billing);
-      if (chargeAttempt) {
+      if (chargeAttempt.success) {
         // Charge succeeded (new charge or idempotency — either way, money was collected).
         // Never suspend when a charge returns true.
         log(`Server ${billing.virtfusionServerId} charge succeeded, skipping suspension`, 'billing');
@@ -549,14 +632,17 @@ export async function runBillingJob(): Promise<BillingJobResult> {
           try {
             await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
             log(`Unsuspended server ${billing.virtfusionServerId} after successful charge`, 'billing');
+
+            await db.update(serverBilling)
+              .set({ status: 'paid', suspendAt: null, updatedAt: new Date() })
+              .where(eq(serverBilling.id, billing.id));
           } catch (unsuspendErr: any) {
             log(`Could not unsuspend server ${billing.virtfusionServerId} after charge: ${unsuspendErr.message}`, 'billing');
+            if (chargeAttempt.chargedFresh && chargeAttempt.idempotencyKey && chargeAttempt.serverName) {
+              await refundFailedUnsuspendCharge(billing, chargeAttempt.idempotencyKey, chargeAttempt.serverName);
+              log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to background unsuspend failure`, 'billing');
+            }
           }
-          // Ensure billing status reflects payment regardless of whether chargeServer
-          // updated it (idempotency path skips the DB update inside chargeServer)
-          await db.update(serverBilling)
-            .set({ status: 'paid', suspendAt: null, updatedAt: new Date() })
-            .where(eq(serverBilling.id, billing.id));
         }
         continue;
       } else {
@@ -665,7 +751,7 @@ export async function forceChargeServer(virtfusionServerId: string): Promise<{ s
 
   // Now charge fresh — this will deduct the wallet
   const charged = await chargeServer(billing);
-  if (charged) {
+  if (charged.success) {
     log(`Force charge: server ${virtfusionServerId} charged successfully`, 'billing');
     return { success: true, message: `Charged — $${(billing.monthlyPriceCents / 100).toFixed(2)} deducted from wallet` };
   } else {
@@ -795,14 +881,11 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
   for (const billing of unpaidServers) {
     try {
       // For suspended/unpaid servers, use reactivation mode (next bill = 1 month from now)
-      const charged = await chargeServer(billing, true);
+      const chargeResult = await chargeServer(billing, true);
 
-      if (charged) {
-        // Always advance nextBillAt to 1 month from now on reactivation.
-        // chargeServer(billing, true) does this on a real charge, but the idempotency
-        // path returns true early without updating the DB. Force-update here so the
-        // billing date is always reset and the billing job doesn't keep finding this
-        // server on every run.
+      if (chargeResult.success) {
+        // Always advance nextBillAt to 1 month from now on reactivation, even if
+        // another process already settled the billing period.
         const newNextBillAt = addMonth(new Date());
         newNextBillAt.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
         await db.update(serverBilling)
@@ -828,44 +911,13 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
           }
 
           if (!unsuspendSuccess) {
-            // All retries failed — refund the charge and revert billing status
-            log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
-
-            const serverName = await getServerName(billing.virtfusionServerId);
-            const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-
-            // Wrap all revert operations in a transaction so a partial failure
-            // cannot leave the ledger entry without the refund, or vice versa
-            await db.transaction(async (tx) => {
-              await tx.update(wallets)
-                .set({
-                  balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
-                  updatedAt: new Date(),
-                })
-                .where(eq(wallets.auth0UserId, billing.auth0UserId));
-
-              await tx.insert(walletTransactions).values({
-                auth0UserId: billing.auth0UserId,
-                type: 'refund',
-                amountCents: billing.monthlyPriceCents,
-                metadata: {
-                  serverId: billing.virtfusionServerId,
-                  serverName,
-                  reason: 'Server unsuspend failed after 3 attempts - auto refund',
-                },
-              });
-
-              // Remove the ledger entry so future retries can charge again with a fresh key
-              await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
-
-              // Revert to suspended — nextBillAt stays at newNextBillAt so the next
-              // retry uses a fresh idempotency key and charges correctly
-              await tx.update(serverBilling)
-                .set({ status: 'suspended', updatedAt: new Date() })
-                .where(eq(serverBilling.id, billing.id));
-            });
-
-            log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+            if (chargeResult.chargedFresh && chargeResult.idempotencyKey && chargeResult.serverName) {
+              log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
+              await refundFailedUnsuspendCharge(billing, chargeResult.idempotencyKey, chargeResult.serverName);
+              log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+            } else {
+              log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}, but no fresh charge was created so no refund was issued`, 'billing');
+            }
           }
         }
       }
@@ -904,9 +956,9 @@ export async function retryServerBilling(auth0UserId: string, virtfusionServerId
   }
 
   try {
-    const charged = await chargeServer(billing, true);
+    const chargeResult = await chargeServer(billing, true);
 
-    if (charged) {
+    if (chargeResult.success) {
       const newNextBillAt = addMonth(new Date());
       newNextBillAt.setUTCHours(0, 0, 0, 0);
       await db.update(serverBilling)
@@ -931,37 +983,13 @@ export async function retryServerBilling(auth0UserId: string, virtfusionServerId
         }
 
         if (!unsuspendSuccess) {
-          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
-
-          const serverName = await getServerName(billing.virtfusionServerId);
-          const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-
-          await db.transaction(async (tx) => {
-            await tx.update(wallets)
-              .set({
-                balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
-                updatedAt: new Date(),
-              })
-              .where(eq(wallets.auth0UserId, billing.auth0UserId));
-
-            await tx.insert(walletTransactions).values({
-              auth0UserId: billing.auth0UserId,
-              type: 'refund',
-              amountCents: billing.monthlyPriceCents,
-              metadata: {
-                serverId: billing.virtfusionServerId,
-                serverName,
-                reason: 'Server unsuspend failed after 3 attempts - auto refund',
-              },
-            });
-
-            await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
-            await tx.update(serverBilling)
-              .set({ status: 'suspended', updatedAt: new Date() })
-              .where(eq(serverBilling.id, billing.id));
-          });
-
-          log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+          if (chargeResult.chargedFresh && chargeResult.idempotencyKey && chargeResult.serverName) {
+            log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
+            await refundFailedUnsuspendCharge(billing, chargeResult.idempotencyKey, chargeResult.serverName);
+            log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+          } else {
+            log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}, but no fresh charge was created so no refund was issued`, 'billing');
+          }
         }
       }
     }

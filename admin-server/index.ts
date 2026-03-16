@@ -12,7 +12,7 @@ import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
 import { registerAuthRoutes } from "./routes/auth";
-import { registerHealthRoutes } from "./routes/health";
+import { registerHealthRoutes, registerPublicHealthRoutes } from "./routes/health";
 import { registerWhitelistRoutes } from "./routes/whitelist";
 import { registerUsersRoutes } from "./routes/users";
 import { registerServersRoutes } from "./routes/servers";
@@ -116,14 +116,15 @@ app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(cookieParser());
 
-// IP whitelist check - TEMPORARILY DISABLED
-// To re-enable, uncomment the middleware below
-// app.use((req, res, next) => {
-//   if (req.path === '/api/health' || req.path === '/health') {
-//     return next();
-//   }
-//   return ipWhitelistMiddleware(req, res, next);
-// });
+// Apply the admin IP whitelist to the entire admin surface except the basic
+// load-balancer health check. When the whitelist is empty, the middleware
+// automatically allows bootstrap access for initial setup.
+app.use((req, res, next) => {
+  if (req.path === '/healthz') {
+    return next();
+  }
+  return ipWhitelistMiddleware(req, res, next);
+});
 
 // Request logging
 app.use((req, res, next) => {
@@ -151,7 +152,7 @@ app.use((req, res, next) => {
   }
 
   // Public routes (no auth required)
-  registerHealthRoutes(app);
+  registerPublicHealthRoutes(app);
   registerAuthRoutes(app);
 
   // Protected routes (require authentication)
@@ -160,6 +161,7 @@ app.use((req, res, next) => {
   protectedRouter.use(csrfMiddleware);
 
   registerWhitelistRoutes(protectedRouter);
+  registerHealthRoutes(protectedRouter);
   registerUsersRoutes(protectedRouter);
   registerServersRoutes(protectedRouter);
   registerBillingRoutes(protectedRouter);

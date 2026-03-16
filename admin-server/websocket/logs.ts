@@ -2,7 +2,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { IncomingMessage } from "http";
 import { parse as parseCookie } from "cookie";
-import { validateAdminSession } from "../middleware/admin-auth";
+import { isUserAdmin, revokeAdminSession, validateAdminSession } from "../middleware/admin-auth";
+import { getClientIp, isAdminIpAllowed } from "../middleware/ip-whitelist";
 
 interface AuthenticatedWebSocket extends WebSocket {
   isAlive: boolean;
@@ -40,6 +41,22 @@ export function setupLogWebSocket(wss: WebSocketServer) {
     const socket = ws as AuthenticatedWebSocket;
     socket.isAlive = true;
 
+    const origin = req.headers.origin;
+    const host = req.headers.host;
+    if (origin && host) {
+      try {
+        if (new URL(origin).host !== host) {
+          socket.send(JSON.stringify({ type: "error", message: "Origin not allowed" }));
+          socket.close(4003, "Origin not allowed");
+          return;
+        }
+      } catch {
+        socket.send(JSON.stringify({ type: "error", message: "Invalid origin" }));
+        socket.close(4003, "Invalid origin");
+        return;
+      }
+    }
+
     // Authenticate the connection
     const cookies = req.headers.cookie ? parseCookie(req.headers.cookie) : {};
     const sessionId = cookies["admin_session"];
@@ -50,18 +67,11 @@ export function setupLogWebSocket(wss: WebSocketServer) {
       return;
     }
 
-    // Get client IP from headers (nginx sets these)
-    const forwardedFor = req.headers["x-forwarded-for"];
-    const realIp = req.headers["x-real-ip"];
-    let clientIp = "unknown";
-
-    if (forwardedFor) {
-      const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-      clientIp = ips.split(",")[0].trim();
-    } else if (realIp) {
-      clientIp = Array.isArray(realIp) ? realIp[0] : realIp;
-    } else if (req.socket.remoteAddress) {
-      clientIp = req.socket.remoteAddress.replace(/^::ffff:/, "");
+    const clientIp = getClientIp(req as any);
+    if (!(await isAdminIpAllowed(clientIp))) {
+      socket.send(JSON.stringify({ type: "error", message: "IP not authorized" }));
+      socket.close(4003, "IP not authorized");
+      return;
     }
 
     const session = await validateAdminSession(sessionId, clientIp);
@@ -69,6 +79,14 @@ export function setupLogWebSocket(wss: WebSocketServer) {
     if (!session) {
       socket.send(JSON.stringify({ type: "error", message: "Session invalid" }));
       socket.close(4001, "Session invalid");
+      return;
+    }
+
+    const stillAdmin = await isUserAdmin(session.auth0UserId);
+    if (!stillAdmin) {
+      await revokeAdminSession(sessionId, "NOT_ADMIN");
+      socket.send(JSON.stringify({ type: "error", message: "Not authorized" }));
+      socket.close(4003, "Not authorized");
       return;
     }
 

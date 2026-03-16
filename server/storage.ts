@@ -881,8 +881,24 @@ export const dbStorage = {
     const [wallet] = await db
       .insert(wallets)
       .values({ auth0UserId, balanceCents: 0 })
+      .onConflictDoNothing({ target: wallets.auth0UserId })
       .returning();
-    return wallet;
+
+    if (wallet) {
+      return wallet;
+    }
+
+    const [createdByAnotherRequest] = await db
+      .select()
+      .from(wallets)
+      .where(eq(wallets.auth0UserId, auth0UserId))
+      .limit(1);
+
+    if (!createdByAnotherRequest) {
+      throw new Error(`Failed to create wallet for user ${auth0UserId}`);
+    }
+
+    return createdByAnotherRequest;
   },
 
   async updateWalletStripeCustomerId(auth0UserId: string, stripeCustomerId: string): Promise<Wallet> {
@@ -960,126 +976,154 @@ export const dbStorage = {
   },
 
   async creditWallet(auth0UserId: string, amountCents: number, transaction: { type: string; stripeEventId?: string | null; stripePaymentIntentId?: string | null; stripeSessionId?: string | null; metadata?: Record<string, unknown> }): Promise<Wallet> {
-    // SECURITY: Check for idempotency using stripeEventId to prevent duplicate credits
-    if (transaction.stripeEventId) {
-      const [existing] = await db
+    return db.transaction(async (tx) => {
+      await tx
+        .insert(wallets)
+        .values({ auth0UserId, balanceCents: 0 })
+        .onConflictDoNothing({ target: wallets.auth0UserId });
+
+      const [lockedWallet] = await tx
         .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.stripeEventId, transaction.stripeEventId));
-      if (existing) {
-        // Already processed, return current wallet
-        log(`Duplicate credit attempt blocked for stripeEventId: ${transaction.stripeEventId}`, 'security');
-        return await this.getOrCreateWallet(auth0UserId);
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .for('update')
+        .limit(1);
+
+      if (!lockedWallet) {
+        throw new Error('Failed to lock wallet for credit');
       }
-    }
 
-    // SECURITY: Also check stripePaymentIntentId for idempotency (used by auto-topup and direct charges)
-    if (transaction.stripePaymentIntentId) {
-      const [existing] = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.stripePaymentIntentId, transaction.stripePaymentIntentId));
-      if (existing) {
-        // Already processed, return current wallet
-        log(`Duplicate credit attempt blocked for stripePaymentIntentId: ${transaction.stripePaymentIntentId}`, 'security');
-        return await this.getOrCreateWallet(auth0UserId);
+      if (transaction.stripeEventId) {
+        const [existingByEvent] = await tx
+          .select()
+          .from(walletTransactions)
+          .where(eq(walletTransactions.stripeEventId, transaction.stripeEventId))
+          .limit(1);
+
+        if (existingByEvent) {
+          log(`Duplicate credit attempt blocked for stripeEventId: ${transaction.stripeEventId}`, 'security');
+          return lockedWallet;
+        }
       }
-    }
 
-    // Create wallet if doesn't exist
-    await this.getOrCreateWallet(auth0UserId);
+      if (transaction.stripePaymentIntentId) {
+        const [existingByIntent] = await tx
+          .select()
+          .from(walletTransactions)
+          .where(eq(walletTransactions.stripePaymentIntentId, transaction.stripePaymentIntentId))
+          .limit(1);
 
-    // SECURITY: Update balance FIRST, then record transaction
-    // This ensures if balance update fails, no orphaned transaction record is created
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.auth0UserId, auth0UserId))
-      .returning();
+        if (existingByIntent) {
+          log(`Duplicate credit attempt blocked for stripePaymentIntentId: ${transaction.stripePaymentIntentId}`, 'security');
+          return lockedWallet;
+        }
+      }
 
-    if (!updated) {
-      throw new Error('Failed to update wallet balance');
-    }
+      const [updated] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
 
-    // Insert transaction after successful balance update
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      amountCents,
-      ...transaction,
+      if (!updated) {
+        throw new Error('Failed to update wallet balance');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        amountCents,
+        ...transaction,
+      });
+
+      return updated;
     });
-
-    return updated;
   },
 
   async debitWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<{ success: boolean; wallet?: Wallet; error?: string }> {
-    // SECURITY: Use atomic UPDATE with WHERE clause to prevent race conditions
-    // This ensures the balance check and deduction happen atomically
-    // If balance is insufficient, no rows are updated
-    
-    await this.getOrCreateWallet(auth0UserId);
-    
-    // Atomic balance check and deduction - prevents race conditions
-    // Only updates if current balance >= amountCents
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(wallets.auth0UserId, auth0UserId),
-          sql`${wallets.balanceCents} >= ${amountCents}`
-        )
-      )
-      .returning();
-    
-    if (!updated) {
-      // No rows updated means insufficient balance
-      return { success: false, error: 'Insufficient balance' };
-    }
+    return db.transaction(async (tx) => {
+      await tx
+        .insert(wallets)
+        .values({ auth0UserId, balanceCents: 0 })
+        .onConflictDoNothing({ target: wallets.auth0UserId });
 
-    // Insert debit transaction after successful balance update
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'debit',
-      amountCents: -amountCents,
-      metadata: metadata || null,
+      const [lockedWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .for('update')
+        .limit(1);
+
+      if (!lockedWallet || lockedWallet.balanceCents < amountCents) {
+        return { success: false, error: 'Insufficient balance' };
+      }
+
+      const [updated] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Failed to update wallet balance');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: 'debit',
+        amountCents: -amountCents,
+        metadata: metadata || null,
+      });
+
+      return { success: true, wallet: updated };
     });
-
-    return { success: true, wallet: updated };
   },
 
   async refundToWallet(auth0UserId: string, amountCents: number, metadata?: Record<string, unknown>): Promise<Wallet> {
-    await this.getOrCreateWallet(auth0UserId);
+    return db.transaction(async (tx) => {
+      await tx
+        .insert(wallets)
+        .values({ auth0UserId, balanceCents: 0 })
+        .onConflictDoNothing({ target: wallets.auth0UserId });
 
-    // SECURITY: Update balance FIRST, then record transaction
-    // This ensures if balance update fails, no orphaned transaction record is created
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.auth0UserId, auth0UserId))
-      .returning();
+      const [lockedWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .for('update')
+        .limit(1);
 
-    if (!updated) {
-      throw new Error('Failed to update wallet balance');
-    }
+      if (!lockedWallet) {
+        throw new Error('Failed to lock wallet for refund');
+      }
 
-    // Record transaction after successful balance update
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'refund',
-      amountCents,
-      metadata: metadata || null,
+      const [updated] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Failed to update wallet balance');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: 'refund',
+        amountCents,
+        metadata: metadata || null,
+      });
+
+      return updated;
     });
-
-    return updated;
   },
 
   async getWalletTransactions(auth0UserId: string, limit = 50): Promise<WalletTransaction[]> {
@@ -1096,33 +1140,45 @@ export const dbStorage = {
     amountCents: number,
     metadata?: Record<string, any>
   ): Promise<boolean> {
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(wallets.auth0UserId, auth0UserId),
-          sql`${wallets.balanceCents} >= ${amountCents}`,
-          sql`${wallets.deletedAt} IS NULL`
+    return db.transaction(async (tx) => {
+      const [lockedWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(
+          and(
+            eq(wallets.auth0UserId, auth0UserId),
+            sql`${wallets.deletedAt} IS NULL`
+          )
         )
-      )
-      .returning();
+        .for('update')
+        .limit(1);
 
-    if (!updated) {
-      return false;
-    }
+      if (!lockedWallet || lockedWallet.balanceCents < amountCents) {
+        return false;
+      }
 
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: metadata?.type || 'debit',
-      amountCents: -amountCents,
-      metadata: metadata || null,
+      const [updated] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} - ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Failed to deduct wallet balance');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: metadata?.type || 'debit',
+        amountCents: -amountCents,
+        metadata: metadata || null,
+      });
+
+      return true;
     });
-
-    return true;
   },
 
   async creditBalance(
@@ -1130,32 +1186,45 @@ export const dbStorage = {
     amountCents: number,
     metadata?: Record<string, any>
   ): Promise<boolean> {
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(wallets.auth0UserId, auth0UserId),
-          sql`${wallets.deletedAt} IS NULL`
+    return db.transaction(async (tx) => {
+      const [lockedWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(
+          and(
+            eq(wallets.auth0UserId, auth0UserId),
+            sql`${wallets.deletedAt} IS NULL`
+          )
         )
-      )
-      .returning();
+        .for('update')
+        .limit(1);
 
-    if (!updated) {
-      return false;
-    }
+      if (!lockedWallet) {
+        return false;
+      }
 
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: metadata?.type || 'credit',
-      amountCents,
-      metadata: metadata || null,
+      const [updated] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} + ${amountCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Failed to credit wallet balance');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: metadata?.type || 'credit',
+        amountCents,
+        metadata: metadata || null,
+      });
+
+      return true;
     });
-
-    return true;
   },
 
   // Admin: Get all wallets
@@ -1288,51 +1357,66 @@ export const dbStorage = {
     hostname?: string,
     planName?: string
   ): Promise<{ success: boolean; order?: DeployOrder; error?: string }> {
-    await this.getOrCreateWallet(auth0UserId);
-    
-    // SECURITY: Atomic balance check and deduction to prevent race conditions
-    const [updated] = await db
-      .update(wallets)
-      .set({
-        balanceCents: sql`${wallets.balanceCents} - ${priceCents}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(wallets.auth0UserId, auth0UserId),
-          sql`${wallets.balanceCents} >= ${priceCents}`
-        )
-      )
-      .returning();
-    
-    if (!updated) {
-      return { success: false, error: 'Insufficient balance' };
-    }
+    return db.transaction(async (tx) => {
+      await tx
+        .insert(wallets)
+        .values({ auth0UserId, balanceCents: 0 })
+        .onConflictDoNothing({ target: wallets.auth0UserId });
 
-    // Create order after successful balance deduction
-    const order = await this.createDeployOrder({
-      auth0UserId,
-      planId,
-      locationCode: 'BNE',
-      hostname,
-      priceCents,
-      status: 'paid',
+      const [lockedWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .for('update')
+        .limit(1);
+
+      if (!lockedWallet || lockedWallet.balanceCents < priceCents) {
+        return { success: false, error: 'Insufficient balance' };
+      }
+
+      const [updatedWallet] = await tx
+        .update(wallets)
+        .set({
+          balanceCents: sql`${wallets.balanceCents} - ${priceCents}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.auth0UserId, auth0UserId))
+        .returning();
+
+      if (!updatedWallet) {
+        throw new Error('Failed to update wallet balance');
+      }
+
+      const [order] = await tx
+        .insert(deployOrders)
+        .values({
+          auth0UserId,
+          planId,
+          locationCode: 'BNE',
+          hostname,
+          priceCents,
+          status: 'paid',
+        } as typeof deployOrders.$inferInsert)
+        .returning();
+
+      if (!order) {
+        throw new Error('Failed to create deploy order');
+      }
+
+      await tx.insert(walletTransactions).values({
+        auth0UserId,
+        type: 'debit',
+        amountCents: -priceCents,
+        metadata: {
+          deployOrderId: order.id,
+          serverName: hostname,
+          planName: planName,
+          reason: 'Server deployment'
+        },
+      });
+
+      return { success: true, order };
     });
-
-    // Insert debit transaction with server details for display
-    await db.insert(walletTransactions).values({
-      auth0UserId,
-      type: 'debit',
-      amountCents: -priceCents,
-      metadata: {
-        deployOrderId: order.id,
-        serverName: hostname,
-        planName: planName,
-        reason: 'Server deployment'
-      },
-    });
-
-    return { success: true, order };
   },
 
   // Server Cancellation methods

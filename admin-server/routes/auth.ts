@@ -187,9 +187,14 @@ export function registerAuthRoutes(app: Express) {
     // Get name from Auth0 (already fetched during password verification)
     const userName = authResult.name || email.split('@')[0];
 
-    // TEMPORARY: Allow bypassing 2FA via environment variable for recovery
-    // Set ADMIN_BYPASS_2FA=true in .env to skip 2FA (remove after re-enabling 2FA!)
-    if (process.env.ADMIN_BYPASS_2FA === 'true') {
+    // Allow the 2FA bypass only outside production so a forgotten env var
+    // cannot silently downgrade the live admin panel.
+    const bypass2FARequested = process.env.ADMIN_BYPASS_2FA === 'true';
+    if (bypass2FARequested && process.env.NODE_ENV === 'production') {
+      log('Ignoring ADMIN_BYPASS_2FA in production', 'admin-auth', { level: 'warn' });
+    }
+
+    if (bypass2FARequested && process.env.NODE_ENV !== 'production') {
       log('WARNING: 2FA bypassed via ADMIN_BYPASS_2FA env var', 'admin-auth', { level: 'warn' });
 
       // Create session directly without 2FA

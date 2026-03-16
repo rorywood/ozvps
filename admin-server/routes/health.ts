@@ -1,4 +1,4 @@
-import { Express, Request, Response } from "express";
+import { Express, Router, Request, Response } from "express";
 import { db } from "../../server/db";
 import { sql } from "drizzle-orm";
 import { redisClient } from "../../server/redis";
@@ -363,14 +363,16 @@ async function getServiceStatus(service: string): Promise<{ running: boolean; en
   });
 }
 
-export function registerHealthRoutes(app: Express) {
+export function registerPublicHealthRoutes(app: Express) {
   // Basic health check (for load balancers) - use /healthz to avoid conflict with frontend /health route
   app.get("/healthz", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
+}
 
+export function registerHealthRoutes(router: Router) {
   // Service control endpoint
-  app.post("/api/services/:service/:action", async (req: Request, res: Response) => {
+  router.post("/services/:service/:action", async (req: Request, res: Response) => {
     const { service, action } = req.params;
 
     if (!["start", "stop", "restart"].includes(action)) {
@@ -394,7 +396,7 @@ export function registerHealthRoutes(app: Express) {
   });
 
   // Get all service statuses (excluding admin panel)
-  app.get("/api/services/status", async (_req: Request, res: Response) => {
+  router.get("/services/status", async (_req: Request, res: Response) => {
     const services = ["postgresql", "redis", "ozvps"];
     const statuses: Record<string, { running: boolean; enabled: boolean; exists: boolean }> = {};
 
@@ -408,7 +410,7 @@ export function registerHealthRoutes(app: Express) {
   });
 
   // Detailed health check (requires auth in production, but middleware is applied separately)
-  app.get("/api/health", async (_req: Request, res: Response) => {
+  router.get("/health", async (_req: Request, res: Response) => {
     const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
       checkDatabase(),
       checkRedis(),
@@ -438,7 +440,7 @@ export function registerHealthRoutes(app: Express) {
   });
 
   // Detailed health check (protected version)
-  app.get("/api/admin/health/detailed", async (_req: Request, res: Response) => {
+  router.get("/admin/health/detailed", async (_req: Request, res: Response) => {
     const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
       checkDatabase(),
       checkRedis(),

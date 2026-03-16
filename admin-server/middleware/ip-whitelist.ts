@@ -7,7 +7,7 @@ import { eq, and, gt, or, isNull } from "drizzle-orm";
 let whitelistCache: { entries: typeof adminIpWhitelist.$inferSelect[]; updatedAt: number } | null = null;
 const CACHE_TTL = 10 * 1000; // 10 seconds (security-critical)
 
-async function getWhitelistEntries() {
+export async function getWhitelistEntries() {
   const now = Date.now();
   if (whitelistCache && now - whitelistCache.updatedAt < CACHE_TTL) {
     return whitelistCache.entries;
@@ -32,7 +32,7 @@ export function invalidateWhitelistCache() {
   whitelistCache = null;
 }
 
-export function getClientIp(req: Request): string {
+export function getClientIp(req: Pick<Request, "headers" | "socket">): string {
   // SECURITY: Only trust proxy headers when explicitly configured
   // This prevents IP spoofing via X-Forwarded-For when not behind a trusted proxy
   const trustProxy = process.env.TRUST_PROXY === 'true';
@@ -131,6 +131,16 @@ function isIpWhitelisted(clientIp: string, entries: typeof adminIpWhitelist.$inf
   }
 
   return false;
+}
+
+export async function isAdminIpAllowed(clientIp: string): Promise<boolean> {
+  const entries = await getWhitelistEntries();
+
+  if (entries.length === 0) {
+    return true;
+  }
+
+  return isIpWhitelisted(clientIp, entries);
 }
 
 export async function ipWhitelistMiddleware(req: Request, res: Response, next: NextFunction) {
