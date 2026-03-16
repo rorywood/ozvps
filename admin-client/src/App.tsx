@@ -16,6 +16,7 @@ import PromoCodes from "./pages/PromoCodes";
 import Security from "./pages/Security";
 import Deletions from "./pages/Deletions";
 import AuditLogs from "./pages/AuditLogs";
+import Activity from "./pages/Activity";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="security" element={<Security />} />
         <Route path="deletions" element={<Deletions />} />
         <Route path="audit-logs" element={<AuditLogs />} />
+        <Route path="activity" element={<Activity />} />
       </Route>
     </Routes>
   );

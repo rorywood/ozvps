@@ -3,9 +3,9 @@ import { db } from "../../server/db";
 import {
   userMappings, wallets, walletTransactions, userFlags, sessions, twoFactorAuth,
   serverBilling, deployOrders, billingLedger, serverCancellations, invoices,
-  tickets, ticketMessages, promoCodeUsage, passwordResetTokens
+  tickets, ticketMessages, promoCodeUsage, passwordResetTokens, userAuditLogs
 } from "../../shared/schema";
-import { eq, desc, like, or, sql, inArray } from "drizzle-orm";
+import { eq, desc, like, or, sql, inArray, gt, and, isNull } from "drizzle-orm";
 import { dbStorage } from "../../server/storage";
 import { auth0Client } from "../../server/auth0";
 import { virtfusionClient } from "../../server/virtfusion";
@@ -631,6 +631,105 @@ export function registerUsersRoutes(router: Router) {
       await auditFailure(req, "user.revoke-sessions", "user", error.message, req.params.auth0UserId);
       console.log(`[admin-users] Revoke sessions error: ${error.message}`);
       res.status(500).json({ error: "Failed to revoke sessions" });
+    }
+  });
+
+  // GET /users/activity/sessions — list active sessions across all users
+  router.get("/users/activity/sessions", async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const onlineOnly = req.query.onlineOnly === "true";
+
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const now = new Date();
+
+      const conditions = [
+        gt(sessions.expiresAt, now),
+        isNull(sessions.revokedAt),
+      ];
+
+      if (onlineOnly) {
+        conditions.push(gt(sessions.lastActiveAt, fifteenMinutesAgo));
+      }
+
+      const rows = await db
+        .select({
+          id: sessions.id,
+          auth0UserId: sessions.auth0UserId,
+          email: sessions.email,
+          name: sessions.name,
+          ipAddress: sessions.ipAddress,
+          userAgent: sessions.userAgent,
+          createdAt: sessions.createdAt,
+          lastActiveAt: sessions.lastActiveAt,
+          expiresAt: sessions.expiresAt,
+        })
+        .from(sessions)
+        .where(and(...conditions))
+        .orderBy(desc(sessions.lastActiveAt))
+        .limit(limit);
+
+      res.json({ sessions: rows });
+    } catch (error: any) {
+      console.log(`[admin-activity] Get sessions error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get sessions" });
+    }
+  });
+
+  // DELETE /users/activity/sessions/:sessionId — revoke a single session
+  router.delete("/users/activity/sessions/:sessionId", async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+
+      await db
+        .update(sessions)
+        .set({ revokedAt: new Date(), revokedReason: "ADMIN_REVOKED" })
+        .where(eq(sessions.id, sessionId));
+
+      await auditSuccess(req, "session.revoke", "session", sessionId);
+
+      console.log(`[admin-activity] Session ${sessionId} revoked by ${req.adminSession!.email}`);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      await auditFailure(req, "session.revoke", "session", error.message, req.params.sessionId);
+      console.log(`[admin-activity] Revoke session error: ${error.message}`);
+      res.status(500).json({ error: "Failed to revoke session" });
+    }
+  });
+
+  // GET /users/activity/feed — recent user audit log entries across all users
+  router.get("/users/activity/feed", async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
+      const since = req.query.since as string | undefined;
+
+      const conditions = [];
+      if (since) {
+        conditions.push(gt(userAuditLogs.createdAt, new Date(since)));
+      }
+
+      const rows = await db
+        .select({
+          id: userAuditLogs.id,
+          auth0UserId: userAuditLogs.auth0UserId,
+          email: userAuditLogs.email,
+          action: userAuditLogs.action,
+          targetType: userAuditLogs.targetType,
+          targetId: userAuditLogs.targetId,
+          details: userAuditLogs.details,
+          ipAddress: userAuditLogs.ipAddress,
+          createdAt: userAuditLogs.createdAt,
+        })
+        .from(userAuditLogs)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(userAuditLogs.createdAt))
+        .limit(limit);
+
+      res.json({ events: rows });
+    } catch (error: any) {
+      console.log(`[admin-activity] Get feed error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get activity feed" });
     }
   });
 

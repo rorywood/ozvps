@@ -498,6 +498,18 @@ export interface RecaptchaSettings {
   minScore: number;
 }
 
+// Activity API
+export const activityApi = {
+  getSessions: (onlineOnly = false) =>
+    api.get<{ sessions: any[] }>(`/users/activity/sessions${onlineOnly ? "?onlineOnly=true" : ""}`),
+
+  revokeSession: (sessionId: string) =>
+    api.delete<{ success: boolean }>(`/users/activity/sessions/${sessionId}`),
+
+  getFeed: (limit = 100) =>
+    api.get<{ events: any[] }>(`/users/activity/feed?limit=${limit}`),
+};
+
 // Security API (reCAPTCHA, etc.)
 export const securityApi = {
   getRecaptchaSettings: () =>

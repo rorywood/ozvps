@@ -9,6 +9,7 @@ import {
   CreditCard,
   MessageSquare,
   Activity,
+  UserCheck,
   FileText,
   Shield,
   ShieldCheck,
@@ -35,6 +36,7 @@ const navItems = [
   { path: "/promo-codes", icon: Tag, label: "Promo Codes" },
   { path: "/deletions", icon: Trash2, label: "Deletions" },
   { path: "/tickets", icon: MessageSquare, label: "Tickets" },
+  { path: "/activity", icon: UserCheck, label: "Activity" },
   { path: "/health", icon: Activity, label: "Health" },
   { path: "/logs", icon: FileText, label: "Logs" },
   { path: "/audit-logs", icon: ClipboardList, label: "Audit Logs" },
@@ -54,6 +56,7 @@ const pageTitles: Record<string, string> = {
   "/health": "System Health",
   "/logs": "Logs",
   "/audit-logs": "Audit Logs",
+  "/activity": "User Activity",
   "/security": "Security Settings",
   "/whitelist": "IP Whitelist",
 };
