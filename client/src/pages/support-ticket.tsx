@@ -137,7 +137,7 @@ function MessageBubble({ message, isUser }: { message: TicketMessage; isUser: bo
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-sm font-semibold text-foreground">
-            {message.authorName || message.authorEmail.split("@")[0]}
+            {isUser ? (message.authorName || message.authorEmail.split("@")[0]) : "OzVPS Support"}
           </span>
           {!isUser && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-success/10 text-success font-medium uppercase tracking-wide">

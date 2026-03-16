@@ -705,6 +705,62 @@ export async function sendTicketConfirmationEmail(
 }
 
 /**
+ * Notify a user that OzVPS staff have raised a ticket on their behalf
+ */
+export async function sendStaffRaisedTicketEmail(
+  to: string,
+  ticketId: number,
+  title: string,
+  category: string,
+  priority: string,
+  userName: string | null
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send staff-raised ticket email', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
+  const ticketUrl = `${appUrl}/support/${ticketId}`;
+  const logoUrl = getLogoUrl();
+
+  const categoryLabels: Record<string, string> = {
+    sales: 'Sales', accounts: 'Accounts', support: 'Technical Support', abuse: 'Abuse Report',
+  };
+
+  const body = `
+    <h1 style="margin:0 0 12px;color:${textDark};font-size:22px;font-weight:700;">We've Opened a Ticket For You</h1>
+    <p style="margin:0 0 24px;color:${textMuted};font-size:15px;line-height:1.6;">Hi${userName ? ` ${userName}` : ''}, our support team has opened a ticket on your behalf and left you a message. Please review it and reply if you have any questions or updates.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
+      ${row('Ticket Number', `#${ticketId}`)}
+      ${row('Subject', title)}
+      ${row('Category', categoryLabels[category] || category)}
+      ${row('Raised By', 'OzVPS Support', true)}
+    </table>
+
+    <p style="margin:0 0 20px;color:${textMuted};font-size:14px;line-height:1.6;">You can reply to this email or view the ticket online to respond:</p>
+    ${btn(ticketUrl, 'View Your Ticket')}`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to,
+      replyTo: `support+${ticketId}@ozvps.com.au`,
+      subject: `[Ticket #${ticketId}] ${title}`,
+      html: baseEmail(body, logoUrl),
+      text: `We've Opened a Ticket For You\n\nOur support team has opened a ticket on your behalf.\n\nTicket: #${ticketId}\nSubject: ${title}\nCategory: ${categoryLabels[category] || category}\nRaised By: OzVPS Support\n\nReply to this email or view the ticket online:\n${ticketUrl}\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+    if (error) { log(`Failed to send staff-raised ticket email to ${to}: ${error.message}`, 'email'); return { success: false, error: error.message }; }
+    log(`Staff-raised ticket email sent to ${to} for ticket #${ticketId}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending staff-raised ticket email to ${to}: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send guest ticket confirmation (no account required)
  */
 export async function sendGuestTicketConfirmationEmail(

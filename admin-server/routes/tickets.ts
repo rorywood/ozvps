@@ -4,7 +4,7 @@ import { tickets, ticketMessages, userMappings, adminTicketUpdateSchema, ticketM
 import { eq, desc, and, or, sql, isNull, ne } from "drizzle-orm";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 import { auth0Client } from "../../server/auth0";
-import { sendTicketAdminReplyEmail, sendGuestTicketAdminReplyEmail, sendTicketConfirmationEmail } from "../../server/email";
+import { sendTicketAdminReplyEmail, sendGuestTicketAdminReplyEmail, sendStaffRaisedTicketEmail } from "../../server/email";
 
 export function registerTicketsRoutes(router: Router) {
 
@@ -66,7 +66,7 @@ export function registerTicketsRoutes(router: Router) {
       // Email the user
       auth0Client.getUserById(auth0UserId).then(auth0User => {
         if (auth0User?.email) {
-          sendTicketConfirmationEmail(auth0User.email, ticket.id, cleanTitle, ticketCategory, ticketPriority, auth0User.name || null).catch(err => {
+          sendStaffRaisedTicketEmail(auth0User.email, ticket.id, cleanTitle, ticketCategory, ticketPriority, auth0User.name || null).catch(err => {
             console.log(`[admin-tickets] Failed to send new ticket email for ticket ${ticket.id}: ${err.message}`);
           });
         }
