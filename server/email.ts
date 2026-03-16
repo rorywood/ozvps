@@ -777,7 +777,7 @@ export async function sendGuestTicketConfirmationEmail(
   }
 
   const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
-  const ticketUrl = `${appUrl}/support/guest/${accessToken}`;
+  const ticketUrl = `${appUrl}/support/guest#token=${encodeURIComponent(accessToken)}`;
   const logoUrl = getLogoUrl();
 
   const body = `
@@ -827,7 +827,7 @@ export async function sendGuestTicketAdminReplyEmail(
   }
 
   const appUrl = process.env.APP_URL || 'https://app.ozvps.com.au';
-  const ticketUrl = `${appUrl}/support/guest/${accessToken}`;
+  const ticketUrl = `${appUrl}/support/guest#token=${encodeURIComponent(accessToken)}`;
   const logoUrl = getLogoUrl();
   const preview = adminReplyMessage.length > 300 ? adminReplyMessage.slice(0, 300) + '...' : adminReplyMessage;
 

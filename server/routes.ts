@@ -492,6 +492,20 @@ function setCsrfCookie(res: Response, token: string, expiresAt: Date): void {
   });
 }
 
+function getGuestTicketToken(req: Request): string | null {
+  const headerToken = req.headers['x-guest-ticket-token'];
+  if (typeof headerToken === 'string' && headerToken.trim()) {
+    return headerToken.trim();
+  }
+
+  if (Array.isArray(headerToken) && headerToken[0]?.trim()) {
+    return headerToken[0].trim();
+  }
+
+  const paramToken = typeof req.params.accessToken === 'string' ? req.params.accessToken.trim() : '';
+  return paramToken || null;
+}
+
 /**
  * CSRF protection middleware - implements double-submit cookie pattern
  * Combined with Origin/Referer validation for defense in depth
@@ -1306,6 +1320,8 @@ export async function registerRoutes(
         auth0UserId: auth0UserId, // Use the prefixed version for consistency
         emailVerified: false, // New users start unverified
         expiresAt,
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || undefined,
       });
 
       res.cookie(SESSION_COOKIE, session.id, {
@@ -1825,6 +1841,8 @@ export async function registerRoutes(
         isAdmin,
         emailVerified,
         expiresAt,
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || undefined,
       });
 
       res.cookie(SESSION_COOKIE, session.id, {
@@ -7059,8 +7077,19 @@ export async function registerRoutes(
         log('Resend inbound webhook: RESEND_WEBHOOK_SECRET not configured — rejecting request', 'webhook');
         return res.status(503).json({ error: 'Webhook not configured' });
       }
-      const provided = req.query.secret || req.headers['x-webhook-secret'];
-      if (!provided || !timingSafeEqual(Buffer.from(String(provided)), Buffer.from(webhookSecret))) {
+      const provided = req.headers['x-webhook-secret'];
+      const providedSecret = typeof provided === 'string'
+        ? provided
+        : Array.isArray(provided)
+        ? provided[0]
+        : '';
+      if (!providedSecret) {
+        log('Resend inbound webhook: missing secret header', 'webhook');
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const providedBuffer = Buffer.from(providedSecret, 'utf8');
+      const expectedBuffer = Buffer.from(webhookSecret, 'utf8');
+      if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) {
         log('Resend inbound webhook: invalid secret', 'webhook');
         return res.status(401).json({ error: 'Unauthorized' });
       }
@@ -7684,9 +7713,9 @@ export async function registerRoutes(
   });
 
   // Get a guest ticket by access token (no auth required)
-  app.get('/api/support/guest/:accessToken', ticketRateLimiter, async (req, res) => {
+  app.get('/api/support/guest', ticketRateLimiter, async (req, res) => {
     try {
-      const { accessToken } = req.params;
+      const accessToken = getGuestTicketToken(req);
       if (!accessToken || accessToken.length < 32) {
         return res.status(400).json({ error: 'Invalid access token' });
       }
@@ -7705,10 +7734,31 @@ export async function registerRoutes(
     }
   });
 
-  // Reply to a guest ticket (no auth required)
-  app.post('/api/support/guest/:accessToken/messages', ticketRateLimiter, async (req, res) => {
+  app.get('/api/support/guest/:accessToken', ticketRateLimiter, async (req, res) => {
     try {
-      const { accessToken } = req.params;
+      const accessToken = getGuestTicketToken(req);
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      const { guestAccessToken: _guestAccessToken, guestEmail: _guestEmail, ...safeTicket } = ticket;
+      const messages = await dbStorage.getTicketMessages(ticket.id, false);
+      res.json({ ticket: safeTicket, messages });
+    } catch (error: any) {
+      log(`Error fetching guest ticket: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to fetch ticket' });
+    }
+  });
+
+  // Reply to a guest ticket (no auth required)
+  app.post('/api/support/guest/messages', ticketRateLimiter, async (req, res) => {
+    try {
+      const accessToken = getGuestTicketToken(req);
       if (!accessToken || accessToken.length < 32) {
         return res.status(400).json({ error: 'Invalid access token' });
       }
@@ -7740,6 +7790,50 @@ export async function registerRoutes(
       });
 
       // Reopen resolved ticket on user reply, otherwise set to waiting_admin
+      const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
+      await dbStorage.updateTicket(ticket.id, { status: newStatus });
+
+      log(`Guest reply added to ticket #${ticket.id} by ${ticket.guestEmail}`, 'support');
+      res.status(201).json({ message: newMessage });
+    } catch (error: any) {
+      log(`Error adding guest reply: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  });
+
+  app.post('/api/support/guest/:accessToken/messages', ticketRateLimiter, async (req, res) => {
+    try {
+      const accessToken = getGuestTicketToken(req);
+      if (!accessToken || accessToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid access token' });
+      }
+
+      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+
+      if (ticket.status === 'closed') {
+        return res.status(400).json({ error: 'This ticket is closed.' });
+      }
+
+      const rawMessage = req.body?.message;
+      if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
+        return res.status(400).json({ error: 'Message is required.' });
+      }
+      if (rawMessage.trim().length > 5000) {
+        return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
+      }
+
+      const newMessage = await dbStorage.createTicketMessage({
+        ticketId: ticket.id,
+        authorType: 'user',
+        authorId: ticket.guestEmail!,
+        authorEmail: ticket.guestEmail!,
+        authorName: null,
+        message: rawMessage.trim(),
+      });
+
       const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
       await dbStorage.updateTicket(ticket.id, { status: newStatus });
 

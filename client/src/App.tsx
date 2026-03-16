@@ -129,6 +129,9 @@ function Router() {
       <Route path="/support/guest/:accessToken">
         <GuestTicket />
       </Route>
+      <Route path="/support/guest">
+        <GuestTicket />
+      </Route>
       <Route path="/contact">
         <ContactPage />
       </Route>

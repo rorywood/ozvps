@@ -147,18 +147,35 @@ export default function GuestTicketPage() {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [reply, setReply] = useState("");
+  const hashToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token")
+    : null;
+  const guestToken = hashToken || accessToken || "";
+
+  useEffect(() => {
+    if (hashToken || !accessToken || typeof window === "undefined") {
+      return;
+    }
+
+    const nextUrl = `/support/guest#token=${encodeURIComponent(accessToken)}`;
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, [accessToken, hashToken]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["guest-ticket", accessToken],
+    queryKey: ["guest-ticket", guestToken],
     queryFn: async () => {
-      const res = await fetch(`/api/support/guest/${accessToken}`);
+      const res = await fetch(`/api/support/guest`, {
+        headers: {
+          "x-guest-ticket-token": guestToken,
+        },
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Failed to fetch ticket");
       }
       return res.json();
     },
-    enabled: !!accessToken && accessToken.length >= 32,
+    enabled: !!guestToken && guestToken.length >= 32,
     refetchInterval: 15000,
   });
 
@@ -172,9 +189,12 @@ export default function GuestTicketPage() {
 
   const replyMutation = useMutation({
     mutationFn: async (message: string) => {
-      const res = await fetch(`/api/support/guest/${accessToken}/messages`, {
+      const res = await fetch(`/api/support/guest/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-guest-ticket-token": guestToken,
+        },
         body: JSON.stringify({ message }),
       });
       if (!res.ok) {
@@ -185,13 +205,13 @@ export default function GuestTicketPage() {
     },
     onSuccess: () => {
       setReply("");
-      queryClient.invalidateQueries({ queryKey: ["guest-ticket", accessToken] });
+      queryClient.invalidateQueries({ queryKey: ["guest-ticket", guestToken] });
       toast({ title: "Reply sent" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  if (!accessToken || accessToken.length < 32) {
+  if (!guestToken || guestToken.length < 32) {
     return <ErrorState title="Invalid Link" message="This ticket link is invalid or has expired." />;
   }
 
