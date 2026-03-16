@@ -93,10 +93,16 @@ export default function Dashboard() {
 
   const hasOverdueServers = billingSuspendedServers.length > 0 || unpaidServers.length > 0 || overdueActiveServers.length > 0;
 
-  // All servers needing payment (for the critical banner)
-  const criticalOverdueServers = [...billingSuspendedServers, ...unpaidServers, ...overdueActiveServers];
+  // Only show overdueActiveServers in the banner if the wallet can't cover them —
+  // if the wallet has enough, the billing job will charge automatically, no need to alarm the user.
+  const overdueActiveAmount = overdueActiveServers.reduce((sum, s) => sum + (s.billing?.monthlyPriceCents || 0), 0);
+  const canCoverOverdueActive = walletBalance >= overdueActiveAmount;
+  const overdueActiveForBanner = canCoverOverdueActive ? [] : overdueActiveServers;
 
-  // Calculate total amount owed
+  // All servers needing user action (for the critical banner)
+  const criticalOverdueServers = [...billingSuspendedServers, ...unpaidServers, ...overdueActiveForBanner];
+
+  // Calculate total amount owed for the banner servers
   const totalAmountOwed = criticalOverdueServers.reduce((sum, s) => {
     return sum + (s.billing?.monthlyPriceCents || 0);
   }, 0);
