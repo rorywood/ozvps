@@ -34,7 +34,8 @@ export async function startBillingProcessor(stripe: Stripe | null) {
     setTimeout(async () => {
       try {
         log('Starting daily billing run (6pm AEST)...', 'billing');
-        await runBillingJob();
+        const jobResult = await runBillingJob();
+        log(`Daily billing run result: charged=${jobResult.charged.length}, noFunds=${jobResult.skippedInsufficientFunds.length}`, 'billing');
         await processAutoTopups(stripe);
         log('Daily billing run completed', 'billing');
       } catch (err: any) {

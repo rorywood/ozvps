@@ -400,19 +400,19 @@ export function registerBillingRoutes(router: Router) {
 
       console.log(`[admin-billing] Manual billing job triggered by ${session.email}`);
 
-      // Run billing job (non-blocking)
-      runBillingJob()
-        .then(() => console.log(`[admin-billing] Manual billing job completed`))
-        .catch((err) => console.log(`[admin-billing] Manual billing job error: ${err.message}`));
+      // Run billing job synchronously so we can return results
+      const result = await runBillingJob();
+
+      console.log(`[admin-billing] Manual billing job completed. Charged: ${result.charged.length}, No funds: ${result.skippedInsufficientFunds.length}, Already charged: ${result.skippedAlreadyCharged.length}, Errors: ${result.errors.length}`);
 
       // Audit log
       await auditSuccess(req, "billing.run-job", "billing");
 
-      res.json({ success: true, message: "Billing job started" });
+      res.json({ success: true, result });
     } catch (error: any) {
       await auditFailure(req, "billing.run-job", "billing", error.message);
       console.log(`[admin-billing] Run job error: ${error.message}`);
-      res.status(500).json({ error: "Failed to start billing job" });
+      res.status(500).json({ error: `Billing job failed: ${error.message}` });
     }
   });
 

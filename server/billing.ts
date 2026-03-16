@@ -314,8 +314,28 @@ async function attemptAutoTopup(auth0UserId: string, neededCents: number): Promi
   }
 }
 
+export interface BillingJobResult {
+  serversFound: number;
+  charged: string[];
+  skippedSuspendedUser: string[];
+  skippedInsufficientFunds: string[];
+  skippedAlreadyCharged: string[];
+  errors: string[];
+  nextBillDates: Record<string, string>; // serverId -> nextBillAt ISO
+}
+
 // Main billing job - runs every 10 minutes
-export async function runBillingJob(): Promise<void> {
+export async function runBillingJob(): Promise<BillingJobResult> {
+  const result: BillingJobResult = {
+    serversFound: 0,
+    charged: [],
+    skippedSuspendedUser: [],
+    skippedInsufficientFunds: [],
+    skippedAlreadyCharged: [],
+    errors: [],
+    nextBillDates: {},
+  };
+
   const now = new Date();
 
   log('Starting billing job...', 'billing');
@@ -342,13 +362,32 @@ export async function runBillingJob(): Promise<void> {
       )
     );
 
-  log(`Found ${dueServers.length} servers due for billing`, 'billing');
+  result.serversFound = dueServers.length;
+  log(`Found ${dueServers.length} servers due for billing (endOfToday=${endOfToday.toISOString()})`, 'billing');
+
+  // Log all found servers for debugging
+  for (const s of dueServers) {
+    result.nextBillDates[s.virtfusionServerId] = s.nextBillAt.toISOString();
+    log(`Due server: ${s.virtfusionServerId}, status=${s.status}, nextBillAt=${s.nextBillAt.toISOString()}, price=${s.monthlyPriceCents}`, 'billing');
+  }
 
   for (const billing of dueServers) {
     try {
       // Skip billing for users with suspended accounts
       if (await isUserAccountSuspended(billing.auth0UserId)) {
         log(`Skipping billing for server ${billing.virtfusionServerId} - user account is suspended`, 'billing');
+        result.skippedSuspendedUser.push(billing.virtfusionServerId);
+        continue;
+      }
+
+      // Check idempotency before charging to give better feedback
+      const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
+      const existing = await db.select().from(billingLedger)
+        .where(eq(billingLedger.idempotencyKey, idempotencyKey))
+        .limit(1);
+      if (existing.length > 0) {
+        log(`Server ${billing.virtfusionServerId} already charged (idempotency key exists)`, 'billing');
+        result.skippedAlreadyCharged.push(billing.virtfusionServerId);
         continue;
       }
 
@@ -361,12 +400,16 @@ export async function runBillingJob(): Promise<void> {
           charged = await chargeServer(billing);
           if (charged) {
             log(`Auto top-up enabled charge of server ${billing.virtfusionServerId}`, 'billing');
+            result.charged.push(billing.virtfusionServerId + ' (auto-topup)');
             continue;
           }
         }
       }
 
-      if (!charged) {
+      if (charged) {
+        result.charged.push(billing.virtfusionServerId);
+      } else {
+        result.skippedInsufficientFunds.push(billing.virtfusionServerId);
         // Payment failed (and auto top-up couldn't cover it) - mark as unpaid and set suspension date
         if (billing.status !== 'unpaid') {
           const suspendAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -401,6 +444,7 @@ export async function runBillingJob(): Promise<void> {
       }
     } catch (error: any) {
       log(`Error charging server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
+      result.errors.push(`${billing.virtfusionServerId}: ${error.message}`);
     }
   }
 
@@ -535,7 +579,8 @@ export async function runBillingJob(): Promise<void> {
   // Step D: Send reminders for servers due tomorrow
   await sendBillingReminders();
 
-  log('Billing job completed', 'billing');
+  log(`Billing job completed. Charged: ${result.charged.length}, Skipped (no funds): ${result.skippedInsufficientFunds.length}, Skipped (already charged): ${result.skippedAlreadyCharged.length}, Skipped (user suspended): ${result.skippedSuspendedUser.length}, Errors: ${result.errors.length}`, 'billing');
+  return result;
 }
 
 // Cleanup billing records for servers that no longer exist in VirtFusion

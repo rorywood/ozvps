@@ -31,7 +31,27 @@ export default function Billing() {
 
   const runJobMutation = useMutation({
     mutationFn: billingApi.runBillingJob,
-    onSuccess: () => toast.success("Billing job started"),
+    onSuccess: (data: any) => {
+      const r = data?.result;
+      if (!r) { toast.success("Billing job completed"); return; }
+      const lines = [
+        `Found: ${r.serversFound} servers`,
+        r.charged.length ? `✓ Charged: ${r.charged.join(", ")}` : null,
+        r.skippedInsufficientFunds.length ? `✗ No funds: ${r.skippedInsufficientFunds.join(", ")}` : null,
+        r.skippedAlreadyCharged.length ? `⟳ Already charged: ${r.skippedAlreadyCharged.join(", ")}` : null,
+        r.skippedSuspendedUser.length ? `— Suspended user: ${r.skippedSuspendedUser.join(", ")}` : null,
+        r.errors.length ? `⚠ Errors: ${r.errors.join("; ")}` : null,
+      ].filter(Boolean).join("\n");
+      if (r.serversFound === 0) {
+        toast.info("Billing job ran — no servers due today");
+      } else if (r.charged.length > 0) {
+        toast.success(`Charged ${r.charged.length} server(s)\n${lines}`);
+      } else {
+        toast.warning(`Job ran — 0 charged\n${lines}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+    },
     onError: (err: any) => toast.error(err.message),
   });
 
