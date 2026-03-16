@@ -180,10 +180,18 @@ export function registerBillingRoutes(router: Router) {
 
       const { status, monthlyPriceCents, autoRenew, freeServer, nextBillAt, suspendAt } = req.body;
 
+      // Validate monthlyPriceCents is a non-negative integer (max $10,000/month)
+      if (monthlyPriceCents !== undefined) {
+        const price = Number(monthlyPriceCents);
+        if (!Number.isInteger(price) || price < 0 || price > 1_000_000) {
+          return res.status(400).json({ error: 'monthlyPriceCents must be an integer between 0 and 1000000' });
+        }
+      }
+
       const updateData: Record<string, any> = { updatedAt: new Date() };
 
       if (status !== undefined) updateData.status = status;
-      if (monthlyPriceCents !== undefined) updateData.monthlyPriceCents = monthlyPriceCents;
+      if (monthlyPriceCents !== undefined) updateData.monthlyPriceCents = Number(monthlyPriceCents);
       if (autoRenew !== undefined) updateData.autoRenew = autoRenew;
       if (freeServer !== undefined) updateData.freeServer = freeServer;
       if (nextBillAt !== undefined) {

@@ -6704,6 +6704,19 @@ export async function registerRoutes(
         }
       }
 
+      // Atomically increment promo usage BEFORE wallet debit to close the race window.
+      // If two concurrent requests both validated the same promo, the DB-level check in
+      // incrementPromoCodeUsage (currentUses < maxUsesTotal) will reject the second one.
+      // Per-user limits are enforced here before any money moves.
+      if (promoValidation?.valid && promoValidation.promoCode) {
+        try {
+          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
+        } catch (promoError: any) {
+          // incrementPromoCodeUsage throws if limit reached (race condition caught)
+          return res.status(400).json({ error: 'Promo code usage limit has been reached' });
+        }
+      }
+
       // Debit wallet and create order atomically
       // Use provided hostname or generate a default one
       const serverHostname = hostname || `vps-${Date.now().toString(36)}`;
@@ -6716,6 +6729,10 @@ export async function registerRoutes(
       );
 
       if (!deployResult.success || !deployResult.order) {
+        // Wallet debit failed — roll back the promo increment so user can retry
+        if (promoValidation?.valid && promoValidation.promoCode) {
+          dbStorage.decrementPromoCodeUsage(promoValidation.promoCode.id).catch(() => {});
+        }
         return res.status(400).json({ error: deployResult.error || 'Failed to create deploy order' });
       }
 
@@ -6772,6 +6789,11 @@ export async function registerRoutes(
           orderId: order.id,
         });
 
+        // Roll back promo increment so user can retry
+        if (promoValidation?.valid && promoValidation.promoCode) {
+          dbStorage.decrementPromoCodeUsage(promoValidation.promoCode.id).catch(() => {});
+        }
+
         await dbStorage.updateDeployOrder(order.id, {
           status: 'failed',
           errorMessage: provisionError.message,
@@ -6804,10 +6826,9 @@ export async function registerRoutes(
         log(`Warning: Could not create billing record for server ${serverResult.serverId}: ${billingError.message}`, 'api');
       }
 
-      // Record promo code usage if one was applied (non-critical, log if it fails)
+      // Record promo code usage details (increment already done before provisioning)
       if (promoValidation?.valid && promoValidation.promoCode) {
         try {
-          await dbStorage.incrementPromoCodeUsage(promoValidation.promoCode.id);
           await dbStorage.recordPromoCodeUsage({
             promoCodeId: promoValidation.promoCode.id,
             auth0UserId,
@@ -6818,7 +6839,7 @@ export async function registerRoutes(
           });
           log(`Promo code ${promoValidation.promoCode.code} usage recorded for order ${order.id}`, 'api');
         } catch (promoError: any) {
-          log(`Warning: Could not record promo code usage: ${promoError.message}`, 'api');
+          log(`Warning: Could not record promo code usage details: ${promoError.message}`, 'api');
         }
       }
 
@@ -6892,14 +6913,17 @@ export async function registerRoutes(
   // Inbound email webhook — Resend forwards emails to support+{ticketId}@ozvps.com.au here
   app.post('/api/hooks/resend-inbound', async (req, res) => {
     try {
-      // Validate shared secret to prevent forged inbound email injection
+      // Validate shared secret to prevent forged inbound email injection.
+      // RESEND_WEBHOOK_SECRET is mandatory — reject all requests if not configured.
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-      if (webhookSecret) {
-        const provided = req.query.secret || req.headers['x-webhook-secret'];
-        if (!provided || !timingSafeEqual(Buffer.from(String(provided)), Buffer.from(webhookSecret))) {
-          log('Resend inbound webhook: invalid secret', 'webhook');
-          return res.status(401).json({ error: 'Unauthorized' });
-        }
+      if (!webhookSecret) {
+        log('Resend inbound webhook: RESEND_WEBHOOK_SECRET not configured — rejecting request', 'webhook');
+        return res.status(503).json({ error: 'Webhook not configured' });
+      }
+      const provided = req.query.secret || req.headers['x-webhook-secret'];
+      if (!provided || !timingSafeEqual(Buffer.from(String(provided)), Buffer.from(webhookSecret))) {
+        log('Resend inbound webhook: invalid secret', 'webhook');
+        return res.status(401).json({ error: 'Unauthorized' });
       }
 
       // Resend sends multipart/form-data or JSON depending on configuration

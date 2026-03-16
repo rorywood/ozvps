@@ -29,6 +29,13 @@ validateOrExit();
 const app = express();
 const httpServer = createServer(app);
 
+// Tell Express to trust the first proxy hop (NGINX) so req.ip returns the real client IP.
+// This makes rate limiting work correctly in production behind NGINX.
+// TRUST_PROXY must only be set when actually running behind a trusted proxy.
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

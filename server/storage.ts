@@ -2435,6 +2435,14 @@ export const dbStorage = {
     return updated;
   },
 
+  // Decrement promo usage — used to roll back if provisioning fails after increment
+  async decrementPromoCodeUsage(id: number): Promise<void> {
+    await db
+      .update(promoCodes)
+      .set({ currentUses: sql`GREATEST(0, ${promoCodes.currentUses} - 1)`, updatedAt: new Date() })
+      .where(eq(promoCodes.id, id));
+  },
+
   // Get user's usage count for a promo code
   async getPromoCodeUsageCount(promoCodeId: number, auth0UserId: string): Promise<number> {
     const [result] = await db
