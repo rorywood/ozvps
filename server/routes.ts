@@ -406,6 +406,12 @@ function csrfProtection(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
+  // Skip CSRF for VNC disable — called via navigator.sendBeacon which cannot set headers.
+  // Still protected by authMiddleware (session cookie) and only disables VNC (benign action).
+  if (/^\/api\/servers\/[^/]+\/vnc\/disable$/.test(req.originalUrl)) {
+    return next();
+  }
+
   // Skip CSRF for login/register/logout (no session yet, or low-risk)
   if (req.originalUrl === '/api/auth/login' ||
       req.originalUrl === '/api/auth/register' ||
