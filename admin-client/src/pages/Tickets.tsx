@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ticketsApi } from "../lib/api";
+import { ticketsApi, usersApi } from "../lib/api";
 import { toast } from "sonner";
 import {
   MessageSquare, Send, X, RefreshCw, RotateCcw, Trash2, Search,
   Lock, Eye, EyeOff, Loader2, ChevronDown, StickyNote, Clock,
-  AlertTriangle, Tag, User,
+  AlertTriangle, Tag, User, Plus,
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Select } from "../components/ui/select";
@@ -68,6 +68,15 @@ export default function Tickets() {
   const cannedRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  // New ticket on behalf of user
+  const [showNewTicket, setShowNewTicket] = useState(false);
+  const [newTicketUserSearch, setNewTicketUserSearch] = useState("");
+  const [newTicketSelectedUser, setNewTicketSelectedUser] = useState<any>(null);
+  const [newTicketTitle, setNewTicketTitle] = useState("");
+  const [newTicketCategory, setNewTicketCategory] = useState("support");
+  const [newTicketPriority, setNewTicketPriority] = useState("normal");
+  const [newTicketMessage, setNewTicketMessage] = useState("");
 
   // Close canned dropdown on outside click
   useEffect(() => {
@@ -159,6 +168,40 @@ export default function Tickets() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const { data: userSearchResults, isLoading: searchingUsers } = useQuery({
+    queryKey: ["user-search", newTicketUserSearch],
+    queryFn: () => usersApi.search(newTicketUserSearch),
+    enabled: newTicketUserSearch.trim().length >= 2,
+  });
+
+  const createOnBehalfMutation = useMutation({
+    mutationFn: ticketsApi.createOnBehalf,
+    onSuccess: (data) => {
+      toast.success(`Ticket #${data.ticket.ticketNumber} created — email sent to user`);
+      setShowNewTicket(false);
+      setNewTicketSelectedUser(null);
+      setNewTicketUserSearch("");
+      setNewTicketTitle("");
+      setNewTicketCategory("support");
+      setNewTicketPriority("normal");
+      setNewTicketMessage("");
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-counts"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const handleCreateOnBehalf = () => {
+    if (!newTicketSelectedUser || !newTicketTitle.trim() || !newTicketMessage.trim()) return;
+    createOnBehalfMutation.mutate({
+      auth0UserId: newTicketSelectedUser.auth0UserId,
+      title: newTicketTitle.trim(),
+      category: newTicketCategory,
+      priority: newTicketPriority,
+      message: newTicketMessage.trim(),
+    });
+  };
+
   const handleSend = () => {
     if (!replyText.trim() || !selectedTicket) return;
     replyMutation.mutate({ id: selectedTicket.ticket.id, message: replyText, note: isInternalNote });
@@ -200,14 +243,23 @@ export default function Tickets() {
             ))}
           </div>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 text-white/60 rounded-lg hover:bg-white/8 hover:text-white transition-colors text-sm"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowNewTicket(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors text-sm font-medium"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Ticket
+          </button>
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 text-white/60 rounded-lg hover:bg-white/8 hover:text-white transition-colors text-sm"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
@@ -582,6 +634,154 @@ export default function Tickets() {
         onConfirm={() => { if (selectedTicket) deleteMutation.mutate(selectedTicket.ticket.id); }}
         isPending={deleteMutation.isPending}
       />
+
+      {/* New Ticket Dialog */}
+      {showNewTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[hsl(216_28%_7%)] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+              <h2 className="text-base font-semibold text-white">New Ticket on Behalf of User</h2>
+              <button
+                onClick={() => setShowNewTicket(false)}
+                className="p-1.5 text-white/30 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* User search */}
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5">User</label>
+                {newTicketSelectedUser ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-[hsl(210_100%_50%)/10] border border-[hsl(210_100%_50%)/25] rounded-lg">
+                    <div>
+                      <p className="text-sm text-white font-medium">{newTicketSelectedUser.name || newTicketSelectedUser.email}</p>
+                      <p className="text-xs text-white/40">{newTicketSelectedUser.email}</p>
+                    </div>
+                    <button
+                      onClick={() => { setNewTicketSelectedUser(null); setNewTicketUserSearch(""); }}
+                      className="text-white/30 hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+                    <input
+                      type="text"
+                      placeholder="Search by name or email..."
+                      value={newTicketUserSearch}
+                      onChange={(e) => setNewTicketUserSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/25 focus:ring-1 focus:ring-[hsl(210_100%_50%)/50] outline-none"
+                      autoFocus
+                    />
+                    {newTicketUserSearch.trim().length >= 2 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl z-10 overflow-hidden max-h-48 overflow-y-auto">
+                        {searchingUsers ? (
+                          <div className="flex items-center justify-center py-4 text-white/30">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        ) : userSearchResults?.users?.length === 0 ? (
+                          <p className="px-4 py-3 text-sm text-white/30">No users found</p>
+                        ) : (
+                          userSearchResults?.users?.map((u: any) => (
+                            <button
+                              key={u.auth0UserId}
+                              onClick={() => { setNewTicketSelectedUser(u); setNewTicketUserSearch(""); }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-white/6 transition-colors"
+                            >
+                              <p className="text-sm text-white">{u.name || u.email}</p>
+                              <p className="text-xs text-white/40">{u.email}</p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5">Subject</label>
+                <input
+                  type="text"
+                  placeholder="Ticket subject..."
+                  value={newTicketTitle}
+                  onChange={(e) => setNewTicketTitle(e.target.value)}
+                  maxLength={200}
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/25 focus:ring-1 focus:ring-[hsl(210_100%_50%)/50] outline-none"
+                />
+              </div>
+
+              {/* Category + Priority */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5">Category</label>
+                  <Select
+                    value={newTicketCategory}
+                    onChange={setNewTicketCategory}
+                    options={[
+                      { value: "support", label: "Support" },
+                      { value: "sales", label: "Sales" },
+                      { value: "accounts", label: "Accounts" },
+                      { value: "abuse", label: "Abuse" },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5">Priority</label>
+                  <Select
+                    value={newTicketPriority}
+                    onChange={setNewTicketPriority}
+                    options={[
+                      { value: "low", label: "Low" },
+                      { value: "normal", label: "Normal" },
+                      { value: "high", label: "High" },
+                      { value: "urgent", label: "Urgent" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {/* Message */}
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5">Initial Message</label>
+                <textarea
+                  placeholder="Describe the issue or intervention..."
+                  value={newTicketMessage}
+                  onChange={(e) => setNewTicketMessage(e.target.value)}
+                  rows={5}
+                  maxLength={5000}
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/25 focus:ring-1 focus:ring-[hsl(210_100%_50%)/50] outline-none resize-none"
+                />
+                <p className="text-xs text-white/25 mt-1">This message will be sent to the user via email.</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/8">
+              <button
+                onClick={() => setShowNewTicket(false)}
+                className="px-4 py-2 text-sm text-white/50 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateOnBehalf}
+                disabled={!newTicketSelectedUser || !newTicketTitle.trim() || !newTicketMessage.trim() || createOnBehalfMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {createOnBehalfMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Create & Email User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

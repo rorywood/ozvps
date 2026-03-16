@@ -4,9 +4,88 @@ import { tickets, ticketMessages, userMappings, adminTicketUpdateSchema, ticketM
 import { eq, desc, and, or, sql, isNull, ne } from "drizzle-orm";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 import { auth0Client } from "../../server/auth0";
-import { sendTicketAdminReplyEmail, sendGuestTicketAdminReplyEmail } from "../../server/email";
+import { sendTicketAdminReplyEmail, sendGuestTicketAdminReplyEmail, sendTicketConfirmationEmail } from "../../server/email";
 
 export function registerTicketsRoutes(router: Router) {
+
+  // Create a ticket on behalf of a user
+  router.post("/tickets", async (req: Request, res: Response) => {
+    try {
+      const session = req.adminSession!;
+      const { auth0UserId, title, category, priority, message } = req.body;
+
+      if (!auth0UserId || typeof auth0UserId !== "string") {
+        return res.status(400).json({ error: "auth0UserId is required" });
+      }
+      if (!title || typeof title !== "string" || title.trim().length < 3) {
+        return res.status(400).json({ error: "Title must be at least 3 characters" });
+      }
+      if (!message || typeof message !== "string" || message.trim().length < 10) {
+        return res.status(400).json({ error: "Message must be at least 10 characters" });
+      }
+
+      const cleanTitle = title.trim().slice(0, 200);
+      const cleanMessage = message.trim().slice(0, 5000);
+      const ticketCategory = ["sales", "support", "accounts", "abuse"].includes(category) ? category : "support";
+      const ticketPriority = ["low", "normal", "high", "urgent"].includes(priority) ? priority : "normal";
+
+      // Generate unique 6-digit ticket number
+      let ticketNumber: number | undefined;
+      for (let i = 0; i < 10; i++) {
+        const candidate = Math.floor(100000 + Math.random() * 900000);
+        const existing = await db.select({ id: tickets.id }).from(tickets).where(eq(tickets.ticketNumber, candidate)).limit(1);
+        if (existing.length === 0) { ticketNumber = candidate; break; }
+      }
+
+      const [ticket] = await db
+        .insert(tickets)
+        .values({
+          auth0UserId,
+          ticketNumber,
+          title: cleanTitle,
+          category: ticketCategory,
+          priority: ticketPriority,
+          status: "waiting_user",
+        })
+        .returning();
+
+      // Add the initial message as admin (on behalf of admin raising it)
+      await db.insert(ticketMessages).values({
+        ticketId: ticket.id,
+        authorType: "admin",
+        authorId: session.auth0UserId,
+        authorEmail: session.email,
+        authorName: session.name,
+        message: cleanMessage,
+        isInternalNote: false,
+      });
+
+      // Update lastMessageAt
+      await db.update(tickets).set({ lastMessageAt: new Date() }).where(eq(tickets.id, ticket.id));
+
+      // Email the user
+      auth0Client.getUserById(auth0UserId).then(auth0User => {
+        if (auth0User?.email) {
+          sendTicketConfirmationEmail(auth0User.email, ticket.id, cleanTitle, ticketCategory, ticketPriority, auth0User.name || null).catch(err => {
+            console.log(`[admin-tickets] Failed to send new ticket email for ticket ${ticket.id}: ${err.message}`);
+          });
+        }
+      }).catch(err => {
+        console.log(`[admin-tickets] Failed to get Auth0 user for new ticket email on ticket ${ticket.id}: ${err.message}`);
+      });
+
+      await auditSuccess(req, "ticket.create_on_behalf", "ticket", String(ticket.id), undefined, { auth0UserId, title: cleanTitle, category: ticketCategory });
+
+      console.log(`[admin-tickets] Ticket ${ticket.id} created on behalf of ${auth0UserId} by ${session.email}`);
+
+      res.json({ ticket });
+    } catch (error: any) {
+      await auditFailure(req, "ticket.create_on_behalf", "ticket", error.message);
+      console.log(`[admin-tickets] Create ticket error: ${error.message}`);
+      res.status(500).json({ error: "Failed to create ticket" });
+    }
+  });
+
   // Get ticket counts by status
   router.get("/tickets/counts", async (req: Request, res: Response) => {
     try {

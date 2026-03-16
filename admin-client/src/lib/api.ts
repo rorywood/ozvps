@@ -318,6 +318,14 @@ export const ticketsApi = {
   reopen: (id: number) => api.post(`/tickets/${id}/reopen`),
 
   delete: (id: number) => api.delete(`/tickets/${id}`, { confirm: "DELETE" }),
+
+  createOnBehalf: (data: {
+    auth0UserId: string;
+    title: string;
+    category: string;
+    priority: string;
+    message: string;
+  }) => api.post<{ ticket: any }>("/tickets", data),
 };
 
 // Whitelist API
