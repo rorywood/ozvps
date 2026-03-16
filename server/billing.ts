@@ -105,8 +105,6 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
   // Get server name for transaction description
   const serverName = await getServerName(billing.virtfusionServerId);
 
-  const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
-
   return await db.transaction(async (tx) => {
     // Lock wallet row FIRST to prevent concurrent charges
     const walletRows = await tx.select().from(wallets)
@@ -119,13 +117,48 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       return false;
     }
 
+    // Re-read and lock the live billing row so stale callers can't undo a
+    // payment or reactivation that already completed in another request.
+    const currentBillingRows = await tx.select().from(serverBilling)
+      .where(eq(serverBilling.id, billing.id))
+      .for('update')
+      .limit(1);
+
+    if (currentBillingRows.length === 0) {
+      log(`Billing record ${billing.id} disappeared before charge for server ${billing.virtfusionServerId}`, 'billing');
+      return false;
+    }
+
+    const currentBilling = currentBillingRows[0];
+
+    if (currentBilling.freeServer) {
+      log(`Skipping charge for complimentary server ${currentBilling.virtfusionServerId}`, 'billing');
+      return true;
+    }
+
+    const billingWasUpdated =
+      currentBilling.nextBillAt.getTime() !== billing.nextBillAt.getTime() ||
+      currentBilling.status !== billing.status;
+
+    if (
+      billingWasUpdated &&
+      currentBilling.status === 'paid' &&
+      currentBilling.suspendAt === null &&
+      currentBilling.nextBillAt.getTime() > billing.nextBillAt.getTime()
+    ) {
+      log(`Server ${currentBilling.virtfusionServerId} was already settled by another process; skipping stale charge request`, 'billing');
+      return true;
+    }
+
+    const idempotencyKey = `bill:${currentBilling.virtfusionServerId}:${currentBilling.nextBillAt.toISOString()}`;
+
     // Check idempotency AFTER acquiring wallet lock to prevent duplicate charges
     const existing = await tx.select().from(billingLedger)
       .where(eq(billingLedger.idempotencyKey, idempotencyKey))
       .limit(1);
 
     if (existing.length > 0) {
-      if (billing.status === 'paid') {
+      if (currentBilling.status === 'paid') {
         // Server is already paid for this period — skip to avoid double-charging
         log(`Server ${billing.virtfusionServerId} already paid for ${billing.nextBillAt.toISOString()} — skipping`, 'billing');
         return true;
@@ -139,24 +172,24 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
 
     const wallet = walletRows[0];
 
-    if (wallet.balanceCents < billing.monthlyPriceCents) {
-      log(`Insufficient balance for server ${billing.virtfusionServerId}: need ${billing.monthlyPriceCents}, have ${wallet.balanceCents}`, 'billing');
+    if (wallet.balanceCents < currentBilling.monthlyPriceCents) {
+      log(`Insufficient balance for server ${currentBilling.virtfusionServerId}: need ${currentBilling.monthlyPriceCents}, have ${wallet.balanceCents}`, 'billing');
       return false; // Insufficient balance
     }
 
     // Deduct from wallet
     await tx.update(wallets)
       .set({
-        balanceCents: wallet.balanceCents - billing.monthlyPriceCents,
+        balanceCents: wallet.balanceCents - currentBilling.monthlyPriceCents,
         updatedAt: new Date(),
       })
-      .where(eq(wallets.auth0UserId, billing.auth0UserId));
+      .where(eq(wallets.auth0UserId, currentBilling.auth0UserId));
 
     // Record in ledger (for idempotency)
     await tx.insert(billingLedger).values({
-      auth0UserId: billing.auth0UserId,
-      virtfusionServerId: billing.virtfusionServerId,
-      amountCents: billing.monthlyPriceCents,
+      auth0UserId: currentBilling.auth0UserId,
+      virtfusionServerId: currentBilling.virtfusionServerId,
+      amountCents: currentBilling.monthlyPriceCents,
       description: `Server renewal - ${serverName}`,
       idempotencyKey,
     });
@@ -164,22 +197,22 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     // Record in wallet transactions (for user visibility)
     // Only call it "reactivation" if the server was actually suspended — unpaid-but-running
     // servers that get auto-charged after a top-up should just show as "Monthly billing"
-    const transactionDescription = (reactivation && billing.status === 'suspended')
+    const transactionDescription = (reactivation && currentBilling.status === 'suspended')
       ? 'Server reactivation'
       : 'Monthly billing';
 
     await tx.insert(walletTransactions).values({
-      auth0UserId: billing.auth0UserId,
+      auth0UserId: currentBilling.auth0UserId,
       type: 'debit',
-      amountCents: -billing.monthlyPriceCents, // Negative for debits
+      amountCents: -currentBilling.monthlyPriceCents, // Negative for debits
       metadata: {
-        serverId: billing.virtfusionServerId,
+        serverId: currentBilling.virtfusionServerId,
         serverName,
         description: transactionDescription,
         ...(reactivation && {
           reactivation: true,
-          previousStatus: billing.status,
-          previousDueDate: billing.nextBillAt.toISOString(),
+          previousStatus: currentBilling.status,
+          previousDueDate: currentBilling.nextBillAt.toISOString(),
         }),
       },
     });
@@ -187,7 +220,7 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
     // Update billing record
     // For reactivation (unsuspending), set next bill to 1 month from now
     // For regular billing, set next bill to 1 month from the previous due date
-    const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(billing.nextBillAt);
+    const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(currentBilling.nextBillAt);
     newNextBillAt.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
     await tx.update(serverBilling)
       .set({
@@ -196,14 +229,14 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
         suspendAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(serverBilling.id, billing.id));
+      .where(eq(serverBilling.id, currentBilling.id));
 
-    log(`Charged server ${billing.virtfusionServerId}: $${billing.monthlyPriceCents / 100}`, 'billing');
+    log(`Charged server ${currentBilling.virtfusionServerId}: $${currentBilling.monthlyPriceCents / 100}`, 'billing');
 
     // Send billing receipt email (non-blocking)
-    getUserEmail(billing.auth0UserId).then(email => {
+    getUserEmail(currentBilling.auth0UserId).then(email => {
       if (email) {
-        const amountDollars = `$${(billing.monthlyPriceCents / 100).toFixed(2)}`;
+        const amountDollars = `$${(currentBilling.monthlyPriceCents / 100).toFixed(2)}`;
         sendBillingReceiptEmail(email, serverName, amountDollars, newNextBillAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })).catch(err => {
           log(`Failed to send billing receipt email to ${email}: ${err.message}`, 'billing');
         });
@@ -530,36 +563,60 @@ export async function runBillingJob(): Promise<BillingJobResult> {
         log(`Server ${billing.virtfusionServerId} charge failed (insufficient balance), proceeding to suspend`, 'billing');
       }
 
-      // Mark as unpaid before suspending (covers active/paid/unpaid statuses)
-      if (billing.status !== 'unpaid' && billing.status !== 'suspended') {
-        await db.update(serverBilling)
-          .set({ status: 'unpaid', updatedAt: new Date() })
-          .where(eq(serverBilling.id, billing.id));
-        log(`Server ${billing.virtfusionServerId} marked as unpaid`, 'billing');
+      const latestBillingRows = await db.select().from(serverBilling)
+        .where(eq(serverBilling.id, billing.id))
+        .limit(1);
+
+      if (latestBillingRows.length === 0) {
+        log(`Billing record ${billing.id} disappeared before suspension for server ${billing.virtfusionServerId}`, 'billing');
+        continue;
       }
 
-      log(`Calling VirtFusion suspendServer for ${billing.virtfusionServerId}`, 'billing');
-      await virtfusionClient.suspendServer(billing.virtfusionServerId);
-      log(`VirtFusion suspend completed for ${billing.virtfusionServerId}`, 'billing');
+      const latestBilling = latestBillingRows[0];
+
+      if (
+        latestBilling.freeServer ||
+        !latestBilling.autoRenew ||
+        (
+          latestBilling.status === 'paid' &&
+          latestBilling.suspendAt === null &&
+          latestBilling.nextBillAt.getTime() > billing.nextBillAt.getTime()
+        )
+      ) {
+        log(`Skipping stale suspension request for server ${latestBilling.virtfusionServerId}; billing was already updated`, 'billing');
+        continue;
+      }
+
+      // Mark as unpaid before suspending (covers active/paid/unpaid statuses)
+      if (latestBilling.status !== 'unpaid' && latestBilling.status !== 'suspended') {
+        await db.update(serverBilling)
+          .set({ status: 'unpaid', updatedAt: new Date() })
+          .where(eq(serverBilling.id, latestBilling.id));
+        log(`Server ${latestBilling.virtfusionServerId} marked as unpaid`, 'billing');
+      }
+
+      log(`Calling VirtFusion suspendServer for ${latestBilling.virtfusionServerId}`, 'billing');
+      await virtfusionClient.suspendServer(latestBilling.virtfusionServerId);
+      log(`VirtFusion suspend completed for ${latestBilling.virtfusionServerId}`, 'billing');
 
       await db.update(serverBilling)
         .set({
           status: 'suspended',
           updatedAt: new Date(),
         })
-        .where(eq(serverBilling.id, billing.id));
+        .where(eq(serverBilling.id, latestBilling.id));
 
-      log(`Suspended server ${billing.virtfusionServerId} - database updated to status=suspended`, 'billing');
+      log(`Suspended server ${latestBilling.virtfusionServerId} - database updated to status=suspended`, 'billing');
 
       // Send server suspended email
       try {
-        const email = await getUserEmail(billing.auth0UserId);
+        const email = await getUserEmail(latestBilling.auth0UserId);
         if (email) {
-          const serverName = await getServerName(billing.virtfusionServerId);
+          const serverName = await getServerName(latestBilling.virtfusionServerId);
           await sendServerSuspendedEmail(
             email,
             serverName,
-            formatCurrency(billing.monthlyPriceCents)
+            formatCurrency(latestBilling.monthlyPriceCents)
           );
         }
       } catch (emailError: any) {
@@ -815,6 +872,101 @@ export async function retryUnpaidServers(auth0UserId: string): Promise<void> {
     } catch (error: any) {
       log(`Error reactivating server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
     }
+  }
+}
+
+export async function retryServerBilling(auth0UserId: string, virtfusionServerId: string): Promise<void> {
+  const [billing] = await db.select().from(serverBilling)
+    .where(
+      and(
+        eq(serverBilling.auth0UserId, auth0UserId),
+        eq(serverBilling.virtfusionServerId, virtfusionServerId),
+        eq(serverBilling.freeServer, false)
+      )
+    )
+    .limit(1);
+
+  if (!billing) {
+    return;
+  }
+
+  const now = new Date();
+  const needsRetry =
+    billing.status === 'unpaid' ||
+    billing.status === 'suspended' ||
+    (
+      (billing.status === 'active' || billing.status === 'paid') &&
+      billing.nextBillAt <= now
+    );
+
+  if (!needsRetry) {
+    return;
+  }
+
+  try {
+    const charged = await chargeServer(billing, true);
+
+    if (charged) {
+      const newNextBillAt = addMonth(new Date());
+      newNextBillAt.setUTCHours(0, 0, 0, 0);
+      await db.update(serverBilling)
+        .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
+        .where(eq(serverBilling.id, billing.id));
+      log(`Server ${billing.virtfusionServerId} billing reset: status=paid, nextBillAt=${newNextBillAt.toISOString()}`, 'billing');
+
+      if (billing.status === 'suspended') {
+        let unsuspendSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await virtfusionClient.unsuspendServer(billing.virtfusionServerId);
+            log(`Reactivated server ${billing.virtfusionServerId} (attempt ${attempt})`, 'billing');
+            unsuspendSuccess = true;
+            break;
+          } catch (unsuspendError: any) {
+            log(`Unsuspend attempt ${attempt}/3 failed for server ${billing.virtfusionServerId}: ${unsuspendError.message}`, 'billing');
+            if (attempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+
+        if (!unsuspendSuccess) {
+          log(`All unsuspend attempts failed for server ${billing.virtfusionServerId}. Refunding charge and reverting status.`, 'billing');
+
+          const serverName = await getServerName(billing.virtfusionServerId);
+          const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
+
+          await db.transaction(async (tx) => {
+            await tx.update(wallets)
+              .set({
+                balanceCents: sql`${wallets.balanceCents} + ${billing.monthlyPriceCents}`,
+                updatedAt: new Date(),
+              })
+              .where(eq(wallets.auth0UserId, billing.auth0UserId));
+
+            await tx.insert(walletTransactions).values({
+              auth0UserId: billing.auth0UserId,
+              type: 'refund',
+              amountCents: billing.monthlyPriceCents,
+              metadata: {
+                serverId: billing.virtfusionServerId,
+                serverName,
+                reason: 'Server unsuspend failed after 3 attempts - auto refund',
+              },
+            });
+
+            await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+            await tx.update(serverBilling)
+              .set({ status: 'suspended', updatedAt: new Date() })
+              .where(eq(serverBilling.id, billing.id));
+          });
+
+          log(`Refunded ${billing.monthlyPriceCents} cents for server ${billing.virtfusionServerId} due to unsuspend failure`, 'billing');
+        }
+      }
+    }
+  } catch (error: any) {
+    log(`Error reactivating server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
   }
 }
 

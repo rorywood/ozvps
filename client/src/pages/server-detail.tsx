@@ -2253,7 +2253,7 @@ export default function ServerDetail() {
             </div>
 
             {/* Row 2: IP · location · OS — single line, no wrap */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground pl-8 mt-1 min-w-0">
+            <div className="flex items-center gap-2.5 text-sm leading-6 text-muted-foreground pl-8 mt-3 min-w-0">
               {/* IP */}
               <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground border border-border leading-none shrink-0">IP</span>
               <span className="text-foreground font-mono shrink-0" data-testid="text-primary-ip">{server.primaryIp}</span>
@@ -3441,4 +3441,3 @@ function ReinstallOsLogo({
     />
   );
 }
-

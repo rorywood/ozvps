@@ -10,7 +10,7 @@ import { storage, dbStorage } from "./storage";
 import { db, checkDatabaseHealth } from "./db";
 import { plans, serverBilling, billingLedger } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { createServerBilling, retryUnpaidServers, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
+import { createServerBilling, retryUnpaidServers, retryServerBilling, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
 import { log } from './log';
@@ -3086,9 +3086,9 @@ export async function registerRoutes(
         });
       }
 
-      // Call retryUnpaidServers to handle the reactivation
-      // This will charge the wallet, update billing status, and unsuspend if needed
-      await retryUnpaidServers(session.auth0UserId!);
+      // Retry only the requested server so one click can't charge
+      // unrelated overdue servers on the same account.
+      await retryServerBilling(session.auth0UserId!, serverId);
 
       // Fetch the updated billing record to verify the outcome
       const updatedRecord = await getServerBillingStatus(serverId, session.auth0UserId!);
