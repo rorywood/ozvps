@@ -19,7 +19,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendTicketConfirmationEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import sharp from "sharp";
@@ -89,6 +89,20 @@ function getClientIp(req: any): string {
   }
 
   return 'unknown';
+}
+
+function getTrustedAppBaseUrl(): string {
+  const configuredAppUrl = process.env.APP_URL?.trim();
+  if (configuredAppUrl) {
+    return configuredAppUrl.replace(/\/+$/, '');
+  }
+
+  const configuredAppDomain = process.env.APP_DOMAIN?.trim();
+  if (configuredAppDomain) {
+    return `https://${configuredAppDomain.replace(/\/+$/, '')}`;
+  }
+
+  return 'https://app.ozvps.com.au';
 }
 
 // Error codes for consistent error handling
@@ -1034,18 +1048,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid email format' });
       }
 
-      // Check if user exists in Auth0
-      try {
-        const existingUser = await auth0Client.getUserByEmail(email);
-        if (existingUser) {
-          return res.json({ available: false, exists: true });
-        }
-        return res.json({ available: true, exists: false });
-      } catch (checkError: any) {
-        // If Auth0 check fails, return error state
-        log(`Email availability check failed for ${email}: ${checkError.message}`, 'auth');
-        return res.status(503).json({ error: 'Unable to verify email availability' });
-      }
+      // Use a generic response so this endpoint cannot be used to enumerate accounts.
+      return res.json({ available: true, exists: false });
     } catch (error: any) {
       log(`Email check error: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to check email availability' });
@@ -1303,7 +1307,7 @@ export async function registerRoutes(
         const resetToken = await dbStorage.createPasswordResetToken(email);
 
         // Build reset URL
-        const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+        const baseUrl = getTrustedAppBaseUrl();
         const resetLink = `${baseUrl}/reset-password?token=${resetToken.token}`;
 
         // Send password reset email
@@ -4173,9 +4177,9 @@ export async function registerRoutes(
   // Email 2FA: Send code during login (public, but rate limited)
   app.post('/api/user/2fa/email/send', mfaRateLimiter, async (req, res) => {
     try {
-      const { email, auth0UserId } = req.body;
-      if (!email || !auth0UserId) {
-        return res.status(400).json({ error: 'Email and user ID are required' });
+      const { auth0UserId } = req.body;
+      if (!auth0UserId || typeof auth0UserId !== 'string') {
+        return res.status(400).json({ error: 'User ID is required' });
       }
 
       const tfa = await dbStorage.getTwoFactorAuth(auth0UserId);
@@ -4183,19 +4187,26 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Email 2FA is not enabled for this account' });
       }
 
+      const auth0User = await auth0Client.getUserById(auth0UserId);
+      if (!auth0User?.email) {
+        return res.status(400).json({ error: 'Unable to send verification email for this account' });
+      }
+
+      const targetEmail = auth0User.email.trim().toLowerCase();
+
       // Generate and send code
       const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
       await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
-      const emailResult = await sendTwoFactorCodeEmail(email, code, 10);
+      const emailResult = await sendTwoFactorCodeEmail(targetEmail, code, 10);
 
       if (!emailResult.success) {
         return res.status(500).json({ error: 'Failed to send verification email' });
       }
 
-      log(`Email 2FA code sent to ${email}`, 'security');
-      await auditUserAction(req, auth0UserId, email, UserActions.EMAIL_2FA_CODE_SENT, 'session', auth0UserId);
+      log(`Email 2FA code sent to ${targetEmail}`, 'security');
+      await auditUserAction(req, auth0UserId, targetEmail, UserActions.EMAIL_2FA_CODE_SENT, 'session', auth0UserId);
       res.json({ success: true, message: 'Verification code sent' });
     } catch (error: any) {
       log(`Error sending 2FA email: ${error.message}`, 'api');
@@ -6179,7 +6190,7 @@ export async function registerRoutes(
       }
 
       // Create portal session
-      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
+      const baseUrl = getTrustedAppBaseUrl();
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
         return_url: `${baseUrl}/account`,
@@ -6260,7 +6271,7 @@ export async function registerRoutes(
       const auth0UserId = req.userSession!.auth0UserId;
 
       // Create a checkout session for wallet top-up with automatic invoice creation
-      const baseUrl = `https://${process.env.APP_DOMAIN || req.headers.host}`;
+      const baseUrl = getTrustedAppBaseUrl();
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: stripeCustomerId,
@@ -7502,67 +7513,42 @@ export async function registerRoutes(
       if (cleanMessage.length < 20) return res.status(400).json({ error: 'Message must be at least 20 characters.' });
       if (cleanMessage.length > 5000) return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
 
-      const cleanName = name ? String(name).trim().slice(0, 100) || null : null;
+      const resolvedName = name ? String(name).trim().slice(0, 100) || null : null;
 
-      // Check if this email belongs to an existing account — if so, attach to their account
-      let auth0UserId: string | null = null;
-      let resolvedName = cleanName;
-      try {
-        const existingUser = await auth0Client.getUserByEmail(cleanEmail);
-        if (existingUser) {
-          auth0UserId = existingUser.user_id;
-          // Use their account name if they didn't provide one
-          if (!resolvedName && existingUser.name) resolvedName = existingUser.name;
-          log(`Contact form: matched email ${cleanEmail} to existing account ${auth0UserId}`, 'support');
-        }
-      } catch (err: any) {
-        // Auth0 lookup failure is non-fatal — fall back to guest ticket
-        log(`Contact form: Auth0 lookup failed for ${cleanEmail}, creating guest ticket: ${err.message}`, 'support');
-      }
-
-      // Generate access token (used for guest tickets; ignored if linked to account)
+      // Public contact is always a guest flow so inbox possession remains
+      // the only path to the secure ticket link.
       const accessToken = randomBytes(32).toString('hex');
 
-      const ticket = await dbStorage.createTicket(
-        auth0UserId
-          ? { auth0UserId, title: cleanTitle, category, priority: 'normal' }
-          : { guestEmail: cleanEmail, guestAccessToken: accessToken, title: cleanTitle, category, priority: 'normal' }
-      );
+      const ticket = await dbStorage.createTicket({
+        guestEmail: cleanEmail,
+        guestAccessToken: accessToken,
+        title: cleanTitle,
+        category,
+        priority: 'normal',
+      });
 
       await dbStorage.createTicketMessage({
         ticketId: ticket.id,
         authorType: 'user',
-        authorId: auth0UserId ?? cleanEmail,
+        authorId: cleanEmail,
         authorEmail: cleanEmail,
         authorName: resolvedName,
         message: cleanMessage,
       });
 
-      if (auth0UserId) {
-        log(`Ticket #${ticket.id} created via public contact form and linked to account ${auth0UserId} (${category})`, 'support');
-      } else {
-        log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
-      }
+      log(`Guest ticket #${ticket.id} created via public contact form by ${cleanEmail} (${category})`, 'support');
 
-      // Send confirmation email
-      if (auth0UserId) {
-        // Linked to an account — send standard ticket confirmation and direct them to sign in
-        sendTicketConfirmationEmail(cleanEmail, ticket.id, cleanTitle, category, 'normal', resolvedName).catch(err => {
-          log(`Failed to send ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
-        });
-      } else {
-        // Guest — send confirmation with token link
-        sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, ticket.ticketNumber!, cleanTitle, accessToken, resolvedName).catch(err => {
-          log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
-        });
-      }
+      // Guest confirmation email carries the secure access link; the API response does not.
+      sendGuestTicketConfirmationEmail(cleanEmail, ticket.id, ticket.ticketNumber!, cleanTitle, accessToken, resolvedName).catch(err => {
+        log(`Failed to send guest ticket confirmation to ${cleanEmail}: ${err.message}`, 'email');
+      });
 
       // Send admin notification (non-blocking)
       sendAdminTicketNotificationEmail(ticket.id, cleanTitle, category, 'normal', cleanMessage, cleanEmail, resolvedName).catch(err => {
         log(`Failed to send admin notification for ticket #${ticket.id}: ${err.message}`, 'email');
       });
 
-      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber, accessToken });
+      res.json({ ticketId: ticket.id, ticketNumber: ticket.ticketNumber });
     } catch (error: any) {
       log(`Error creating guest ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to submit your enquiry. Please try again.' });
@@ -7582,8 +7568,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Ticket not found' });
       }
 
+      const { guestAccessToken: _guestAccessToken, guestEmail: _guestEmail, ...safeTicket } = ticket;
       const messages = await dbStorage.getTicketMessages(ticket.id, false); // exclude internal notes from guest view
-      res.json({ ticket, messages });
+      res.json({ ticket: safeTicket, messages });
     } catch (error: any) {
       log(`Error fetching guest ticket: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch ticket' });

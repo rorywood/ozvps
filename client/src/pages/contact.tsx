@@ -89,7 +89,7 @@ export default function ContactPage() {
   const { toast } = useToast();
 
   const [form, setForm] = useState({ name: "", email: "", category: "", title: "", message: "" });
-  const [submitted, setSubmitted] = useState<{ ticketId: number; ticketNumber: number; accessToken: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ ticketId: number; ticketNumber: number } | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof form) => {
@@ -154,13 +154,11 @@ export default function ContactPage() {
                   <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your ticket number</p>
                   <p className="text-5xl font-bold text-foreground font-mono">#{submitted.ticketNumber ?? submitted.ticketId}</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <a href={`/support/guest/${submitted.accessToken}`} className="flex-1">
-                    <button className="w-full inline-flex items-center justify-center rounded-full h-11 px-7 font-medium bg-[#0085ff] text-white hover:bg-[#0070dd] shadow-[0_4px_14px_rgba(0,133,255,0.3)] transition-all duration-200">
-                      <MessageSquare className="mr-2 h-4 w-4" />View Ticket
-                    </button>
-                  </a>
-                  <a href="https://ozvps.com.au" className="flex-1">
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    For security, the secure ticket link is only sent to your email inbox.
+                  </p>
+                  <a href="https://ozvps.com.au" className="block">
                     <button className="w-full inline-flex items-center justify-center rounded-full h-11 px-7 font-medium border border-gray-200 dark:border-white/[0.1] text-foreground hover:bg-white/5 transition-all duration-200">
                       <ExternalLink className="mr-2 h-4 w-4" />Back to OzVPS
                     </button>

@@ -336,8 +336,23 @@ export class VirtFusionClient {
   async getUserByExtRelationId(extRelationId: string): Promise<VirtFusionUser | null> {
     try {
       const encodedExtRelationId = encodeURIComponent(extRelationId);
-      const data = await this.request<{ data: VirtFusionUser }>(`/users/${encodedExtRelationId}/byExtRelation`);
-      return data.data;
+      const lookupPaths = [
+        `/users/${encodedExtRelationId}/byExtRelation?relStr=true`,
+        `/users/${encodedExtRelationId}/byExtRelation`,
+      ];
+
+      for (const lookupPath of lookupPaths) {
+        try {
+          const data = await this.request<{ data: VirtFusionUser }>(lookupPath);
+          return data.data;
+        } catch (error: any) {
+          if (!error?.message?.includes('404')) {
+            log(`Failed to fetch user by extRelationId ${extRelationId} via ${lookupPath}: ${error}`, 'virtfusion');
+          }
+        }
+      }
+
+      return null;
     } catch (error) {
       log(`Failed to fetch user by extRelationId ${extRelationId}: ${error}`, 'virtfusion');
       return null;

@@ -33,6 +33,8 @@ interface EnvConfig {
   REDIS_URL?: string;
   REDIS_PASSWORD?: string;
   EMAIL_FROM?: string;
+  APP_URL?: string;
+  APP_DOMAIN?: string;
   PORT?: string;
   NODE_ENV?: string;
 }
@@ -160,6 +162,10 @@ export function validateEnvironment(): ValidationResult {
 
     if (process.env.SESSION_VALIDATE_IP !== 'true') {
       warnings.push('SESSION_VALIDATE_IP not set to true - sessions are not IP-bound (session hijacking risk)');
+    }
+
+    if (!process.env.APP_URL && !process.env.APP_DOMAIN) {
+      warnings.push('APP_URL or APP_DOMAIN should be set in production so emails and Stripe return links do not rely on host header fallbacks');
     }
 
     // Check for example/placeholder values

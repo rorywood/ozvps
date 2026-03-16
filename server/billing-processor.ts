@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { db } from "./db";
 import { wallets, walletTransactions, serverBilling, serverCancellations, plans } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { runBillingJob, retryUnpaidServers } from "./billing";
+import { getAutoTopupIdempotencyKey, runBillingJob, retryUnpaidServers } from "./billing";
 import { dbStorage } from "./storage";
 import { log } from "./logger";
 import { processTrials } from "./trial-processor";
@@ -90,11 +90,9 @@ async function processAutoTopups(stripe: Stripe | null) {
         continue;
       }
 
-      // SECURITY: Generate a unique idempotency key based on wallet and current day
-      // This prevents duplicate charges if the billing job runs multiple times
-      // The key resets daily to allow a new auto-topup the next day if needed
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      const idempotencyKey = `auto_topup_${wallet.auth0UserId}_${today}`;
+      // Key off the wallet state so retries of the same charge dedupe cleanly,
+      // but a later legitimate top-up the same day can still proceed.
+      const idempotencyKey = getAutoTopupIdempotencyKey(wallet);
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: wallet.autoTopupAmountCents,

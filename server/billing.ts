@@ -7,6 +7,24 @@ import { auth0Client } from './auth0';
 import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail, sendAutoTopupSuccessEmail, sendAutoTopupFailedEmail, sendBillingReceiptEmail } from './email';
 import { getUncachableStripeClient } from './stripeClient';
 
+export function getAutoTopupIdempotencyKey(wallet: {
+  auth0UserId: string;
+  balanceCents: number;
+  updatedAt: Date | null;
+  autoTopupAmountCents?: number | null;
+  autoTopupPaymentMethodId?: string | null;
+}): string {
+  const updatedAtKey = wallet.updatedAt ? wallet.updatedAt.toISOString() : 'none';
+  return [
+    'auto_topup',
+    wallet.auth0UserId,
+    wallet.balanceCents,
+    wallet.autoTopupAmountCents ?? 0,
+    wallet.autoTopupPaymentMethodId ?? 'none',
+    updatedAtKey,
+  ].join('_');
+}
+
 // Check if a user's account is suspended
 async function isUserAccountSuspended(auth0UserId: string): Promise<boolean> {
   const [flags] = await db.select().from(userFlags).where(eq(userFlags.auth0UserId, auth0UserId));
@@ -374,10 +392,9 @@ async function attemptAutoTopup(auth0UserId: string, neededCents: number): Promi
       return false;
     }
 
-    // Daily idempotency key — matches billing-processor.ts so both systems deduplicate
-    // against the same Stripe key and can't double-charge on the same day
-    const today = new Date().toISOString().split('T')[0];
-    const idempotencyKey = `auto_topup_${auth0UserId}_${today}`;
+    // Key off the wallet state so retries of the same charge dedupe cleanly,
+    // but a later legitimate top-up the same day can still proceed.
+    const idempotencyKey = getAutoTopupIdempotencyKey(wallet);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: topupAmount,

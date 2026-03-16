@@ -21,6 +21,106 @@ function sanitizeReason(reason: unknown): string | undefined {
   return reason.trim().slice(0, MAX_REASON_LENGTH);
 }
 
+type ResolvedVirtFusionUser = {
+  userId: number;
+  extRelationId: string | null;
+  source: string;
+};
+
+async function resolveVirtFusionUserForPurge(
+  auth0UserId: string,
+  userEmail: string | null,
+  auth0VirtFusionUserId: number | null,
+): Promise<ResolvedVirtFusionUser | null> {
+  const candidateIds: Array<{ id: number; source: string }> = [];
+  const candidateExtRelationIds: Array<{ extRelationId: string; source: string }> = [];
+
+  if (auth0VirtFusionUserId) {
+    candidateIds.push({ id: auth0VirtFusionUserId, source: "auth0_metadata" });
+  }
+
+  const [wallet] = await db
+    .select({ virtFusionUserId: wallets.virtFusionUserId })
+    .from(wallets)
+    .where(eq(wallets.auth0UserId, auth0UserId));
+
+  if (wallet?.virtFusionUserId) {
+    candidateIds.push({ id: wallet.virtFusionUserId, source: "wallet" });
+  }
+
+  const [userMapping] = await db
+    .select({ virtFusionUserId: userMappings.virtFusionUserId })
+    .from(userMappings)
+    .where(eq(userMappings.auth0UserId, auth0UserId));
+
+  if (userMapping?.virtFusionUserId) {
+    candidateIds.push({ id: userMapping.virtFusionUserId, source: "user_mapping" });
+  }
+
+  const [latestSession] = await db
+    .select({
+      virtFusionUserId: sessions.virtFusionUserId,
+      extRelationId: sessions.extRelationId,
+    })
+    .from(sessions)
+    .where(eq(sessions.auth0UserId, auth0UserId))
+    .orderBy(desc(sessions.createdAt))
+    .limit(1);
+
+  if (latestSession?.virtFusionUserId) {
+    candidateIds.push({ id: latestSession.virtFusionUserId, source: "latest_session" });
+  }
+
+  if (latestSession?.extRelationId) {
+    candidateExtRelationIds.push({ extRelationId: latestSession.extRelationId, source: "latest_session" });
+  }
+
+  if (userEmail) {
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    candidateExtRelationIds.push({
+      extRelationId: virtfusionClient.generateNumericId(normalizedEmail),
+      source: "email_numeric_extrelation",
+    });
+    candidateExtRelationIds.push({
+      extRelationId: normalizedEmail,
+      source: "email_legacy_extrelation",
+    });
+  }
+
+  const seenIds = new Set<number>();
+  for (const candidate of candidateIds) {
+    if (!candidate.id || seenIds.has(candidate.id)) continue;
+    seenIds.add(candidate.id);
+
+    const vfUser = await virtfusionClient.getUserById(candidate.id);
+    if (vfUser) {
+      return {
+        userId: vfUser.id,
+        extRelationId: vfUser.extRelationId || null,
+        source: candidate.source,
+      };
+    }
+  }
+
+  const seenExtRelationIds = new Set<string>();
+  for (const candidate of candidateExtRelationIds) {
+    const extRelationId = candidate.extRelationId.trim();
+    if (!extRelationId || seenExtRelationIds.has(extRelationId)) continue;
+    seenExtRelationIds.add(extRelationId);
+
+    const vfUser = await virtfusionClient.getUserByExtRelationId(extRelationId);
+    if (vfUser) {
+      return {
+        userId: vfUser.id,
+        extRelationId: vfUser.extRelationId || extRelationId,
+        source: candidate.source,
+      };
+    }
+  }
+
+  return null;
+}
+
 export function registerUsersRoutes(router: Router) {
   // List all users from Auth0 (paginated)
   router.get("/users", async (req: Request, res: Response) => {
@@ -832,6 +932,8 @@ export function registerUsersRoutes(router: Router) {
 
       // 1. Get user info from Auth0 first (need VirtFusion ID and email for Stripe)
       let virtFusionUserId: number | null = null;
+      let virtFusionExtRelationId: string | null = null;
+      let virtFusionLookupSource: string | null = null;
       let userEmail: string | null = null;
       try {
         const auth0User = await auth0Client.getUserById(auth0UserId);
@@ -850,6 +952,32 @@ export function registerUsersRoutes(router: Router) {
       } catch (err: any) {
         console.log(`[admin-users] Failed to fetch Auth0 user: ${err.message}`);
         results.errors.push(`Auth0 fetch failed: ${err.message}`);
+      }
+
+      try {
+        const resolvedVirtFusionUser = await resolveVirtFusionUserForPurge(auth0UserId, userEmail, virtFusionUserId);
+        if (resolvedVirtFusionUser) {
+          virtFusionUserId = resolvedVirtFusionUser.userId;
+          virtFusionExtRelationId = resolvedVirtFusionUser.extRelationId;
+          virtFusionLookupSource = resolvedVirtFusionUser.source;
+          console.log(
+            `[admin-users] Resolved VirtFusion user ${virtFusionUserId} via ${virtFusionLookupSource}` +
+            (virtFusionExtRelationId ? ` (extRelationId=${virtFusionExtRelationId})` : "")
+          );
+        } else {
+          const vfConnection = await virtfusionClient.getConnectionStatus();
+          if (!vfConnection.connected) {
+            return res.status(503).json({
+              error: `VirtFusion is unavailable (${vfConnection.errorType || "unknown"}). Purge stopped before deleting Auth0 so the user is not orphaned.`,
+            });
+          }
+
+          results.virtfusionUserDeleted = true;
+          console.log(`[admin-users] No VirtFusion user found for ${auth0UserId} after checking Auth0, wallet, mappings, sessions, and email lookups`);
+        }
+      } catch (err: any) {
+        console.log(`[admin-users] VirtFusion lookup failed: ${err.message}`);
+        results.errors.push(`VirtFusion lookup failed: ${err.message}`);
       }
 
       // 2. Check if VirtFusion user has active servers - block purge if they do
@@ -872,7 +1000,10 @@ export function registerUsersRoutes(router: Router) {
       // 3. Delete VirtFusion user (servers should already be deleted)
       if (virtFusionUserId) {
         try {
-          console.log(`[admin-users] Attempting to delete VirtFusion user ID: ${virtFusionUserId} (type: ${typeof virtFusionUserId})`);
+          console.log(
+            `[admin-users] Attempting to delete VirtFusion user ID: ${virtFusionUserId} (type: ${typeof virtFusionUserId})` +
+            (virtFusionLookupSource ? ` via ${virtFusionLookupSource}` : "")
+          );
           const userDeleted = await virtfusionClient.deleteUserById(virtFusionUserId);
           results.virtfusionUserDeleted = userDeleted;
           if (!userDeleted) {
@@ -884,7 +1015,7 @@ export function registerUsersRoutes(router: Router) {
           console.log(`[admin-users] VirtFusion user deletion error stack: ${err.stack}`);
           results.errors.push(`VirtFusion user deletion failed: ${err.message}`);
         }
-      } else {
+      } else if (!results.virtfusionUserDeleted) {
         console.log(`[admin-users] No VirtFusion user ID found for ${auth0UserId}, skipping VirtFusion deletion`);
       }
 
