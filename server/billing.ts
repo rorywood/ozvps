@@ -125,17 +125,16 @@ async function chargeServer(billing: typeof serverBilling.$inferSelect, reactiva
       .limit(1);
 
     if (existing.length > 0) {
-      log(`Server ${billing.virtfusionServerId} already charged for ${billing.nextBillAt.toISOString()} — reconciling status`, 'billing');
-      // Ledger entry exists (charge happened) but status may still be 'active'/'unpaid' — fix it
-      if (billing.status !== 'paid') {
-        const newNextBillAt = reactivation ? addMonth(new Date()) : addMonth(billing.nextBillAt);
-        newNextBillAt.setUTCHours(0, 0, 0, 0);
-        await tx.update(serverBilling)
-          .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
-          .where(eq(serverBilling.id, billing.id));
-        log(`Reconciled server ${billing.virtfusionServerId} status to paid, nextBillAt=${newNextBillAt.toISOString()}`, 'billing');
+      if (billing.status === 'paid') {
+        // Server is already paid for this period — skip to avoid double-charging
+        log(`Server ${billing.virtfusionServerId} already paid for ${billing.nextBillAt.toISOString()} — skipping`, 'billing');
+        return true;
       }
-      return true;
+      // Ledger entry exists but status is not 'paid' — stale entry (DB was reset or admin changed status).
+      // Delete the stale entry and charge fresh so the wallet is correctly debited.
+      await tx.delete(billingLedger).where(eq(billingLedger.idempotencyKey, idempotencyKey));
+      log(`Server ${billing.virtfusionServerId}: stale ledger entry cleared (status=${billing.status}), charging fresh`, 'billing');
+      // Fall through to charge fresh below
     }
 
     const wallet = walletRows[0];
@@ -405,8 +404,6 @@ export async function runBillingJob(): Promise<BillingJobResult> {
       }
 
       if (charged) {
-        // chargeServer returns true for both fresh charges and idempotency-reconciled ones
-        // Check if it was already in ledger by seeing if status was just fixed
         result.charged.push(billing.virtfusionServerId);
       } else {
         result.skippedInsufficientFunds.push(billing.virtfusionServerId);
