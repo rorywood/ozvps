@@ -91,8 +91,7 @@ export default function Billing() {
     mutationFn: (virtfusionServerId: string) => billingApi.forceCharge(virtfusionServerId),
     onSuccess: (data) => {
       if (data.success) {
-        toast.success(data.walletDeducted ? `Charged — wallet deducted` : `Status reconciled — wallet was already deducted previously`);
-        toast.info(data.message);
+        toast.success(data.message);
       } else {
         toast.error(data.message);
       }
