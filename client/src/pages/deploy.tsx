@@ -656,6 +656,10 @@ export default function DeployPage() {
                             </Tooltip>
                             <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>500 Mbps</span>
                           </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">IPv4 Address</span>
+                            <span className={cn("font-medium", isOutOfStock ? "text-muted-foreground" : "text-foreground")}>1 Included</span>
+                          </div>
                         </div>
                       </button>
                     );
@@ -825,6 +829,7 @@ export default function DeployPage() {
                         <div>{formatRAM(selectedPlan.ramMb)} RAM</div>
                         <div>{selectedPlan.storageGb} GB Storage</div>
                         <div>{formatTransfer(selectedPlan.transferGb)} Bandwidth</div>
+                        <div>1 IPv4 Address</div>
                       </div>
                     )}
                   </div>
