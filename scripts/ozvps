@@ -915,6 +915,34 @@ EOF
         success "SQL migrations applied"
     fi
 
+    info "Ensuring default admin whitelist entries..."
+    psql "$DATABASE_URL" -c "
+        INSERT INTO admin_ip_whitelist (
+            ip_address,
+            cidr,
+            label,
+            added_by,
+            added_by_email,
+            enabled,
+            created_at
+        )
+        SELECT
+            '115.64.218.44',
+            NULL,
+            'Primary admin IP',
+            'system',
+            'system@ozvps.local',
+            true,
+            NOW()
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM admin_ip_whitelist
+            WHERE ip_address = '115.64.218.44'
+        );
+    " 2>/dev/null \
+        && success "Admin IP 115.64.218.44 is whitelisted" \
+        || warning "Could not verify admin IP whitelist entry"
+
     # Prune dev dependencies for production to save space (AFTER migrations)
     local env=$(get_environment)
     if [[ "$env" == "production" ]]; then

@@ -1,6 +1,6 @@
 import { db } from './db';
 import { serverBilling, billingLedger, wallets, walletTransactions, userFlags } from '../shared/schema';
-import { eq, and, lte, isNull, or, not, gte, lt, sql } from 'drizzle-orm';
+import { eq, and, lte, isNull, or, not, gte, gt, lt, sql } from 'drizzle-orm';
 import { log } from './log';
 import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
@@ -531,6 +531,7 @@ export async function runBillingJob(): Promise<BillingJobResult> {
             .set({
               status: 'unpaid',
               suspendAt,
+              lastReminderSentAt: null,
               updatedAt: new Date(),
             })
             .where(eq(serverBilling.id, billing.id));
@@ -716,7 +717,7 @@ export async function runBillingJob(): Promise<BillingJobResult> {
   // Step C: Cleanup orphaned billing records (servers deleted from VirtFusion)
   await cleanupOrphanedBillingRecords();
 
-  // Step D: Send reminders for servers due tomorrow
+  // Step D: Send reminders for servers due tomorrow and overdue warnings
   await sendBillingReminders();
 
   log(`Billing job completed. Charged: ${result.charged.length}, Skipped (no funds): ${result.skippedInsufficientFunds.length}, Skipped (already charged): ${result.skippedAlreadyCharged.length}, Skipped (user suspended): ${result.skippedSuspendedUser.length}, Errors: ${result.errors.length}`, 'billing');
@@ -795,10 +796,13 @@ async function cleanupOrphanedBillingRecords(): Promise<void> {
   }
 }
 
-// Send billing reminders for servers due in the next 24 hours
+// Send billing reminders for servers due in the next 24 hours and overdue
+// suspension warnings for servers that have been unpaid for 2+ days.
 export async function sendBillingReminders(): Promise<void> {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
   // Only send one reminder per server per day — billing job runs every 10 minutes
   // so without this guard each server would get ~144 emails per day
   const twentyHoursAgo = new Date(now.getTime() - 20 * 60 * 60 * 1000);
@@ -852,6 +856,58 @@ export async function sendBillingReminders(): Promise<void> {
       log(`Sent billing reminder for server ${billing.virtfusionServerId}`, 'billing');
     } catch (error: any) {
       log(`Failed to send billing reminder for server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
+    }
+  }
+
+  const overdueWarningServers = await db.select().from(serverBilling)
+    .where(
+      and(
+        eq(serverBilling.status, 'unpaid'),
+        eq(serverBilling.autoRenew, true),
+        eq(serverBilling.freeServer, false),
+        not(isNull(serverBilling.suspendAt)),
+        gt(serverBilling.suspendAt, now),
+        lte(serverBilling.nextBillAt, twoDaysAgo),
+        gt(serverBilling.nextBillAt, threeDaysAgo),
+        or(
+          isNull(serverBilling.lastReminderSentAt),
+          lt(serverBilling.lastReminderSentAt, serverBilling.nextBillAt)
+        )
+      )
+    );
+
+  log(`Found ${overdueWarningServers.length} unpaid servers ready for 2-day suspension warnings`, 'billing');
+
+  for (const billing of overdueWarningServers) {
+    try {
+      if (!billing.suspendAt) {
+        continue;
+      }
+
+      const email = await getUserEmail(billing.auth0UserId);
+      if (!email) continue;
+
+      const serverName = await getServerName(billing.virtfusionServerId);
+      const daysUntilSuspension = Math.max(
+        1,
+        Math.ceil((billing.suspendAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+      );
+
+      await sendPaymentFailedEmail(
+        email,
+        serverName,
+        formatCurrency(billing.monthlyPriceCents),
+        formatDate(billing.suspendAt),
+        daysUntilSuspension
+      );
+
+      await db.update(serverBilling)
+        .set({ lastReminderSentAt: new Date(), updatedAt: new Date() })
+        .where(eq(serverBilling.id, billing.id));
+
+      log(`Sent 2-day overdue suspension warning for server ${billing.virtfusionServerId}`, 'billing');
+    } catch (error: any) {
+      log(`Failed to send 2-day overdue suspension warning for server ${billing.virtfusionServerId}: ${error.message}`, 'billing');
     }
   }
 }
