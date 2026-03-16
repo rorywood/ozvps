@@ -11,7 +11,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   bootstrapMode: boolean;
-  login: (email: string, password: string) => Promise<{ success?: boolean; user?: User; csrfToken?: string; bootstrapMode?: boolean; requires2FA?: boolean; pendingLoginToken?: string; requires2FASetup?: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success?: boolean; user?: User; csrfToken?: string; bootstrapMode?: boolean; requires2FA?: boolean; pendingLoginToken?: string; twoFAMethod?: "totp" | "email"; emailCodeSent?: boolean; requires2FASetup?: boolean; error?: string }>;
+  sendEmail2FA: (pendingLoginToken: string) => Promise<{ success: boolean; message: string }>;
   verify2FA: (pendingLoginToken: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
@@ -62,6 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
+  const sendEmail2FA = async (pendingLoginToken: string) => {
+    return authApi.sendEmail2FA(pendingLoginToken);
+  };
+
   const verify2FA = async (pendingLoginToken: string, code: string) => {
     const result = await authApi.verify2FA(pendingLoginToken, code);
     if (result.success) {
@@ -84,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         bootstrapMode,
         login,
+        sendEmail2FA,
         verify2FA,
         logout,
         checkSession,

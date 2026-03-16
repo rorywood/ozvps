@@ -5,12 +5,14 @@ import { AlertCircle, Lock, Mail, KeyRound, ArrowLeft, Shield } from "lucide-rea
 import logo from "../assets/logo.png";
 
 export default function Login() {
-  const { login, verify2FA } = useAuth();
+  const { login, sendEmail2FA, verify2FA } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [pendingLoginToken, setPendingLoginToken] = useState<string | null>(null);
+  const [twoFAMethod, setTwoFAMethod] = useState<"totp" | "email">("totp");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingEmailCode, setIsSendingEmailCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requires2FASetup, setRequires2FASetup] = useState(false);
 
@@ -34,6 +36,10 @@ export default function Login() {
         return;
       } else if (result.requires2FA && result.pendingLoginToken) {
         setPendingLoginToken(result.pendingLoginToken);
+        setTwoFAMethod(result.twoFAMethod || "totp");
+        if (result.twoFAMethod === "email" && result.emailCodeSent) {
+          toast.success("Verification code sent to your email");
+        }
       } else if (result.error) {
         setError(result.error);
       }
@@ -41,6 +47,22 @@ export default function Login() {
       setError(err.message || "Authentication failed");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendEmailCode = async () => {
+    if (!pendingLoginToken) return;
+
+    setError(null);
+    setIsSendingEmailCode(true);
+
+    try {
+      const result = await sendEmail2FA(pendingLoginToken);
+      toast.success(result.message || "Verification code sent");
+    } catch (err: any) {
+      setError(err.message || "Failed to send verification code");
+    } finally {
+      setIsSendingEmailCode(false);
     }
   };
 
@@ -183,7 +205,9 @@ export default function Login() {
                 </div>
                 <h2 className="text-xl font-semibold text-white mb-2">Two-Factor Authentication</h2>
                 <p className="text-gray-400">
-                  Enter the 6-digit code from your authenticator app
+                  {twoFAMethod === "email"
+                    ? "Enter the 6-digit verification code sent to your email"
+                    : "Enter the 6-digit code from your authenticator app"}
                 </p>
               </div>
               <div>
@@ -216,11 +240,22 @@ export default function Login() {
                   "Verify Code"
                 )}
               </button>
+              {twoFAMethod === "email" && (
+                <button
+                  type="button"
+                  onClick={handleSendEmailCode}
+                  disabled={isSendingEmailCode}
+                  className="w-full py-3 px-4 text-blue-400 rounded-xl hover:text-blue-300 hover:bg-blue-500/10 transition-all"
+                >
+                  {isSendingEmailCode ? "Sending code..." : "Send Email Code Again"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setPendingLoginToken(null);
                   setCode("");
+                  setTwoFAMethod("totp");
                   setError(null);
                 }}
                 className="w-full py-3 px-4 text-gray-400 rounded-xl hover:text-white hover:bg-gray-800/50 transition-all flex items-center justify-center gap-2"

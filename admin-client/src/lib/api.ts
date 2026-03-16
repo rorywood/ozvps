@@ -74,9 +74,14 @@ export const authApi = {
     api.post<{
       requires2FA?: boolean;
       pendingLoginToken?: string;
+      twoFAMethod?: "totp" | "email";
+      emailCodeSent?: boolean;
       requires2FASetup?: boolean;
       error?: string;
     }>("/auth/login", { email, password }),
+
+  sendEmail2FA: (pendingLoginToken: string) =>
+    api.post<{ success: boolean; message: string }>("/auth/send-email-2fa", { pendingLoginToken }),
 
   verify2FA: (pendingLoginToken: string, code: string) =>
     api.post<{

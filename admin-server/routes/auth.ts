@@ -6,6 +6,9 @@ import { verifySync as otplibVerifySync } from "otplib";
 import { isEncrypted, decryptSecret } from "../../server/crypto";
 import argon2 from "argon2";
 import { createHmac, timingSafeEqual } from "crypto";
+import { auth0Client } from "../../server/auth0";
+import { dbStorage } from "../../server/storage";
+import { sendTwoFactorCodeEmail } from "../../server/email";
 import {
   isUserAdmin,
   createAdminSession,
@@ -75,6 +78,28 @@ function verifyPendingLoginToken(token: string): { auth0UserId: string; email: s
   } catch {
     return null;
   }
+}
+
+async function sendAdminEmailTwoFactorCode(auth0UserId: string, fallbackEmail?: string | null): Promise<string> {
+  const auth0User = await auth0Client.getUserById(auth0UserId);
+  const targetEmail = auth0User?.email?.trim().toLowerCase() || fallbackEmail?.trim().toLowerCase();
+
+  if (!targetEmail) {
+    throw new Error("No email address available for this account");
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
+
+  const emailResult = await sendTwoFactorCodeEmail(targetEmail, code, 10);
+  if (!emailResult.success) {
+    throw new Error(emailResult.error || "Failed to send verification email");
+  }
+
+  log(`Admin email 2FA code sent to ${targetEmail}`, 'admin-auth');
+  return targetEmail;
 }
 
 // Verify password using Auth0 Resource Owner Password Grant
@@ -255,10 +280,51 @@ export function registerAuthRoutes(app: Express) {
       exp: Date.now() + 5 * 60 * 1000,
     });
 
+    if (tfa.method === "email") {
+      try {
+        await sendAdminEmailTwoFactorCode(auth0UserId, email);
+      } catch (error: any) {
+        log(`Failed to send admin email 2FA code: ${error.message}`, 'admin-auth', { level: 'error' });
+        return res.status(500).json({ error: "Failed to send verification code" });
+      }
+    }
+
     return res.json({
       requires2FA: true,
       pendingLoginToken,
+      twoFAMethod: tfa.method || "totp",
+      emailCodeSent: tfa.method === "email",
     });
+  });
+
+  app.post("/api/auth/send-email-2fa", async (req: Request, res: Response) => {
+    try {
+      const { pendingLoginToken } = req.body;
+
+      if (!pendingLoginToken) {
+        return res.status(400).json({ error: "Pending login token required" });
+      }
+
+      const tokenData = verifyPendingLoginToken(pendingLoginToken);
+      if (!tokenData) {
+        return res.status(401).json({ error: "Invalid or expired login token. Please start over." });
+      }
+
+      const [tfa] = await db
+        .select()
+        .from(twoFactorAuth)
+        .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
+
+      if (!tfa || tfa.method !== "email") {
+        return res.status(400).json({ error: "Email 2FA is not enabled for this account" });
+      }
+
+      await sendAdminEmailTwoFactorCode(tokenData.auth0UserId, tokenData.email);
+      return res.json({ success: true, message: "Verification code sent" });
+    } catch (error: any) {
+      log(`Admin email 2FA resend error: ${error.message}`, 'admin-auth', { level: 'error' });
+      return res.status(500).json({ error: "Failed to send verification code" });
+    }
   });
 
   // Step 2: Verify 2FA code and create session
@@ -289,59 +355,88 @@ export function registerAuthRoutes(app: Express) {
         return res.status(403).json({ error: "2FA not enabled for this account" });
       }
 
-      // Decrypt the secret if encrypted
-      let plaintextSecret: string;
-      try {
-        plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-      } catch (decryptError: any) {
-        log(`Failed to decrypt 2FA secret: ${decryptError.message}`, 'admin-auth', { level: 'error' });
-        return res.status(500).json({ error: "Authentication error" });
-      }
+      if (tfa.method === "email") {
+        if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
+          return res.status(400).json({ error: "No verification code pending. Please resend the email code." });
+        }
 
-      // Verify the TOTP code
-      const isValid = otplibVerifySync({ token: code, secret: plaintextSecret });
+        if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
+          return res.status(400).json({ error: "Verification code has expired. Please resend the email code." });
+        }
 
-      if (!isValid) {
-        // Check backup codes
-        if (tfa.backupCodes) {
-          try {
-            const backupCodes: string[] = JSON.parse(tfa.backupCodes);
-            let backupCodeUsed = false;
+        let emailCodeValid = false;
+        try {
+          const codeBuffer = Buffer.from(tfa.emailOtpCode, "utf8");
+          const tokenBuffer = Buffer.from(code, "utf8");
+          if (codeBuffer.length === tokenBuffer.length && timingSafeEqual(codeBuffer, tokenBuffer)) {
+            emailCodeValid = true;
+          }
+        } catch {
+          emailCodeValid = false;
+        }
 
-            for (let i = 0; i < backupCodes.length; i++) {
-              // Backup codes are stored hashed
-              const isMatch = await argon2.verify(backupCodes[i], code);
-              if (isMatch) {
-                // Remove the used backup code
-                backupCodes.splice(i, 1);
-                await db
-                  .update(twoFactorAuth)
-                  .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
-                  .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
-                backupCodeUsed = true;
-                log('Backup code used for admin login', 'admin-auth');
-                break;
+        if (!emailCodeValid) {
+          log('Invalid email 2FA code for admin login', 'admin-auth', { level: 'warn' });
+          return res.status(401).json({ error: "Invalid 2FA code" });
+        }
+
+        await dbStorage.clearEmailOtpCode(tokenData.auth0UserId);
+        await dbStorage.updateTwoFactorLastUsed(tokenData.auth0UserId);
+      } else {
+        // Decrypt the secret if encrypted
+        let plaintextSecret: string;
+        try {
+          plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+        } catch (decryptError: any) {
+          log(`Failed to decrypt 2FA secret: ${decryptError.message}`, 'admin-auth', { level: 'error' });
+          return res.status(500).json({ error: "Authentication error" });
+        }
+
+        // Verify the TOTP code
+        const isValid = otplibVerifySync({ token: code, secret: plaintextSecret });
+
+        if (!isValid) {
+          // Check backup codes
+          if (tfa.backupCodes) {
+            try {
+              const backupCodes: string[] = JSON.parse(tfa.backupCodes);
+              let backupCodeUsed = false;
+
+              for (let i = 0; i < backupCodes.length; i++) {
+                // Backup codes are stored hashed
+                const isMatch = await argon2.verify(backupCodes[i], code);
+                if (isMatch) {
+                  // Remove the used backup code
+                  backupCodes.splice(i, 1);
+                  await db
+                    .update(twoFactorAuth)
+                    .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
+                    .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
+                  backupCodeUsed = true;
+                  log('Backup code used for admin login', 'admin-auth');
+                  break;
+                }
               }
-            }
 
-            if (!backupCodeUsed) {
-              log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
+              if (!backupCodeUsed) {
+                log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
+                return res.status(401).json({ error: "Invalid 2FA code" });
+              }
+            } catch (backupError: any) {
+              log(`Backup code check error: ${backupError.message}`, 'admin-auth', { level: 'warn' });
               return res.status(401).json({ error: "Invalid 2FA code" });
             }
-          } catch (backupError: any) {
-            log(`Backup code check error: ${backupError.message}`, 'admin-auth', { level: 'warn' });
+          } else {
+            log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
             return res.status(401).json({ error: "Invalid 2FA code" });
           }
         } else {
-          log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
-          return res.status(401).json({ error: "Invalid 2FA code" });
+          // Update last used timestamp
+          await db
+            .update(twoFactorAuth)
+            .set({ lastUsedAt: new Date() })
+            .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
         }
-      } else {
-        // Update last used timestamp
-        await db
-          .update(twoFactorAuth)
-          .set({ lastUsedAt: new Date() })
-          .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
       }
 
       log('2FA verified for admin login', 'admin-auth');
