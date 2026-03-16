@@ -18,10 +18,11 @@ import { captureException, isSentryEnabled } from "./sentry";
 import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
-import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes } from "./crypto";
+import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes, verifyEmailOtpCode } from "./crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
+import { redisClient } from "./redis";
 import sharp from "sharp";
 import path from "path";
 import fs from "fs";
@@ -38,6 +39,92 @@ const vncSessionTokens = new Map<string, {
 // VNC auto-disable timers: kill VNC access 30 minutes after console is opened
 const vncAutoDisableTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const VNC_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const DIRECT_TOPUP_REQUEST_TTL_SECONDS = 120;
+const directTopupFallback = new Map<string, { status: 'pending' | 'succeeded'; requestId: string; paymentIntentId?: string; response?: { newBalanceCents: number; chargedAmountCents: number }; expiresAt: number }>();
+
+function getDirectTopupRequestKey(auth0UserId: string, paymentMethodId: string, amountCents: number): string {
+  return `billing:direct-topup:${auth0UserId}:${paymentMethodId}:${amountCents}`;
+}
+
+function isRedisReady(): boolean {
+  return !!redisClient?.isReady;
+}
+
+async function claimDirectTopupRequest(key: string): Promise<{ claimed: boolean; requestId?: string; existing?: { status: 'pending' | 'succeeded'; requestId: string; paymentIntentId?: string; response?: { newBalanceCents: number; chargedAmountCents: number } } }> {
+  if (isRedisReady()) {
+    const requestId = randomBytes(16).toString('hex');
+    const value = JSON.stringify({ status: 'pending', requestId });
+    const claimed = await redisClient!.set(key, value, { NX: true, EX: DIRECT_TOPUP_REQUEST_TTL_SECONDS });
+    if (claimed) {
+      return { claimed: true, requestId };
+    }
+
+    const existingRaw = await redisClient!.get(key);
+    if (!existingRaw) {
+      return { claimed: false };
+    }
+
+    try {
+      return { claimed: false, existing: JSON.parse(existingRaw) };
+    } catch {
+      return { claimed: false };
+    }
+  }
+
+  const now = Date.now();
+  const existing = directTopupFallback.get(key);
+  if (existing && existing.expiresAt > now) {
+    return {
+      claimed: false,
+      existing: {
+        status: existing.status,
+        requestId: existing.requestId,
+        paymentIntentId: existing.paymentIntentId,
+        response: existing.response,
+      },
+    };
+  }
+
+  directTopupFallback.set(key, {
+    status: 'pending',
+    requestId: randomBytes(16).toString('hex'),
+    expiresAt: now + DIRECT_TOPUP_REQUEST_TTL_SECONDS * 1000,
+  });
+  return { claimed: true, requestId: directTopupFallback.get(key)!.requestId };
+}
+
+async function markDirectTopupRequestSucceeded(
+  key: string,
+  requestId: string,
+  paymentIntentId: string,
+  response: { newBalanceCents: number; chargedAmountCents: number },
+): Promise<void> {
+  const payload = {
+    status: 'succeeded' as const,
+    requestId,
+    paymentIntentId,
+    response,
+  };
+
+  if (isRedisReady()) {
+    await redisClient!.set(key, JSON.stringify(payload), { EX: DIRECT_TOPUP_REQUEST_TTL_SECONDS });
+    return;
+  }
+
+  directTopupFallback.set(key, {
+    ...payload,
+    expiresAt: Date.now() + DIRECT_TOPUP_REQUEST_TTL_SECONDS * 1000,
+  });
+}
+
+async function clearDirectTopupRequest(key: string): Promise<void> {
+  if (isRedisReady()) {
+    await redisClient!.del(key);
+    return;
+  }
+
+  directTopupFallback.delete(key);
+}
 
 // Helper to validate IP address format (prevents header injection)
 function isValidIp(ip: string): boolean {
@@ -1566,10 +1653,7 @@ export async function registerRoutes(
           }
 
           try {
-            const codeBuffer = Buffer.from(tfa.emailOtpCode, 'utf8');
-            const tokenBuffer = Buffer.from(emailOtpToken, 'utf8');
-            if (codeBuffer.length === tokenBuffer.length &&
-                crypto.timingSafeEqual(codeBuffer, tokenBuffer)) {
+            if (verifyEmailOtpCode(emailOtpToken, tfa.emailOtpCode)) {
               tfaValid = true;
               // Clear the used code
               await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
@@ -1794,7 +1878,7 @@ export async function registerRoutes(
           return res.status(400).json({ error: 'reCAPTCHA verification required' });
         }
         const recaptchaValid = await verifyRecaptchaToken(recaptchaToken, recaptchaSettings.secretKey!, 'force_logout', recaptchaSettings.minScore || 0.5);
-        if (!recaptchaValid) {
+        if (!recaptchaValid.valid) {
           return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
         }
       }
@@ -4145,7 +4229,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
       }
 
-      if (tfa.emailOtpCode !== code) {
+      if (!verifyEmailOtpCode(code, tfa.emailOtpCode)) {
         return res.status(400).json({ error: 'Invalid verification code' });
       }
 
@@ -5783,7 +5867,6 @@ export async function registerRoutes(
           last4: pm.card?.last4 || '****',
           expMonth: pm.card?.exp_month,
           expYear: pm.card?.exp_year,
-          fingerprint: pm.card?.fingerprint,
         })),
       });
     } catch (error: any) {
@@ -5837,7 +5920,7 @@ export async function registerRoutes(
       if (duplicateCard) {
         // Detach the duplicate payment method
         await stripe.paymentMethods.detach(paymentMethodId);
-        log(`Rejected duplicate card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+        log(`Rejected duplicate card for ${auth0UserId}`, 'stripe');
         return res.status(409).json({
           error: 'This card is already saved to your account',
           duplicate: true,
@@ -5853,7 +5936,7 @@ export async function registerRoutes(
         customer: stripeCustomerId,
       });
 
-      log(`Validated and attached new card for ${auth0UserId} - fingerprint ${newFingerprint}`, 'stripe');
+      log(`Validated and attached new card for ${auth0UserId}`, 'stripe');
       res.json({ valid: true });
     } catch (error: any) {
       if (error instanceof StripeCustomerError) {
@@ -6390,10 +6473,25 @@ export async function registerRoutes(
       }
 
       log(`[Direct Topup] Creating payment intent for $${(amountCents / 100).toFixed(2)}`, 'api');
-      // Create idempotency key to prevent duplicate charges from rapid clicks
-      // Uses 5-second time window to allow retry if payment genuinely fails
-      const timeWindow = Math.floor(Date.now() / 5000);
-      const idempotencyKey = `topup_${auth0UserId}_${paymentMethodId}_${amountCents}_${timeWindow}`;
+      const requestKey = getDirectTopupRequestKey(auth0UserId, paymentMethodId, amountCents);
+      const requestClaim = await claimDirectTopupRequest(requestKey);
+
+      if (!requestClaim.claimed) {
+        if (requestClaim.existing?.status === 'succeeded' && requestClaim.existing.response) {
+          log(`[Direct Topup] Duplicate retry replayed cached success for ${auth0UserId}`, 'api');
+          return res.json({
+            success: true,
+            duplicatePrevented: true,
+            ...requestClaim.existing.response,
+          });
+        }
+
+        return res.status(409).json({
+          error: 'A matching top-up is already processing. Please wait a moment before trying again.',
+        });
+      }
+
+      const idempotencyKey = `topup_${requestClaim.requestId}`;
 
       // Create a payment intent and confirm it immediately
       const paymentIntent = await stripe.paymentIntents.create({
@@ -6479,15 +6577,20 @@ export async function registerRoutes(
         }
 
         log(`[Direct Topup] Sending success response`, 'api');
-        res.json({
-          success: true,
+        const successPayload = {
           newBalanceCents: updatedWallet?.balanceCents || 0,
           chargedAmountCents: amountCents,
+        };
+        await markDirectTopupRequestSucceeded(requestKey, requestClaim.requestId!, paymentIntent.id, successPayload);
+        res.json({
+          success: true,
+          ...successPayload,
         });
       } else if (paymentIntent.status === 'requires_action') {
         // Card requires 3D Secure or additional authentication
         // Return client_secret so frontend can either handle on-session or fallback
         log(`[Direct Topup] Payment requires action: ${paymentIntent.status}`, 'stripe');
+        await clearDirectTopupRequest(requestKey);
         res.status(402).json({
           error: 'This card requires additional authentication.',
           requiresAction: true,
@@ -6496,6 +6599,7 @@ export async function registerRoutes(
         });
       } else {
         log(`[Direct Topup] Payment failed with status: ${paymentIntent.status}`, 'stripe');
+        await clearDirectTopupRequest(requestKey);
         res.status(400).json({ error: 'Payment failed. Please try again or use a different card.' });
       }
     } catch (error: any) {
@@ -6505,6 +6609,12 @@ export async function registerRoutes(
 
       // Handle Stripe customer errors
       if (error instanceof StripeCustomerError) {
+        const auth0UserId = req.userSession?.auth0UserId;
+        const paymentMethodId = req.body?.paymentMethodId;
+        const amountCents = req.body?.amountCents;
+        if (auth0UserId && paymentMethodId && typeof amountCents === 'number') {
+          await clearDirectTopupRequest(getDirectTopupRequestKey(auth0UserId, paymentMethodId, amountCents));
+        }
         return res.status(error.httpStatus).json({
           error: error.message,
           code: error.code
@@ -6512,15 +6622,33 @@ export async function registerRoutes(
       }
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
+        const auth0UserId = req.userSession?.auth0UserId;
+        const paymentMethodId = req.body?.paymentMethodId;
+        const amountCents = req.body?.amountCents;
+        if (auth0UserId && paymentMethodId && typeof amountCents === 'number') {
+          await clearDirectTopupRequest(getDirectTopupRequestKey(auth0UserId, paymentMethodId, amountCents));
+        }
         log(`[Direct Topup] Card error: ${error.message}`, 'stripe');
         res.status(400).json({ error: error.message || 'Your card was declined. Please try a different card.' });
       } else if (error.code === 'authentication_required') {
+        const auth0UserId = req.userSession?.auth0UserId;
+        const paymentMethodId = req.body?.paymentMethodId;
+        const amountCents = req.body?.amountCents;
+        if (auth0UserId && paymentMethodId && typeof amountCents === 'number') {
+          await clearDirectTopupRequest(getDirectTopupRequestKey(auth0UserId, paymentMethodId, amountCents));
+        }
         log(`[Direct Topup] Authentication required`, 'stripe');
         res.status(402).json({
           error: 'This card requires additional authentication. Please use the standard top-up flow.',
           requiresAction: true,
         });
       } else {
+        const auth0UserId = req.userSession?.auth0UserId;
+        const paymentMethodId = req.body?.paymentMethodId;
+        const amountCents = req.body?.amountCents;
+        if (auth0UserId && paymentMethodId && typeof amountCents === 'number') {
+          await clearDirectTopupRequest(getDirectTopupRequestKey(auth0UserId, paymentMethodId, amountCents));
+        }
         log(`[Direct Topup] Unhandled error: ${error.message}`, 'api');
         log(`[Direct Topup] Stack trace: ${error.stack}`, 'api');
         res.status(500).json({ error: 'Failed to process payment. Please try again.' });

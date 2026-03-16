@@ -6,6 +6,7 @@ import { virtfusionClient } from './virtfusion';
 import { auth0Client } from './auth0';
 import { sendPaymentFailedEmail, sendServerSuspendedEmail, sendBillingReminderEmail, sendAutoTopupSuccessEmail, sendAutoTopupFailedEmail, sendBillingReceiptEmail } from './email';
 import { getUncachableStripeClient } from './stripeClient';
+import { dbStorage } from './storage';
 
 export function getAutoTopupIdempotencyKey(wallet: {
   auth0UserId: string;
@@ -421,23 +422,15 @@ async function attemptAutoTopup(auth0UserId: string, neededCents: number): Promi
       ? paymentMethod.card.brand.charAt(0).toUpperCase() + paymentMethod.card.brand.slice(1)
       : undefined;
 
-    await db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(walletTransactions)
-        .where(eq(walletTransactions.stripePaymentIntentId, paymentIntent.id));
-      if (existing) {
-        log(`Auto top-up: payment ${paymentIntent.id} already credited, skipping duplicate`, 'billing');
-        return;
-      }
-      await tx.update(wallets)
-        .set({ balanceCents: sql`${wallets.balanceCents} + ${topupAmount}`, updatedAt: new Date() })
-        .where(eq(wallets.auth0UserId, auth0UserId));
-      await tx.insert(walletTransactions).values({
-        auth0UserId,
-        type: 'credit',
-        amountCents: topupAmount,
-        stripePaymentIntentId: paymentIntent.id,
-        metadata: { source: 'auto_topup', cardBrand, cardLast4: paymentMethod.card?.last4, reason: 'Auto wallet top-up' },
-      });
+    await dbStorage.creditWallet(auth0UserId, topupAmount, {
+      type: 'credit',
+      stripePaymentIntentId: paymentIntent.id,
+      metadata: {
+        source: 'auto_topup',
+        cardBrand,
+        cardLast4: paymentMethod.card?.last4,
+        reason: 'Auto wallet top-up',
+      },
     });
 
     log(`Auto top-up successful for ${auth0UserId}: ${formatCurrency(topupAmount)}`, 'billing');

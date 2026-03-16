@@ -101,7 +101,7 @@ export const walletTransactions = pgTable("wallet_transactions", {
   type: text("type").notNull(), // topup, debit, refund, adjustment
   amountCents: integer("amount_cents").notNull(), // signed: positive for credits, negative for debits
   stripeEventId: text("stripe_event_id").unique(),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   stripeSessionId: text("stripe_session_id"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

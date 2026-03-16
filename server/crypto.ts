@@ -181,3 +181,50 @@ export async function generateBackupCodes(count: number = 10): Promise<{
 
   return { codes, hashes };
 }
+
+function getEmailOtpKey(): string {
+  if (SESSION_SECRET && SESSION_SECRET.length >= 32) {
+    return SESSION_SECRET;
+  }
+
+  if (ENCRYPTION_KEY && ENCRYPTION_KEY.length >= 32) {
+    return ENCRYPTION_KEY;
+  }
+
+  if (IS_PRODUCTION) {
+    throw new Error('SECURITY ERROR: Unable to derive key for email OTP hashing');
+  }
+
+  return 'INSECURE-DEV-EMAIL-OTP-KEY';
+}
+
+export function hashEmailOtpCode(code: string): string {
+  return crypto
+    .createHmac('sha256', getEmailOtpKey())
+    .update(code, 'utf8')
+    .digest('hex');
+}
+
+export function verifyEmailOtpCode(code: string, storedValue: string): boolean {
+  const hashed = hashEmailOtpCode(code);
+
+  try {
+    const hashedBuffer = Buffer.from(hashed, 'hex');
+    const storedBuffer = /^[0-9a-f]{64}$/i.test(storedValue)
+      ? Buffer.from(storedValue, 'hex')
+      : Buffer.from(storedValue, 'utf8');
+
+    if (hashedBuffer.length === storedBuffer.length) {
+      return crypto.timingSafeEqual(hashedBuffer, storedBuffer);
+    }
+
+    const codeBuffer = Buffer.from(code, 'utf8');
+    if (codeBuffer.length === storedBuffer.length) {
+      return crypto.timingSafeEqual(codeBuffer, storedBuffer);
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}

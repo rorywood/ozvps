@@ -281,23 +281,26 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
 }));
 
 // Sensitive fields to redact from logs
-const SENSITIVE_FIELDS = ['password', 'token', 'secret', 'apiKey', 'authorization', 'cookie', 'accessToken', 'refreshToken', 'credentials'];
+function sanitizeApiPathForLogging(path: string): string {
+  return path
+    .replace(/(\/api\/support\/guest\/)([^/]+)/i, '$1[REDACTED]')
+    .replace(/(\/api\/vnc-session\/)([^/]+)/i, '$1[REDACTED]');
+}
 
-function sanitizeForLogging(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
-  
-  const sanitized: any = Array.isArray(obj) ? [] : {};
-  for (const key in obj) {
-    const lowerKey = key.toLowerCase();
-    if (SENSITIVE_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
-      sanitized[key] = '[REDACTED]';
-    } else if (typeof obj[key] === 'object') {
-      sanitized[key] = sanitizeForLogging(obj[key]);
-    } else {
-      sanitized[key] = obj[key];
-    }
+function summarizeErrorResponseForLogging(body: any): Record<string, unknown> | undefined {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return undefined;
   }
-  return sanitized;
+
+  const summary: Record<string, unknown> = {};
+  if (typeof body.error === 'string') {
+    summary.error = body.error;
+  }
+  if (typeof body.code === 'string') {
+    summary.code = body.code;
+  }
+
+  return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
 // Re-export log from logger module for backwards compatibility
@@ -311,7 +314,7 @@ export { logger };
 
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
+  const path = sanitizeApiPathForLogging(req.path);
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
@@ -324,10 +327,11 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        // Sanitize sensitive data before logging
-        const sanitized = sanitizeForLogging(capturedJsonResponse);
-        logLine += ` :: ${JSON.stringify(sanitized)}`;
+      if (res.statusCode >= 400 && capturedJsonResponse) {
+        const sanitized = summarizeErrorResponseForLogging(capturedJsonResponse);
+        if (sanitized) {
+          logLine += ` :: ${JSON.stringify(sanitized)}`;
+        }
       }
 
       log(logLine);

@@ -3,7 +3,7 @@ import { db } from "../../server/db";
 import { twoFactorAuth } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
 import { verifySync as otplibVerifySync } from "otplib";
-import { isEncrypted, decryptSecret } from "../../server/crypto";
+import { isEncrypted, decryptSecret, verifyEmailOtpCode } from "../../server/crypto";
 import argon2 from "argon2";
 import { createHmac, timingSafeEqual } from "crypto";
 import { auth0Client } from "../../server/auth0";
@@ -364,16 +364,7 @@ export function registerAuthRoutes(app: Express) {
           return res.status(400).json({ error: "Verification code has expired. Please resend the email code." });
         }
 
-        let emailCodeValid = false;
-        try {
-          const codeBuffer = Buffer.from(tfa.emailOtpCode, "utf8");
-          const tokenBuffer = Buffer.from(code, "utf8");
-          if (codeBuffer.length === tokenBuffer.length && timingSafeEqual(codeBuffer, tokenBuffer)) {
-            emailCodeValid = true;
-          }
-        } catch {
-          emailCodeValid = false;
-        }
+        const emailCodeValid = verifyEmailOtpCode(code, tfa.emailOtpCode);
 
         if (!emailCodeValid) {
           log('Invalid email 2FA code for admin login', 'admin-auth', { level: 'warn' });

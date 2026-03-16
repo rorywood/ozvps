@@ -4,6 +4,7 @@ import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray, or, isNull, ne } from "drizzle-orm";
+import { hashEmailOtpCode } from "./crypto";
 
 export interface Session {
   id: string;
@@ -1019,6 +1020,19 @@ export const dbStorage = {
         }
       }
 
+      const insertedTransaction = await tx.insert(walletTransactions).values({
+          auth0UserId,
+          amountCents,
+          ...transaction,
+        })
+        .onConflictDoNothing()
+        .returning({ id: walletTransactions.id });
+
+      if (insertedTransaction.length === 0) {
+        log(`Duplicate wallet credit insert blocked for ${auth0UserId}`, 'security');
+        return lockedWallet;
+      }
+
       const [updated] = await tx
         .update(wallets)
         .set({
@@ -1031,12 +1045,6 @@ export const dbStorage = {
       if (!updated) {
         throw new Error('Failed to update wallet balance');
       }
-
-      await tx.insert(walletTransactions).values({
-        auth0UserId,
-        amountCents,
-        ...transaction,
-      });
 
       return updated;
     });
@@ -2331,10 +2339,11 @@ export const dbStorage = {
   },
 
   async setEmailOtpCode(auth0UserId: string, code: string, expiresAt: Date): Promise<TwoFactorAuth | undefined> {
+    const hashedCode = hashEmailOtpCode(code);
     const [updated] = await db
       .update(twoFactorAuth)
       .set({
-        emailOtpCode: code,
+        emailOtpCode: hashedCode,
         emailOtpExpiresAt: expiresAt,
         updatedAt: new Date(),
       })
