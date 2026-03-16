@@ -566,6 +566,12 @@ export class RedisStorage implements IStorage {
       log(`Redis error in updateSessionActivity: ${error.message}`, 'storage');
       return this.memoryFallback.updateSessionActivity(sessionId);
     }
+
+    // Update lastActiveAt in DB for admin activity tracking (fire-and-forget)
+    db.update(sessions)
+      .set({ lastActiveAt: new Date() })
+      .where(eq(sessions.id, sessionId))
+      .catch((e: any) => log(`DB lastActiveAt update failed: ${e.message}`, 'storage'));
   }
 
   async updateSession(sessionId: string, updates: Partial<Pick<Session, 'isAdmin' | 'name' | 'emailVerified'>>): Promise<void> {

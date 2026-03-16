@@ -2109,7 +2109,7 @@ export default function ServerDetail() {
                   return (
                     <div className="border-t border-border pt-4">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                        {server.billing.status === 'unpaid' ? 'Payment Due' : isOverdue ? 'Overdue' : 'Next Due'}
+                        {server.billing.status === 'unpaid' ? 'Payment Due' : isOverdue ? 'Overdue' : isDueToday ? 'Upcoming Payment' : 'Next Due'}
                       </p>
                       <div className="flex items-center gap-2">
                         {(server.billing.status === 'unpaid' || isOverdue || isDueToday) && (
@@ -2119,7 +2119,7 @@ export default function ServerDetail() {
                           server.billing.status === 'unpaid' || isOverdue ? 'text-red-400' :
                           isDueToday ? 'text-amber-500' : 'text-foreground'
                         }`}>
-                          {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Due today' : isDueTomorrow ? 'Due Tomorrow' : (
+                          {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Today' : isDueTomorrow ? 'Due Tomorrow' : (
                             <>
                               {formatDate(nextBillDate.toISOString())}
                               <span className="text-muted-foreground font-normal ml-1">
@@ -2136,7 +2136,7 @@ export default function ServerDetail() {
                       )}
                       {isDueToday && !isOverdue && server.billing.status !== 'unpaid' && (
                         <p className="text-xs text-amber-500/80 mt-1">
-                          Wallet charged at 6pm AEST
+                          Will be charged automatically today
                         </p>
                       )}
                       {isDueTomorrow && server.billing.status !== 'unpaid' && (
