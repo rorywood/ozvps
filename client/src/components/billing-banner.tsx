@@ -1,4 +1,4 @@
-import { Info, AlertTriangle, AlertCircle, Wallet, Loader2 } from "lucide-react";
+import { Info, AlertTriangle, AlertCircle, Wallet } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 
@@ -6,8 +6,6 @@ interface BillingBannerProps {
   servers: any[];
   walletBalance: number;
   walletLoaded: boolean;
-  onPayNow?: () => void;
-  payNowPending?: boolean;
 }
 
 function getDaysUntil(nextBillAt: string): number {
@@ -22,7 +20,7 @@ function formatCurrency(cents: number): string {
   return (cents / 100).toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
 }
 
-export function BillingBanner({ servers, walletBalance, walletLoaded, onPayNow, payNowPending }: BillingBannerProps) {
+export function BillingBanner({ servers, walletBalance, walletLoaded }: BillingBannerProps) {
   const dueToday = servers.filter(s => {
     const b = s.billing;
     if (!b || (b.status !== 'active' && b.status !== 'paid') || b.isTrial || b.freeServer || !b.nextBillAt) return false;
@@ -86,20 +84,6 @@ export function BillingBanner({ servers, walletBalance, walletLoaded, onPayNow, 
                 will be deducted from your wallet. No action needed.
               </p>
             </div>
-            {onPayNow && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-primary/40 text-primary hover:bg-primary/10 shrink-0"
-                onClick={onPayNow}
-                disabled={payNowPending}
-              >
-                {payNowPending
-                  ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Paying...</>
-                  : <><Wallet className="h-3.5 w-3.5 mr-1.5" />Pay Now</>
-                }
-              </Button>
-            )}
           </div>
         </div>
       )}

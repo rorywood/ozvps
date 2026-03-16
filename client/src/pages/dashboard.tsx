@@ -4,7 +4,7 @@ import { PageSection } from "@/components/layout/page-section";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
@@ -77,20 +77,6 @@ export default function Dashboard() {
     return new Date(b.nextBillAt) < new Date();
   });
 
-  const payOverdueMutation = useMutation({
-    mutationFn: () => Promise.all(
-      [...overdueActiveServers, ...unpaidServers, ...billingSuspendedServers].map(s => api.reactivateServer(s.id))
-    ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      toast({ title: 'Payment Successful', description: 'Your servers have been charged.', variant: 'success' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Payment Failed', description: error.message || 'Failed to charge. Please try again.', variant: 'destructive' });
-    },
-  });
-
   useSyncPowerActions(servers);
 
   const stats = {
@@ -150,8 +136,7 @@ export default function Dashboard() {
           servers={servers}
           walletBalance={walletBalance}
           walletLoaded={!!walletData}
-          onPayNow={payOverdueMutation.mutate}
-          payNowPending={payOverdueMutation.isPending}
+
         />
 
         {/* Admin Suspended Servers Alert */}

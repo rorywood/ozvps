@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Server as ServerIcon,
   Search,
@@ -64,18 +64,6 @@ export default function ServerList() {
   });
 
   const walletBalance = walletData?.wallet?.balanceCents ?? 0;
-
-  const payOverdueMutation = useMutation({
-    mutationFn: () => Promise.all(overdueActiveServers.map(s => api.reactivateServer(s.id))),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      toast({ title: 'Payment Successful', description: 'Overdue servers have been charged.', variant: 'success' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Payment Failed', description: error.message || 'Failed to charge. Please try again.', variant: 'destructive' });
-    },
-  });
 
   useSyncPowerActions(servers);
 
@@ -160,8 +148,7 @@ export default function ServerList() {
           servers={servers}
           walletBalance={walletBalance}
           walletLoaded={!!walletData}
-          onPayNow={payOverdueMutation.mutate}
-          payNowPending={payOverdueMutation.isPending}
+
         />
 
         <PageHeader
