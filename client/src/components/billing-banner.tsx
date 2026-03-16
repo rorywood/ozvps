@@ -73,18 +73,17 @@ export function BillingBanner({ servers, walletBalance, walletLoaded, onPayNow, 
           <div className="flex items-start gap-3">
             <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="font-semibold text-foreground mb-1">Payment Due Today</h3>
+              <h3 className="font-semibold text-foreground mb-1">Upcoming Payment</h3>
               <p className="text-sm text-muted-foreground">
-                Your wallet will be charged{" "}
-                <span className="font-semibold text-foreground">{formatCurrency(dueTodayAmount)}</span>{" "}
-                today for{" "}
                 {dueToday.map((s, i) => (
                   <span key={s.id}>
                     {i > 0 && ", "}
                     <span className="text-foreground font-medium">{s.name || `Server #${s.id}`}</span>
                   </span>
-                ))}
-                . No action needed.
+                ))}{" "}
+                will be charged automatically today —{" "}
+                <span className="font-semibold text-foreground">{formatCurrency(dueTodayAmount)}</span>{" "}
+                will be deducted from your wallet. No action needed.
               </p>
             </div>
             {onPayNow && (

@@ -1710,9 +1710,9 @@ export default function ServerDetail() {
                 <div className="flex items-start gap-3">
                   <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="font-semibold text-foreground mb-1">Payment Due Today</h3>
+                    <h3 className="font-semibold text-foreground mb-1">Upcoming Payment</h3>
                     <p className="text-sm text-muted-foreground">
-                      Your wallet will be charged <span className="font-semibold text-foreground">${(amountDue / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span> today for this server. No action needed.
+                      This server will be charged automatically today — <span className="font-semibold text-foreground">${(amountDue / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span> will be deducted from your wallet. No action needed.
                     </p>
                   </div>
                 </div>
@@ -2119,7 +2119,7 @@ export default function ServerDetail() {
                           server.billing.status === 'unpaid' || isOverdue ? 'text-red-400' :
                           isDueToday ? 'text-amber-500' : 'text-foreground'
                         }`}>
-                          {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Due Today' : isDueTomorrow ? 'Due Tomorrow' : (
+                          {isOverdue ? `Overdue (${Math.abs(daysUntilBill)} day${Math.abs(daysUntilBill) !== 1 ? 's' : ''})` : isDueToday ? 'Due today' : isDueTomorrow ? 'Due Tomorrow' : (
                             <>
                               {formatDate(nextBillDate.toISOString())}
                               <span className="text-muted-foreground font-normal ml-1">
