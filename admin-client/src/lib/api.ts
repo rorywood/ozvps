@@ -265,6 +265,8 @@ export const billingApi = {
 
   runBillingJob: () => api.post("/billing/run-job"),
 
+  forceCharge: (virtfusionServerId: string) => api.post<{ success: boolean; message: string; walletDeducted: boolean }>(`/billing/force-charge/${virtfusionServerId}`),
+
   cleanupOrphaned: () => api.post<{ cleaned: number; total: number; errors?: string[] }>("/billing/cleanup-orphaned"),
 
   getLedger: (limit = 100, offset = 0, auth0UserId?: string, serverId?: string) => {

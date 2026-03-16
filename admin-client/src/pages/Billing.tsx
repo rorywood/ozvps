@@ -87,6 +87,22 @@ export default function Billing() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const forceChargeMutation = useMutation({
+    mutationFn: (virtfusionServerId: string) => billingApi.forceCharge(virtfusionServerId),
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.walletDeducted ? `Charged — wallet deducted` : `Status reconciled — wallet was already deducted previously`);
+        toast.info(data.message);
+      } else {
+        toast.error(data.message);
+      }
+      queryClient.invalidateQueries({ queryKey: ["billing-records"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      setSelectedRecord(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const endTrialMutation = useMutation({
     mutationFn: (serverId: number) => serversApi.endTrial(serverId),
     onSuccess: () => {
@@ -280,6 +296,20 @@ export default function Billing() {
                   >
                     <Clock className="h-4 w-4" />
                     End Trial
+                  </button>
+                )}
+                {/* Force Charge — bypasses idempotency, clears stale ledger entries */}
+                {!selectedRecord.billing.freeServer && !selectedRecord.billing.isTrial && (
+                  <button
+                    onClick={() => forceChargeMutation.mutate(selectedRecord.billing.virtfusionServerId)}
+                    disabled={forceChargeMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(209_100%_50%)/10] text-[hsl(209_100%_70%)] border border-[hsl(209_100%_50%)/30] rounded-lg text-sm hover:bg-[hsl(209_100%_50%)/20] transition-colors"
+                  >
+                    {forceChargeMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" />Charging...</>
+                    ) : (
+                      <><DollarSign className="h-4 w-4" />Force Charge</>
+                    )}
                   </button>
                 )}
                 {selectedRecord.billing.status === "suspended" ? (

@@ -3,7 +3,7 @@ import { db } from "../../server/db";
 import { serverBilling, billingLedger, wallets, walletTransactions, userMappings, plans } from "../../shared/schema";
 import { eq, desc, and, gte, lte, sql, or, isNull } from "drizzle-orm";
 import { virtfusionClient } from "../../server/virtfusion";
-import { runBillingJob } from "../../server/billing";
+import { runBillingJob, forceChargeServer } from "../../server/billing";
 import { auth0Client } from "../../server/auth0";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 
@@ -413,6 +413,24 @@ export function registerBillingRoutes(router: Router) {
       await auditFailure(req, "billing.run-job", "billing", error.message);
       console.log(`[admin-billing] Run job error: ${error.message}`);
       res.status(500).json({ error: `Billing job failed: ${error.message}` });
+    }
+  });
+
+  // Force charge a specific server — bypasses idempotency by detecting and clearing stale ledger entries
+  router.post("/billing/force-charge/:serverId", async (req: Request, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const session = req.adminSession!;
+
+      console.log(`[admin-billing] Force charge triggered for server ${serverId} by ${session.email}`);
+
+      const result = await forceChargeServer(serverId);
+
+      await auditSuccess(req, "billing.force-charge", "billing");
+      res.json(result);
+    } catch (error: any) {
+      await auditFailure(req, "billing.force-charge", "billing", error.message);
+      res.status(500).json({ error: `Force charge failed: ${error.message}` });
     }
   });
 

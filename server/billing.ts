@@ -583,6 +583,67 @@ export async function runBillingJob(): Promise<BillingJobResult> {
   return result;
 }
 
+// Force charge a specific server — deletes any stale ledger entry first so
+// idempotency never blocks it. Checks wallet transactions to avoid double-charging.
+export async function forceChargeServer(virtfusionServerId: string): Promise<{ success: boolean; message: string; walletDeducted: boolean }> {
+  const [billing] = await db.select().from(serverBilling)
+    .where(eq(serverBilling.virtfusionServerId, virtfusionServerId))
+    .limit(1);
+
+  if (!billing) {
+    return { success: false, message: `No billing record found for server ${virtfusionServerId}`, walletDeducted: false };
+  }
+
+  const idempotencyKey = `bill:${billing.virtfusionServerId}:${billing.nextBillAt.toISOString()}`;
+
+  // Check if a ledger entry exists for this billing period
+  const [existingLedger] = await db.select().from(billingLedger)
+    .where(eq(billingLedger.idempotencyKey, idempotencyKey))
+    .limit(1);
+
+  if (existingLedger) {
+    // Ledger entry exists. Check if a wallet debit actually happened by looking at
+    // walletTransactions created around the same time as the ledger entry.
+    const ledgerCreatedAt = existingLedger.createdAt;
+    const windowStart = new Date(ledgerCreatedAt.getTime() - 5000);  // 5s before
+    const windowEnd = new Date(ledgerCreatedAt.getTime() + 5000);    // 5s after
+    const matchingTx = await db.select().from(walletTransactions)
+      .where(
+        and(
+          eq(walletTransactions.auth0UserId, billing.auth0UserId),
+          eq(walletTransactions.type, 'debit'),
+          eq(walletTransactions.amountCents, -billing.monthlyPriceCents),
+          gte(walletTransactions.createdAt, windowStart),
+          lte(walletTransactions.createdAt, windowEnd)
+        )
+      )
+      .limit(1);
+
+    if (matchingTx.length > 0) {
+      // Money WAS taken — just reconcile the status
+      log(`Force charge: ledger entry exists and wallet was deducted — reconciling status for server ${virtfusionServerId}`, 'billing');
+      const newNextBillAt = addMonth(billing.nextBillAt);
+      newNextBillAt.setUTCHours(0, 0, 0, 0);
+      await db.update(serverBilling)
+        .set({ status: 'paid', nextBillAt: newNextBillAt, suspendAt: null, updatedAt: new Date() })
+        .where(eq(serverBilling.id, billing.id));
+      return { success: true, message: `Status reconciled to paid. Wallet was already deducted. Next bill: ${newNextBillAt.toISOString()}`, walletDeducted: false };
+    } else {
+      // Ledger entry exists but NO matching wallet deduction — stale/orphaned entry
+      log(`Force charge: stale ledger entry found (no wallet deduction) — deleting and recharging server ${virtfusionServerId}`, 'billing');
+      await db.delete(billingLedger).where(eq(billingLedger.id, existingLedger.id));
+    }
+  }
+
+  // Charge fresh
+  const charged = await chargeServer(billing);
+  if (charged) {
+    return { success: true, message: `Server ${virtfusionServerId} charged successfully`, walletDeducted: true };
+  } else {
+    return { success: false, message: `Charge failed — insufficient wallet balance`, walletDeducted: false };
+  }
+}
+
 // Cleanup billing records for servers that no longer exist in VirtFusion
 async function cleanupOrphanedBillingRecords(): Promise<void> {
   // Only check active/paid/unpaid records - cancelled ones are already handled
