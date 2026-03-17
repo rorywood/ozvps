@@ -1636,109 +1636,9 @@ export async function registerRoutes(
         });
       }
 
-      // Check if 2FA is enabled for this user
-      // Normalize the auth0 user ID to ensure consistent prefix format
       const auth0UserIdFor2FA = auth0Result.user.user_id.startsWith('auth0|')
         ? auth0Result.user.user_id
         : `auth0|${auth0Result.user.user_id}`;
-      const tfa = await dbStorage.getTwoFactorAuth(auth0UserIdFor2FA);
-      if (tfa?.enabled) {
-        // 2FA required - check if token was provided (totpToken/backupCode/emailOtpToken already extracted above)
-        if (!totpToken && !backupCode && !emailOtpToken) {
-          // Return 2FA required status - client should prompt for code
-          log(`2FA required for user: ${email} (method: ${tfa.method})`, 'auth');
-          return res.status(200).json({
-            requires2FA: true,
-            twoFAMethod: tfa.method || 'totp',
-            auth0UserId: auth0UserIdFor2FA,
-            message: 'Two-factor authentication required',
-          });
-        }
-
-        let tfaValid = false;
-
-        // Handle email 2FA separately from TOTP
-        if (tfa.method === 'email' && emailOtpToken) {
-          // Verify email OTP
-          if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
-            return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
-          }
-
-          if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
-            return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
-          }
-
-          try {
-            if (verifyEmailOtpCode(emailOtpToken, tfa.emailOtpCode)) {
-              tfaValid = true;
-              // Clear the used code
-              await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
-              log(`Email 2FA verified for user: ${email}`, 'security');
-            }
-          } catch {
-            // Invalid format, reject
-          }
-        } else if (tfa.method === 'totp' || totpToken) {
-          // TOTP verification
-          // Decrypt the secret for TOTP verification
-          let plaintextSecret: string;
-          try {
-            plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-            log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
-          } catch (decryptError: any) {
-            log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
-            return res.status(500).json({ error: 'Authentication error. Please contact support.' });
-          }
-
-          // Try TOTP token first
-          if (totpToken) {
-            log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
-            tfaValid = totpVerify(totpToken, plaintextSecret);
-            log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
-          }
-        }
-
-        // If TOTP failed, try backup code
-        if (!tfaValid && backupCode) {
-          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
-
-          // Check each backup code with argon2 (or fallback to sha256 for legacy codes)
-          for (let i = 0; i < backupCodes.length; i++) {
-            const storedHash = backupCodes[i];
-            // Check if it's an argon2 hash (starts with $argon2)
-            if (storedHash.startsWith('$argon2')) {
-              if (await verifyBackupCode(backupCode, storedHash)) {
-                tfaValid = true;
-                // Remove used backup code
-                backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
-                log(`Backup code used for 2FA login: ${email}`, 'security');
-                break;
-              }
-            } else {
-              // Legacy sha256 hash - check and migrate if valid
-              const crypto = await import('crypto');
-              const hashedInput = crypto.createHash('sha256').update(backupCode.toUpperCase()).digest('hex');
-              if (hashedInput === storedHash) {
-                tfaValid = true;
-                // Remove used backup code
-                backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
-                log(`Legacy backup code used for 2FA login: ${email}`, 'security');
-                break;
-              }
-            }
-          }
-        }
-
-        if (!tfaValid) {
-          await recordFailedLogin(email, clientIp);
-          return res.status(401).json({ error: 'Invalid two-factor authentication code' });
-        }
-
-        // Update last used timestamp
-        await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
-      }
 
       // Revoke ALL existing sessions for this user (single-session policy)
       // This allows users who lost their cookie to log in again without waiting
@@ -1861,7 +1761,7 @@ export async function registerRoutes(
       await auditUserAction(req, auth0UserIdPrefixed, email, UserActions.LOGIN_SUCCESS, 'session', session.id, {
         isAdmin,
         emailVerified,
-        has2FA: !!tfa,
+        has2FA: false,
       });
 
       res.json({
@@ -1956,17 +1856,63 @@ export async function registerRoutes(
       const session = await storage.getSession(sessionId);
 
       if (!session || new Date(session.expiresAt) < new Date()) {
+        res.clearCookie(SESSION_COOKIE);
+        res.clearCookie(CSRF_COOKIE);
         return res.json({ authenticated: false });
       }
 
       // Check if session was revoked
       if (session.revokedAt) {
+        res.clearCookie(SESSION_COOKIE);
+        res.clearCookie(CSRF_COOKIE);
         return res.json({ authenticated: false });
       }
 
+      if (session.lastActivityAt) {
+        const lastActivity = new Date(session.lastActivityAt);
+        const now = new Date();
+        if (!isNaN(lastActivity.getTime()) && now.getTime() - lastActivity.getTime() > IDLE_TIMEOUT_MS) {
+          await storage.revokeSessionsByAuth0UserId(session.auth0UserId || '', SESSION_REVOKE_REASONS.IDLE_TIMEOUT);
+          res.clearCookie(SESSION_COOKIE);
+          res.clearCookie(CSRF_COOKIE);
+          return res.json({ authenticated: false });
+        }
+      }
+
+      if (process.env.SESSION_VALIDATE_IP === 'true' && session.ipAddress) {
+        const currentIp = getClientIp(req);
+        if (currentIp !== session.ipAddress) {
+          await storage.deleteSession(sessionId);
+          res.clearCookie(SESSION_COOKIE);
+          res.clearCookie(CSRF_COOKIE);
+          return res.json({ authenticated: false });
+        }
+      }
+
+      if (session.auth0UserId) {
+        const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId);
+        if (userFlags?.blocked) {
+          await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_BLOCKED);
+          res.clearCookie(SESSION_COOKIE);
+          res.clearCookie(CSRF_COOKIE);
+          return res.json({ authenticated: false });
+        }
+
+        const userExists = await auth0Client.userExists(session.auth0UserId);
+        if (!userExists) {
+          await storage.revokeSessionsByAuth0UserId(session.auth0UserId, SESSION_REVOKE_REASONS.USER_DELETED);
+          res.clearCookie(SESSION_COOKIE);
+          res.clearCookie(CSRF_COOKIE);
+          return res.json({ authenticated: false });
+        }
+      }
+
+      await storage.updateSessionActivity(sessionId);
       return res.json({ authenticated: true });
     } catch (error) {
       // On any error, just return not authenticated (don't crash)
+      res.clearCookie(SESSION_COOKIE);
+      res.clearCookie(CSRF_COOKIE);
       return res.json({ authenticated: false });
     }
   });
@@ -3903,21 +3849,22 @@ export async function registerRoutes(
   // TWO-FACTOR AUTHENTICATION ENDPOINTS
   // ===========================================
 
+  const twoFactorTemporarilyUnavailable = (res: Response) => {
+    return res.status(503).json({
+      error: 'Two-factor authentication is temporarily unavailable',
+      code: 'TWO_FACTOR_TEMPORARILY_DISABLED',
+    });
+  };
+
   // Get 2FA status for current user
   app.get('/api/user/2fa/status', authMiddleware, async (req, res) => {
     try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-
       res.json({
-        enabled: tfa?.enabled || false,
-        method: tfa?.method || 'totp',
-        verifiedAt: tfa?.verifiedAt || null,
-        lastUsedAt: tfa?.lastUsedAt || null,
+        enabled: false,
+        method: 'totp',
+        verifiedAt: null,
+        lastUsedAt: null,
+        temporarilyDisabled: true,
       });
     } catch (error: any) {
       log(`Error getting 2FA status: ${error.message}`, 'api');
@@ -3927,393 +3874,37 @@ export async function registerRoutes(
 
   // Begin 2FA setup - generate secret and QR code
   app.post('/api/user/2fa/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      log(`2FA setup: starting for user ${session.email}`, 'security');
-
-      // Import QR code library
-      let QRCode;
-      try {
-        QRCode = await import('qrcode');
-        log(`2FA setup: QRCode library loaded`, 'security');
-      } catch (qrErr: any) {
-        log(`2FA setup: Failed to load QRCode library: ${qrErr.message}`, 'api');
-        return res.status(500).json({ error: 'Failed to load QR code library' });
-      }
-
-      // Check if 2FA is already enabled
-      const existing = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (existing?.enabled) {
-        return res.status(400).json({ error: '2FA is already enabled. Disable it first to set up again.' });
-      }
-
-      // Generate a new secret
-      let plaintextSecret: string;
-      try {
-        plaintextSecret = totpGenerateSecret();
-        log(`2FA setup: Secret generated (length: ${plaintextSecret.length})`, 'security');
-      } catch (secretErr: any) {
-        log(`2FA setup: Failed to generate secret: ${secretErr.message}`, 'api');
-        return res.status(500).json({ error: 'Failed to generate secret' });
-      }
-
-      // Encrypt the secret for storage
-      let encryptedSecret: string;
-      try {
-        encryptedSecret = encryptSecret(plaintextSecret);
-        log(`2FA setup: Secret encrypted`, 'security');
-      } catch (encryptErr: any) {
-        log(`2FA setup: Failed to encrypt secret: ${encryptErr.message}`, 'api');
-        return res.status(500).json({ error: 'Failed to encrypt secret' });
-      }
-
-      // Create or update the 2FA record with encrypted secret
-      try {
-        if (existing) {
-          await dbStorage.updateTwoFactorAuth(session.auth0UserId, { secret: encryptedSecret, enabled: false });
-          log(`2FA setup: Updated existing record`, 'security');
-        } else {
-          await dbStorage.createTwoFactorAuth({
-            auth0UserId: session.auth0UserId,
-            secret: encryptedSecret,
-            enabled: false,
-          });
-          log(`2FA setup: Created new record`, 'security');
-        }
-      } catch (dbErr: any) {
-        log(`2FA setup: Database error: ${dbErr.message}`, 'api');
-        return res.status(500).json({ error: 'Failed to save 2FA configuration' });
-      }
-
-      // Generate QR code URL using plaintext secret (user needs to scan it)
-      let otpAuthUrl: string;
-      let qrCodeDataUrl: string;
-      try {
-        otpAuthUrl = totpGenerateURI(session.email, plaintextSecret);
-        log(`2FA setup: URI generated: ${otpAuthUrl.substring(0, 50)}...`, 'security');
-        // Generate QR code with higher error correction for logo overlay
-        const rawQrCode = await QRCode.toDataURL(otpAuthUrl, {
-          errorCorrectionLevel: 'H',
-          width: 300,
-          margin: 2
-        });
-        // Add OzVPS logo to center of QR code
-        qrCodeDataUrl = await addLogoToQRCode(rawQrCode);
-        log(`2FA setup: QR code generated with logo`, 'security');
-      } catch (qrGenErr: any) {
-        log(`2FA setup: Failed to generate QR code: ${qrGenErr.message}`, 'api');
-        return res.status(500).json({ error: 'Failed to generate QR code' });
-      }
-
-      log(`2FA setup completed successfully for user ${session.email}`, 'security');
-
-      res.json({
-        secret: plaintextSecret, // Show plaintext to user for manual entry
-        qrCode: qrCodeDataUrl,
-        otpAuthUrl,
-      });
-    } catch (error: any) {
-      log(`Error setting up 2FA: ${error.message}\n${error.stack}`, 'api');
-      res.status(500).json({ error: 'Failed to set up 2FA' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Enable 2FA after verifying token
   app.post('/api/user/2fa/enable', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      const { token } = req.body;
-      if (!token || typeof token !== 'string') {
-        return res.status(400).json({ error: 'Verification token is required' });
-      }
-
-      // Get the pending 2FA setup
-      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (!tfa) {
-        return res.status(400).json({ error: 'Please set up 2FA first by calling /api/user/2fa/setup' });
-      }
-
-      if (tfa.enabled) {
-        return res.status(400).json({ error: '2FA is already enabled' });
-      }
-
-      // Decrypt the secret for verification
-      let plaintextSecret: string;
-      try {
-        plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-        log(`2FA enable: decrypted secret length=${plaintextSecret.length}, encrypted=${isEncrypted(tfa.secret)}`, 'security');
-      } catch (decryptError: any) {
-        log(`2FA enable: failed to decrypt secret: ${decryptError.message}`, 'security');
-        return res.status(500).json({ error: 'Failed to verify 2FA. Please try setting up again.' });
-      }
-
-      // Verify the token
-      log(`2FA enable: verifying token ${token} against secret`, 'security');
-      const isValid = totpVerify(token, plaintextSecret);
-      log(`2FA enable: verification result=${isValid}`, 'security');
-      if (!isValid) {
-        return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
-      }
-
-      // Generate backup codes with argon2 hashing
-      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
-
-      // Enable 2FA with backup codes
-      await dbStorage.enableTwoFactorAuth(session.auth0UserId, hashedBackupCodes);
-
-      // Audit log 2FA enable
-      await auditUserAction(req, session.auth0UserId, session.email, UserActions.TWO_FA_ENABLE, '2fa', session.auth0UserId, { method: 'totp' });
-
-      log(`2FA enabled for user ${session.email}`, 'security');
-
-      res.json({
-        success: true,
-        backupCodes, // Return plaintext codes only once
-        message: '2FA has been enabled. Please save your backup codes in a safe place.',
-      });
-    } catch (error: any) {
-      log(`Error enabling 2FA: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to enable 2FA' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Disable 2FA
   app.post('/api/user/2fa/disable', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      const { token, password } = req.body;
-
-      // SECURITY: Require BOTH a valid 2FA token AND password for maximum security
-      if (!token || !password) {
-        return res.status(400).json({ error: 'Both 2FA token and password are required to disable 2FA' });
-      }
-
-      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (!tfa?.enabled) {
-        return res.status(400).json({ error: '2FA is not enabled' });
-      }
-
-      // Verify password first
-      const authResult = await auth0Client.authenticateUser(session.email, password);
-      if (!authResult.success) {
-        return res.status(400).json({ error: 'Invalid password' });
-      }
-
-      // Decrypt the secret and verify TOTP token
-      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-      const isValid = totpVerify(token, plaintextSecret);
-      if (!isValid) {
-        return res.status(400).json({ error: 'Invalid verification code' });
-      }
-
-      await dbStorage.disableTwoFactorAuth(session.auth0UserId);
-
-      // Audit log 2FA disable
-      await auditUserAction(req, session.auth0UserId, session.email, UserActions.TWO_FA_DISABLE, '2fa', session.auth0UserId);
-
-      log(`2FA disabled for user ${session.email}`, 'security');
-
-      res.json({ success: true, message: '2FA has been disabled' });
-    } catch (error: any) {
-      log(`Error disabling 2FA: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to disable 2FA' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Generate new backup codes
   app.post('/api/user/2fa/backup-codes', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      const { token } = req.body;
-      if (!token || typeof token !== 'string') {
-        return res.status(400).json({ error: '2FA token is required' });
-      }
-
-      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (!tfa?.enabled) {
-        return res.status(400).json({ error: '2FA is not enabled' });
-      }
-
-      // Decrypt the secret for verification
-      const plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-
-      // Verify the token
-      const isValid = totpVerify(token, plaintextSecret);
-      if (!isValid) {
-        return res.status(400).json({ error: 'Invalid verification code' });
-      }
-
-      // Generate new backup codes with argon2 hashing
-      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
-
-      await dbStorage.updateTwoFactorBackupCodes(session.auth0UserId, hashedBackupCodes);
-      log(`New backup codes generated for user ${session.email}`, 'security');
-
-      res.json({
-        success: true,
-        backupCodes,
-        message: 'New backup codes generated. Please save them in a safe place.',
-      });
-    } catch (error: any) {
-      log(`Error generating backup codes: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to generate backup codes' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Email 2FA: Setup (creates record with email method)
   app.post('/api/user/2fa/email/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      // Check if 2FA already exists
-      let tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (tfa?.enabled) {
-        return res.status(400).json({ error: '2FA is already enabled. Disable it first to change methods.' });
-      }
-
-      // Create or update 2FA record for email method
-      if (tfa) {
-        await dbStorage.setTwoFactorMethod(session.auth0UserId, 'email');
-      } else {
-        tfa = await dbStorage.createEmailTwoFactorAuth(session.auth0UserId);
-      }
-
-      // Generate and send a verification code
-      const code = crypto.randomInt(100000, 1000000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-      await dbStorage.setEmailOtpCode(session.auth0UserId, code, expiresAt);
-      const emailResult = await sendTwoFactorCodeEmail(session.email, code, 10);
-
-      if (!emailResult.success) {
-        return res.status(500).json({ error: 'Failed to send verification email' });
-      }
-
-      log(`Email 2FA setup initiated for ${session.email}`, 'security');
-      res.json({ success: true, message: 'Verification code sent to your email' });
-    } catch (error: any) {
-      log(`Error setting up email 2FA: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to setup email 2FA' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Email 2FA: Enable (verify code and enable)
   app.post('/api/user/2fa/email/enable', authMiddleware, mfaRateLimiter, async (req, res) => {
-    try {
-      const session = req.userSession!;
-      if (!session.auth0UserId) {
-        return res.status(400).json({ error: 'User not authenticated' });
-      }
-
-      const { code } = req.body;
-      if (!code || typeof code !== 'string') {
-        return res.status(400).json({ error: 'Verification code is required' });
-      }
-
-      const tfa = await dbStorage.getTwoFactorAuth(session.auth0UserId);
-      if (!tfa) {
-        return res.status(400).json({ error: 'Please setup email 2FA first' });
-      }
-
-      if (tfa.enabled) {
-        return res.status(400).json({ error: '2FA is already enabled' });
-      }
-
-      // Verify the code
-      if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
-        return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
-      }
-
-      if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
-        return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
-      }
-
-      if (!verifyEmailOtpCode(code, tfa.emailOtpCode)) {
-        return res.status(400).json({ error: 'Invalid verification code' });
-      }
-
-      // Generate backup codes
-      const { codes: backupCodes, hashes: hashedBackupCodes } = await generateBackupCodes(10);
-
-      // Enable 2FA with email method
-      await dbStorage.updateTwoFactorAuth(session.auth0UserId, {
-        enabled: true,
-        method: 'email',
-        backupCodes: JSON.stringify(hashedBackupCodes),
-        verifiedAt: new Date(),
-        emailOtpCode: null,
-        emailOtpExpiresAt: null,
-      });
-
-      log(`Email 2FA enabled for ${session.email}`, 'security');
-      res.json({
-        success: true,
-        backupCodes,
-        message: 'Email 2FA is now enabled. Save your backup codes!',
-      });
-    } catch (error: any) {
-      log(`Error enabling email 2FA: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to enable email 2FA' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Email 2FA: Send code during login (public, but rate limited)
   app.post('/api/user/2fa/email/send', mfaRateLimiter, async (req, res) => {
-    try {
-      const { auth0UserId } = req.body;
-      if (!auth0UserId || typeof auth0UserId !== 'string') {
-        return res.status(400).json({ error: 'User ID is required' });
-      }
-
-      const tfa = await dbStorage.getTwoFactorAuth(auth0UserId);
-      if (!tfa?.enabled || tfa.method !== 'email') {
-        return res.status(400).json({ error: 'Email 2FA is not enabled for this account' });
-      }
-
-      const auth0User = await auth0Client.getUserById(auth0UserId);
-      if (!auth0User?.email) {
-        return res.status(400).json({ error: 'Unable to send verification email for this account' });
-      }
-
-      const targetEmail = auth0User.email.trim().toLowerCase();
-
-      // Generate and send code
-      const code = crypto.randomInt(100000, 1000000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-      await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
-      const emailResult = await sendTwoFactorCodeEmail(targetEmail, code, 10);
-
-      if (!emailResult.success) {
-        return res.status(500).json({ error: 'Failed to send verification email' });
-      }
-
-      log(`Email 2FA code sent to ${targetEmail}`, 'security');
-      await auditUserAction(req, auth0UserId, targetEmail, UserActions.EMAIL_2FA_CODE_SENT, 'session', auth0UserId);
-      res.json({ success: true, message: 'Verification code sent' });
-    } catch (error: any) {
-      log(`Error sending 2FA email: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to send verification code' });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   app.post('/api/admin/block-user', authMiddleware, requireAdmin, async (req, res) => {
@@ -7734,27 +7325,6 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/support/guest/:accessToken', ticketRateLimiter, async (req, res) => {
-    try {
-      const accessToken = getGuestTicketToken(req);
-      if (!accessToken || accessToken.length < 32) {
-        return res.status(400).json({ error: 'Invalid access token' });
-      }
-
-      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
-      if (!ticket) {
-        return res.status(404).json({ error: 'Ticket not found' });
-      }
-
-      const { guestAccessToken: _guestAccessToken, guestEmail: _guestEmail, ...safeTicket } = ticket;
-      const messages = await dbStorage.getTicketMessages(ticket.id, false);
-      res.json({ ticket: safeTicket, messages });
-    } catch (error: any) {
-      log(`Error fetching guest ticket: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch ticket' });
-    }
-  });
-
   // Reply to a guest ticket (no auth required)
   app.post('/api/support/guest/messages', ticketRateLimiter, async (req, res) => {
     try {
@@ -7790,50 +7360,6 @@ export async function registerRoutes(
       });
 
       // Reopen resolved ticket on user reply, otherwise set to waiting_admin
-      const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
-      await dbStorage.updateTicket(ticket.id, { status: newStatus });
-
-      log(`Guest reply added to ticket #${ticket.id} by ${ticket.guestEmail}`, 'support');
-      res.status(201).json({ message: newMessage });
-    } catch (error: any) {
-      log(`Error adding guest reply: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to send reply' });
-    }
-  });
-
-  app.post('/api/support/guest/:accessToken/messages', ticketRateLimiter, async (req, res) => {
-    try {
-      const accessToken = getGuestTicketToken(req);
-      if (!accessToken || accessToken.length < 32) {
-        return res.status(400).json({ error: 'Invalid access token' });
-      }
-
-      const ticket = await dbStorage.getTicketByAccessToken(accessToken);
-      if (!ticket) {
-        return res.status(404).json({ error: 'Ticket not found' });
-      }
-
-      if (ticket.status === 'closed') {
-        return res.status(400).json({ error: 'This ticket is closed.' });
-      }
-
-      const rawMessage = req.body?.message;
-      if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
-        return res.status(400).json({ error: 'Message is required.' });
-      }
-      if (rawMessage.trim().length > 5000) {
-        return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
-      }
-
-      const newMessage = await dbStorage.createTicketMessage({
-        ticketId: ticket.id,
-        authorType: 'user',
-        authorId: ticket.guestEmail!,
-        authorEmail: ticket.guestEmail!,
-        authorName: null,
-        message: rawMessage.trim(),
-      });
-
       const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
       await dbStorage.updateTicket(ticket.id, { status: newStatus });
 

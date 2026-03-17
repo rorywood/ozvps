@@ -1,14 +1,5 @@
 import { Express, Request, Response } from "express";
-import { db } from "../../server/db";
-import { twoFactorAuth } from "../../shared/schema";
-import { eq, and } from "drizzle-orm";
-import { verifySync as otplibVerifySync } from "otplib";
-import { isEncrypted, decryptSecret, verifyEmailOtpCode } from "../../server/crypto";
-import argon2 from "argon2";
-import { createHmac, timingSafeEqual } from "crypto";
 import { auth0Client } from "../../server/auth0";
-import { dbStorage } from "../../server/storage";
-import { sendTwoFactorCodeEmail } from "../../server/email";
 import {
   isUserAdmin,
   createAdminSession,
@@ -18,89 +9,6 @@ import {
 import { generateCsrfToken, clearCsrfToken } from "../middleware/csrf";
 import { getClientIp } from "../middleware/ip-whitelist";
 import { log } from "../../server/logger";
-
-// HMAC secret for signing pending login tokens
-// SECURITY: Must use SESSION_SECRET in production - no fallbacks allowed
-const PENDING_TOKEN_SECRET = process.env.SESSION_SECRET;
-if (!PENDING_TOKEN_SECRET || PENDING_TOKEN_SECRET.length < 32) {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('CRITICAL: SESSION_SECRET must be set and at least 32 characters in production');
-  }
-  console.warn('WARNING: SESSION_SECRET not set or too short - using insecure fallback for development only');
-}
-const EFFECTIVE_TOKEN_SECRET = PENDING_TOKEN_SECRET || 'dev-only-insecure-token-secret-do-not-use-in-prod';
-
-/**
- * Create a signed pending login token with HMAC
- */
-function createPendingLoginToken(data: { auth0UserId: string; email: string; name: string | null; exp: number }): string {
-  const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
-  const signature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
-    .update(payload)
-    .digest("base64url");
-  return `${payload}.${signature}`;
-}
-
-/**
- * Verify and decode a pending login token
- */
-function verifyPendingLoginToken(token: string): { auth0UserId: string; email: string; name: string | null; exp: number } | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 2) {
-      return null;
-    }
-
-    const [payload, signature] = parts;
-
-    // Verify signature
-    const expectedSignature = createHmac("sha256", EFFECTIVE_TOKEN_SECRET)
-      .update(payload)
-      .digest("base64url");
-
-    if (signature.length !== expectedSignature.length) {
-      return null;
-    }
-
-    if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-      return null;
-    }
-
-    // Decode payload
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString());
-
-    // Check expiry
-    if (Date.now() > data.exp) {
-      return null;
-    }
-
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-async function sendAdminEmailTwoFactorCode(auth0UserId: string, fallbackEmail?: string | null): Promise<string> {
-  const auth0User = await auth0Client.getUserById(auth0UserId);
-  const targetEmail = auth0User?.email?.trim().toLowerCase() || fallbackEmail?.trim().toLowerCase();
-
-  if (!targetEmail) {
-    throw new Error("No email address available for this account");
-  }
-
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-  await dbStorage.setEmailOtpCode(auth0UserId, code, expiresAt);
-
-  const emailResult = await sendTwoFactorCodeEmail(targetEmail, code, 10);
-  if (!emailResult.success) {
-    throw new Error(emailResult.error || "Failed to send verification email");
-  }
-
-  log(`Admin email 2FA code sent to ${targetEmail}`, 'admin-auth');
-  return targetEmail;
-}
 
 // Verify password using Auth0 Resource Owner Password Grant
 // This requires the Auth0 application to have "Password" grant type enabled
@@ -186,7 +94,14 @@ export function registerAuthRoutes(app: Express) {
     });
   });
 
-  // Step 1: Verify credentials and check 2FA status
+  const twoFactorTemporarilyUnavailable = (res: Response) => {
+    return res.status(503).json({
+      error: "Two-factor authentication is temporarily unavailable",
+      code: "TWO_FACTOR_TEMPORARILY_DISABLED",
+    });
+  };
+
+  // Verify credentials and create a session directly while 2FA is disabled
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
@@ -212,263 +127,45 @@ export function registerAuthRoutes(app: Express) {
     // Get name from Auth0 (already fetched during password verification)
     const userName = authResult.name || email.split('@')[0];
 
-    // Allow the 2FA bypass only outside production so a forgotten env var
-    // cannot silently downgrade the live admin panel.
-    const bypass2FARequested = process.env.ADMIN_BYPASS_2FA === 'true';
-    if (bypass2FARequested && process.env.NODE_ENV === 'production') {
-      log('Ignoring ADMIN_BYPASS_2FA in production', 'admin-auth', { level: 'warn' });
-    }
-
-    if (bypass2FARequested && process.env.NODE_ENV !== 'production') {
-      log('WARNING: 2FA bypassed via ADMIN_BYPASS_2FA env var', 'admin-auth', { level: 'warn' });
-
-      // Create session directly without 2FA
-      const clientIp = getClientIp(req);
-      const userAgent = req.headers["user-agent"] || null;
-      const sessionId = await createAdminSession(
-        auth0UserId,
-        email,
-        userName,
-        clientIp,
-        userAgent
-      );
-
-      // Generate CSRF token
-      const csrfToken = await generateCsrfToken(sessionId);
-
-      // Set session cookie
-      res.cookie("admin_session", sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: ADMIN_SESSION_EXPIRY,
-      });
-
-      log(`Admin login successful (2FA bypassed) from ${clientIp}`, 'admin-auth');
-
-      return res.json({
-        success: true,
-        user: {
-          email,
-          name: userName,
-        },
-        csrfToken,
-        bootstrapMode: (req as any).bootstrapMode || false,
-      });
-    }
-
-    // Check if 2FA is enabled (this is the only thing we need from the database)
-    const [tfa] = await db
-      .select()
-      .from(twoFactorAuth)
-      .where(and(eq(twoFactorAuth.auth0UserId, auth0UserId), eq(twoFactorAuth.enabled, true)));
-
-    if (!tfa) {
-      return res.status(403).json({
-        error: "2FA required",
-        message: "Two-factor authentication must be enabled to access the admin panel. Please enable 2FA in the main panel first.",
-        requires2FASetup: true,
-      });
-    }
-
-    // 2FA is enabled, return a signed temporary token for the second step
-    // Token is HMAC-signed and expires in 5 minutes
-    const pendingLoginToken = createPendingLoginToken({
+    const clientIp = getClientIp(req);
+    const userAgent = req.headers["user-agent"] || null;
+    const sessionId = await createAdminSession(
       auth0UserId,
       email,
-      name: userName,
-      exp: Date.now() + 5 * 60 * 1000,
+      userName,
+      clientIp,
+      userAgent
+    );
+
+    const csrfToken = await generateCsrfToken(sessionId);
+
+    res.cookie("admin_session", sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: ADMIN_SESSION_EXPIRY,
     });
 
-    if (tfa.method === "email") {
-      try {
-        await sendAdminEmailTwoFactorCode(auth0UserId, email);
-      } catch (error: any) {
-        log(`Failed to send admin email 2FA code: ${error.message}`, 'admin-auth', { level: 'error' });
-        return res.status(500).json({ error: "Failed to send verification code" });
-      }
-    }
+    log(`Admin login successful with 2FA temporarily disabled from ${clientIp}`, 'admin-auth', { level: 'warn' });
 
     return res.json({
-      requires2FA: true,
-      pendingLoginToken,
-      twoFAMethod: tfa.method || "totp",
-      emailCodeSent: tfa.method === "email",
+      success: true,
+      user: {
+        email,
+        name: userName,
+      },
+      csrfToken,
+      bootstrapMode: (req as any).bootstrapMode || false,
+      twoFactorTemporarilyDisabled: true,
     });
   });
 
   app.post("/api/auth/send-email-2fa", async (req: Request, res: Response) => {
-    try {
-      const { pendingLoginToken } = req.body;
-
-      if (!pendingLoginToken) {
-        return res.status(400).json({ error: "Pending login token required" });
-      }
-
-      const tokenData = verifyPendingLoginToken(pendingLoginToken);
-      if (!tokenData) {
-        return res.status(401).json({ error: "Invalid or expired login token. Please start over." });
-      }
-
-      const [tfa] = await db
-        .select()
-        .from(twoFactorAuth)
-        .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
-
-      if (!tfa || tfa.method !== "email") {
-        return res.status(400).json({ error: "Email 2FA is not enabled for this account" });
-      }
-
-      await sendAdminEmailTwoFactorCode(tokenData.auth0UserId, tokenData.email);
-      return res.json({ success: true, message: "Verification code sent" });
-    } catch (error: any) {
-      log(`Admin email 2FA resend error: ${error.message}`, 'admin-auth', { level: 'error' });
-      return res.status(500).json({ error: "Failed to send verification code" });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
-  // Step 2: Verify 2FA code and create session
   app.post("/api/auth/verify-2fa", async (req: Request, res: Response) => {
-    try {
-      const { pendingLoginToken, code } = req.body;
-
-      if (!pendingLoginToken || !code) {
-        return res.status(400).json({ error: "Token and 2FA code required" });
-      }
-
-      // Verify and decode the pending login token (HMAC-signed)
-      const tokenData = verifyPendingLoginToken(pendingLoginToken);
-      if (!tokenData) {
-        return res.status(401).json({ error: "Invalid or expired login token. Please start over." });
-      }
-
-      log('Verifying 2FA for admin login', 'admin-auth');
-
-      // Get the user's 2FA secret
-      const [tfa] = await db
-        .select()
-        .from(twoFactorAuth)
-        .where(and(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId), eq(twoFactorAuth.enabled, true)));
-
-      if (!tfa) {
-        log('No 2FA record found for admin user', 'admin-auth', { level: 'warn' });
-        return res.status(403).json({ error: "2FA not enabled for this account" });
-      }
-
-      if (tfa.method === "email") {
-        if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
-          return res.status(400).json({ error: "No verification code pending. Please resend the email code." });
-        }
-
-        if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
-          return res.status(400).json({ error: "Verification code has expired. Please resend the email code." });
-        }
-
-        const emailCodeValid = verifyEmailOtpCode(code, tfa.emailOtpCode);
-
-        if (!emailCodeValid) {
-          log('Invalid email 2FA code for admin login', 'admin-auth', { level: 'warn' });
-          return res.status(401).json({ error: "Invalid 2FA code" });
-        }
-
-        await dbStorage.clearEmailOtpCode(tokenData.auth0UserId);
-        await dbStorage.updateTwoFactorLastUsed(tokenData.auth0UserId);
-      } else {
-        // Decrypt the secret if encrypted
-        let plaintextSecret: string;
-        try {
-          plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-        } catch (decryptError: any) {
-          log(`Failed to decrypt 2FA secret: ${decryptError.message}`, 'admin-auth', { level: 'error' });
-          return res.status(500).json({ error: "Authentication error" });
-        }
-
-        // Verify the TOTP code
-        const isValid = otplibVerifySync({ token: code, secret: plaintextSecret });
-
-        if (!isValid) {
-          // Check backup codes
-          if (tfa.backupCodes) {
-            try {
-              const backupCodes: string[] = JSON.parse(tfa.backupCodes);
-              let backupCodeUsed = false;
-
-              for (let i = 0; i < backupCodes.length; i++) {
-                // Backup codes are stored hashed
-                const isMatch = await argon2.verify(backupCodes[i], code);
-                if (isMatch) {
-                  // Remove the used backup code
-                  backupCodes.splice(i, 1);
-                  await db
-                    .update(twoFactorAuth)
-                    .set({ backupCodes: JSON.stringify(backupCodes), lastUsedAt: new Date() })
-                    .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
-                  backupCodeUsed = true;
-                  log('Backup code used for admin login', 'admin-auth');
-                  break;
-                }
-              }
-
-              if (!backupCodeUsed) {
-                log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
-                return res.status(401).json({ error: "Invalid 2FA code" });
-              }
-            } catch (backupError: any) {
-              log(`Backup code check error: ${backupError.message}`, 'admin-auth', { level: 'warn' });
-              return res.status(401).json({ error: "Invalid 2FA code" });
-            }
-          } else {
-            log('Invalid 2FA code for admin login', 'admin-auth', { level: 'warn' });
-            return res.status(401).json({ error: "Invalid 2FA code" });
-          }
-        } else {
-          // Update last used timestamp
-          await db
-            .update(twoFactorAuth)
-            .set({ lastUsedAt: new Date() })
-            .where(eq(twoFactorAuth.auth0UserId, tokenData.auth0UserId));
-        }
-      }
-
-      log('2FA verified for admin login', 'admin-auth');
-
-      // 2FA verified - create admin session
-      const clientIp = getClientIp(req);
-      const userAgent = req.headers["user-agent"] || null;
-      const sessionId = await createAdminSession(
-        tokenData.auth0UserId,
-        tokenData.email,
-        tokenData.name,
-        clientIp,
-        userAgent
-      );
-
-      // Generate CSRF token
-      const csrfToken = await generateCsrfToken(sessionId);
-
-      // Set session cookie
-      res.cookie("admin_session", sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: ADMIN_SESSION_EXPIRY,
-      });
-
-      log(`Admin login successful from ${clientIp}`, 'admin-auth');
-
-      return res.json({
-        success: true,
-        user: {
-          email: tokenData.email,
-          name: tokenData.name,
-        },
-        csrfToken,
-        bootstrapMode: (req as any).bootstrapMode || false,
-      });
-    } catch (error: any) {
-      log(`2FA verification error: ${error.message}`, 'admin-auth', { level: 'error' });
-      return res.status(500).json({ error: "Internal server error" });
-    }
+    return twoFactorTemporarilyUnavailable(res);
   });
 
   // Logout
