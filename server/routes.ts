@@ -28,15 +28,7 @@ import path from "path";
 import fs from "fs";
 import { LOCATION_CONFIG } from "@shared/locations";
 import { registerPublicCatalogRoutes } from "./public-catalog-routes";
-
-// VNC security: one-time credential tokens (exchanged by noVNC on load, then deleted)
-const vncSessionTokens = new Map<string, {
-  wsUrl: string;
-  password: string;
-  serverId: string;
-  auth0UserId: string;
-  expiresAt: number;
-}>();
+import { CSRF_COOKIE, SESSION_COOKIE } from "./auth-cookies";
 
 // VNC auto-disable timers: kill VNC access 30 minutes after console is opened
 const vncAutoDisableTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -468,8 +460,6 @@ declare global {
 // Key: serverId, Value: timestamp (ms) when we first saw commissioned=1
 const buildStartTimes = new Map<string, number>();
 
-const SESSION_COOKIE = 'ozvps_session';
-const CSRF_COOKIE = 'ozvps_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -3500,139 +3490,13 @@ export async function registerRoutes(
       if (server.suspended) {
         return res.status(403).json({ error: 'Server is suspended. Console access is disabled.' });
       }
-
-      const panelUrl = process.env.VIRTFUSION_PANEL_URL || '';
-      
-      // Step 1: Enable VNC on the server first
-      try {
-        log(`Enabling VNC for server ${serverId}...`, 'api');
-        await virtfusionClient.enableVnc(serverId);
-        log(`VNC enabled successfully for server ${serverId}`, 'api');
-      } catch (vncError: any) {
-        log(`Failed to enable VNC for server ${serverId}: ${vncError.message}`, 'api');
-      }
-      
-      // Step 2: Get VNC access details for embedded noVNC
-      let vncAccess = null;
-      try {
-        vncAccess = await virtfusionClient.getServerVncAccess(serverId);
-        // Log without exposing password
-        log(`VNC access retrieved for server ${serverId}: ip=${vncAccess?.ip}, port=${vncAccess?.port}, hasPassword=${!!vncAccess?.password}`, 'api');
-      } catch (vncErr: any) {
-        log(`Failed to get VNC access: ${vncErr.message}`, 'api');
-      }
-      
-      // Return embedded VNC data if we have WebSocket access
-      if (vncAccess?.wss?.url && vncAccess?.password) {
-        // Build WebSocket URL from panel URL
-        const panelHost = new URL(panelUrl).host;
-        const wsUrl = `wss://${panelHost}${vncAccess.wss.url}`;
-
-        log(`Embedded VNC WebSocket URL: ${wsUrl}`, 'api');
-
-        // SECURITY: Store credentials server-side as a one-time token.
-        // The noVNC page exchanges this token (with auth cookie) to get credentials.
-        // Raw wsUrl/password never appear in any URL or browser history.
-        const vncToken = randomBytes(32).toString('hex');
-        vncSessionTokens.set(vncToken, {
-          wsUrl,
-          password: vncAccess.password,
-          serverId,
-          auth0UserId: session.auth0UserId!,
-          expiresAt: Date.now() + 5 * 60 * 1000, // 5 min to exchange token
-        });
-
-        // Auto-disable VNC after 30 minutes (reset timer if user opens a new console)
-        const existingTimer = vncAutoDisableTimers.get(serverId);
-        if (existingTimer) clearTimeout(existingTimer);
-        vncAutoDisableTimers.set(serverId, setTimeout(() => {
-          virtfusionClient.disableVnc(serverId).catch(() => {});
-          vncAutoDisableTimers.delete(serverId);
-          log(`VNC auto-disabled for server ${serverId} after ${VNC_SESSION_TTL_MS / 60000}min TTL`, 'security');
-        }, VNC_SESSION_TTL_MS));
-
-        return res.json({
-          embedded: true,
-          vncToken,
-        });
-      }
-      
-      // Fallback: Try to get auth token for SSO to old panel (not preferred)
-      try {
-        const ownerData = await virtfusionClient.getServerOwner(serverId);
-        const extRelationId = ownerData?.extRelationId;
-        
-        if (extRelationId) {
-          const tokenData = await virtfusionClient.generateServerLoginTokens(
-            server.id.toString(), 
-            extRelationId.toString()
-          );
-          
-          if (tokenData?.authentication?.tokens) {
-            const tokens = tokenData.authentication.tokens;
-            if (tokens['1'] && tokens['2']) {
-              // Return auth URL and VNC URL separately - frontend will handle flow
-              const authUrl = `${panelUrl}/token_authenticate/?1=${tokens['1']}&2=${tokens['2']}`;
-              const vncUrl = `${panelUrl}/server/${server.uuid}/vnc`;
-              
-              log(`Fallback: Generated auth URL: ${authUrl}`, 'api');
-              log(`Fallback: VNC URL: ${vncUrl}`, 'api');
-              
-              return res.json({ 
-                authUrl,
-                vncUrl,
-                twoStep: true
-              });
-            }
-          }
-        }
-      } catch (tokenErr: any) {
-        log(`Token generation failed: ${tokenErr.message}`, 'api');
-      }
-
-      // SECURITY: Do NOT fallback to unauthenticated URL
-      // If token generation fails, return an error instead of exposing unprotected console
-      log(`Console URL generation failed for server ${req.params.id} - no valid authentication method`, 'security');
-      return res.status(503).json({
-        error: 'Console temporarily unavailable. Please try again in a few moments.',
-        retryable: true
+      return res.json({
+        url: `/api/servers/${serverId}/vnc-console`,
       });
     } catch (error: any) {
       log(`Error generating console URL for server ${req.params.id}: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to generate console URL' });
     }
-  });
-
-  // Exchange a one-time VNC session token for actual credentials.
-  // Requires auth — only the session that created the token can redeem it.
-  app.get('/api/vnc-session/:token', authMiddleware, async (req, res) => {
-    const token = req.params.token;
-    const session = req.userSession!;
-
-    const vncSession = vncSessionTokens.get(token);
-    if (!vncSession) {
-      return res.status(404).json({ error: 'Invalid or expired console token. Please request a new console session.' });
-    }
-
-    // Verify the token belongs to this authenticated user
-    if (vncSession.auth0UserId !== session.auth0UserId) {
-      log(`VNC token theft attempt: token owned by ${vncSession.auth0UserId}, used by ${session.auth0UserId}`, 'security');
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Check token expiry (5 min to exchange after console-url is called)
-    if (Date.now() > vncSession.expiresAt) {
-      vncSessionTokens.delete(token);
-      return res.status(410).json({ error: 'Console token has expired. Please close this window and open a new console session.' });
-    }
-
-    // One-time use: delete token immediately after returning credentials
-    vncSessionTokens.delete(token);
-
-    return res.json({
-      wsUrl: vncSession.wsUrl,
-      password: vncSession.password,
-    });
   });
 
   // Serve the noVNC console page with credentials injected server-side.
@@ -3642,6 +3506,11 @@ export async function registerRoutes(
     try {
       const serverId = req.params.id;
       const session = req.userSession!;
+      const sessionId = req.cookies?.[SESSION_COOKIE];
+
+      if (!sessionId) {
+        return res.status(401).send('<p>Your session has ended. Please sign in again.</p>');
+      }
 
       // Check account flags
       const userFlags = await dbStorage.getUserFlagsFromDb(session.auth0UserId!);
@@ -3718,6 +3587,7 @@ export async function registerRoutes(
       vncProxySessions.set(proxyToken, {
         wsUrl: wsUrl.toString(),
         password: vncAccess.password,
+        sessionId,
         auth0UserId: session.auth0UserId!,
         serverId,
         expiresAt: Date.now() + 2 * 60 * 1000, // 2 min to initiate WebSocket

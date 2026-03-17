@@ -11,12 +11,15 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { Socket } from 'net';
+import { storage } from './storage';
+import { SESSION_COOKIE } from './auth-cookies';
 import { log } from './log';
 
 // Short-lived proxy sessions: opaque token → VirtFusion credentials
 export const vncProxySessions = new Map<string, {
   wsUrl: string;
   password: string;
+  sessionId: string;
   auth0UserId: string;
   serverId: string;
   expiresAt: number;
@@ -29,6 +32,80 @@ setInterval(() => {
     if (now > s.expiresAt) vncProxySessions.delete(token);
   }
 }, 5 * 60 * 1000);
+
+function getHttpStatusText(statusCode: number): string {
+  switch (statusCode) {
+    case 401:
+      return 'Unauthorized';
+    case 403:
+      return 'Forbidden';
+    case 404:
+      return 'Not Found';
+    case 410:
+      return 'Gone';
+    default:
+      return 'Bad Request';
+  }
+}
+
+function writeUpgradeError(socket: Socket, statusCode: number): void {
+  socket.write(`HTTP/1.1 ${statusCode} ${getHttpStatusText(statusCode)}\r\nContent-Length: 0\r\n\r\n`);
+  socket.destroy();
+}
+
+export function getCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+
+  for (const part of cookieHeader.split(';')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex === -1) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    if (key !== name) continue;
+
+    return decodeURIComponent(trimmed.slice(separatorIndex + 1));
+  }
+
+  return undefined;
+}
+
+export async function validateVncProxyRequest(
+  cookieHeader: string | undefined,
+  expectedSessionId: string,
+  expectedAuth0UserId: string,
+): Promise<{ ok: true } | { ok: false; statusCode: number; reason: string }> {
+  const sessionId = getCookieValue(cookieHeader, SESSION_COOKIE);
+  if (!sessionId) {
+    return { ok: false, statusCode: 401, reason: 'missing session cookie' };
+  }
+
+  if (sessionId !== expectedSessionId) {
+    return { ok: false, statusCode: 403, reason: 'session cookie mismatch' };
+  }
+
+  const session = await storage.getSession(sessionId);
+  if (!session) {
+    return { ok: false, statusCode: 401, reason: 'session not found' };
+  }
+
+  if (session.revokedAt) {
+    return { ok: false, statusCode: 401, reason: 'session revoked' };
+  }
+
+  if (new Date(session.expiresAt).getTime() < Date.now()) {
+    await storage.deleteSession(sessionId);
+    return { ok: false, statusCode: 401, reason: 'session expired' };
+  }
+
+  if (session.auth0UserId !== expectedAuth0UserId) {
+    return { ok: false, statusCode: 403, reason: 'session user mismatch' };
+  }
+
+  return { ok: true };
+}
 
 // ---------------------------------------------------------------------------
 // Pure-JS DES implementation for VNC RFB authentication.
@@ -194,16 +271,26 @@ export async function handleVncUpgrade(
 
   if (!session) {
     log(`VNC upgrade: token not found (already used or expired)`, 'vnc');
-    socket.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n');
-    socket.destroy();
+    writeUpgradeError(socket, 404);
     return true;
   }
 
   if (Date.now() > session.expiresAt) {
     log(`VNC upgrade: token expired for server ${session.serverId}`, 'vnc');
     vncProxySessions.delete(token);
-    socket.write('HTTP/1.1 410 Gone\r\nContent-Length: 0\r\n\r\n');
-    socket.destroy();
+    writeUpgradeError(socket, 410);
+    return true;
+  }
+
+  const validation = await validateVncProxyRequest(
+    req.headers.cookie,
+    session.sessionId,
+    session.auth0UserId,
+  );
+  if (!validation.ok) {
+    log(`VNC upgrade rejected for server ${session.serverId}: ${validation.reason}`, 'security');
+    vncProxySessions.delete(token);
+    writeUpgradeError(socket, validation.statusCode);
     return true;
   }
 
