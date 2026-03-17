@@ -1,31 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
-import { SupportTicket, TicketMessage, TicketCategory, TicketPriority, TicketStatus } from "@/lib/types";
-import {
-  MessageSquare,
-  ArrowLeft,
-  Clock,
-  Loader2,
-  Send,
-  Server,
-  Calendar,
-  Tag,
-  AlertTriangle,
-  CheckCircle2,
-  CircleDot,
-  Timer,
-  XCircle,
-  User,
-  ShieldCheck,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,129 +17,45 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Loader2,
+  MessageSquare,
+  Send,
+  Server,
+  Timer,
+  XCircle,
+} from "lucide-react";
+import {
+  SupportCategoryBadge,
+  SupportPanel,
+  SupportPriorityBadge,
+  SupportStatusBadge,
+  SupportThreadMessage,
+  formatSupportDateTime,
+  formatSupportRelativeTime,
+} from "@/components/support/support-ui";
 
-const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  sales: "Sales",
-  accounts: "Accounts",
-  support: "Support",
-  abuse: "Abuse",
-};
-
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  low: "Low",
-  normal: "Normal",
-  high: "High",
-  urgent: "Urgent",
-};
-
-const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot }> = {
-  new: { label: "New", color: "text-blue-400 bg-blue-500/10", icon: CircleDot },
-  open: { label: "Open", color: "text-cyan-400 bg-cyan-500/10", icon: CircleDot },
-  waiting_user: { label: "Awaiting Your Reply", color: "text-amber-400 bg-amber-500/10", icon: Timer },
-  waiting_admin: { label: "In Progress", color: "text-purple-400 bg-purple-500/10", icon: Clock },
-  resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
-  closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
-};
-
-function StatusBadge({ status }: { status: TicketStatus }) {
-  const config = STATUS_CONFIG[status];
-  const Icon = config.icon;
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", config.color)}>
-      <Icon className="h-3 w-3" />
-      {config.label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: TicketPriority }) {
-  const colors: Record<TicketPriority, string> = {
-    low: "text-muted-foreground bg-muted/50",
-    normal: "text-foreground bg-muted/50",
-    high: "text-amber-400 bg-amber-500/10",
-    urgent: "text-red-400 bg-red-500/10",
-  };
-  return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium", colors[priority])}>
-      <AlertTriangle className="h-3 w-3" />
-      {PRIORITY_LABELS[priority]}
-    </span>
-  );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Australia/Brisbane",
-  });
-}
-
-function formatRelativeDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  if (diffHours < 1) {
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    return diffMins <= 1 ? "Just now" : `${diffMins} minutes ago`;
-  } else if (diffHours < 24) {
-    return `${Math.floor(diffHours)} hours ago`;
-  } else if (diffDays < 7) {
-    return `${Math.floor(diffDays)} days ago`;
-  } else {
-    return formatDate(dateString);
-  }
-}
-
-function MessageBubble({ message, isUser }: { message: TicketMessage; isUser: boolean }) {
-  // DO style: Both sides left-aligned, minimal styling
-  return (
-    <div className="flex gap-3">
-      <div
-        className={cn(
-          "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0",
-          isUser ? "bg-primary/10" : "bg-success/10"
-        )}
-      >
-        {isUser ? (
-          <User className="h-4 w-4 text-primary" />
-        ) : (
-          <ShieldCheck className="h-4 w-4 text-success" />
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-semibold text-foreground">
-            {isUser ? (message.authorName || message.authorEmail.split("@")[0]) : "OzVPS Support"}
-          </span>
-          {!isUser && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-success/10 text-success font-medium uppercase tracking-wide">
-              Support
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">{formatRelativeDate(message.createdAt)}</span>
-        </div>
-        <div className="bg-muted/30 border border-border rounded-lg p-3">
-          <p className="whitespace-pre-wrap break-words text-sm text-foreground leading-relaxed">
-            {message.message}
-          </p>
-        </div>
-      </div>
+    <div className="border-t border-white/10 pt-4 first:border-t-0 first:pt-0">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <div className="mt-2 text-sm text-foreground">{value}</div>
     </div>
   );
 }
 
 export default function SupportTicketPage() {
   const { id } = useParams<{ id: string }>();
-  const [, setLocation] = useLocation();
   const ticketId = parseInt(id || "0", 10);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -171,33 +68,32 @@ export default function SupportTicketPage() {
     queryKey: ["support", "ticket", ticketId],
     queryFn: () => api.getSupportTicket(ticketId),
     enabled: ticketId > 0,
-    refetchInterval: 10000, // Refresh every 10 seconds for real-time updates
+    refetchInterval: 10000,
   });
 
   useDocumentTitle(data?.ticket ? `Ticket #${data.ticket.id}` : "Support Ticket");
 
-  // Scroll to bottom when messages change
   useEffect(() => {
-    if (data?.messages) {
+    if (data?.messages?.length) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [data?.messages]);
+  }, [data?.messages?.length]);
 
   const replyMutation = useMutation({
     mutationFn: (message: string) => api.replyToSupportTicket(ticketId, message),
     onSuccess: () => {
-      toast({
-        title: "Reply Sent",
-        description: "Your message has been sent successfully.",
-      });
       setReplyMessage("");
+      toast({
+        title: "Reply sent",
+        description: "Your message has been added to the thread.",
+      });
       queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Unable to send reply",
         description: error.message,
         variant: "destructive",
       });
@@ -207,18 +103,18 @@ export default function SupportTicketPage() {
   const closeMutation = useMutation({
     mutationFn: () => api.closeSupportTicket(ticketId),
     onSuccess: () => {
-      toast({
-        title: "Ticket Closed",
-        description: "The ticket has been closed.",
-      });
       setCloseDialogOpen(false);
+      toast({
+        title: "Ticket closed",
+        description: "This thread has been marked closed.",
+      });
       queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Unable to close ticket",
         description: error.message,
         variant: "destructive",
       });
@@ -229,8 +125,8 @@ export default function SupportTicketPage() {
     mutationFn: () => api.reopenSupportTicket(ticketId),
     onSuccess: () => {
       toast({
-        title: "Ticket Reopened",
-        description: "The ticket has been reopened.",
+        title: "Ticket reopened",
+        description: "The thread is back in the active queue.",
       });
       queryClient.invalidateQueries({ queryKey: ["support", "ticket", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
@@ -238,33 +134,34 @@ export default function SupportTicketPage() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Unable to reopen ticket",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const handleSubmitReply = (e: React.FormEvent) => {
+  function handleSubmitReply(e: React.FormEvent) {
     e.preventDefault();
     if (!replyMessage.trim()) return;
     replyMutation.mutate(replyMessage);
-  };
+  }
 
   if (!ticketId || ticketId <= 0) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center p-12">
-          <div className="text-center">
-            <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-lg font-medium text-foreground">Invalid Ticket ID</h2>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <SupportPanel className="max-w-lg px-8 py-12 text-center">
+            <XCircle className="mx-auto h-12 w-12 text-destructive" />
+            <h1 className="mt-5 text-2xl font-semibold text-white">Invalid ticket</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">This support link is missing a valid ticket number.</p>
             <Link href="/support">
-              <Button variant="outline" className="mt-4">
+              <Button className="mt-6 rounded-full">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Support
+                Back to support
               </Button>
             </Link>
-          </div>
+          </SupportPanel>
         </div>
       </AppShell>
     );
@@ -273,7 +170,7 @@ export default function SupportTicketPage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center p-12">
+        <div className="flex min-h-[50vh] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </AppShell>
@@ -283,20 +180,20 @@ export default function SupportTicketPage() {
   if (error || !data) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center p-12">
-          <div className="text-center">
-            <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-lg font-medium text-foreground">Ticket Not Found</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              The ticket you're looking for doesn't exist or you don't have access to it.
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <SupportPanel className="max-w-lg px-8 py-12 text-center">
+            <XCircle className="mx-auto h-12 w-12 text-destructive" />
+            <h1 className="mt-5 text-2xl font-semibold text-white">Ticket not found</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              The ticket you’re looking for no longer exists or isn’t available to this account.
             </p>
             <Link href="/support">
-              <Button variant="outline" className="mt-4">
+              <Button className="mt-6 rounded-full">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Support
+                Back to support
               </Button>
             </Link>
-          </div>
+          </SupportPanel>
         </div>
       </AppShell>
     );
@@ -310,68 +207,131 @@ export default function SupportTicketPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <Link href="/support">
-              <Button variant="ghost" size="icon" className="shrink-0">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
+        <SupportPanel className="overflow-hidden border-primary/15 bg-[linear-gradient(135deg,rgba(0,133,255,0.16),rgba(255,255,255,0.04)_42%,rgba(255,255,255,0.03))]">
+          <div className="grid gap-6 px-6 py-7 lg:grid-cols-[minmax(0,1fr)_240px] lg:px-8 lg:py-8">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm text-muted-foreground">Ticket #{ticket.id}</span>
-                <StatusBadge status={ticket.status} />
+              <Link href="/support">
+                <Button variant="ghost" className="-ml-3 mb-4 text-muted-foreground hover:text-white">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to queue
+                </Button>
+              </Link>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Ticket #{ticket.id}
+                </span>
+                <SupportStatusBadge status={ticket.status} />
+                <SupportCategoryBadge category={ticket.category} />
+                <SupportPriorityBadge priority={ticket.priority} />
               </div>
-              <h1 className="text-xl font-bold text-foreground">{ticket.title}</h1>
+
+              <h1 className="max-w-3xl text-3xl font-semibold text-white sm:text-4xl">{ticket.title}</h1>
+              <p className="mt-3 text-sm leading-6 text-white/65">
+                Opened {formatSupportRelativeTime(ticket.createdAt)} and last updated {formatSupportRelativeTime(ticket.lastMessageAt)}.
+              </p>
+            </div>
+
+            <div className="flex flex-col justify-start gap-3">
+              {!isInactive ? (
+                <Button variant="outline" onClick={() => setCloseDialogOpen(true)} className="border-white/10 bg-white/5 hover:bg-white/10">
+                  Close ticket
+                </Button>
+              ) : isResolved ? (
+                <Button onClick={() => reopenMutation.mutate()} disabled={reopenMutation.isPending} className="rounded-full">
+                  {reopenMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Reopening...
+                    </>
+                  ) : (
+                    <>
+                      Reopen ticket
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Link href="/support">
+                  <Button className="rounded-full">
+                    Open another ticket
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
-          {!isInactive && (
-            <Button
-              variant="outline"
-              onClick={() => setCloseDialogOpen(true)}
-              className="text-muted-foreground"
-            >
-              Close Ticket
-            </Button>
-          )}
-        </div>
+        </SupportPanel>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Messages - DO style */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="rounded-lg bg-card border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Conversation
-                </h2>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_340px]">
+          <div className="space-y-6">
+            {ticket.status === "waiting_user" && (
+              <SupportPanel className="border-amber-500/20 bg-amber-500/[0.07] px-6 py-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-300">
+                    <Timer className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-300">Support needs your reply</p>
+                    <p className="mt-1 text-sm leading-6 text-amber-100/75">
+                      Reply in this thread so the existing context stays intact and the queue doesn’t split.
+                    </p>
+                  </div>
+                </div>
+              </SupportPanel>
+            )}
+
+            {isResolved && (
+              <SupportPanel className="border-emerald-500/20 bg-emerald-500/[0.07] px-6 py-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+                    <CheckCircle2 className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-300">This ticket is resolved</p>
+                    <p className="mt-1 text-sm leading-6 text-emerald-100/75">
+                      If the issue comes back, reopen the thread and reply with what changed.
+                    </p>
+                  </div>
+                </div>
+              </SupportPanel>
+            )}
+
+            <SupportPanel className="overflow-hidden">
+              <div className="border-b border-white/10 px-6 py-5">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  <h2 className="text-xl font-semibold text-white">Conversation</h2>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Keep replies in this thread so the agent sees the full timeline.
+                </p>
               </div>
 
-              <div className="p-4 space-y-6 max-h-[600px] overflow-y-auto">
+              <div className="max-h-[680px] space-y-6 overflow-y-auto px-6 py-6">
                 {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    isUser={message.authorType === "user"}
-                  />
+                  <SupportThreadMessage key={message.id} message={message} />
                 ))}
                 <div ref={messagesEndRef} />
               </div>
 
-              {!isInactive && (
-                <div className="p-4 border-t border-border bg-muted/20">
-                  <form onSubmit={handleSubmitReply} className="space-y-3">
+              {!isInactive ? (
+                <div className="border-t border-white/10 bg-white/[0.03] px-6 py-5">
+                  <form onSubmit={handleSubmitReply} className="space-y-4">
                     <Textarea
-                      placeholder="Type your reply..."
                       value={replyMessage}
                       onChange={(e) => setReplyMessage(e.target.value)}
-                      rows={4}
+                      placeholder="Add the next step, result, or exact error message here."
+                      rows={5}
                       disabled={replyMutation.isPending}
-                      className="resize-none"
+                      className="min-h-[150px] resize-none border-white/10 bg-black/10"
                     />
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={!replyMessage.trim() || replyMutation.isPending}>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Replies here keep the ticket active and notify support automatically.
+                      </p>
+                      <Button type="submit" disabled={!replyMessage.trim() || replyMutation.isPending} className="rounded-full px-5">
                         {replyMutation.isPending ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -380,136 +340,85 @@ export default function SupportTicketPage() {
                         ) : (
                           <>
                             <Send className="mr-2 h-4 w-4" />
-                            Send Reply
+                            Send reply
                           </>
                         )}
                       </Button>
                     </div>
                   </form>
                 </div>
-              )}
-
-              {isResolved && (
-                <div className="p-4 border-t border-border bg-success/5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-success font-medium">
-                      This ticket is resolved.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => reopenMutation.mutate()}
-                      disabled={reopenMutation.isPending}
-                      className="text-success border-success/30 hover:bg-success/10"
-                    >
-                      {reopenMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          Reopening...
-                        </>
-                      ) : (
-                        "Reopen Ticket"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {isClosed && (
-                <div className="p-4 border-t border-border bg-muted/20">
-                  <p className="text-sm text-muted-foreground text-center">
-                    This ticket is closed. Please create a new ticket if you need further assistance.
+              ) : (
+                <div className="border-t border-white/10 bg-white/[0.03] px-6 py-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    This thread is closed. Open a new one if you need help with a different issue.
                   </p>
                 </div>
               )}
-            </div>
+            </SupportPanel>
           </div>
 
-          {/* Ticket Details - DO style minimal sidebar */}
-          <div className="space-y-4">
-            <div className="rounded-lg bg-card border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Details</h2>
-              </div>
-
-              <div className="p-4 space-y-4">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Category</p>
-                  <p className="text-sm font-medium text-foreground">
-                    {CATEGORY_LABELS[ticket.category]}
-                  </p>
-                </div>
-
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Priority</p>
-                  <PriorityBadge priority={ticket.priority} />
-                </div>
-
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Created</p>
-                  <p className="text-sm text-foreground">{formatDate(ticket.createdAt)}</p>
-                </div>
-
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Last Updated</p>
-                  <p className="text-sm text-foreground">
-                    {formatRelativeDate(ticket.lastMessageAt)}
-                  </p>
-                </div>
-
+          <div className="space-y-6">
+            <SupportPanel className="p-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Overview</p>
+              <div className="mt-5 space-y-4">
+                <DetailRow label="Created" value={formatSupportDateTime(ticket.createdAt)} />
+                <DetailRow label="Last update" value={formatSupportDateTime(ticket.lastMessageAt)} />
+                <DetailRow label="Status" value={<SupportStatusBadge status={ticket.status} />} />
+                <DetailRow label="Queue" value={<SupportCategoryBadge category={ticket.category} />} />
+                <DetailRow label="Priority" value={<SupportPriorityBadge priority={ticket.priority} />} />
                 {server && (
-                  <div className="border-t border-border pt-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Affected Server</p>
-                    <Link href={`/servers/${server.id}`}>
-                      <span className="text-sm font-medium text-primary hover:underline">
-                        {server.name || server.hostname}
-                      </span>
-                    </Link>
-                  </div>
+                  <DetailRow
+                    label="Affected server"
+                    value={
+                      <Link href={`/servers/${server.id}`}>
+                        <span className="inline-flex items-center gap-2 text-primary transition hover:text-primary/80">
+                          <Server className="h-4 w-4" />
+                          {server.name || server.hostname}
+                        </span>
+                      </Link>
+                    }
+                  />
                 )}
               </div>
-            </div>
+            </SupportPanel>
 
-            {ticket.status === "waiting_user" && (
-              <div className="rounded-lg bg-warning/10 border border-warning/20 p-4">
-                <div className="flex items-start gap-3">
-                  <Timer className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-warning">Response Required</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Our support team is waiting for your reply to continue helping you.
-                    </p>
+            <SupportPanel className="p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-muted-foreground">
+                  <Clock3 className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Keep replies effective</p>
+                  <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+                    <p>Say what changed since the last reply.</p>
+                    <p>Include the exact error or screenshot if the behavior is still broken.</p>
+                    <p>If the issue is fixed, closing the ticket helps keep the queue tidy.</p>
                   </div>
                 </div>
               </div>
-            )}
+            </SupportPanel>
           </div>
         </div>
       </div>
 
-      {/* Close Ticket Dialog */}
       <AlertDialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Close Ticket</AlertDialogTitle>
+            <AlertDialogTitle>Close this ticket?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to close this ticket? You can reopen it later by sending a new
-              reply.
+              Closing it removes it from the active queue. You can reopen it later if the same issue comes back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={closeMutation.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => closeMutation.mutate()}
-              disabled={closeMutation.isPending}
-            >
+            <AlertDialogAction onClick={() => closeMutation.mutate()} disabled={closeMutation.isPending}>
               {closeMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Closing...
                 </>
               ) : (
-                "Close Ticket"
+                "Close ticket"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

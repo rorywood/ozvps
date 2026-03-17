@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AppShell } from "@/components/layout/app-shell";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
+import { SupportTicket, TicketCategory, TicketPriority } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,219 +18,179 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { api } from "@/lib/api";
-import { SupportTicket, TicketCategory, TicketPriority, TicketStatus } from "@/lib/types";
-import {
-  MessageSquare,
-  Plus,
-  Clock,
-  ChevronRight,
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  CircleDot,
-  Timer,
-  Search,
-  Server,
-  HelpCircle,
-  Zap,
-  CreditCard,
-  Shield,
-  Gauge,
-  RefreshCw,
-} from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { cn } from "@/lib/utils";
+import {
+  ArrowRight,
+  CircleDashed,
+  Clock3,
+  CreditCard,
+  Filter,
+  HelpCircle,
+  Loader2,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  Server,
+  ShieldAlert,
+  Timer,
+} from "lucide-react";
+import {
+  SupportCategoryBadge,
+  SUPPORT_CATEGORY_LABELS,
+  SupportPanel,
+  SupportPriorityBadge,
+  SUPPORT_PRIORITY_LABELS,
+  SupportStatusBadge,
+  formatSupportRelativeTime,
+} from "@/components/support/support-ui";
 
-const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  sales: "Sales",
-  accounts: "Accounts",
-  support: "Support",
-  abuse: "Abuse",
-};
-
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  low: "Low",
-  normal: "Normal",
-  high: "High",
-  urgent: "Urgent",
-};
-
-const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: typeof CircleDot; userAction?: boolean }> = {
-  new: { label: "New", color: "text-blue-400 bg-blue-500/10", icon: CircleDot },
-  open: { label: "Open", color: "text-cyan-400 bg-cyan-500/10", icon: CircleDot },
-  waiting_user: { label: "Your Reply Needed", color: "text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30", icon: Timer, userAction: true },
-  waiting_admin: { label: "Waiting for Support", color: "text-purple-400 bg-purple-500/10", icon: Clock },
-  resolved: { label: "Resolved", color: "text-green-400 bg-green-500/10", icon: CheckCircle2 },
-  closed: { label: "Closed", color: "text-muted-foreground bg-muted/50", icon: CheckCircle2 },
-};
-
-// FAQ Data
-const FAQ_ITEMS = [
+const QUICK_HELP = [
   {
-    question: "How do I reset my server password?",
-    answer: "Go to your server's detail page, click on the 'Settings' tab, and use the 'Reset Root Password' option. A new password will be generated and emailed to you. Note: This requires a server reboot.",
+    title: "Password reset",
+    body: "Open the server page, head to settings, and trigger a password reset. The new credentials arrive by email.",
     icon: RefreshCw,
   },
   {
-    question: "Why is my server suspended?",
-    answer: "Servers can be suspended for overdue payments, bandwidth overage, or Terms of Service violations. Check your billing page for payment status. If your bandwidth is exceeded, the server will be shaped to 1Mbps until the next billing cycle.",
-    icon: AlertCircle,
-  },
-  {
-    question: "How do I add funds to my wallet?",
-    answer: "Go to the Billing page and click 'Add Funds'. You can add any amount from $5 to $500 using a credit/debit card. Funds are added instantly and used for server renewals.",
+    title: "Billing issues",
+    body: "Use Accounts for wallet, invoice, and renewal questions. Include the affected invoice or transaction if you have it.",
     icon: CreditCard,
   },
   {
-    question: "What happens when I run out of bandwidth?",
-    answer: "When you reach your bandwidth limit, your server's network speed is shaped (throttled) to 1Mbps for both upload and download. The limit resets on your server's billing date each month.",
-    icon: Gauge,
+    title: "Server incidents",
+    body: "Use Support and attach the server if possible. Mention what changed, when it started, and what you've already tried.",
+    icon: Server,
   },
   {
-    question: "How do I upgrade or downgrade my server?",
-    answer: "Currently, plan changes require creating a new server with the desired plan. Contact support if you need help migrating your data to a new server.",
-    icon: Zap,
-  },
-  {
-    question: "Is DDoS protection included?",
-    answer: "Yes! All OzVPS servers include enterprise-grade DDoS protection at no extra cost. Our infrastructure automatically detects and mitigates attacks.",
-    icon: Shield,
+    title: "Abuse or urgent reports",
+    body: "Use Abuse for spam, attacks, or network misuse reports so the right queue sees it first.",
+    icon: ShieldAlert,
   },
 ];
 
+const CATEGORY_HELP: Record<TicketCategory, { label: string; hint: string }> = {
+  support: {
+    label: "Technical Support",
+    hint: "Best for outages, configuration issues, login problems, or anything affecting a running server.",
+  },
+  accounts: {
+    label: "Accounts",
+    hint: "Best for billing, invoices, wallet questions, account access, and verification issues.",
+  },
+  sales: {
+    label: "Sales",
+    hint: "Best for plan advice, upgrades, migrations, or pre-purchase questions.",
+  },
+  abuse: {
+    label: "Abuse",
+    hint: "Best for urgent reports about spam, attacks, or policy violations.",
+  },
+};
 
-// FAQ Section
-function FAQSection() {
+function QueueStat({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
   return (
-    <div className="rounded-xl bg-card border border-border overflow-hidden mb-6">
-      <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <HelpCircle className="h-4 w-4 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Frequently Asked Questions</h2>
-          <p className="text-xs text-muted-foreground">Quick answers to common questions</p>
-        </div>
-      </div>
-      <Accordion type="single" collapsible className="px-4">
-        {FAQ_ITEMS.map((item, index) => (
-          <AccordionItem key={index} value={`item-${index}`} className="border-b border-border/50 last:border-0">
-            <AccordionTrigger className="py-4 hover:no-underline group">
-              <div className="flex items-center gap-3 text-left">
-                <item.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-                <span className="font-medium text-sm">{item.question}</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pb-4 pl-7 text-sm text-muted-foreground">
-              {item.answer}
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
+      <p className="mt-1 text-sm text-white/60">{note}</p>
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: TicketStatus }) {
-  const config = STATUS_CONFIG[status];
-  const Icon = config.icon;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium", config.color)}>
-      <Icon className="h-3 w-3" />
-      {config.label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: TicketPriority }) {
-  const colors: Record<TicketPriority, string> = {
-    low: "text-muted-foreground",
-    normal: "text-foreground",
-    high: "text-amber-400",
-    urgent: "text-red-400",
-  };
-  return (
-    <span className={cn("text-xs font-medium", colors[priority])}>
-      {PRIORITY_LABELS[priority]}
-    </span>
-  );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  if (diffHours < 1) {
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    return diffMins <= 1 ? "Just now" : `${diffMins} minutes ago`;
-  } else if (diffHours < 24) {
-    return `${Math.floor(diffHours)} hours ago`;
-  } else if (diffDays < 7) {
-    return `${Math.floor(diffDays)} days ago`;
-  } else {
-    return date.toLocaleDateString("en-AU", {
-      day: "numeric",
-      month: "short",
-      year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-      timeZone: "Australia/Brisbane",
-    });
-  }
 }
 
 function TicketRow({ ticket }: { ticket: SupportTicket }) {
   const needsAction = ticket.status === "waiting_user";
 
-  // Priority left border colors
-  const priorityBorderColor = {
-    urgent: "border-l-destructive",
-    high: "border-l-warning",
-    normal: "border-l-transparent",
-    low: "border-l-transparent",
-  }[ticket.priority];
-
   return (
     <Link href={`/support/${ticket.id}`}>
-      <div className={cn(
-        "flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer border-b border-border last:border-b-0 border-l-4",
-        priorityBorderColor,
-        needsAction && "bg-warning/5 hover:bg-warning/10"
-      )}>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs text-muted-foreground font-mono">#{ticket.id}</span>
-            <StatusBadge status={ticket.status} />
-            <PriorityBadge priority={ticket.priority} />
+      <div
+        className={cn(
+          "group cursor-pointer rounded-[26px] border border-white/8 bg-white/[0.03] p-5 transition hover:border-primary/30 hover:bg-primary/[0.06] hover:shadow-[0_18px_40px_rgba(0,133,255,0.14)]",
+          needsAction && "border-amber-500/25 bg-amber-500/[0.06]",
+        )}
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Ticket #{ticket.id}
+              </span>
+              <SupportStatusBadge status={ticket.status} />
+              <SupportCategoryBadge category={ticket.category} />
+              <SupportPriorityBadge priority={ticket.priority} />
+            </div>
+
+            <h3 className="text-lg font-semibold text-foreground transition group-hover:text-white">
+              {ticket.title}
+            </h3>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              <span>Updated {formatSupportRelativeTime(ticket.lastMessageAt)}</span>
+              <span>Opened {formatSupportRelativeTime(ticket.createdAt)}</span>
+              {ticket.virtfusionServerId && <span>Linked to a server</span>}
+            </div>
           </div>
-          <h3 className="font-semibold text-foreground truncate">{ticket.title}</h3>
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            <span>{CATEGORY_LABELS[ticket.category]}</span>
-            <span>•</span>
-            <span>Updated {formatDate(ticket.lastMessageAt)}</span>
+
+          <div className="flex items-center gap-3">
+            {needsAction && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300">
+                <Timer className="h-3.5 w-3.5" />
+                Reply needed
+              </div>
+            )}
+
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+              Open thread
+              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </span>
           </div>
         </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       </div>
     </Link>
   );
 }
 
-function NewTicketForm({
-  isOpen,
-  onToggle,
+function FilterChip({
+  active,
+  children,
+  onClick,
 }: {
-  isOpen: boolean;
-  onToggle: () => void;
+  active: boolean;
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition",
+        active
+          ? "border-primary/40 bg-primary/15 text-primary"
+          : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function NewTicketComposer({
+  onClose,
+}: {
+  onClose: () => void;
 }) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -238,40 +202,39 @@ function NewTicketForm({
   const [description, setDescription] = useState("");
   const [selectedServer, setSelectedServer] = useState<string>("none");
 
-  const { data: serversData } = useQuery({
+  const { data: servers } = useQuery({
     queryKey: ["servers"],
     queryFn: () => api.listServers(),
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: {
+    mutationFn: (payload: {
       title: string;
       category: TicketCategory;
       priority: TicketPriority;
       description: string;
       virtfusionServerId?: string;
-    }) => api.createSupportTicket(data),
+    }) => api.createSupportTicket(payload),
     onSuccess: (data) => {
       toast({
-        title: "Ticket Created",
-        description: `Ticket #${data.ticket.id} has been created successfully.`,
+        title: "Ticket created",
+        description: `Ticket #${data.ticket.id} is now in the queue.`,
       });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
-      resetForm();
-      onToggle();
+      onClose();
       setLocation(`/support/${data.ticket.id}`);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Unable to create ticket",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     createMutation.mutate({
       title,
@@ -280,337 +243,381 @@ function NewTicketForm({
       description,
       virtfusionServerId: selectedServer === "none" ? undefined : selectedServer,
     });
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setCategory("support");
-    setPriority("normal");
-    setDescription("");
-    setSelectedServer("none");
-  };
-
-  if (!isOpen) return null;
+  }
 
   return (
-    <div className="rounded-lg bg-card border border-border overflow-hidden mb-6">
-      <div className="px-4 py-3 border-b border-border bg-muted/30">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-          Create New Ticket
-        </h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          Describe your issue and we'll get back to you as soon as possible.
-        </p>
+    <SupportPanel className="overflow-hidden">
+      <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(0,133,255,0.14),rgba(255,255,255,0.03))] px-6 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">New Support Ticket</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Describe the issue once, route it properly, and keep the thread tidy.</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/65">
+              Pick the closest queue, attach the affected server if there is one, and include the exact error or symptom you are seeing.
+            </p>
+          </div>
+
+          <Button variant="outline" onClick={onClose} className="border-white/10 bg-white/5 hover:bg-white/10">
+            Close
+          </Button>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-4 space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="title">Subject</Label>
-          <Input
-            id="title"
-            placeholder="Brief description of your issue"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            minLength={3}
-            maxLength={200}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as TicketCategory)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" sideOffset={4}>
-                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <form onSubmit={handleSubmit} className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-6">
+          <div>
+            <Label className="mb-3 block text-sm font-medium text-foreground">Queue</Label>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(Object.keys(CATEGORY_HELP) as TicketCategory[]).map((key) => {
+                const option = CATEGORY_HELP[key];
+                const selected = category === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCategory(key)}
+                    className={cn(
+                      "rounded-2xl border p-4 text-left transition",
+                      selected
+                        ? "border-primary/40 bg-primary/10 shadow-[0_12px_30px_rgba(0,133,255,0.14)]"
+                        : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]",
+                    )}
+                  >
+                    <p className={cn("text-sm font-semibold", selected ? "text-primary" : "text-foreground")}>{option.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{option.hint}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="priority">Priority</Label>
-            <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" sideOffset={4}>
-                {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="support-title">Subject</Label>
+            <Input
+              id="support-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Short summary of the issue"
+              minLength={3}
+              maxLength={200}
+              required
+              className="h-12 border-white/10 bg-white/[0.03]"
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={(value) => setPriority(value as TicketPriority)}>
+                <SelectTrigger className="h-12 border-white/10 bg-white/[0.03]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {(Object.keys(SUPPORT_PRIORITY_LABELS) as TicketPriority[]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {SUPPORT_PRIORITY_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Affected Server</Label>
+              <Select value={selectedServer} onValueChange={setSelectedServer}>
+                <SelectTrigger className="h-12 border-white/10 bg-white/[0.03]">
+                  <SelectValue placeholder="General enquiry" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectItem value="none">None / General enquiry</SelectItem>
+                  {servers?.map((server) => (
+                    <SelectItem key={server.id} value={server.id}>
+                      {server.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="support-description">Details</Label>
+              <span className="text-xs text-muted-foreground">{description.length}/10000</span>
+            </div>
+            <Textarea
+              id="support-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What happened, when it started, what changed, and what you've already tried."
+              minLength={10}
+              maxLength={10000}
+              rows={9}
+              required
+              className="min-h-[220px] resize-none border-white/10 bg-white/[0.03]"
+            />
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="server">Affected Server (Optional)</Label>
-          <Select value={selectedServer} onValueChange={setSelectedServer}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a server if applicable" />
-            </SelectTrigger>
-            <SelectContent position="popper" sideOffset={4}>
-              <SelectItem value="none">None / General</SelectItem>
-              {serversData?.map((server) => (
-                <SelectItem key={server.id} value={server.id}>
-                  <div className="flex items-center gap-2">
-                    <Server className="h-4 w-4" />
-                    {server.name}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">What helps most</p>
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+              <li>Exact error text or screenshot.</li>
+              <li>What changed before the issue started.</li>
+              <li>Whether it affects one server or everything.</li>
+              <li>Any deadline or customer impact.</li>
+            </ul>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            placeholder="Please provide as much detail as possible..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-            minLength={10}
-            maxLength={10000}
-            rows={6}
-            className="resize-none"
-          />
-        </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Current route</p>
+            <p className="mt-3 text-lg font-semibold text-white">{CATEGORY_HELP[category].label}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{CATEGORY_HELP[category].hint}</p>
+          </div>
 
-        <div className="flex justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              resetForm();
-              onToggle();
-            }}
-            disabled={createMutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Ticket"
-            )}
-          </Button>
+          <div className="flex flex-col gap-3">
+            <Button type="submit" disabled={createMutation.isPending} className="h-12 rounded-full text-sm font-semibold">
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating ticket...
+                </>
+              ) : (
+                <>
+                  Submit ticket
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+              Cancel
+            </Button>
+          </div>
         </div>
       </form>
-    </div>
+    </SupportPanel>
   );
 }
 
 export default function SupportPage() {
   useDocumentTitle("Support");
+
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
   const [categoryFilter, setCategoryFilter] = useState<TicketCategory | "all">("all");
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [search, setSearch] = useState("");
-  const [showNewTicketForm, setShowNewTicketForm] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
+
+  const { data: counts } = useQuery({
+    queryKey: ["support", "counts"],
+    queryFn: () => api.getSupportTicketCounts(),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["support", "tickets", filter],
     queryFn: () => api.getSupportTickets({ status: filter }),
   });
 
-  // Count tickets needing user action
-  const actionNeededCount = data?.tickets.filter(t => t.status === "waiting_user").length || 0;
-
-  const filteredTickets = data?.tickets.filter((ticket) => {
-    // Search filter
-    if (search) {
-      const searchLower = search.toLowerCase();
-      if (!ticket.title.toLowerCase().includes(searchLower) &&
-          !ticket.id.toString().includes(searchLower)) {
-        return false;
-      }
-    }
-    // Category filter
-    if (categoryFilter !== "all" && ticket.category !== categoryFilter) {
-      return false;
-    }
-    // Priority filter
-    if (priorityFilter !== "all" && ticket.priority !== priorityFilter) {
-      return false;
-    }
-    return true;
+  const tickets = data?.tickets ?? [];
+  const filteredTickets = tickets.filter((ticket) => {
+    const matchesSearch = !search || ticket.title.toLowerCase().includes(search.toLowerCase()) || String(ticket.id).includes(search);
+    const matchesCategory = categoryFilter === "all" || ticket.category === categoryFilter;
+    const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
+    return matchesSearch && matchesCategory && matchesPriority;
   });
+
+  const waitingUserCount = counts?.waitingUser ?? tickets.filter((ticket) => ticket.status === "waiting_user").length;
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="h-6 w-6 text-primary" />
-            </div>
+      <div className="space-y-8">
+        <SupportPanel className="overflow-hidden border-primary/15 bg-[linear-gradient(135deg,rgba(0,133,255,0.18),rgba(255,255,255,0.04)_42%,rgba(255,255,255,0.03))]">
+          <div className="grid gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-8 lg:py-10">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Support Center</h1>
-              <p className="text-muted-foreground">
-                Get help with your account or servers
-              </p>
-            </div>
-          </div>
-          <Button onClick={() => setShowNewTicketForm(!showNewTicketForm)} size="lg">
-            <Plus className="mr-2 h-4 w-4" />
-            {showNewTicketForm ? "Cancel" : "New Ticket"}
-          </Button>
-        </div>
-
-        {/* FAQ Section - hidden when creating new ticket */}
-        {!showNewTicketForm && <FAQSection />}
-
-        {/* Inline collapsible form */}
-        <NewTicketForm isOpen={showNewTicketForm} onToggle={() => setShowNewTicketForm(!showNewTicketForm)} />
-
-        {/* Action needed alert */}
-        {actionNeededCount > 0 && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-              <Timer className="h-5 w-5 text-amber-400" />
-            </div>
-            <div className="flex-1">
-              <p className="font-medium text-amber-400">
-                {actionNeededCount} ticket{actionNeededCount > 1 ? "s" : ""} need{actionNeededCount === 1 ? "s" : ""} your reply
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Our team is waiting for additional information from you
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="rounded-lg bg-card border border-border overflow-hidden">
-          {/* DO-style underlined tabs */}
-          <div className="px-4 pt-4">
-            <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "open" | "closed")}>
-              <TabsList className="border-b border-border bg-transparent p-0 h-auto gap-6 justify-start rounded-none w-full">
-                <TabsTrigger
-                  value="all"
-                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
-                >
-                  All Tickets
-                </TabsTrigger>
-                <TabsTrigger
-                  value="open"
-                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
-                >
-                  Open
-                </TabsTrigger>
-                <TabsTrigger
-                  value="closed"
-                  className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none pb-3 px-1 data-[state=active]:text-foreground"
-                >
-                  Closed
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Horizontal filters bar - DO style */}
-          <div className="px-4 py-3 border-b border-border bg-muted/30">
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tickets..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 h-9"
-                />
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Support Desk
               </div>
-
-              <div className="flex items-center gap-2">
-                <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as TicketCategory | "all")}>
-                  <SelectTrigger className="w-[140px] h-9">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4}>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as TicketPriority | "all")}>
-                  <SelectTrigger className="w-[130px] h-9">
-                    <SelectValue placeholder="Priority" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4}>
-                    <SelectItem value="all">All Priorities</SelectItem>
-                    {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {(categoryFilter !== "all" || priorityFilter !== "all") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setCategoryFilter("all");
-                      setPriorityFilter("all");
-                    }}
-                    className="text-muted-foreground hover:text-foreground h-9"
-                  >
-                    Clear filters
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center p-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : !filteredTickets?.length ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                <MessageSquare className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="font-medium text-foreground mb-1">
-                {search ? "No tickets found" : "No tickets yet"}
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                {search
-                  ? "Try adjusting your search or filter"
-                  : "Create your first support ticket to get help from our team."}
+              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+                Keep support organised, fast to scan, and easy to reply to.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-white/70">
+                Your technical issues, billing questions, and sales requests all live here. Open a ticket once, keep the conversation in one place, and pick up replies without digging around.
               </p>
-              {!search && (
-                <Button onClick={() => setShowNewTicketForm(true)} className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Ticket
-                </Button>
+
+              {waitingUserCount > 0 && (
+                <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-300">
+                  <Timer className="h-4 w-4" />
+                  {waitingUserCount} ticket{waitingUserCount === 1 ? "" : "s"} need your reply
+                </div>
               )}
             </div>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {filteredTickets.map((ticket) => (
-                <TicketRow key={ticket.id} ticket={ticket} />
-              ))}
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <QueueStat label="Open" value={String(counts?.open ?? 0)} note="Threads still active" />
+              <QueueStat label="Waiting on you" value={String(counts?.waitingUser ?? 0)} note="Support needs a reply" />
+              <QueueStat label="All tickets" value={String(counts?.total ?? 0)} note="Complete support history" />
             </div>
-          )}
+          </div>
+        </SupportPanel>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_360px]">
+          <div className="space-y-6">
+            {!showComposer && (
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <CircleDashed className="h-4 w-4" />
+                  Filter the queue, search quickly, or open a new ticket.
+                </div>
+                <Button onClick={() => setShowComposer(true)} className="rounded-full px-5">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New ticket
+                </Button>
+              </div>
+            )}
+
+            {showComposer && <NewTicketComposer onClose={() => setShowComposer(false)} />}
+
+            <SupportPanel className="overflow-hidden">
+              <div className="border-b border-white/10 px-6 py-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Inbox</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-white">Your support threads</h2>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>All</FilterChip>
+                    <FilterChip active={filter === "open"} onClick={() => setFilter("open")}>Open</FilterChip>
+                    <FilterChip active={filter === "closed"} onClick={() => setFilter("closed")}>Closed</FilterChip>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by subject or ticket number"
+                      className="h-12 border-white/10 bg-white/[0.03] pl-11"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                      <FilterChip active={categoryFilter === "all"} onClick={() => setCategoryFilter("all")}>All queues</FilterChip>
+                      {(Object.keys(SUPPORT_CATEGORY_LABELS) as TicketCategory[]).map((key) => (
+                        <FilterChip key={key} active={categoryFilter === key} onClick={() => setCategoryFilter(key)}>
+                          {SUPPORT_CATEGORY_LABELS[key]}
+                        </FilterChip>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <FilterChip active={priorityFilter === "all"} onClick={() => setPriorityFilter("all")}>Any priority</FilterChip>
+                      {(Object.keys(SUPPORT_PRIORITY_LABELS) as TicketPriority[]).map((key) => (
+                        <FilterChip key={key} active={priorityFilter === key} onClick={() => setPriorityFilter(key)}>
+                          {SUPPORT_PRIORITY_LABELS[key]}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-6">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredTickets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-16 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-muted-foreground">
+                      <MessageSquare className="h-6 w-6" />
+                    </div>
+                    <h3 className="mt-5 text-xl font-semibold text-white">
+                      {search || categoryFilter !== "all" || priorityFilter !== "all" ? "No matching tickets" : "No tickets yet"}
+                    </h3>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                      {search || categoryFilter !== "all" || priorityFilter !== "all"
+                        ? "Try a broader search or clear a filter to bring more of the queue back into view."
+                        : "Open your first ticket and keep technical, billing, and sales conversations in one place."}
+                    </p>
+                    {!showComposer && (
+                      <Button onClick={() => setShowComposer(true)} className="mt-6 rounded-full px-5">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create a ticket
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredTickets.map((ticket) => (
+                      <TicketRow key={ticket.id} ticket={ticket} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SupportPanel>
+          </div>
+
+          <div className="space-y-6">
+            <SupportPanel className="overflow-hidden">
+              <div className="border-b border-white/10 px-6 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Quick answers</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">The questions that usually don’t need a full thread.</h2>
+              </div>
+              <Accordion type="single" collapsible className="px-6">
+                {QUICK_HELP.map((item) => (
+                  <AccordionItem key={item.title} value={item.title} className="border-white/10">
+                    <AccordionTrigger className="py-4 text-left hover:no-underline">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-primary">
+                          <item.icon className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-medium text-foreground">{item.title}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4 text-sm leading-6 text-muted-foreground">
+                      {item.body}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </SupportPanel>
+
+            <SupportPanel className="p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                  <HelpCircle className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Keep the thread moving</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    If a ticket is marked <span className="text-amber-300">Action Needed</span>, reply in the same thread instead of opening another one. That keeps the full timeline with the agent already handling it.
+                  </p>
+                </div>
+              </div>
+            </SupportPanel>
+
+            <SupportPanel className="p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-muted-foreground">
+                  <Clock3 className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Response guidance</p>
+                  <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                    <p>Sales and planning questions: usually same-day.</p>
+                    <p>Technical issues: fastest when the affected server is attached.</p>
+                    <p>Abuse reports: include source IP, timestamps, and logs if you have them.</p>
+                  </div>
+                </div>
+              </div>
+            </SupportPanel>
+          </div>
         </div>
       </div>
     </AppShell>
