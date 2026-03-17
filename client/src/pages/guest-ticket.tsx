@@ -5,17 +5,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Bookmark,
-  CheckCircle2,
-  Hash,
-  Loader2,
-  Mail,
-  MessageSquare,
-  Send,
-  Timer,
-  XCircle,
-} from "lucide-react";
+import { Bookmark, Hash, Loader2, Mail, MessageSquare, Send, Timer, XCircle } from "lucide-react";
 import {
   SupportCategoryBadge,
   SupportPanel,
@@ -38,34 +28,22 @@ interface GuestTicketMessage {
   createdAt: string;
 }
 
-function ErrorTicketState({
-  title,
-  message,
-}: {
-  title: string;
-  message: string;
-}) {
+function ErrorTicketState({ title, message }: { title: string; message: string }) {
   return (
     <SupportPublicShell
       eyebrow="Secure Ticket"
       title={title}
       description={message}
-      meta={[
-        { label: "Access", value: "Token protected" },
-        { label: "Replies", value: "Email + web" },
-        { label: "Support", value: "OzVPS Desk" },
-      ]}
+      meta={[{ label: "Access", value: "Token protected" }]}
     >
       <div className="mx-auto max-w-xl">
-        <SupportPanel className="px-8 py-12 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-red-500/20 bg-red-500/10 text-red-300">
-            <XCircle className="h-8 w-8" />
-          </div>
-          <h2 className="mt-6 text-3xl font-semibold text-white">{title}</h2>
-          <p className="mt-3 text-base leading-7 text-white/70">{message}</p>
-          <div className="mt-8 flex justify-center">
+        <SupportPanel className="px-6 py-8 text-center">
+          <XCircle className="mx-auto h-10 w-10 text-destructive" />
+          <h2 className="mt-4 text-xl font-semibold text-white">{title}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <div className="mt-6">
             <a href="/contact">
-              <Button className="rounded-full px-6">Open a new enquiry</Button>
+              <Button className="rounded-full px-5">Open a new enquiry</Button>
             </a>
           </div>
         </SupportPanel>
@@ -74,17 +52,11 @@ function ErrorTicketState({
   );
 }
 
-function TicketMetaRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="border-t border-white/10 pt-4 first:border-t-0 first:pt-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <div className="mt-2 text-sm text-foreground">{value}</div>
+    <div className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <div className="mt-1.5 text-sm text-foreground">{value}</div>
     </div>
   );
 }
@@ -120,16 +92,12 @@ export default function GuestTicketPage() {
     queryFn: async () => {
       const response = await fetch("/api/support/guest", {
         cache: "no-store",
-        headers: {
-          "x-guest-ticket-token": guestToken,
-        },
+        headers: { "x-guest-ticket-token": guestToken },
       });
-
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to fetch ticket");
       }
-
       return response.json();
     },
     enabled: !!guestToken && guestToken.length >= 32,
@@ -155,12 +123,10 @@ export default function GuestTicketPage() {
         },
         body: JSON.stringify({ message }),
       });
-
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to send reply");
       }
-
       return response.json();
     },
     onSuccess: () => {
@@ -169,11 +135,7 @@ export default function GuestTicketPage() {
       toast({ title: "Reply sent" });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Unable to send reply",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Unable to send reply", description: error.message, variant: "destructive" });
     },
   });
 
@@ -182,16 +144,12 @@ export default function GuestTicketPage() {
       const response = await fetch("/api/support/guest/close", {
         method: "POST",
         cache: "no-store",
-        headers: {
-          "x-guest-ticket-token": guestToken,
-        },
+        headers: { "x-guest-ticket-token": guestToken },
       });
-
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to close ticket");
       }
-
       return response.json();
     },
     onSuccess: () => {
@@ -199,11 +157,7 @@ export default function GuestTicketPage() {
       toast({ title: "Ticket closed" });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Unable to close ticket",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Unable to close ticket", description: error.message, variant: "destructive" });
     },
   });
 
@@ -212,16 +166,12 @@ export default function GuestTicketPage() {
       const response = await fetch("/api/support/guest/reopen", {
         method: "POST",
         cache: "no-store",
-        headers: {
-          "x-guest-ticket-token": guestToken,
-        },
+        headers: { "x-guest-ticket-token": guestToken },
       });
-
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to reopen ticket");
       }
-
       return response.json();
     },
     onSuccess: () => {
@@ -229,11 +179,7 @@ export default function GuestTicketPage() {
       toast({ title: "Ticket reopened" });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Unable to reopen ticket",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Unable to reopen ticket", description: error.message, variant: "destructive" });
     },
   });
 
@@ -254,15 +200,11 @@ export default function GuestTicketPage() {
     return (
       <SupportPublicShell
         eyebrow="Secure Ticket"
-        title="Loading your ticket"
-        description="We’re fetching the latest messages and status now."
-        meta={[
-          { label: "Access", value: "Token protected" },
-          { label: "Replies", value: "Email + web" },
-          { label: "Status", value: "Checking" },
-        ]}
+        title="Loading ticket"
+        description="Fetching the latest messages."
+        meta={[{ label: "Access", value: "Token protected" }]}
       >
-        <div className="flex min-h-[240px] items-center justify-center">
+        <div className="flex min-h-[220px] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </SupportPublicShell>
@@ -270,7 +212,7 @@ export default function GuestTicketPage() {
   }
 
   if (error || !data) {
-    return <ErrorTicketState title="Ticket not found" message="This ticket doesn’t exist anymore or the secure access token is invalid." />;
+    return <ErrorTicketState title="Ticket not found" message="This secure link is invalid or the ticket no longer exists." />;
   }
 
   const { ticket, messages } = data as {
@@ -292,48 +234,29 @@ export default function GuestTicketPage() {
 
   return (
     <SupportPublicShell
-      eyebrow="Secure Ticket Access"
+      eyebrow="Secure Ticket"
       title={ticket.title}
-      description="This private page keeps the full conversation in one place. Replies here and replies by email both feed the same ticket thread."
+      description="Reply here or by email. Both update the same thread."
       meta={[
         { label: "Ticket", value: `#${ticket.ticketNumber ?? ticket.id}` },
         { label: "Opened", value: formatSupportRelativeTime(ticket.createdAt) },
-        { label: "Messages", value: String(messages.length) },
       ]}
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_320px]">
-        <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="space-y-4">
           {ticket.status === "waiting_user" && (
-            <SupportPanel className="border-amber-500/20 bg-amber-500/[0.07] px-6 py-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-300">
-                  <Timer className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-amber-300">Reply needed</p>
-                  <p className="mt-1 text-sm leading-6 text-amber-100/75">
-                    OzVPS support is waiting for more detail in this thread.
-                  </p>
-                </div>
+            <SupportPanel className="border-amber-500/20 bg-amber-500/[0.07] px-4 py-3">
+              <div className="flex items-center gap-2 text-sm text-amber-300">
+                <Timer className="h-4 w-4" />
+                OzVPS support is waiting for your reply.
               </div>
             </SupportPanel>
           )}
 
           {isResolved && (
-            <SupportPanel className="border-emerald-500/20 bg-emerald-500/[0.07] px-6 py-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
-                    <CheckCircle2 className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-300">This ticket is resolved</p>
-                    <p className="mt-1 text-sm leading-6 text-emerald-100/75">
-                      If you need more help on the same issue, reopen the thread and reply below.
-                    </p>
-                  </div>
-                </div>
-
+            <SupportPanel className="px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-emerald-300">This ticket is resolved.</p>
                 <Button onClick={() => reopenTicketMutation.mutate()} disabled={reopenTicketMutation.isPending} className="rounded-full">
                   {reopenTicketMutation.isPending ? (
                     <>
@@ -341,7 +264,7 @@ export default function GuestTicketPage() {
                       Reopening...
                     </>
                   ) : (
-                    "Reopen ticket"
+                    "Reopen"
                   )}
                 </Button>
               </div>
@@ -349,17 +272,14 @@ export default function GuestTicketPage() {
           )}
 
           <SupportPanel className="overflow-hidden">
-            <div className="border-b border-white/10 px-6 py-5">
+            <div className="border-b border-white/10 px-4 py-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />
-                <h2 className="text-xl font-semibold text-white">Conversation</h2>
+                <h2 className="text-sm font-semibold text-white">Conversation</h2>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Reply here or by email. Both paths update the same thread.
-              </p>
             </div>
 
-            <div className="max-h-[640px] space-y-6 overflow-y-auto px-6 py-6">
+            <div className="max-h-[620px] space-y-5 overflow-y-auto p-4">
               {messages.map((message) => (
                 <SupportThreadMessage key={message.id} message={message} />
               ))}
@@ -367,49 +287,40 @@ export default function GuestTicketPage() {
             </div>
 
             {canReply ? (
-              <div className="border-t border-white/10 bg-white/[0.03] px-6 py-5">
+              <div className="border-t border-white/10 bg-white/[0.03] p-4">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (!reply.trim()) return;
                     replyMutation.mutate(reply);
                   }}
-                  className="space-y-4"
+                  className="space-y-3"
                 >
                   <Textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
-                    placeholder="Add your reply here."
+                    placeholder="Reply to this ticket"
                     rows={5}
                     disabled={replyMutation.isPending}
-                    className="min-h-[150px] resize-none border-white/10 bg-black/10"
+                    className="min-h-[140px] resize-none border-white/10 bg-black/10"
                   />
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Mail className="h-4 w-4" />
-                      Replying here also keeps the email thread in sync.
+                      Email replies stay in sync too.
                     </p>
-
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => closeTicketMutation.mutate()}
                         disabled={closeTicketMutation.isPending}
-                        className="rounded-full border-white/10 bg-white/5 hover:bg-white/10"
+                        className="rounded-full border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
                       >
-                        {closeTicketMutation.isPending ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Closing...
-                          </>
-                        ) : (
-                          "Close ticket"
-                        )}
+                        {closeTicketMutation.isPending ? "Closing..." : "Close"}
                       </Button>
-
-                      <Button type="submit" disabled={!reply.trim() || replyMutation.isPending} className="rounded-full px-5">
+                      <Button type="submit" disabled={!reply.trim() || replyMutation.isPending} className="rounded-full">
                         {replyMutation.isPending ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -418,7 +329,7 @@ export default function GuestTicketPage() {
                         ) : (
                           <>
                             <Send className="mr-2 h-4 w-4" />
-                            Send reply
+                            Send
                           </>
                         )}
                       </Button>
@@ -427,38 +338,29 @@ export default function GuestTicketPage() {
                 </form>
               </div>
             ) : (
-              <div className="border-t border-white/10 bg-white/[0.03] px-6 py-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  This ticket is closed. Open a new enquiry if you need help with something else.
-                </p>
+              <div className="border-t border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-muted-foreground">
+                This ticket is closed.
               </div>
             )}
           </SupportPanel>
         </div>
 
-        <div className="space-y-6">
-          <SupportPanel className="p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Ticket details</p>
-            <div className="mt-5 space-y-4">
-              <TicketMetaRow label="Ticket number" value={<span className="inline-flex items-center gap-2"><Hash className="h-4 w-4 text-muted-foreground" />#{ticket.ticketNumber ?? ticket.id}</span>} />
-              <TicketMetaRow label="Status" value={<SupportStatusBadge status={ticket.status} />} />
-              <TicketMetaRow label="Queue" value={<SupportCategoryBadge category={ticket.category} />} />
-              <TicketMetaRow label="Opened" value={formatSupportDateTime(ticket.createdAt)} />
-              <TicketMetaRow label="Last update" value={formatSupportDateTime(ticket.lastMessageAt)} />
+        <div className="space-y-4">
+          <SupportPanel className="p-4">
+            <h2 className="text-sm font-semibold text-white">Details</h2>
+            <div className="mt-4 space-y-3">
+              <MetaRow label="Ticket number" value={<span className="inline-flex items-center gap-2"><Hash className="h-4 w-4 text-muted-foreground" />#{ticket.ticketNumber ?? ticket.id}</span>} />
+              <MetaRow label="Status" value={<SupportStatusBadge status={ticket.status} />} />
+              <MetaRow label="Queue" value={<SupportCategoryBadge category={ticket.category} />} />
+              <MetaRow label="Opened" value={formatSupportDateTime(ticket.createdAt)} />
+              <MetaRow label="Last update" value={formatSupportDateTime(ticket.lastMessageAt)} />
             </div>
           </SupportPanel>
 
-          <SupportPanel className="p-6">
+          <SupportPanel className="p-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-muted-foreground">
-                <Bookmark className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Tip</p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  Bookmark this page if you want a quick way back in. You’ll still receive replies by email as well.
-                </p>
-              </div>
+              <Bookmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Bookmark this page if you want a quick way back to the thread.</p>
             </div>
           </SupportPanel>
         </div>
