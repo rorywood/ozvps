@@ -6,6 +6,8 @@ import { virtfusionClient } from "../../server/virtfusion";
 import { auth0Client } from "../../server/auth0";
 import { auditSuccess, auditFailure } from "../utils/audit-log";
 import { sendServerCredentialsEmail } from "../../server/email";
+import { LOCATION_CONFIG, getPublicLocations } from "../../shared/locations";
+import { resolveVirtFusionUserIdentity } from "../services/virtfusion-user-sync";
 
 // SECURITY: Validate and sanitize reason strings
 const MAX_REASON_LENGTH = 500;
@@ -174,20 +176,12 @@ export function registerServersRoutes(router: Router) {
     }
   });
 
-  // Location to hypervisor GROUP mapping (must match main server config)
-  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },
-  };
-
   // Get available locations
   router.get("/locations", async (req: Request, res: Response) => {
-    res.json({
-      locations: Object.entries(LOCATION_CONFIG).map(([code, config]) => ({
-        code,
-        ...config,
-      })),
-    });
+    res.json({ locations: getPublicLocations().map((location) => ({
+      ...location,
+      hypervisorGroupId: LOCATION_CONFIG[location.code].hypervisorGroupId,
+    })) });
   });
 
   // Sync a user to VirtFusion (create VirtFusion account if needed)
@@ -220,9 +214,7 @@ export function registerServersRoutes(router: Router) {
         });
       }
 
-      // Create VirtFusion user
-      const userEmail = auth0UserId;
-      const userName = userEmail.split('@')[0];
+      const { email: userEmail, name: userName } = await resolveVirtFusionUserIdentity(auth0UserId, auth0Client);
 
       const vfUser = await virtfusionClient.findOrCreateUser(userEmail, userName);
       if (!vfUser) {

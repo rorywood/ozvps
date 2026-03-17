@@ -163,7 +163,7 @@ sudo bash install.sh
 
 ### Manual Production Setup
 
-See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for detailed manual deployment instructions.
+See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the deployment map and links to the install and production runbooks.
 
 ---
 
@@ -171,9 +171,9 @@ See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for detailed manual deployment in
 
 - **[Production Roadmap](./PRODUCTION_ROADMAP.md)** - 3-week plan to full production readiness
 - **[Security Audit Report](./SECURITY_AUDIT_REPORT.md)** - Comprehensive security assessment
-- **[API Documentation](./docs/API.md)** - REST API reference *(coming soon)*
-- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Production deployment instructions *(coming soon)*
-- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions *(coming soon)*
+- **[API Documentation](./docs/API.md)** - Core API surfaces and auth expectations
+- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Deployment map and production runbooks
+- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and recovery steps
 
 ---
 
@@ -187,10 +187,10 @@ npm test
 npm run test:coverage
 
 # E2E tests
-npm run test:e2e
+# Not configured yet in this repository
 ```
 
-**Note**: Testing framework setup is in progress as part of the production readiness roadmap.
+**Note**: Unit tests and coverage are available today. E2E automation is still pending.
 
 ---
 

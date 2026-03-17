@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import { createIpRateLimit } from "./rate-limit";
 import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
 import { dbStorage, initializeStorage } from "./storage";
@@ -171,7 +171,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Rate limiting for auth endpoints (stricter)
-const authLimiter = rateLimit({
+const authLimiter = createIpRateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // 20 attempts per window (allows retries for typos)
   message: { error: 'Too many authentication attempts. Please try again later.' },
@@ -182,7 +182,7 @@ const authLimiter = rateLimit({
 
 // General API rate limiting
 // Note: Dashboard polls every 500ms-2s, so needs generous limit
-const apiLimiter = rateLimit({
+const apiLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 600, // 600 requests per minute (allows aggressive polling + multiple tabs + user actions)
   message: { error: 'Too many requests. Please slow down.' },
@@ -192,7 +192,7 @@ const apiLimiter = rateLimit({
 });
 
 // SECURITY: Stricter rate limiting for wallet/payment operations
-const walletLimiter = rateLimit({
+const walletLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10, // 10 payment attempts per minute per IP
   message: { error: 'Too many payment attempts. Please wait a moment before trying again.' },
@@ -202,7 +202,7 @@ const walletLimiter = rateLimit({
 });
 
 // SECURITY: Rate limiting for public/unauthenticated endpoints to prevent enumeration
-const publicEndpointLimiter = rateLimit({
+const publicEndpointLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute per IP
   message: { error: 'Too many requests. Please slow down.' },

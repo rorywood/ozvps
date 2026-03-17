@@ -26,6 +26,8 @@ import { redisClient } from "./redis";
 import sharp from "sharp";
 import path from "path";
 import fs from "fs";
+import { LOCATION_CONFIG } from "@shared/locations";
+import { registerPublicCatalogRoutes } from "./public-catalog-routes";
 
 // VNC security: one-time credential tokens (exchanged by noVNC on load, then deleted)
 const vncSessionTokens = new Map<string, {
@@ -977,6 +979,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerPublicCatalogRoutes(app);
 
   // VNC WebSocket proxy: intercept upgrade requests for /api/vnc-ws/:token
   // This must be registered early so it runs before any other upgrade handlers.
@@ -5888,27 +5891,6 @@ export async function registerRoutes(
 
   // ================== Wallet & Deploy Routes ==================
 
-  // Location to hypervisor GROUP mapping
-  // NOTE: Update these IDs to match your VirtFusion hypervisor GROUPS (not individual hypervisors)
-  // hypervisorGroupId = the group ID from /compute/hypervisors response (group.id field)
-  const LOCATION_CONFIG: Record<string, { name: string; country: string; countryCode: string; hypervisorGroupId: number; enabled: boolean }> = {
-    'BNE': { name: 'Brisbane', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: true },  // "Brisbane Node" group
-    'SYD': { name: 'Sydney', country: 'Australia', countryCode: 'AU', hypervisorGroupId: 2, enabled: false },  // No Sydney node yet
-  };
-
-  // Get available locations
-  app.get('/api/locations', async (req, res) => {
-    res.json({
-      locations: Object.entries(LOCATION_CONFIG).map(([code, config]) => ({
-        code,
-        name: config.name,
-        country: config.country,
-        countryCode: config.countryCode,
-        enabled: config.enabled,
-      })),
-    });
-  });
-
   // Get current user info with balance (authenticated)
   app.get('/api/me', authMiddleware, async (req, res) => {
     try {
@@ -5952,57 +5934,6 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error fetching user info: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to fetch user info' });
-    }
-  });
-
-  // Get available plans
-  app.get('/api/plans', async (req, res) => {
-    try {
-      const allPlans = await dbStorage.getAllPlans();
-
-      // Filter out admin-only plans from public endpoint
-      // Set ADMIN_ONLY_PLAN_IDS=7,8,9 in .env to hide specific VirtFusion package IDs from deploy page
-      const adminOnlyPlanIds = (process.env.ADMIN_ONLY_PLAN_IDS || '')
-        .split(',')
-        .map(id => parseInt(id.trim(), 10))
-        .filter(id => !isNaN(id));
-
-      const publicPlans = adminOnlyPlanIds.length > 0
-        ? allPlans.filter(plan => !plan.virtfusionPackageId || !adminOnlyPlanIds.includes(plan.virtfusionPackageId))
-        : allPlans;
-
-      res.json({ plans: publicPlans });
-    } catch (error: any) {
-      log(`Error fetching plans: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to fetch plans' });
-    }
-  });
-
-  // Get Stripe publishable key
-  app.get('/api/stripe/publishable-key', async (req, res) => {
-    try {
-      const publishableKey = await getStripePublishableKey();
-      res.json({ publishableKey });
-    } catch (error: any) {
-      log(`Error getting Stripe publishable key: ${error.message}`, 'api');
-      res.status(500).json({ error: 'Failed to get Stripe configuration' });
-    }
-  });
-
-  // Get Stripe configuration status
-  app.get('/api/billing/stripe/status', async (req, res) => {
-    try {
-      const publishableKey = await getStripePublishableKey();
-      res.json({
-        configured: !!publishableKey,
-        publishableKey: publishableKey, // Return full key for frontend to use
-      });
-    } catch (error: any) {
-      log(`Stripe not configured: ${error.message}`, 'api');
-      res.json({
-        configured: false,
-        error: 'Stripe connector not set up',
-      });
     }
   });
 

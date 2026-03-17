@@ -2,12 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { connectRedis, disconnectRedis } from "../server/redis";
 import { runAutoMigrations } from "../server/db";
 import { log } from "../server/logger";
+import { createIpRateLimit } from "../server/rate-limit";
 import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -27,6 +27,10 @@ import { setupLogWebSocket } from "./websocket/logs";
 
 const app = express();
 const httpServer = createServer(app);
+
+if (process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
 
 // WebSocket server for log streaming
 const wss = new WebSocketServer({ server: httpServer, path: "/ws/logs" });
@@ -62,7 +66,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Rate limiting - stricter for admin panel
-const authLimiter = rateLimit({
+const authLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5, // 5 attempts per minute
   message: { error: 'Too many authentication attempts. Please try again later.' },
@@ -72,7 +76,7 @@ const authLimiter = rateLimit({
 });
 
 // Very strict rate limit for 2FA - prevents brute force
-const twoFactorLimiter = rateLimit({
+const twoFactorLimiter = createIpRateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 5, // Only 5 attempts per 5 minutes
   message: { error: 'Too many 2FA attempts. Please wait 5 minutes.' },
@@ -82,7 +86,7 @@ const twoFactorLimiter = rateLimit({
 });
 
 // Strict limit for dangerous operations
-const dangerousOpLimiter = rateLimit({
+const dangerousOpLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10, // 10 dangerous operations per minute
   message: { error: 'Too many operations. Please slow down.' },
@@ -91,7 +95,7 @@ const dangerousOpLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-const apiLimiter = rateLimit({
+const apiLimiter = createIpRateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute
   message: { error: 'Too many requests. Please slow down.' },
