@@ -4,9 +4,16 @@ import { log } from './log';
 import { db } from "./db";
 import { serverBilling, serverCancellations } from "../shared/schema";
 import { eq, and, lte } from "drizzle-orm";
+import {
+  markProcessorFailed,
+  markProcessorStarted,
+  markProcessorSucceeded,
+  scheduleProcessorRun,
+} from "./processor-health";
 
 const PROCESSING_INTERVAL_MS = 30 * 1000; // Check every 30 seconds for faster cleanup
 const AUTO_APPROVE_AFTER_MS = 24 * 60 * 60 * 1000; // Auto-approve pending_approval after 24 hours
+const CANCELLATION_PROCESSOR = "cancellation-processor";
 
 let isRunning = false;
 
@@ -250,6 +257,9 @@ export function startCancellationProcessor(): void {
   
   const runProcessor = async () => {
     if (!isRunning) return;
+
+    const nextRunAt = new Date(Date.now() + PROCESSING_INTERVAL_MS);
+    const startedAtMs = await markProcessorStarted(CANCELLATION_PROCESSOR, { nextRunAt });
     
     try {
       const pendingCount = (await dbStorage.getPendingCancellations()).length;
@@ -262,16 +272,28 @@ export function startCancellationProcessor(): void {
       if (processed > 0 || errors > 0) {
         log(`Cancellation processor: ${processed} processed, ${errors} errors`, 'cancellation');
       }
+      await markProcessorSucceeded(CANCELLATION_PROCESSOR, startedAtMs, {
+        nextRunAt,
+        lastResult: {
+          pendingCount,
+          processingCount,
+          processed,
+          errors,
+        },
+      });
     } catch (error: any) {
       log(`Cancellation processor error: ${error.message}`, 'cancellation');
+      await markProcessorFailed(CANCELLATION_PROCESSOR, error, startedAtMs, { nextRunAt });
     }
     
     if (isRunning) {
+      void scheduleProcessorRun(CANCELLATION_PROCESSOR, { nextRunAt });
       setTimeout(runProcessor, PROCESSING_INTERVAL_MS);
     }
   };
   
   // Run immediately on startup, then every minute
+  void scheduleProcessorRun(CANCELLATION_PROCESSOR, { nextRunAt: new Date() });
   runProcessor();
 }
 

@@ -194,6 +194,23 @@ export default function Account() {
     }
   });
 
+  const sendAuthenticatedEmail2FACodeMutation = useMutation({
+    mutationFn: () => api.sendAuthenticatedEmail2FACode(),
+    onSuccess: (data) => {
+      toast({
+        title: "Code Sent",
+        description: data.message || "A verification code has been sent to your email.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Send Failed",
+        description: error.message || "Failed to send verification code.",
+        variant: "destructive",
+      });
+    }
+  });
+
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedCode(text);
@@ -1014,6 +1031,9 @@ export default function Account() {
                       onClick={() => {
                         setTwoFAStep('verify');
                         setTwoFAToken("");
+                        if (twoFAStatus.method === 'email') {
+                          sendAuthenticatedEmail2FACodeMutation.mutate();
+                        }
                       }}
                       className="flex-1 border-border hover:bg-muted/50"
                     >
@@ -1022,7 +1042,12 @@ export default function Account() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setShowDisableConfirm(true)}
+                      onClick={() => {
+                        setShowDisableConfirm(true);
+                        if (twoFAStatus.method === 'email') {
+                          sendAuthenticatedEmail2FACodeMutation.mutate();
+                        }
+                      }}
                       className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
                     >
                       <ShieldOff className="h-4 w-4 mr-2" />
@@ -1037,7 +1062,7 @@ export default function Account() {
                         <h4 className="font-medium text-red-400">Disable Two-Factor Authentication?</h4>
                         <p className="text-sm text-muted-foreground mt-1">
                           This will remove the extra security layer from your account.
-                          Enter both your password and current 2FA code to confirm.
+                          Enter both your password and current {twoFAStatus.method === 'email' ? 'email verification code' : '2FA code'} to confirm.
                         </p>
                       </div>
                     </div>
@@ -1058,6 +1083,16 @@ export default function Account() {
                       maxLength={6}
                       data-testid="input-disable-2fa-token"
                     />
+                    {twoFAStatus.method === 'email' && (
+                      <button
+                        type="button"
+                        onClick={() => sendAuthenticatedEmail2FACodeMutation.mutate()}
+                        disabled={sendAuthenticatedEmail2FACodeMutation.isPending}
+                        className="w-full text-sm text-primary hover:text-primary/80 transition-colors"
+                      >
+                        {sendAuthenticatedEmail2FACodeMutation.isPending ? "Sending..." : "Send email verification code"}
+                      </button>
+                    )}
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -1091,7 +1126,7 @@ export default function Account() {
               // Verify for regenerating backup codes
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Enter your current 2FA code to regenerate backup codes. This will invalidate your old codes.
+                  Enter your current {twoFAStatus?.method === 'email' ? 'email verification code' : '2FA code'} to regenerate backup codes. This will invalidate your old codes.
                 </p>
                 <Input
                   value={twoFAToken}
@@ -1100,6 +1135,16 @@ export default function Account() {
                   className="bg-card/30 border-border text-foreground text-center text-xl tracking-widest font-mono"
                   maxLength={6}
                 />
+                {twoFAStatus?.method === 'email' && (
+                  <button
+                    type="button"
+                    onClick={() => sendAuthenticatedEmail2FACodeMutation.mutate()}
+                    disabled={sendAuthenticatedEmail2FACodeMutation.isPending}
+                    className="w-full text-sm text-primary hover:text-primary/80 transition-colors"
+                  >
+                    {sendAuthenticatedEmail2FACodeMutation.isPending ? "Sending..." : "Send email verification code"}
+                  </button>
+                )}
                 <div className="flex gap-2">
                   <Button
                     variant="outline"

@@ -25,6 +25,8 @@ import {
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 
+const GUEST_TICKET_TOKEN_STORAGE_KEY = "ozvps:guest-ticket-token";
+
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
   sales: "Sales",
   accounts: "Accounts",
@@ -147,24 +149,36 @@ export default function GuestTicketPage() {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [reply, setReply] = useState("");
+  const storedToken = typeof window !== "undefined"
+    ? window.sessionStorage.getItem(GUEST_TICKET_TOKEN_STORAGE_KEY)
+    : null;
   const hashToken = typeof window !== "undefined"
     ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token")
     : null;
-  const guestToken = hashToken || accessToken || "";
+  const guestToken = hashToken || accessToken || storedToken || "";
 
   useEffect(() => {
-    if (hashToken || !accessToken || typeof window === "undefined") {
+    if (typeof window === "undefined") {
       return;
     }
 
-    const nextUrl = `/support/guest#token=${encodeURIComponent(accessToken)}`;
-    window.history.replaceState(window.history.state, "", nextUrl);
+    const tokenFromUrl = hashToken || accessToken || "";
+    if (!tokenFromUrl || tokenFromUrl.length < 32) {
+      return;
+    }
+
+    window.sessionStorage.setItem(GUEST_TICKET_TOKEN_STORAGE_KEY, tokenFromUrl);
+
+    if (hashToken || accessToken) {
+      window.history.replaceState(window.history.state, "", "/support/guest");
+    }
   }, [accessToken, hashToken]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["guest-ticket", guestToken],
     queryFn: async () => {
       const res = await fetch(`/api/support/guest`, {
+        cache: "no-store",
         headers: {
           "x-guest-ticket-token": guestToken,
         },
@@ -191,6 +205,7 @@ export default function GuestTicketPage() {
     mutationFn: async (message: string) => {
       const res = await fetch(`/api/support/guest/messages`, {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           "x-guest-ticket-token": guestToken,
@@ -210,6 +225,61 @@ export default function GuestTicketPage() {
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const closeTicketMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/support/guest/close`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "x-guest-ticket-token": guestToken,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to close ticket");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-ticket", guestToken] });
+      toast({ title: "Ticket closed" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const reopenTicketMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/support/guest/reopen`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "x-guest-ticket-token": guestToken,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to reopen ticket");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-ticket", guestToken] });
+      toast({ title: "Ticket reopened" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (!error || typeof window === "undefined") {
+      return;
+    }
+
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
+    if (errorMessage.includes("not found") || errorMessage.includes("invalid")) {
+      window.sessionStorage.removeItem(GUEST_TICKET_TOKEN_STORAGE_KEY);
+    }
+  }, [error]);
 
   if (!guestToken || guestToken.length < 32) {
     return <ErrorState title="Invalid Link" message="This ticket link is invalid or has expired." />;
@@ -285,6 +355,24 @@ export default function GuestTicketPage() {
                 <p className="text-sm font-semibold text-foreground">{messages.length}</p>
               </div>
             </div>
+
+            {!isClosed && (
+              <div className="flex flex-wrap gap-2 mt-5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => closeTicketMutation.mutate()}
+                  disabled={closeTicketMutation.isPending}
+                >
+                  {closeTicketMutation.isPending ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <XCircle className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Close Ticket
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -292,7 +380,22 @@ export default function GuestTicketPage() {
         {isResolved && (
           <div className="flex items-center gap-3 bg-green-500/5 border border-green-500/20 rounded-xl px-5 py-3.5">
             <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
-            <p className="text-sm text-green-400 font-medium">This ticket has been resolved. Reply below to reopen it.</p>
+            <div className="flex-1 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-sm text-green-400 font-medium">This ticket has been resolved. Reply below to reopen it.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => reopenTicketMutation.mutate()}
+                disabled={reopenTicketMutation.isPending}
+              >
+                {reopenTicketMutation.isPending ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CircleDot className="mr-2 h-3.5 w-3.5" />
+                )}
+                Reopen Ticket
+              </Button>
+            </div>
           </div>
         )}
 

@@ -20,6 +20,14 @@ function formatCurrency(cents: number): string {
   return (cents / 100).toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
 }
 
+function formatDateShort(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function BillingBanner({ servers, walletBalance, walletLoaded }: BillingBannerProps) {
   const dueToday = servers.filter(s => {
     const b = s.billing;
@@ -55,6 +63,10 @@ export function BillingBanner({ servers, walletBalance, walletLoaded }: BillingB
   ];
   const insufficientAmount = insufficientServers.reduce((sum, s) => sum + (s.billing?.monthlyPriceCents || 0), 0);
   const showInsufficientFunds = insufficientServers.length > 0 && !walletCoversOverdue;
+  const nextSuspensionDate = unpaid
+    .map((s) => s.billing?.suspendAt)
+    .filter((date): date is string => !!date)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
 
   const showDueToday = dueToday.length > 0 && walletLoaded && walletCoversToday;
   const showSuspended = billingSuspended.length > 0;
@@ -108,6 +120,9 @@ export function BillingBanner({ servers, walletBalance, walletLoaded }: BillingB
                     <> ({formatCurrency(insufficientAmount)})</>
                   )}
                   . Please add funds to avoid suspension.
+                  {nextSuspensionDate && (
+                    <> Next suspension date: <span className="font-semibold text-foreground">{formatDateShort(nextSuspensionDate)}</span>.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -137,7 +152,7 @@ export function BillingBanner({ servers, walletBalance, walletLoaded }: BillingB
                   {suspendedAmount > 0 && (
                     <> ({formatCurrency(suspendedAmount)} due)</>
                   )}
-                  .
+                  . Add funds, then reactivate the affected server{billingSuspended.length !== 1 ? 's' : ''} from the billing page.
                 </p>
               </div>
             </div>

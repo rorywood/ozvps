@@ -2,6 +2,7 @@ import { Express, Router, Request, Response } from "express";
 import { db } from "../../server/db";
 import { sql } from "drizzle-orm";
 import { redisClient } from "../../server/redis";
+import { getProcessorHealthSnapshots } from "../../server/processor-health";
 import os from "os";
 import { exec } from "child_process";
 
@@ -411,19 +412,20 @@ export function registerHealthRoutes(router: Router) {
 
   // Detailed health check (requires auth in production, but middleware is applied separately)
   router.get("/health", async (_req: Request, res: Response) => {
-    const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
+    const [database, redis, virtfusion, stripe, disk, dbStats, processors] = await Promise.all([
       checkDatabase(),
       checkRedis(),
       checkVirtFusion(),
       checkStripe(),
       getDiskStats(),
       getDatabaseStats(),
+      getProcessorHealthSnapshots(),
     ]);
 
     const services = [database, redis, virtfusion, stripe];
-    const overallStatus = services.some(s => s.status === "unhealthy")
+    const overallStatus = [...services, ...processors].some(s => s.status === "unhealthy")
       ? "unhealthy"
-      : services.some(s => s.status === "degraded")
+      : [...services, ...processors].some(s => s.status === "degraded")
       ? "degraded"
       : "healthy";
 
@@ -431,6 +433,7 @@ export function registerHealthRoutes(router: Router) {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       services,
+      processors,
       system: {
         ...getSystemStats(),
         disk,
@@ -441,19 +444,20 @@ export function registerHealthRoutes(router: Router) {
 
   // Detailed health check (protected version)
   router.get("/admin/health/detailed", async (_req: Request, res: Response) => {
-    const [database, redis, virtfusion, stripe, disk, dbStats] = await Promise.all([
+    const [database, redis, virtfusion, stripe, disk, dbStats, processors] = await Promise.all([
       checkDatabase(),
       checkRedis(),
       checkVirtFusion(),
       checkStripe(),
       getDiskStats(),
       getDatabaseStats(),
+      getProcessorHealthSnapshots(),
     ]);
 
     const services = [database, redis, virtfusion, stripe];
-    const overallStatus = services.some(s => s.status === "unhealthy")
+    const overallStatus = [...services, ...processors].some(s => s.status === "unhealthy")
       ? "unhealthy"
-      : services.some(s => s.status === "degraded")
+      : [...services, ...processors].some(s => s.status === "degraded")
       ? "degraded"
       : "healthy";
 
@@ -461,6 +465,7 @@ export function registerHealthRoutes(router: Router) {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       services,
+      processors,
       system: {
         ...getSystemStats(),
         disk,

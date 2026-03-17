@@ -281,11 +281,21 @@ export const billingApi = {
     return api.get<{ entries: any[] }>(url);
   },
 
+  getAttention: (limit = 25) =>
+    api.get<{ records: any[] }>(`/billing/attention?limit=${limit}`),
+
   getStats: () => api.get<{
     statusCounts: Record<string, number>;
     mrr: number;
     freeServerCount: number;
     dueSoonCount: number;
+    attentionCounts: {
+      overdue: number;
+      suspendingSoon: number;
+      adminSuspended: number;
+      trials: number;
+      dueToday: number;
+    };
   }>("/billing/stats"),
 };
 
@@ -360,6 +370,20 @@ export const healthApi = {
       status: string;
       timestamp: string;
       services: { name: string; status: string; latencyMs?: number; message?: string }[];
+      processors: {
+        name: string;
+        label: string;
+        description: string;
+        status: string;
+        statusMessage: string;
+        running?: boolean;
+        nextRunAt?: string | null;
+        lastStartedAt?: string;
+        lastSucceededAt?: string;
+        lastFailedAt?: string;
+        lastDurationMs?: number;
+        lastError?: string | null;
+      }[];
       system: any;
     }>("/health"),
 
@@ -368,6 +392,7 @@ export const healthApi = {
       status: string;
       timestamp: string;
       services: any[];
+      processors: any[];
       system: any;
       environment: any;
     }>("/admin/health/detailed"),

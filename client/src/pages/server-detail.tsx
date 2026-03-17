@@ -776,6 +776,10 @@ export default function ServerDetail() {
   const canAffordReactivation = walletData?.wallet && server?.billing?.monthlyPriceCents
     ? walletData.wallet.balanceCents >= server.billing.monthlyPriceCents
     : false;
+  const billingSuspendDate = server?.billing?.suspendAt ? new Date(server.billing.suspendAt) : null;
+  const billingSuspendDaysRemaining = billingSuspendDate
+    ? Math.ceil((billingSuspendDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
 
   const handlePowerAction = (action: 'boot' | 'reboot' | 'shutdown' | 'poweroff') => {
     if (serverId) {
@@ -1750,6 +1754,9 @@ export default function ServerDetail() {
                         {walletData && (
                           <> · Wallet: <span className="font-semibold text-destructive">${(walletBalance / 100).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span></>
                         )}
+                        {billingSuspendDate && (
+                          <> · Suspends <span className="font-semibold text-foreground">{formatDateShort(server.billing!.suspendAt!)}</span></>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -1775,10 +1782,16 @@ export default function ServerDetail() {
               <div>
                 <h3 className="font-semibold text-red-300">Payment Overdue</h3>
                 <p className="text-sm text-red-300/80">
-                  Your server payment is overdue. Please add funds to avoid suspension
-                  {server.billing?.suspendAt && (
-                    <> by {formatDateShort(server.billing.suspendAt)}</>
-                  )}.
+                  Your server payment is overdue.
+                  {billingSuspendDate && billingSuspendDaysRemaining !== null ? (
+                    billingSuspendDaysRemaining > 0 ? (
+                      <> Add funds within <span className="font-semibold text-red-200">{billingSuspendDaysRemaining} day{billingSuspendDaysRemaining !== 1 ? 's' : ''}</span> to avoid suspension on <span className="font-semibold text-red-200">{formatDateShort(server.billing!.suspendAt!)}</span>.</>
+                    ) : (
+                      <> Suspension date was <span className="font-semibold text-red-200">{formatDateShort(server.billing!.suspendAt!)}</span>. Add funds now to reduce downtime.</>
+                    )
+                  ) : (
+                    <> Please add funds now to avoid suspension.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -1809,6 +1822,9 @@ export default function ServerDetail() {
                           <p className="text-sm text-foreground">{server.billing.adminSuspendedReason}</p>
                         </div>
                       )}
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Add at least the amount due to your wallet, then use <span className="font-medium text-foreground">Pay & Reactivate</span> to bring this server back online.
+                      </p>
                     </>
                   ) : isBillingSuspended ? (
                     <>
@@ -2092,7 +2108,7 @@ export default function ServerDetail() {
                       </p>
                     </div>
                     <p className="text-xs text-destructive/80 mt-1">
-                      Add funds to reactivate this server
+                      Add funds, then return here to pay and reactivate this server
                     </p>
                   </div>
                 ) : server.billing?.nextBillAt && !server.billing?.isTrial && (() => {
@@ -2146,7 +2162,9 @@ export default function ServerDetail() {
                       )}
                       {server.billing.status === 'unpaid' && server.billing.suspendAt && (
                         <p className="text-xs text-red-400/80 mt-1">
-                          Suspends {formatDateShort(server.billing.suspendAt)}
+                          {billingSuspendDaysRemaining !== null && billingSuspendDaysRemaining > 0
+                            ? `Suspends in ${billingSuspendDaysRemaining} day${billingSuspendDaysRemaining !== 1 ? 's' : ''} on ${formatDateShort(server.billing.suspendAt)}`
+                            : `Suspension date: ${formatDateShort(server.billing.suspendAt)}`}
                         </p>
                       )}
                     </div>

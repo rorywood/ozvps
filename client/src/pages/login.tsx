@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [savedRecaptchaToken, setSavedRecaptchaToken] = useState<string | undefined>(undefined);
   const [twoFAMethod, setTwoFAMethod] = useState<'totp' | 'email'>('totp');
   const [auth0UserId, setAuth0UserId] = useState<string>("");
+  const [pendingTwoFactorToken, setPendingTwoFactorToken] = useState<string>("");
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
 
@@ -216,6 +217,7 @@ export default function LoginPage() {
         setRequires2FA(true);
         setTwoFAMethod(data.twoFAMethod || 'totp');
         setAuth0UserId(data.auth0UserId || '');
+        setPendingTwoFactorToken(data.pendingTwoFactorToken || '');
         setEmailCodeSent(false);
         setError("");
         setIsSubmitting(false);
@@ -338,11 +340,12 @@ export default function LoginPage() {
     setError("");
     setTwoFAMethod('totp');
     setAuth0UserId('');
+    setPendingTwoFactorToken('');
     setEmailCodeSent(false);
   };
 
   const handleSendEmailCode = async () => {
-    if (!auth0UserId || !email) {
+    if (!pendingTwoFactorToken) {
       setError("Unable to send verification code. Please try again.");
       return;
     }
@@ -351,7 +354,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const result = await api.sendEmail2FACode(email, auth0UserId);
+      const result = await api.sendEmail2FACode(pendingTwoFactorToken);
       if (result.success) {
         setEmailCodeSent(true);
         toast({

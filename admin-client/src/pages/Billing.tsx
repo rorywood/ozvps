@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock, Loader2 } from "lucide-react";
+import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock, Loader2, AlertTriangle } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 
 export default function Billing() {
@@ -29,6 +29,11 @@ export default function Billing() {
     queryFn: billingApi.getStats,
   });
 
+  const { data: attention, isLoading: attentionLoading } = useQuery({
+    queryKey: ["billing-attention"],
+    queryFn: () => billingApi.getAttention(12),
+  });
+
   const runJobMutation = useMutation({
     mutationFn: billingApi.runBillingJob,
     onSuccess: (data: any) => {
@@ -51,6 +56,7 @@ export default function Billing() {
       }
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -61,6 +67,7 @@ export default function Billing() {
       toast.success(`Cleaned up ${data.cleaned} orphaned records`);
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -71,6 +78,7 @@ export default function Billing() {
       toast.success("Server suspended");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
@@ -82,6 +90,7 @@ export default function Billing() {
       toast.success("Server unsuspended");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
@@ -97,6 +106,7 @@ export default function Billing() {
       }
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message),
@@ -108,6 +118,7 @@ export default function Billing() {
       toast.success("Trial ended - server has been powered off");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
       setSelectedRecord(null);
     },
     onError: (err: any) => toast.error(err.message || "Failed to end trial"),
@@ -119,6 +130,7 @@ export default function Billing() {
       toast.success("Record updated");
       queryClient.invalidateQueries({ queryKey: ["billing-records"] });
       queryClient.invalidateQueries({ queryKey: ["billing-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-attention"] });
       setShowEditModal(false);
     },
     onError: (err: any) => toast.error(err.message),
@@ -126,6 +138,14 @@ export default function Billing() {
 
   const formatCurrency = (cents: number) =>
     new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "Not set";
+    return new Date(value).toLocaleString("en-AU", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -217,6 +237,84 @@ export default function Billing() {
           </div>
         </div>
       )}
+
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(14_100%_60%)/20] rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Overdue</p>
+            <p className="text-xl font-bold text-[hsl(14_100%_70%)]">{stats.attentionCounts.overdue}</p>
+          </div>
+          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(45_100%_51%)/20] rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Suspending Soon</p>
+            <p className="text-xl font-bold text-[hsl(45_100%_60%)]">{stats.attentionCounts.suspendingSoon}</p>
+          </div>
+          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(0_84%_60%)/20] rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Admin Suspended</p>
+            <p className="text-xl font-bold text-[hsl(0_84%_70%)]">{stats.attentionCounts.adminSuspended}</p>
+          </div>
+          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(210_100%_50%)/20] rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Due in 24h</p>
+            <p className="text-xl font-bold text-[hsl(210_100%_70%)]">{stats.attentionCounts.dueToday}</p>
+          </div>
+          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+            <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Active Trials</p>
+            <p className="text-xl font-bold text-white">{stats.attentionCounts.trials}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-[hsl(45_100%_60%)]" />
+            <h2 className="text-lg font-semibold text-white">Needs Attention</h2>
+          </div>
+          <p className="text-sm text-white/40">Overdue, suspended, or approaching suspension</p>
+        </div>
+
+        {attentionLoading ? (
+          <div className="flex justify-center py-6">
+            <RefreshCw className="h-6 w-6 animate-spin text-white/40" />
+          </div>
+        ) : !attention?.records?.length ? (
+          <div className="rounded-lg border border-white/8 bg-white/5 px-4 py-6 text-sm text-white/50">
+            No billing records currently need urgent attention.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {attention.records.map((record) => (
+              <button
+                key={record.billing.id}
+                onClick={() => setSelectedRecord(record)}
+                className="w-full rounded-lg border border-white/8 bg-white/5 px-4 py-3 text-left hover:bg-white/[0.07] transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-white">
+                        {record.serverName || `Server #${record.billing.virtfusionServerId}`}
+                      </span>
+                      <span className={`px-2 py-0.5 text-xs rounded ${getStatusColor(record.billing.status)}`}>
+                        {record.billing.status}
+                      </span>
+                      <span className="px-2 py-0.5 text-xs rounded bg-[hsl(45_100%_51%)/15] text-[hsl(45_100%_60%)] border border-[hsl(45_100%_51%)/20]">
+                        {record.attentionReason}
+                      </span>
+                    </div>
+                    <p className="text-sm text-white/55 mt-1">
+                      {record.user?.email || "Unknown user"}{record.plan?.name ? ` • ${record.plan.name}` : ""}
+                    </p>
+                  </div>
+                  <div className="text-right text-sm text-white/50 shrink-0">
+                    <p>Next bill: {formatDateTime(record.billing.nextBillAt)}</p>
+                    <p>Suspend at: {formatDateTime(record.billing.suspendAt)}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Filter and Quick Actions */}
       <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4 mb-6">

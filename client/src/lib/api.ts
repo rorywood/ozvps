@@ -619,11 +619,22 @@ class ApiClient {
     return response.json();
   }
 
-  async sendEmail2FACode(email: string, auth0UserId: string): Promise<{ success: boolean; message: string }> {
+  async sendEmail2FACode(pendingTwoFactorToken: string): Promise<{ success: boolean; message: string }> {
     const response = await secureFetch(`${this.baseUrl}/user/2fa/email/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, auth0UserId }),
+      body: JSON.stringify({ pendingTwoFactorToken }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to send verification code');
+    }
+    return response.json();
+  }
+
+  async sendAuthenticatedEmail2FACode(): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/email/send-authenticated`, {
+      method: 'POST',
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -638,7 +649,7 @@ class ApiClient {
     recaptchaToken?: string,
     totpToken?: string,
     backupCode?: string
-  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string }> {
+  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; pendingTwoFactorToken?: string }> {
     // Pre-flight check: verify API is reachable and all services are healthy
     try {
       const healthCheck = await fetch('/api/health', {

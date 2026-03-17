@@ -16,6 +16,26 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "Not yet";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
+function formatDuration(durationMs?: number) {
+  if (!durationMs || durationMs < 1000) {
+    return durationMs ? `${durationMs}ms` : "N/A";
+  }
+
+  if (durationMs < 60_000) {
+    return `${Math.round(durationMs / 1000)}s`;
+  }
+
+  return `${Math.round(durationMs / 60_000)}m`;
+}
+
 export default function Health() {
   const queryClient = useQueryClient();
 
@@ -180,6 +200,61 @@ export default function Health() {
               ))}
             </div>
           </div>
+
+          {/* Background Processors */}
+          {health.processors?.length > 0 && (
+            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="h-4 w-4 text-[hsl(210_100%_70%)]" />
+                <h2 className="text-base font-semibold text-white">Background Jobs</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {health.processors.map((processor) => (
+                  <div
+                    key={processor.name}
+                    className={`p-4 rounded-lg border ${getStatusBg(processor.status)}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <StatusIcon status={processor.status} />
+                          <div>
+                            <h3 className="font-medium text-white text-sm">{processor.label}</h3>
+                            <p className="text-xs text-white/50">{processor.description}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-white/70">{processor.statusMessage}</p>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-white/40 mb-1">Last Success</p>
+                            <p className="text-white/80">{formatDateTime(processor.lastSucceededAt)}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/40 mb-1">Next Run</p>
+                            <p className="text-white/80">{formatDateTime(processor.nextRunAt)}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/40 mb-1">Last Runtime</p>
+                            <p className="text-white/80">{formatDuration(processor.lastDurationMs)}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/40 mb-1">State</p>
+                            <p className="text-white/80">{processor.running ? "Running now" : "Idle"}</p>
+                          </div>
+                        </div>
+                        {processor.lastError && (
+                          <div className="rounded-lg border border-[hsl(0_84%_60%)/25] bg-[hsl(0_84%_60%)/8] px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-[hsl(0_84%_70%)]">Last Error</p>
+                            <p className="mt-1 text-xs text-white/80 break-words">{processor.lastError}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* System Resources */}
           {health.system && (

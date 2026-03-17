@@ -6,10 +6,20 @@ import { getAutoTopupIdempotencyKey, runBillingJob, retryUnpaidServers } from ".
 import { dbStorage } from "./storage";
 import { log } from "./logger";
 import { processTrials } from "./trial-processor";
+import {
+  markProcessorFailed,
+  markProcessorStarted,
+  markProcessorSucceeded,
+  scheduleProcessorRun,
+} from "./processor-health";
 
 // Billing runs daily at 6pm AEST (8am UTC / 18:00 AEST)
 // AEST is UTC+10, so 6pm AEST = 8am UTC
 const BILLING_HOUR_UTC = 8; // 8am UTC = 6pm AEST
+const BILLING_DAILY_PROCESSOR = "billing-daily";
+const BILLING_QUICK_CHECK_PROCESSOR = "billing-quick-check";
+const QUICK_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const QUICK_CHECK_STARTUP_DELAY_MS = 2 * 60 * 1000;
 
 // Calculate milliseconds until next 6pm AEST
 function getMillisecondsUntilBillingTime(): number {
@@ -30,16 +40,20 @@ export async function startBillingProcessor(stripe: Stripe | null) {
     const msUntilNextRun = getMillisecondsUntilBillingTime();
     const nextRunDate = new Date(Date.now() + msUntilNextRun);
     log(`Next billing run scheduled for ${nextRunDate.toISOString()} (6pm AEST)`, 'billing');
+    void scheduleProcessorRun(BILLING_DAILY_PROCESSOR, { nextRunAt: nextRunDate });
 
     setTimeout(async () => {
+      const startedAtMs = await markProcessorStarted(BILLING_DAILY_PROCESSOR);
       try {
         log('Starting daily billing run (6pm AEST)...', 'billing');
         const jobResult = await runBillingJob();
         log(`Daily billing run result: charged=${jobResult.charged.length}, noFunds=${jobResult.skippedInsufficientFunds.length}`, 'billing');
         await processAutoTopups(stripe);
         log('Daily billing run completed', 'billing');
+        await markProcessorSucceeded(BILLING_DAILY_PROCESSOR, startedAtMs);
       } catch (err: any) {
         log(`Error in billing cycle: ${err.message}`, 'billing', { level: 'error' });
+        await markProcessorFailed(BILLING_DAILY_PROCESSOR, err, startedAtMs);
       }
 
       // Schedule the next run
@@ -50,21 +64,39 @@ export async function startBillingProcessor(stripe: Stripe | null) {
   // Also run a quick check every 30 minutes for urgent tasks (auto top-ups, reactivations, trials)
   // This ensures users who top up get their servers reactivated promptly
   const runQuickCheck = async () => {
+    const startedAtMs = await markProcessorStarted(BILLING_QUICK_CHECK_PROCESSOR, {
+      nextRunAt: new Date(Date.now() + QUICK_CHECK_INTERVAL_MS),
+    });
+
     try {
       await processAutoTopups(stripe);
       // Process trial expirations
-      await processTrials();
+      const trialResult = await processTrials();
+      await markProcessorSucceeded(BILLING_QUICK_CHECK_PROCESSOR, startedAtMs, {
+        nextRunAt: new Date(Date.now() + QUICK_CHECK_INTERVAL_MS),
+        lastResult: {
+          trialsEnded: trialResult.ended,
+          trialsQueued: trialResult.queued,
+          trialErrors: trialResult.errors,
+        },
+      });
     } catch (err: any) {
       log(`Error in quick billing check: ${err.message}`, 'billing', { level: 'error' });
+      await markProcessorFailed(BILLING_QUICK_CHECK_PROCESSOR, err, startedAtMs, {
+        nextRunAt: new Date(Date.now() + QUICK_CHECK_INTERVAL_MS),
+      });
     }
   };
 
   log('Starting billing processor - daily run at 6pm AEST, quick checks every 30 minutes', 'billing');
   scheduleNextBillingRun();
+  await scheduleProcessorRun(BILLING_QUICK_CHECK_PROCESSOR, {
+    nextRunAt: new Date(Date.now() + QUICK_CHECK_STARTUP_DELAY_MS),
+  });
 
   // Run quick check on startup, then every 30 minutes
-  setTimeout(runQuickCheck, 2 * 60 * 1000); // 2 minutes after startup
-  setInterval(runQuickCheck, 30 * 60 * 1000); // Every 30 minutes
+  setTimeout(runQuickCheck, QUICK_CHECK_STARTUP_DELAY_MS); // 2 minutes after startup
+  setInterval(runQuickCheck, QUICK_CHECK_INTERVAL_MS); // Every 30 minutes
 }
 
 // Old daily billing function removed - now using monthly billing system via runBillingJob()

@@ -102,6 +102,7 @@ const apiLimiter = rateLimit({
 
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/send-email-2fa', twoFactorLimiter);
 app.use('/api/auth/verify-2fa', twoFactorLimiter);
 app.use('/api/users/:id/block', dangerousOpLimiter);
 app.use('/api/users/:id/suspend', dangerousOpLimiter);

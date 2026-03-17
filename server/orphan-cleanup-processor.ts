@@ -3,8 +3,16 @@ import { auth0Client } from "./auth0";
 import { getUncachableStripeClient } from "./stripeClient";
 import { virtfusionClient } from "./virtfusion";
 import { log } from './log';
+import {
+  markProcessorFailed,
+  markProcessorStarted,
+  markProcessorSucceeded,
+  scheduleProcessorRun,
+} from "./processor-health";
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Run every hour
+const INITIAL_CLEANUP_DELAY_MS = 5 * 60 * 1000;
+const ORPHAN_CLEANUP_PROCESSOR = "orphan-cleanup";
 
 let isRunning = false;
 
@@ -216,28 +224,35 @@ export function startOrphanCleanupProcessor(): void {
   
   isRunning = true;
   log('Starting orphan cleanup processor (checking every hour)', 'orphan-cleanup');
+
+  const runCleanup = async (nextRunAt: Date) => {
+    const startedAtMs = await markProcessorStarted(ORPHAN_CLEANUP_PROCESSOR, { nextRunAt });
+
+    try {
+      const result = await processOrphanedAccounts();
+      if (result.cleaned > 0) {
+        log(`Orphan cleanup completed: ${result.checked} checked, ${result.cleaned} cleaned, ${result.errors} errors`, 'orphan-cleanup');
+      }
+      await markProcessorSucceeded(ORPHAN_CLEANUP_PROCESSOR, startedAtMs, {
+        nextRunAt,
+        lastResult: result,
+      });
+    } catch (error: any) {
+      log(`Orphan cleanup error: ${error.message}`, 'orphan-cleanup');
+      await markProcessorFailed(ORPHAN_CLEANUP_PROCESSOR, error, startedAtMs, { nextRunAt });
+    }
+  };
   
   // Run initial cleanup after 5 minutes (give time for app to stabilize)
-  setTimeout(async () => {
-    try {
-      const result = await processOrphanedAccounts();
-      if (result.cleaned > 0) {
-        log(`Orphan cleanup completed: ${result.checked} checked, ${result.cleaned} cleaned, ${result.errors} errors`, 'orphan-cleanup');
-      }
-    } catch (error: any) {
-      log(`Orphan cleanup error: ${error.message}`, 'orphan-cleanup');
-    }
-  }, 5 * 60 * 1000);
+  void scheduleProcessorRun(ORPHAN_CLEANUP_PROCESSOR, {
+    nextRunAt: new Date(Date.now() + INITIAL_CLEANUP_DELAY_MS),
+  });
+  setTimeout(() => {
+    void runCleanup(new Date(Date.now() + CLEANUP_INTERVAL_MS));
+  }, INITIAL_CLEANUP_DELAY_MS);
   
   // Schedule regular cleanup
-  setInterval(async () => {
-    try {
-      const result = await processOrphanedAccounts();
-      if (result.cleaned > 0) {
-        log(`Orphan cleanup completed: ${result.checked} checked, ${result.cleaned} cleaned, ${result.errors} errors`, 'orphan-cleanup');
-      }
-    } catch (error: any) {
-      log(`Orphan cleanup error: ${error.message}`, 'orphan-cleanup');
-    }
+  setInterval(() => {
+    void runCleanup(new Date(Date.now() + CLEANUP_INTERVAL_MS));
   }, CLEANUP_INTERVAL_MS);
 }

@@ -344,7 +344,7 @@ export function registerBillingRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "billing.unsuspend", "billing", error.message, req.params.id);
       console.log(`[admin-billing] Unsuspend error: ${error.message}`);
-      res.status(500).json({ error: error.message || "Failed to unsuspend server" });
+      res.status(500).json({ error: "Failed to unsuspend server. Please check server logs for details." });
     }
   });
 
@@ -412,7 +412,7 @@ export function registerBillingRoutes(router: Router) {
     } catch (error: any) {
       await auditFailure(req, "billing.run-job", "billing", error.message);
       console.log(`[admin-billing] Run job error: ${error.message}`);
-      res.status(500).json({ error: `Billing job failed: ${error.message}` });
+      res.status(500).json({ error: "Billing job failed. Please check server logs for details." });
     }
   });
 
@@ -430,7 +430,8 @@ export function registerBillingRoutes(router: Router) {
       res.json(result);
     } catch (error: any) {
       await auditFailure(req, "billing.force-charge", "billing", error.message);
-      res.status(500).json({ error: `Force charge failed: ${error.message}` });
+      console.log(`[admin-billing] Force charge error: ${error.message}`);
+      res.status(500).json({ error: "Force charge failed. Please check server logs for details." });
     }
   });
 
@@ -499,9 +500,140 @@ export function registerBillingRoutes(router: Router) {
     }
   });
 
+  router.get("/billing/attention", async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 25, 100);
+      const now = new Date();
+      const upcomingWindow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const dueSoonWindow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const records = await db
+        .select({
+          billing: serverBilling,
+          user: {
+            email: userMappings.email,
+            name: userMappings.name,
+          },
+          plan: {
+            name: plans.name,
+            code: plans.code,
+          },
+        })
+        .from(serverBilling)
+        .leftJoin(userMappings, eq(serverBilling.auth0UserId, userMappings.auth0UserId))
+        .leftJoin(plans, eq(serverBilling.planId, plans.id))
+        .where(
+          or(
+            eq(serverBilling.status, "unpaid"),
+            eq(serverBilling.status, "suspended"),
+            eq(serverBilling.adminSuspended, true),
+            and(
+              eq(serverBilling.status, "active"),
+              eq(serverBilling.freeServer, false),
+              lte(serverBilling.nextBillAt, dueSoonWindow)
+            )
+          )
+        )
+        .limit(limit * 3);
+
+      const enrichedRecords = await Promise.all(
+        records.map(async (record) => {
+          let serverName: string | undefined;
+          let serverUuid: string | undefined = record.billing.virtfusionServerUuid || undefined;
+
+          try {
+            const server = await virtfusionClient.getServer(record.billing.virtfusionServerId);
+            if (server) {
+              serverName = server.name;
+              serverUuid = server.uuid;
+            }
+          } catch {
+            // Ignore missing VirtFusion server info here.
+          }
+
+          let user = record.user;
+          if (!user?.email && record.billing.auth0UserId) {
+            try {
+              const auth0User = await auth0Client.getUserById(record.billing.auth0UserId);
+              if (auth0User) {
+                user = {
+                  email: auth0User.email,
+                  name: auth0User.name || null,
+                };
+              }
+            } catch {
+              // Ignore Auth0 enrichment failure.
+            }
+          }
+
+          let severity = 0;
+          let attentionReason = "Needs review";
+          let relevantAt: Date | null = record.billing.updatedAt ? new Date(record.billing.updatedAt) : null;
+
+          if (record.billing.adminSuspended) {
+            severity = 5;
+            attentionReason = "Admin suspended";
+            relevantAt = record.billing.adminSuspendedAt ? new Date(record.billing.adminSuspendedAt) : relevantAt;
+          } else if (record.billing.status === "suspended") {
+            severity = 4;
+            attentionReason = "Suspended for billing";
+            relevantAt = record.billing.suspendAt ? new Date(record.billing.suspendAt) : relevantAt;
+          } else if (record.billing.status === "unpaid") {
+            const suspendAt = record.billing.suspendAt ? new Date(record.billing.suspendAt) : null;
+            if (suspendAt && suspendAt <= now) {
+              severity = 4;
+              attentionReason = "Past suspension deadline";
+              relevantAt = suspendAt;
+            } else if (suspendAt && suspendAt <= upcomingWindow) {
+              severity = 3;
+              attentionReason = "Suspending within 48 hours";
+              relevantAt = suspendAt;
+            } else {
+              severity = 2;
+              attentionReason = "Payment overdue";
+              relevantAt = record.billing.nextBillAt ? new Date(record.billing.nextBillAt) : relevantAt;
+            }
+          } else if (record.billing.nextBillAt && new Date(record.billing.nextBillAt) <= dueSoonWindow) {
+            severity = 1;
+            attentionReason = "Due within 24 hours";
+            relevantAt = new Date(record.billing.nextBillAt);
+          }
+
+          return {
+            ...record,
+            user,
+            serverName,
+            serverUuid,
+            attentionReason,
+            attentionSeverity: severity,
+            relevantAt: relevantAt ? relevantAt.toISOString() : null,
+          };
+        })
+      );
+
+      const sorted = enrichedRecords
+        .sort((a, b) => {
+          if (b.attentionSeverity !== a.attentionSeverity) {
+            return b.attentionSeverity - a.attentionSeverity;
+          }
+          return (a.relevantAt || "").localeCompare(b.relevantAt || "");
+        })
+        .slice(0, limit);
+
+      res.json({ records: sorted });
+    } catch (error: any) {
+      console.log(`[admin-billing] Get attention error: ${error.message}`);
+      res.status(500).json({ error: "Failed to get billing attention records" });
+    }
+  });
+
   // Get billing stats
   router.get("/billing/stats", async (req: Request, res: Response) => {
     try {
+      const now = new Date();
+      const dueSoonWindow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const suspensionWindow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
       // Get counts by status
       const statusCounts = await db
         .select({
@@ -549,11 +681,75 @@ export function registerBillingRoutes(router: Router) {
           )
         );
 
+      const [overdueResult] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(serverBilling)
+        .where(
+          and(
+            eq(serverBilling.status, "unpaid"),
+            lte(serverBilling.nextBillAt, now)
+          )
+        );
+
+      const [suspendingSoonResult] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(serverBilling)
+        .where(
+          and(
+            eq(serverBilling.status, "unpaid"),
+            gte(serverBilling.suspendAt, now),
+            lte(serverBilling.suspendAt, suspensionWindow)
+          )
+        );
+
+      const [adminSuspendedResult] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(serverBilling)
+        .where(eq(serverBilling.adminSuspended, true));
+
+      const [trialsResult] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(serverBilling)
+        .where(
+          and(
+            eq(serverBilling.isTrial, true),
+            isNull(serverBilling.trialEndedAt)
+          )
+        );
+
+      const [dueTodayResult] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(serverBilling)
+        .where(
+          and(
+            eq(serverBilling.status, "active"),
+            eq(serverBilling.freeServer, false),
+            lte(serverBilling.nextBillAt, dueSoonWindow)
+          )
+        );
+
       res.json({
         statusCounts: Object.fromEntries(statusCounts.map((s) => [s.status, s.count])),
         mrr: mrrResult[0]?.total || 0,
         freeServerCount: freeCountResult[0]?.count || 0,
         dueSoonCount: dueSoonResult[0]?.count || 0,
+        attentionCounts: {
+          overdue: overdueResult?.count || 0,
+          suspendingSoon: suspendingSoonResult?.count || 0,
+          adminSuspended: adminSuspendedResult?.count || 0,
+          trials: trialsResult?.count || 0,
+          dueToday: dueTodayResult?.count || 0,
+        },
       });
     } catch (error: any) {
       console.log(`[admin-billing] Get stats error: ${error.message}`);
