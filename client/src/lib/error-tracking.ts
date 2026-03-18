@@ -17,6 +17,18 @@ export interface ClientErrorReport {
   extra?: Record<string, unknown>;
 }
 
+const EXPECTED_AUTH_ERROR_PATTERNS = [
+  "invalid email or password",
+  "invalid email or password format",
+  "invalid two-factor authentication code",
+  "invalid verification code",
+  "verification code has expired",
+  "no verification code pending",
+  "two-factor authentication required",
+  "too many 2fa attempts",
+  "invalid login token",
+];
+
 interface TrackingUser {
   id?: string | number | null;
   email?: string | null;
@@ -57,6 +69,20 @@ function toError(value: unknown): Error | null {
   }
 
   return null;
+}
+
+function getReportMessage(report: Pick<ClientErrorReport, "message" | "error">): string {
+  const error = toError(report.error);
+  return (report.message || error?.message || "").trim().toLowerCase();
+}
+
+export function shouldIgnoreClientErrorReport(report: Pick<ClientErrorReport, "message" | "error">): boolean {
+  const message = getReportMessage(report);
+  if (!message) {
+    return false;
+  }
+
+  return EXPECTED_AUTH_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
 function getCurrentRoute(): string | undefined {
@@ -306,6 +332,10 @@ export async function captureClientError(report: ClientErrorReport): Promise<voi
     ...report,
     route: report.route || getCurrentRoute(),
   };
+
+  if (shouldIgnoreClientErrorReport(normalizedReport)) {
+    return;
+  }
 
   if (shouldSkipDuplicate(normalizedReport)) {
     return;

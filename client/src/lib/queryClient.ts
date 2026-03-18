@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient, QueryFunction } from "@tanstack/react-query";
-import { captureClientError } from "./error-tracking";
+import { captureClientError, shouldIgnoreClientErrorReport } from "./error-tracking";
 
 export interface SessionError {
   error: string;
@@ -22,7 +22,17 @@ function isTransientFetchError(error: unknown): boolean {
 
 function shouldSkipQueryErrorCapture(error: unknown, query: { queryKey: readonly unknown[]; meta?: Record<string, unknown> | undefined }): boolean {
   const suppressNetworkErrors = query.meta?.suppressNetworkErrors === true;
-  return suppressNetworkErrors && isTransientFetchError(error);
+  return (suppressNetworkErrors && isTransientFetchError(error)) || shouldIgnoreClientErrorReport({
+    message: error instanceof Error ? error.message : "Query failed",
+    error,
+  });
+}
+
+function shouldSkipMutationErrorCapture(error: unknown): boolean {
+  return shouldIgnoreClientErrorReport({
+    message: error instanceof Error ? error.message : "Mutation failed",
+    error,
+  });
 }
 
 async function handleResponse(res: Response): Promise<void> {
@@ -138,6 +148,10 @@ export const queryClient = new QueryClient({
   }),
   mutationCache: new MutationCache({
     onError: (error, variables, _context, mutation) => {
+      if (shouldSkipMutationErrorCapture(error)) {
+        return;
+      }
+
       void captureClientError({
         source: "react-query.mutation",
         level: "error",

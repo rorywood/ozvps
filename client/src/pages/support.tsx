@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MessageSquare, Plus, Search, Server, Timer, Loader2, ArrowRight } from "lucide-react";
+import { MessageSquare, Plus, Search, Timer, Loader2, ArrowRight } from "lucide-react";
 import {
   SUPPORT_CATEGORY_LABELS,
   SUPPORT_PRIORITY_LABELS,
@@ -38,9 +38,9 @@ const CATEGORY_HELP: Record<TicketCategory, string> = {
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-slate-50">{value}</p>
+    <div className="rounded-xl border border-border bg-card px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
     </div>
   );
 }
@@ -61,8 +61,8 @@ function FilterPill({
       className={cn(
         "rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
-          ? "border-primary/35 bg-primary/15 text-primary"
-          : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+          ? "border-primary/30 bg-primary/10 text-primary"
+          : "border-border bg-card text-muted-foreground hover:border-primary/20 hover:text-foreground",
       )}
     >
       {label}
@@ -77,21 +77,21 @@ function TicketRow({ ticket }: { ticket: SupportTicket }) {
     <Link href={`/support/${ticket.id}`}>
       <div
         className={cn(
-          "cursor-pointer rounded-xl border border-slate-800 bg-slate-950 p-4 transition hover:border-primary/25 hover:bg-slate-900",
+          "cursor-pointer rounded-xl border border-border bg-card p-4 transition hover:border-primary/25 hover:bg-muted/20",
           needsAction && "border-amber-500/25 bg-amber-500/[0.08]",
         )}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-400">#{ticket.id}</span>
+              <span className="text-xs font-medium text-muted-foreground">#{ticket.id}</span>
               <SupportStatusBadge status={ticket.status} />
               <SupportCategoryBadge category={ticket.category} />
               <SupportPriorityBadge priority={ticket.priority} />
             </div>
 
-            <h3 className="text-base font-semibold leading-6 text-slate-50 break-words">{ticket.title}</h3>
-            <p className="mt-1 text-sm text-slate-300">
+            <h3 className="text-base font-semibold leading-6 text-foreground break-words">{ticket.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
               Updated {formatSupportRelativeTime(ticket.lastMessageAt)}
               {ticket.virtfusionServerId ? " • Linked server" : ""}
             </p>
@@ -172,10 +172,10 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
     <SupportPanel className="p-5">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-50">New ticket</h2>
-          <p className="mt-1 text-sm text-slate-300">{CATEGORY_HELP[category]}</p>
+          <h2 className="text-lg font-semibold text-foreground">New ticket</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{CATEGORY_HELP[category]}</p>
         </div>
-        <Button variant="ghost" onClick={onClose} className="text-slate-400 hover:text-slate-100">
+        <Button variant="ghost" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           Cancel
         </Button>
       </div>
@@ -192,28 +192,28 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
                   "rounded-xl border p-3 text-left transition",
                   category === key
                     ? "border-primary/35 bg-primary/10"
-                    : "border-slate-800 bg-slate-950 hover:border-slate-600",
+                    : "border-border bg-card hover:border-primary/20 hover:bg-muted/20",
                 )}
               >
-                <p className={cn("text-sm font-medium", category === key ? "text-primary" : "text-slate-100")}>
+                <p className={cn("text-sm font-medium", category === key ? "text-primary" : "text-foreground")}>
                   {SUPPORT_CATEGORY_LABELS[key]}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-slate-300">{CATEGORY_HELP[key]}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{CATEGORY_HELP[key]}</p>
               </button>
             ))}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="support-title">Subject</Label>
-                    <Input
-                      id="support-title"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Short summary"
+            <Input
+              id="support-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Short summary"
               minLength={3}
               maxLength={200}
               required
-              className="border-slate-800 bg-slate-950 text-slate-50"
+              className="border-border bg-background text-foreground"
             />
           </div>
 
@@ -221,7 +221,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <Label>Priority</Label>
               <Select value={priority} onValueChange={(value) => setPriority(value as TicketPriority)}>
-                <SelectTrigger className="border-slate-800 bg-slate-950 text-slate-50">
+                <SelectTrigger className="border-border bg-background text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
@@ -237,7 +237,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <Label>Affected server</Label>
               <Select value={selectedServer} onValueChange={setSelectedServer}>
-                <SelectTrigger className="border-slate-800 bg-slate-950 text-slate-50">
+                <SelectTrigger className="border-border bg-background text-foreground">
                   <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
@@ -255,7 +255,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="support-description">Details</Label>
-              <span className="text-xs text-slate-400">{description.length}/10000</span>
+              <span className="text-xs text-muted-foreground">{description.length}/10000</span>
             </div>
             <Textarea
               id="support-description"
@@ -266,13 +266,13 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
               maxLength={10000}
               rows={7}
               required
-              className="min-h-[180px] resize-none border-slate-800 bg-slate-950 text-slate-50"
+              className="min-h-[180px] resize-none border-border bg-background text-foreground"
             />
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">
+          <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
             Attach the server when possible. It helps support jump straight to the right context.
           </div>
 
@@ -333,8 +333,8 @@ export default function SupportPage() {
               <MessageSquare className="h-3.5 w-3.5" />
               Client Support
             </div>
-            <h1 className="text-3xl font-semibold text-slate-50">Support</h1>
-            <p className="mt-2 text-sm text-slate-300">
+            <h1 className="text-3xl font-semibold text-foreground">Support</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               Technical issues, billing questions, and account requests in one place.
             </p>
           </div>
@@ -353,7 +353,7 @@ export default function SupportPage() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
           <SupportPanel className="overflow-hidden">
-            <div className="border-b border-white/10 p-4">
+            <div className="border-b border-border p-4">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-wrap gap-2">
                   <FilterPill active={filter === "all"} label="All" onClick={() => setFilter("all")} />
@@ -362,12 +362,12 @@ export default function SupportPage() {
                 </div>
 
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search tickets"
-                    className="border-slate-800 bg-slate-950 pl-10 text-slate-50"
+                    className="border-border bg-background pl-10 text-foreground"
                   />
                 </div>
 
@@ -393,12 +393,12 @@ export default function SupportPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : filteredTickets.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950 px-6 py-12 text-center">
-                  <MessageSquare className="mx-auto h-10 w-10 text-slate-400" />
-                  <h2 className="mt-4 text-lg font-semibold text-slate-50">
+                <div className="rounded-xl border border-dashed border-border bg-muted/10 px-6 py-12 text-center">
+                  <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <h2 className="mt-4 text-lg font-semibold text-foreground">
                     {search || categoryFilter !== "all" || priorityFilter !== "all" ? "No matching tickets" : "No tickets yet"}
                   </h2>
-                  <p className="mt-2 text-sm text-slate-300">
+                  <p className="mt-2 text-sm text-muted-foreground">
                     {search || categoryFilter !== "all" || priorityFilter !== "all"
                       ? "Try broadening the filters."
                       : "Open a ticket when you need help."}
@@ -416,8 +416,8 @@ export default function SupportPage() {
 
           <div className="space-y-4">
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-slate-50">Quick help</h2>
-              <div className="mt-3 space-y-3 text-sm text-slate-300">
+              <h2 className="text-sm font-semibold text-foreground">Quick help</h2>
+              <div className="mt-3 space-y-3 text-sm text-muted-foreground">
                 <p>Password reset: use the server settings page.</p>
                 <p>Billing issues: use the Accounts queue.</p>
                 <p>Server incidents: attach the affected server.</p>
@@ -426,8 +426,8 @@ export default function SupportPage() {
             </SupportPanel>
 
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-slate-50">Keep it tidy</h2>
-              <p className="mt-3 text-sm text-slate-300">
+              <h2 className="text-sm font-semibold text-foreground">Keep it tidy</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
                 If a ticket says <span className="text-amber-200">Action Needed</span>, reply in the same thread instead of opening another one.
               </p>
             </SupportPanel>

@@ -38,12 +38,12 @@ export const SUPPORT_STATUS_META: Record<
   new: {
     label: "New",
     icon: CircleDot,
-    badgeClassName: "border-blue-500/20 bg-blue-500/10 text-blue-300",
+    badgeClassName: "border-primary/20 bg-primary/10 text-primary",
   },
   open: {
     label: "Open",
     icon: CircleDot,
-    badgeClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300",
+    badgeClassName: "border-info/20 bg-info/10 text-info",
   },
   waiting_user: {
     label: "Action Needed",
@@ -53,7 +53,7 @@ export const SUPPORT_STATUS_META: Record<
   waiting_admin: {
     label: "With Support",
     icon: Clock3,
-    badgeClassName: "border-violet-500/20 bg-violet-500/10 text-violet-300",
+    badgeClassName: "border-border bg-muted/40 text-foreground",
   },
   resolved: {
     label: "Resolved",
@@ -110,7 +110,7 @@ export function SupportPanel({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-slate-800 bg-slate-950 shadow-[0_14px_32px_rgba(2,6,23,0.34)]",
+        "rounded-2xl border border-border bg-card shadow-[0_14px_32px_rgba(2,6,23,0.22)]",
         className,
       )}
     >
@@ -138,8 +138,8 @@ export function SupportStatusBadge({ status }: { status: TicketStatus }) {
 
 export function SupportPriorityBadge({ priority }: { priority: TicketPriority }) {
   const tone = {
-    low: "border-slate-700 bg-slate-900 text-slate-200",
-    normal: "border-slate-700 bg-slate-900 text-slate-50",
+    low: "border-border bg-muted/40 text-muted-foreground",
+    normal: "border-border bg-muted/40 text-foreground",
     high: "border-amber-500/25 bg-amber-500/12 text-amber-200",
     urgent: "border-red-500/25 bg-red-500/12 text-red-200",
   }[priority];
@@ -154,7 +154,7 @@ export function SupportPriorityBadge({ priority }: { priority: TicketPriority })
 
 export function SupportCategoryBadge({ category }: { category: TicketCategory }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-200">
+    <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-foreground">
       {SUPPORT_CATEGORY_LABELS[category]}
     </span>
   );
@@ -194,8 +194,8 @@ export function SupportThreadMessage({
           className={cn(
             "rounded-2xl border px-4 py-3 text-sm leading-6",
             isSupport
-              ? "rounded-tl-md border-primary/20 bg-primary/12 text-slate-50"
-              : "rounded-tr-md border-slate-700 bg-slate-900 text-slate-100",
+              ? "rounded-tl-md border-primary/20 bg-primary/10 text-foreground"
+              : "rounded-tr-md border-border bg-muted/40 text-foreground",
           )}
         >
           <p className="whitespace-pre-wrap break-words">{message.message}</p>
@@ -203,7 +203,7 @@ export function SupportThreadMessage({
       </div>
 
       {!isSupport && (
-        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground">
+        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
           <UserRound className="h-4 w-4" />
         </div>
       )}

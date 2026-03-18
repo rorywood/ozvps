@@ -30,9 +30,9 @@ import {
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <div className="mt-1.5 text-sm text-slate-100">{value}</div>
+    <div className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <div className="mt-1.5 text-sm text-foreground">{value}</div>
     </div>
   );
 }
@@ -115,8 +115,8 @@ export default function SupportTicketPage() {
         <div className="flex min-h-[45vh] items-center justify-center">
           <SupportPanel className="max-w-lg px-8 py-10 text-center">
             <XCircle className="mx-auto h-10 w-10 text-destructive" />
-            <h1 className="mt-4 text-xl font-semibold text-slate-50">Invalid ticket</h1>
-            <p className="mt-2 text-sm text-slate-300">This support link doesn’t contain a valid ticket number.</p>
+            <h1 className="mt-4 text-xl font-semibold text-foreground">Invalid ticket</h1>
+            <p className="mt-2 text-sm text-muted-foreground">This support link doesn’t contain a valid ticket number.</p>
           </SupportPanel>
         </div>
       </AppShell>
@@ -139,8 +139,8 @@ export default function SupportTicketPage() {
         <div className="flex min-h-[45vh] items-center justify-center">
           <SupportPanel className="max-w-lg px-8 py-10 text-center">
             <XCircle className="mx-auto h-10 w-10 text-destructive" />
-            <h1 className="mt-4 text-xl font-semibold text-slate-50">Ticket not found</h1>
-            <p className="mt-2 text-sm text-slate-300">This ticket is unavailable to this account.</p>
+            <h1 className="mt-4 text-xl font-semibold text-foreground">Ticket not found</h1>
+            <p className="mt-2 text-sm text-muted-foreground">This ticket is unavailable to this account.</p>
           </SupportPanel>
         </div>
       </AppShell>
@@ -158,25 +158,25 @@ export default function SupportTicketPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <Link href="/support">
-              <Button variant="ghost" className="-ml-3 mb-3 text-slate-400 hover:text-slate-100">
+              <Button variant="ghost" className="-ml-3 mb-3 text-muted-foreground hover:text-foreground">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to support
               </Button>
             </Link>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-400">#{ticket.id}</span>
+              <span className="text-xs font-medium text-muted-foreground">#{ticket.id}</span>
               <SupportStatusBadge status={ticket.status} />
               <SupportCategoryBadge category={ticket.category} />
               <SupportPriorityBadge priority={ticket.priority} />
             </div>
-            <h1 className="break-words text-2xl font-semibold text-slate-50">{ticket.title}</h1>
-            <p className="mt-2 text-sm text-slate-300">
+            <h1 className="break-words text-2xl font-semibold text-foreground">{ticket.title}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               Opened {formatSupportRelativeTime(ticket.createdAt)} • Updated {formatSupportRelativeTime(ticket.lastMessageAt)}
             </p>
           </div>
 
           {!isInactive ? (
-            <Button variant="outline" onClick={() => setCloseDialogOpen(true)} className="rounded-full border-white/10 bg-white/[0.03] hover:bg-white/[0.06]">
+            <Button variant="outline" onClick={() => setCloseDialogOpen(true)} className="rounded-full border-border bg-card hover:bg-muted/20">
               Close ticket
             </Button>
           ) : isResolved ? (
@@ -204,10 +204,10 @@ export default function SupportTicketPage() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
           <SupportPanel className="overflow-hidden">
-            <div className="border-b border-white/10 px-4 py-3">
+            <div className="border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold text-slate-50">Conversation</h2>
+                <h2 className="text-sm font-semibold text-foreground">Conversation</h2>
               </div>
             </div>
 
@@ -219,7 +219,7 @@ export default function SupportTicketPage() {
             </div>
 
             {!isInactive ? (
-              <div className="border-t border-white/10 bg-white/[0.03] p-4">
+              <div className="border-t border-border bg-muted/10 p-4">
                 <form onSubmit={handleSubmitReply} className="space-y-3">
                   <Textarea
                     value={replyMessage}
@@ -228,11 +228,11 @@ export default function SupportTicketPage() {
                     rows={5}
                     maxLength={10000}
                     disabled={replyMutation.isPending}
-                    className="min-h-[140px] resize-none border-white/10 bg-black/10"
+                    className="min-h-[140px] resize-none border-border bg-background text-foreground"
                   />
 
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-slate-300">Replying here keeps the same thread active.</p>
+                    <p className="text-sm text-muted-foreground">Replying here keeps the same thread active.</p>
                     <Button type="submit" disabled={!replyMessage.trim() || replyMutation.isPending} className="rounded-full">
                       {replyMutation.isPending ? (
                         <>
@@ -250,7 +250,7 @@ export default function SupportTicketPage() {
                 </form>
               </div>
             ) : (
-              <div className="border-t border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-muted-foreground">
+              <div className="border-t border-border bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
                 This ticket is closed.
               </div>
             )}
@@ -258,7 +258,7 @@ export default function SupportTicketPage() {
 
           <div className="space-y-4">
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-slate-50">Details</h2>
+              <h2 className="text-sm font-semibold text-foreground">Details</h2>
               <div className="mt-4 space-y-3">
                 <MetaRow label="Created" value={formatSupportDateTime(ticket.createdAt)} />
                 <MetaRow label="Last update" value={formatSupportDateTime(ticket.lastMessageAt)} />
@@ -280,8 +280,8 @@ export default function SupportTicketPage() {
             </SupportPanel>
 
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-slate-50">Tip</h2>
-              <p className="mt-3 text-sm text-slate-300">
+              <h2 className="text-sm font-semibold text-foreground">Tip</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
                 Reply in the same thread instead of opening another ticket for the same issue.
               </p>
             </SupportPanel>
