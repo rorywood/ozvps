@@ -28,6 +28,29 @@ validateOrExit();
 
 const app = express();
 const httpServer = createServer(app);
+const allowCloudflareAnalytics = process.env.CLOUDFLARE_WEB_ANALYTICS === 'true';
+
+const cspScriptSrc = [
+  "'self'",
+  "'unsafe-inline'",
+  "https://js.stripe.com",
+  "https://www.google.com/recaptcha/",
+  "https://www.gstatic.com/recaptcha/",
+];
+
+const cspConnectSrc = ["'self'", "wss:", "https:"];
+
+const cspFrameSrc = [
+  "https://js.stripe.com",
+  "https://*.stripe.com",
+  "https://www.google.com/recaptcha/",
+  "https://recaptcha.google.com/",
+];
+
+if (allowCloudflareAnalytics) {
+  cspScriptSrc.push("https://static.cloudflareinsights.com");
+  cspConnectSrc.push("https://cloudflareinsights.com");
+}
 
 // Tell Express to trust the first proxy hop (NGINX) so req.ip returns the real client IP.
 // This makes rate limiting work correctly in production behind NGINX.
@@ -109,12 +132,12 @@ app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://www.google.com/recaptcha/", "https://www.gstatic.com/recaptcha/"],
+      scriptSrc: cspScriptSrc,
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "wss:", "https:"],
-      frameSrc: ["'none'", "https://js.stripe.com", "https://*.stripe.com", "https://www.google.com/recaptcha/", "https://recaptcha.google.com/"],
+      connectSrc: cspConnectSrc,
+      frameSrc: cspFrameSrc,
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],

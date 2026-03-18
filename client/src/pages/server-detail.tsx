@@ -322,12 +322,14 @@ export default function ServerDetail() {
     queryKey: ['cancellation', serverId],
     queryFn: () => api.getCancellationStatus(serverId || ''),
     enabled: !!serverId,
+    meta: { suppressNetworkErrors: true },
     refetchInterval: (query) => {
       const cancellation = (query.state.data as any)?.cancellation;
-      if (!cancellation) return 30000;             // No active deletion — check every 30s
+      if (!cancellation) return false;             // No active deletion — only refresh on demand
       if (cancellation.status === 'processing') return 5000;  // Actively deleting — check every 5s
       return 15000;                                // pending_approval / pending — check every 15s
     },
+    refetchIntervalInBackground: false,
   });
 
   // Power action pending state - declared here so liveStats can use it
@@ -339,7 +341,9 @@ export default function ServerDetail() {
     queryKey: ['live-stats', serverId],
     queryFn: () => api.getLiveStats(serverId || ''),
     enabled: !!serverId && (server?.status === 'running' || !!powerActionPending),
+    meta: { suppressNetworkErrors: true },
     refetchInterval: 1000, // Poll every 1 second for real-time stats
+    refetchIntervalInBackground: false,
   });
 
   // Console lock hook - must be after server query

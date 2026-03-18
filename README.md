@@ -111,7 +111,10 @@ SENTRY_DSN=https://your_key@sentry.io/your_backend_project_id
 SENTRY_ENVIRONMENT=production
 VITE_SENTRY_DSN=https://your_key@sentry.io/your_frontend_project_id
 VITE_SENTRY_ENVIRONMENT=production
+CLOUDFLARE_WEB_ANALYTICS=false
 ```
+
+If you enable Cloudflare Web Analytics at the edge, set `CLOUDFLARE_WEB_ANALYTICS=true` so the app CSP allows the injected beacon script. Otherwise leave it `false` and the script will stay blocked by design.
 
 ### 4. Database Setup
 

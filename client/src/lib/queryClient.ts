@@ -12,6 +12,19 @@ export function setSessionErrorCallback(callback: (error: SessionError) => void)
   sessionErrorCallback = callback;
 }
 
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message === "Failed to fetch" || error.message.includes("NetworkError");
+}
+
+function shouldSkipQueryErrorCapture(error: unknown, query: { queryKey: readonly unknown[]; meta?: Record<string, unknown> | undefined }): boolean {
+  const suppressNetworkErrors = query.meta?.suppressNetworkErrors === true;
+  return suppressNetworkErrors && isTransientFetchError(error);
+}
+
 async function handleResponse(res: Response): Promise<void> {
   if (!res.ok) {
     if (res.status === 401) {
@@ -108,6 +121,10 @@ export const getQueryFn: <T>(options: {
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
+      if (shouldSkipQueryErrorCapture(error, query)) {
+        return;
+      }
+
       void captureClientError({
         source: "react-query.query",
         level: "error",
