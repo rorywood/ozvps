@@ -38,9 +38,9 @@ const CATEGORY_HELP: Record<TicketCategory, string> = {
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+    <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-slate-50">{value}</p>
     </div>
   );
 }
@@ -62,7 +62,7 @@ function FilterPill({
         "rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
           ? "border-primary/35 bg-primary/15 text-primary"
-          : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20 hover:text-foreground",
+          : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 hover:text-slate-100",
       )}
     >
       {label}
@@ -77,21 +77,21 @@ function TicketRow({ ticket }: { ticket: SupportTicket }) {
     <Link href={`/support/${ticket.id}`}>
       <div
         className={cn(
-          "cursor-pointer rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-primary/25 hover:bg-white/[0.05]",
-          needsAction && "border-amber-500/20 bg-amber-500/[0.05]",
+          "cursor-pointer rounded-xl border border-slate-800 bg-slate-950 p-4 transition hover:border-primary/25 hover:bg-slate-900",
+          needsAction && "border-amber-500/25 bg-amber-500/[0.08]",
         )}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">#{ticket.id}</span>
+              <span className="text-xs font-medium text-slate-400">#{ticket.id}</span>
               <SupportStatusBadge status={ticket.status} />
               <SupportCategoryBadge category={ticket.category} />
               <SupportPriorityBadge priority={ticket.priority} />
             </div>
 
-            <h3 className="truncate text-base font-semibold text-foreground">{ticket.title}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h3 className="text-base font-semibold leading-6 text-slate-50 break-words">{ticket.title}</h3>
+            <p className="mt-1 text-sm text-slate-300">
               Updated {formatSupportRelativeTime(ticket.lastMessageAt)}
               {ticket.virtfusionServerId ? " • Linked server" : ""}
             </p>
@@ -99,7 +99,7 @@ function TicketRow({ ticket }: { ticket: SupportTicket }) {
 
           <div className="flex items-center gap-2 text-sm">
             {needsAction && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-1 text-amber-200">
                 <Timer className="h-3.5 w-3.5" />
                 Reply needed
               </span>
@@ -172,10 +172,10 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
     <SupportPanel className="p-5">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white">New ticket</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{CATEGORY_HELP[category]}</p>
+          <h2 className="text-lg font-semibold text-slate-50">New ticket</h2>
+          <p className="mt-1 text-sm text-slate-300">{CATEGORY_HELP[category]}</p>
         </div>
-        <Button variant="ghost" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" onClick={onClose} className="text-slate-400 hover:text-slate-100">
           Cancel
         </Button>
       </div>
@@ -192,13 +192,13 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
                   "rounded-xl border p-3 text-left transition",
                   category === key
                     ? "border-primary/35 bg-primary/10"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/20",
+                    : "border-slate-800 bg-slate-950 hover:border-slate-600",
                 )}
               >
-                <p className={cn("text-sm font-medium", category === key ? "text-primary" : "text-foreground")}>
+                <p className={cn("text-sm font-medium", category === key ? "text-primary" : "text-slate-100")}>
                   {SUPPORT_CATEGORY_LABELS[key]}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{CATEGORY_HELP[key]}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">{CATEGORY_HELP[key]}</p>
               </button>
             ))}
           </div>
@@ -213,7 +213,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
               minLength={3}
               maxLength={200}
               required
-              className="border-white/10 bg-white/[0.03]"
+              className="border-slate-800 bg-slate-950 text-slate-50"
             />
           </div>
 
@@ -221,7 +221,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <Label>Priority</Label>
               <Select value={priority} onValueChange={(value) => setPriority(value as TicketPriority)}>
-                <SelectTrigger className="border-white/10 bg-white/[0.03]">
+                <SelectTrigger className="border-slate-800 bg-slate-950 text-slate-50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
@@ -237,7 +237,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <Label>Affected server</Label>
               <Select value={selectedServer} onValueChange={setSelectedServer}>
-                <SelectTrigger className="border-white/10 bg-white/[0.03]">
+                <SelectTrigger className="border-slate-800 bg-slate-950 text-slate-50">
                   <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
@@ -255,7 +255,7 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="support-description">Details</Label>
-              <span className="text-xs text-muted-foreground">{description.length}/10000</span>
+              <span className="text-xs text-slate-400">{description.length}/10000</span>
             </div>
             <Textarea
               id="support-description"
@@ -266,13 +266,13 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
               maxLength={10000}
               rows={7}
               required
-              className="min-h-[180px] resize-none border-white/10 bg-white/[0.03]"
+              className="min-h-[180px] resize-none border-slate-800 bg-slate-950 text-slate-50"
             />
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">
             Attach the server when possible. It helps support jump straight to the right context.
           </div>
 
@@ -331,11 +331,11 @@ export default function SupportPage() {
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
               <MessageSquare className="h-3.5 w-3.5" />
-              Support
+              Client Support
             </div>
-            <h1 className="text-3xl font-semibold text-white">Support desk</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Keep technical, billing, and sales threads in one tidy queue.
+            <h1 className="text-3xl font-semibold text-slate-50">Support</h1>
+            <p className="mt-2 text-sm text-slate-300">
+              Technical issues, billing questions, and account requests in one place.
             </p>
           </div>
 
@@ -362,12 +362,12 @@ export default function SupportPage() {
                 </div>
 
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search tickets"
-                    className="border-white/10 bg-white/[0.03] pl-10"
+                    className="border-slate-800 bg-slate-950 pl-10 text-slate-50"
                   />
                 </div>
 
@@ -393,12 +393,12 @@ export default function SupportPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : filteredTickets.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center">
-                  <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground" />
-                  <h2 className="mt-4 text-lg font-semibold text-white">
+                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950 px-6 py-12 text-center">
+                  <MessageSquare className="mx-auto h-10 w-10 text-slate-400" />
+                  <h2 className="mt-4 text-lg font-semibold text-slate-50">
                     {search || categoryFilter !== "all" || priorityFilter !== "all" ? "No matching tickets" : "No tickets yet"}
                   </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <p className="mt-2 text-sm text-slate-300">
                     {search || categoryFilter !== "all" || priorityFilter !== "all"
                       ? "Try broadening the filters."
                       : "Open a ticket when you need help."}
@@ -416,8 +416,8 @@ export default function SupportPage() {
 
           <div className="space-y-4">
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-white">Quick help</h2>
-              <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+              <h2 className="text-sm font-semibold text-slate-50">Quick help</h2>
+              <div className="mt-3 space-y-3 text-sm text-slate-300">
                 <p>Password reset: use the server settings page.</p>
                 <p>Billing issues: use the Accounts queue.</p>
                 <p>Server incidents: attach the affected server.</p>
@@ -426,9 +426,9 @@ export default function SupportPage() {
             </SupportPanel>
 
             <SupportPanel className="p-4">
-              <h2 className="text-sm font-semibold text-white">Keep it tidy</h2>
-              <p className="mt-3 text-sm text-muted-foreground">
-                If a ticket says <span className="text-amber-300">Action Needed</span>, reply in the same thread instead of opening another one.
+              <h2 className="text-sm font-semibold text-slate-50">Keep it tidy</h2>
+              <p className="mt-3 text-sm text-slate-300">
+                If a ticket says <span className="text-amber-200">Action Needed</span>, reply in the same thread instead of opening another one.
               </p>
             </SupportPanel>
           </div>

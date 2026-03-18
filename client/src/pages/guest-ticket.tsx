@@ -39,8 +39,8 @@ function ErrorTicketState({ title, message }: { title: string; message: string }
       <div className="mx-auto max-w-xl">
         <SupportPanel className="px-6 py-8 text-center">
           <XCircle className="mx-auto h-10 w-10 text-destructive" />
-          <h2 className="mt-4 text-xl font-semibold text-white">{title}</h2>
-          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <h2 className="mt-4 text-xl font-semibold text-slate-50">{title}</h2>
+          <p className="mt-2 text-sm text-slate-300">{message}</p>
           <div className="mt-6">
             <a href="/contact">
               <Button className="rounded-full px-5">Open a new enquiry</Button>
@@ -55,8 +55,8 @@ function ErrorTicketState({ title, message }: { title: string; message: string }
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <div className="mt-1.5 text-sm text-foreground">{value}</div>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <div className="mt-1.5 text-sm text-slate-100">{value}</div>
     </div>
   );
 }
@@ -246,7 +246,7 @@ export default function GuestTicketPage() {
         <div className="space-y-4">
           {ticket.status === "waiting_user" && (
             <SupportPanel className="border-amber-500/20 bg-amber-500/[0.07] px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-amber-300">
+              <div className="flex items-center gap-2 text-sm text-amber-200">
                 <Timer className="h-4 w-4" />
                 OzVPS support is waiting for your reply.
               </div>
@@ -256,7 +256,7 @@ export default function GuestTicketPage() {
           {isResolved && (
             <SupportPanel className="px-4 py-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-emerald-300">This ticket is resolved.</p>
+                <p className="text-sm text-emerald-200">This ticket is resolved.</p>
                 <Button onClick={() => reopenTicketMutation.mutate()} disabled={reopenTicketMutation.isPending} className="rounded-full">
                   {reopenTicketMutation.isPending ? (
                     <>
@@ -272,10 +272,10 @@ export default function GuestTicketPage() {
           )}
 
           <SupportPanel className="overflow-hidden">
-            <div className="border-b border-white/10 px-4 py-3">
+            <div className="border-b border-slate-800 px-4 py-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold text-white">Conversation</h2>
+                <h2 className="text-sm font-semibold text-slate-50">Conversation</h2>
               </div>
             </div>
 
@@ -287,7 +287,7 @@ export default function GuestTicketPage() {
             </div>
 
             {canReply ? (
-              <div className="border-t border-white/10 bg-white/[0.03] p-4">
+              <div className="border-t border-slate-800 bg-slate-950 p-4">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -303,11 +303,11 @@ export default function GuestTicketPage() {
                     rows={5}
                     maxLength={5000}
                     disabled={replyMutation.isPending}
-                    className="min-h-[140px] resize-none border-white/10 bg-black/10"
+                    className="min-h-[140px] resize-none border-slate-800 bg-slate-900 text-slate-50"
                   />
 
                   <div className="flex items-center justify-between gap-3">
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2 text-sm text-slate-300">
                       <Mail className="h-4 w-4" />
                       Email replies stay in sync too.
                     </p>
@@ -317,7 +317,7 @@ export default function GuestTicketPage() {
                         variant="outline"
                         onClick={() => closeTicketMutation.mutate()}
                         disabled={closeTicketMutation.isPending}
-                        className="rounded-full border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                        className="rounded-full border-slate-700 bg-slate-950 hover:bg-slate-900"
                       >
                         {closeTicketMutation.isPending ? "Closing..." : "Close"}
                       </Button>

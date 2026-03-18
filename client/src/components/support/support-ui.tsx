@@ -110,7 +110,7 @@ export function SupportPanel({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.03)] shadow-[0_10px_30px_rgba(0,0,0,0.18)]",
+        "rounded-2xl border border-slate-800 bg-slate-950 shadow-[0_14px_32px_rgba(2,6,23,0.34)]",
         className,
       )}
     >
@@ -138,10 +138,10 @@ export function SupportStatusBadge({ status }: { status: TicketStatus }) {
 
 export function SupportPriorityBadge({ priority }: { priority: TicketPriority }) {
   const tone = {
-    low: "border-white/10 bg-white/5 text-muted-foreground",
-    normal: "border-white/10 bg-white/5 text-foreground",
-    high: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-    urgent: "border-red-500/20 bg-red-500/10 text-red-300",
+    low: "border-slate-700 bg-slate-900 text-slate-200",
+    normal: "border-slate-700 bg-slate-900 text-slate-50",
+    high: "border-amber-500/25 bg-amber-500/12 text-amber-200",
+    urgent: "border-red-500/25 bg-red-500/12 text-red-200",
   }[priority];
 
   return (
@@ -154,7 +154,7 @@ export function SupportPriorityBadge({ priority }: { priority: TicketPriority })
 
 export function SupportCategoryBadge({ category }: { category: TicketCategory }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-200">
       {SUPPORT_CATEGORY_LABELS[category]}
     </span>
   );
@@ -194,8 +194,8 @@ export function SupportThreadMessage({
           className={cn(
             "rounded-2xl border px-4 py-3 text-sm leading-6",
             isSupport
-              ? "rounded-tl-md border-primary/15 bg-primary/10 text-foreground"
-              : "rounded-tr-md border-white/10 bg-white/[0.04] text-foreground",
+              ? "rounded-tl-md border-primary/20 bg-primary/12 text-slate-50"
+              : "rounded-tr-md border-slate-700 bg-slate-900 text-slate-100",
           )}
         >
           <p className="whitespace-pre-wrap break-words">{message.message}</p>
@@ -225,20 +225,21 @@ export function SupportPublicShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(0,133,255,0.12),transparent_30%),linear-gradient(180deg,hsl(222_50%_4%)_0%,hsl(222_44%_6%)_100%)] text-foreground">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(6,10,18,0.84)] backdrop-blur-xl">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#070b14_0%,#0b1220_45%,#0d1524_100%)] text-foreground">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.18),transparent_26%),radial-gradient(circle_at_85%_18%,rgba(14,165,233,0.1),transparent_22%)]" />
+      <header className="sticky top-0 z-40 border-b border-slate-800 bg-[rgba(7,11,20,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
           <a href="https://ozvps.com.au" className="flex items-center gap-3">
             <img src={logo} alt="OzVPS" className="h-8 w-auto brightness-0 invert" />
-            <span className="hidden text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground sm:inline">
-              Support
+            <span className="hidden text-[11px] font-medium uppercase tracking-[0.2em] text-slate-300 sm:inline">
+              Client Support
             </span>
           </a>
 
           <div className="flex items-center gap-3">
             <a
               href="/login"
-              className="inline-flex items-center justify-center rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/10"
+              className="inline-flex items-center justify-center rounded-full border border-slate-700 px-3.5 py-1.5 text-sm font-medium text-slate-100 transition hover:border-primary/40 hover:bg-primary/10"
             >
               Sign In
             </a>
@@ -252,19 +253,19 @@ export function SupportPublicShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
+      <main className="relative mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         <div className="mb-6">
-          <div className="mb-3 inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
+          <div className="mb-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
             {eyebrow}
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{title}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/70 sm:text-base">{description}</p>
+          <h1 className="max-w-4xl text-3xl font-semibold tracking-tight text-slate-50 sm:text-4xl">{title}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">{description}</p>
 
           {meta?.length ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {meta.map((item) => (
-                <div key={item.label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/80">
-                  <span className="text-white/45">{item.label}:</span> {item.value}
+                <div key={item.label} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100">
+                  <span className="text-slate-400">{item.label}:</span> {item.value}
                 </div>
               ))}
             </div>
@@ -274,14 +275,14 @@ export function SupportPublicShell({
         {children}
       </main>
 
-      <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-5 py-6 text-sm text-white/55 sm:flex-row lg:px-8">
+      <footer className="relative border-t border-slate-800">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-5 py-6 text-sm text-slate-400 sm:flex-row lg:px-8">
           <p>© {new Date().getFullYear()} OzVPS Pty Ltd</p>
           <div className="flex items-center gap-4">
-            <a href="https://ozvps.com.au" className="transition hover:text-white">
+            <a href="https://ozvps.com.au" className="transition hover:text-slate-100">
               ozvps.com.au
             </a>
-            <a href="/contact" className="inline-flex items-center gap-1 transition hover:text-white">
+            <a href="/contact" className="inline-flex items-center gap-1 transition hover:text-slate-100">
               Contact
               <ArrowUpRight className="h-3.5 w-3.5" />
             </a>

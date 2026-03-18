@@ -18,11 +18,11 @@ const CATEGORIES = [
 
 const FAQ = [
   { question: "Do I need an account?", answer: "No. Sales and abuse tickets can be submitted without an account." },
-  { question: "Can I get technical support here?", answer: "No. Existing customers should sign in and use the main support desk." },
+  { question: "Can I get technical support here?", answer: "No. Existing customers should sign in and use the main support area." },
   { question: "How do replies work?", answer: "We’ll email you a secure ticket link so you can continue the same thread." },
 ];
 
-const fieldClassName = "border-white/10 bg-white/[0.04] text-foreground placeholder:text-muted-foreground";
+const fieldClassName = "border-slate-800 bg-slate-950 text-slate-50 placeholder:text-slate-400";
 
 export default function ContactPage() {
   useDocumentTitle("Contact OzVPS");
@@ -81,15 +81,15 @@ export default function ContactPage() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
               <CheckCircle2 className="h-7 w-7" />
             </div>
-            <h2 className="mt-5 text-2xl font-semibold text-white">Ticket #{submitted.ticketNumber ?? submitted.ticketId}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <h2 className="mt-5 text-2xl font-semibold text-slate-50">Ticket #{submitted.ticketNumber ?? submitted.ticketId}</h2>
+            <p className="mt-2 text-sm text-slate-300">
               Check <span className="text-foreground">{form.email}</span> for the secure reply link.
             </p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               <a href="https://ozvps.com.au">
                 <Button className="rounded-full px-5">Back to OzVPS</Button>
               </a>
-              <Button variant="outline" className="rounded-full border-white/10 bg-white/[0.03] hover:bg-white/[0.06]" onClick={() => setSubmitted(null)}>
+              <Button variant="outline" className="rounded-full border-slate-700 bg-slate-950 hover:bg-slate-900" onClick={() => setSubmitted(null)}>
                 Submit another enquiry
               </Button>
             </div>
@@ -111,8 +111,8 @@ export default function ContactPage() {
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
         <SupportPanel className="overflow-hidden">
-          <div className="border-b border-white/10 px-5 py-4">
-            <h2 className="text-lg font-semibold text-white">New enquiry</h2>
+          <div className="border-b border-slate-800 px-5 py-4">
+            <h2 className="text-lg font-semibold text-slate-50">New enquiry</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5 p-5">
@@ -127,16 +127,16 @@ export default function ContactPage() {
                     onClick={() => setForm((current) => ({ ...current, category: category.value }))}
                     className={cn(
                       "rounded-xl border p-4 text-left transition",
-                      selected ? "border-primary/35 bg-primary/10" : "border-white/10 bg-white/[0.03] hover:border-white/20",
+                      selected ? "border-primary/35 bg-primary/10" : "border-slate-800 bg-slate-950 hover:border-slate-600",
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl border", selected ? "border-primary/20 bg-primary/10 text-primary" : "border-white/10 bg-white/[0.04] text-muted-foreground")}>
+                      <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl border", selected ? "border-primary/20 bg-primary/10 text-primary" : "border-slate-700 bg-slate-900 text-slate-300")}>
                         <Icon className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className={cn("text-sm font-medium", selected ? "text-primary" : "text-foreground")}>{category.label}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>
+                        <p className={cn("text-sm font-medium", selected ? "text-primary" : "text-slate-100")}>{category.label}</p>
+                        <p className="mt-1 text-sm text-slate-300">{category.description}</p>
                       </div>
                     </div>
                   </button>
@@ -148,7 +148,7 @@ export default function ContactPage() {
               <div className="space-y-2">
                 <label htmlFor="contact-name" className="text-sm font-medium text-foreground">Name</label>
                 <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     id="contact-name"
                     value={form.name}
@@ -163,7 +163,7 @@ export default function ContactPage() {
               <div className="space-y-2">
                 <label htmlFor="contact-email" className="text-sm font-medium text-foreground">Email</label>
                 <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     id="contact-email"
                     type="email"
@@ -195,7 +195,7 @@ export default function ContactPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label htmlFor="contact-message" className="text-sm font-medium text-foreground">Message</label>
-                <span className="text-xs text-muted-foreground">{form.message.length}/5000</span>
+                <span className="text-xs text-slate-400">{form.message.length}/5000</span>
               </div>
               <Textarea
                 id="contact-message"
@@ -206,12 +206,12 @@ export default function ContactPage() {
                 required
                 rows={7}
                 maxLength={5000}
-                className="min-h-[180px] resize-none border-white/10 bg-white/[0.04]"
+                className="min-h-[180px] resize-none border-slate-800 bg-slate-950 text-slate-50"
               />
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-300">
                 Already a customer? <a href="/login" className="text-primary hover:text-primary/80">Sign in</a>.
               </p>
               <Button type="submit" disabled={submitMutation.isPending || !form.category} className="rounded-full px-5">
@@ -230,25 +230,25 @@ export default function ContactPage() {
 
         <div className="space-y-4">
           <SupportPanel className="p-4">
-            <h2 className="text-sm font-semibold text-white">Before you send</h2>
-            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <h2 className="text-sm font-semibold text-slate-50">Before you send</h2>
+            <div className="mt-3 space-y-2 text-sm text-slate-300">
               <p>Sales: plans, upgrades, migrations, quotes.</p>
               <p>Abuse: include IPs, timestamps, and logs.</p>
-              <p>Technical support: use the signed-in support desk.</p>
+              <p>Technical support: use the signed-in support area.</p>
             </div>
           </SupportPanel>
 
           <SupportPanel className="overflow-hidden">
-            <div className="border-b border-white/10 px-4 py-3">
-              <h2 className="text-sm font-semibold text-white">FAQ</h2>
+            <div className="border-b border-slate-800 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-50">FAQ</h2>
             </div>
             <Accordion type="single" collapsible className="px-4">
               {FAQ.map((item) => (
                 <AccordionItem key={item.question} value={item.question} className="border-white/10">
                   <AccordionTrigger className="text-left hover:no-underline">
-                    <span className="text-sm font-medium text-foreground">{item.question}</span>
+                    <span className="text-sm font-medium text-slate-100">{item.question}</span>
                   </AccordionTrigger>
-                  <AccordionContent className="text-sm text-muted-foreground">
+                  <AccordionContent className="text-sm text-slate-300">
                     {item.answer}
                   </AccordionContent>
                 </AccordionItem>
