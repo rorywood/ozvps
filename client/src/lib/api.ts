@@ -1209,7 +1209,7 @@ class ApiClient {
     priority: string;
     description: string;
     virtfusionServerId?: string;
-  }): Promise<{ ticket: SupportTicket }> {
+  }): Promise<{ ticket: SupportTicket; serverAttachmentSkipped?: boolean }> {
     const response = await secureFetch(`${this.baseUrl}/support/tickets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -139,7 +139,9 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
     onSuccess: (data) => {
       toast({
         title: "Ticket created",
-        description: `Ticket #${data.ticket.id} is now open.`,
+        description: data.serverAttachmentSkipped
+          ? `Ticket #${data.ticket.id} is open. We couldn't auto-link the selected server, but your message was submitted.`
+          : `Ticket #${data.ticket.id} is now open.`,
       });
       queryClient.invalidateQueries({ queryKey: ["support", "tickets"] });
       queryClient.invalidateQueries({ queryKey: ["support", "counts"] });
@@ -203,11 +205,11 @@ function NewTicketComposer({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-2">
             <Label htmlFor="support-title">Subject</Label>
-            <Input
-              id="support-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Short summary"
+                    <Input
+                      id="support-title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Short summary"
               minLength={3}
               maxLength={200}
               required

@@ -226,6 +226,7 @@ export default function SupportTicketPage() {
                     onChange={(e) => setReplyMessage(e.target.value)}
                     placeholder="Reply to this ticket"
                     rows={5}
+                    maxLength={10000}
                     disabled={replyMutation.isPending}
                     className="min-h-[140px] resize-none border-white/10 bg-black/10"
                   />

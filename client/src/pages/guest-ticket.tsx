@@ -301,6 +301,7 @@ export default function GuestTicketPage() {
                     onChange={(e) => setReply(e.target.value)}
                     placeholder="Reply to this ticket"
                     rows={5}
+                    maxLength={5000}
                     disabled={replyMutation.isPending}
                     className="min-h-[140px] resize-none border-white/10 bg-black/10"
                   />

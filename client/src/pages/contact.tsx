@@ -185,6 +185,7 @@ export default function ContactPage() {
                 value={form.title}
                 onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
                 placeholder="Short summary"
+                minLength={2}
                 required
                 maxLength={200}
                 className={fieldClassName}
@@ -201,6 +202,7 @@ export default function ContactPage() {
                 value={form.message}
                 onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
                 placeholder="Tell us what you need."
+                minLength={20}
                 required
                 rows={7}
                 maxLength={5000}

@@ -29,6 +29,7 @@ import fs from "fs";
 import { LOCATION_CONFIG } from "@shared/locations";
 import { registerPublicCatalogRoutes } from "./public-catalog-routes";
 import { CSRF_COOKIE, SESSION_COOKIE } from "./auth-cookies";
+import { resolveEffectiveVirtFusionUserId, validatePublicContactSubmission } from "./support-ticket-utils";
 
 // VNC auto-disable timers: kill VNC access 30 minutes after console is opened
 const vncAutoDisableTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1020,6 +1021,15 @@ export async function registerRoutes(
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => (req as any).userSession?.auth0UserId || getClientIp(req),
+  });
+
+  const guestTicketRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 20,
+    message: { error: 'Too many support requests. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => getGuestTicketToken(req) || getClientIp(req),
   });
 
   const walletTopupRateLimiter = rateLimit({
@@ -7351,12 +7361,25 @@ export async function registerRoutes(
       }
 
       const { title, category, priority, description, virtfusionServerId } = parseResult.data;
+      let verifiedVirtfusionServerId: string | null = null;
 
       // If a server is specified, verify ownership
       if (virtfusionServerId) {
-        const isOwner = await verifyServerOwnership(virtfusionServerId, req.userSession!.virtFusionUserId);
-        if (!isOwner) {
-          return res.status(403).json({ error: 'You do not have access to this server' });
+        const wallet = await dbStorage.getWallet(auth0UserId);
+        const effectiveVirtFusionUserId = resolveEffectiveVirtFusionUserId(
+          req.userSession!.virtFusionUserId,
+          wallet?.virtFusionUserId,
+        );
+
+        if (!effectiveVirtFusionUserId) {
+          log(`Ticket request by ${req.userSession!.email} could not auto-link server ${virtfusionServerId}: missing VirtFusion user mapping`, 'support');
+        } else {
+          const isOwner = await verifyServerOwnership(virtfusionServerId, effectiveVirtFusionUserId);
+          if (!isOwner) {
+            return res.status(403).json({ error: 'You do not have access to this server' });
+          }
+
+          verifiedVirtfusionServerId = virtfusionServerId;
         }
       }
 
@@ -7366,7 +7389,7 @@ export async function registerRoutes(
         title,
         category,
         priority,
-        virtfusionServerId: virtfusionServerId || null,
+        virtfusionServerId: verifiedVirtfusionServerId,
       });
 
       // Create the initial message
@@ -7394,7 +7417,10 @@ export async function registerRoutes(
         log(`Failed to send admin notification for ticket #${ticket.id}: ${err.message}`, 'email');
       });
 
-      res.status(201).json({ ticket });
+      res.status(201).json({
+        ticket,
+        serverAttachmentSkipped: Boolean(virtfusionServerId && !verifiedVirtfusionServerId),
+      });
     } catch (error: any) {
       log(`Error creating ticket: ${error.message}`, 'api');
       // Log detailed error but return generic message to user
@@ -7604,30 +7630,12 @@ export async function registerRoutes(
   // Public contact form - sales and abuse enquiries only (no auth required)
   app.post('/api/support/contact', contactRateLimiter, async (req, res) => {
     try {
-      const { name, email, category, title, message } = req.body;
-
-      // Only sales and abuse allowed for public contact
-      if (!['sales', 'abuse'].includes(category)) {
-        return res.status(400).json({ error: 'Invalid category. Only sales and abuse enquiries accepted here.' });
+      const validation = validatePublicContactSubmission(req.body ?? {});
+      if (!validation.ok) {
+        return res.status(400).json({ error: validation.error });
       }
 
-      // Validate email
-      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) {
-        return res.status(400).json({ error: 'A valid email address is required.' });
-      }
-
-      // Validate title
-      const cleanTitle = typeof title === 'string' ? title.trim() : '';
-      if (cleanTitle.length < 2) return res.status(400).json({ error: 'Subject is required.' });
-      if (cleanTitle.length > 200) return res.status(400).json({ error: 'Subject must be 200 characters or less.' });
-
-      // Validate message
-      const cleanMessage = typeof message === 'string' ? message.trim() : '';
-      if (cleanMessage.length < 20) return res.status(400).json({ error: 'Message must be at least 20 characters.' });
-      if (cleanMessage.length > 5000) return res.status(400).json({ error: 'Message must be 5000 characters or less.' });
-
-      const resolvedName = name ? String(name).trim().slice(0, 100) || null : null;
+      const { category, cleanEmail, cleanTitle, cleanMessage, resolvedName } = validation.value;
 
       // Public contact is always a guest flow so inbox possession remains
       // the only path to the secure ticket link.
@@ -7670,7 +7678,7 @@ export async function registerRoutes(
   });
 
   // Get a guest ticket by access token (no auth required)
-  app.get('/api/support/guest', ticketRateLimiter, async (req, res) => {
+  app.get('/api/support/guest', guestTicketRateLimiter, async (req, res) => {
     try {
       setGuestTicketResponseHeaders(res);
       const accessToken = getGuestTicketToken(req);
@@ -7693,7 +7701,7 @@ export async function registerRoutes(
   });
 
   // Reply to a guest ticket (no auth required)
-  app.post('/api/support/guest/messages', ticketRateLimiter, async (req, res) => {
+  app.post('/api/support/guest/messages', guestTicketRateLimiter, async (req, res) => {
     try {
       setGuestTicketResponseHeaders(res);
       const accessToken = getGuestTicketToken(req);
@@ -7739,7 +7747,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/support/guest/close', ticketRateLimiter, async (req, res) => {
+  app.post('/api/support/guest/close', guestTicketRateLimiter, async (req, res) => {
     try {
       setGuestTicketResponseHeaders(res);
       const accessToken = getGuestTicketToken(req);
@@ -7761,7 +7769,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/support/guest/reopen', ticketRateLimiter, async (req, res) => {
+  app.post('/api/support/guest/reopen', guestTicketRateLimiter, async (req, res) => {
     try {
       setGuestTicketResponseHeaders(res);
       const accessToken = getGuestTicketToken(req);
