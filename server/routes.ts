@@ -8,8 +8,8 @@ import rateLimit from "express-rate-limit";
 import { virtfusionClient, VirtFusionTimeoutError } from "./virtfusion";
 import { storage, dbStorage } from "./storage";
 import { db, checkDatabaseHealth } from "./db";
-import { plans, serverBilling, billingLedger } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { plans, serverBilling, billingLedger, clientErrorEvents } from "@shared/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { createServerBilling, retryUnpaidServers, retryServerBilling, getServerBillingStatus, getUpcomingCharges, getBillingLedger, runBillingJob } from "./billing";
 import { auth0Client } from "./auth0";
 import { loginSchema, registerSchema, serverNameSchema, reinstallSchema, SESSION_REVOKE_REASONS, createTicketSchema, ticketMessageSchema, adminTicketUpdateSchema, TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES, type TicketStatus, type TicketPriority, type TicketCategory } from "@shared/schema";
@@ -28,14 +28,36 @@ import path from "path";
 import fs from "fs";
 import { LOCATION_CONFIG } from "@shared/locations";
 import { registerPublicCatalogRoutes } from "./public-catalog-routes";
-import { CSRF_COOKIE, SESSION_COOKIE } from "./auth-cookies";
+import { CSRF_COOKIE, SESSION_COOKIE, TRUSTED_2FA_DEVICE_COOKIE } from "./auth-cookies";
 import { resolveEffectiveVirtFusionUserId, validatePublicContactSubmission } from "./support-ticket-utils";
+import {
+  createTrustedTwoFactorDevice,
+  hashTrustedTwoFactorToken,
+  trustedTwoFactorUserAgentMatches,
+  validateTrustedTwoFactorDevice,
+} from "./trusted-two-factor-devices";
 
 // VNC auto-disable timers: kill VNC access 30 minutes after console is opened
 const vncAutoDisableTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const VNC_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const DIRECT_TOPUP_REQUEST_TTL_SECONDS = 120;
 const directTopupFallback = new Map<string, { status: 'pending' | 'succeeded'; requestId: string; paymentIntentId?: string; response?: { newBalanceCents: number; chargedAmountCents: number }; expiresAt: number }>();
+const clientErrorEventSchema = z.object({
+  source: z.string().min(1).max(100),
+  level: z.enum(['info', 'warning', 'error', 'fatal']).default('error'),
+  message: z.string().min(1).max(2000),
+  route: z.string().max(500).optional(),
+  pageUrl: z.string().url().max(2000).optional(),
+  requestUrl: z.string().max(2000).optional(),
+  method: z.string().max(16).optional(),
+  statusCode: z.number().int().min(100).max(599).optional(),
+  stack: z.string().max(20000).optional(),
+  componentStack: z.string().max(20000).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
+  extra: z.record(z.string(), z.unknown()).optional(),
+  userAgent: z.string().max(1000).optional(),
+  timestamp: z.string().optional(),
+});
 
 function getDirectTopupRequestKey(auth0UserId: string, paymentMethodId: string, amountCents: number): string {
   return `billing:direct-topup:${auth0UserId}:${paymentMethodId}:${amountCents}`;
@@ -462,8 +484,8 @@ declare global {
 const buildStartTimes = new Map<string, number>();
 
 const CSRF_HEADER = 'x-csrf-token';
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const PENDING_TWO_FACTOR_TOKEN_TTL_MS = 10 * 60 * 1000;
 
 /**
@@ -483,6 +505,25 @@ function setCsrfCookie(res: Response, token: string, expiresAt: Date): void {
     sameSite: 'strict',
     path: '/',
     expires: expiresAt,
+  });
+}
+
+function setTrustedTwoFactorDeviceCookie(res: Response, token: string, expiresAt: Date): void {
+  res.cookie(TRUSTED_2FA_DEVICE_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    expires: expiresAt,
+  });
+}
+
+function clearTrustedTwoFactorDeviceCookie(res: Response): void {
+  res.clearCookie(TRUSTED_2FA_DEVICE_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
   });
 }
 
@@ -705,7 +746,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       }
     }
 
-    // Check for idle timeout (15 minutes of inactivity)
+    // Check for idle timeout after extended inactivity
     // Handle sessions without lastActivityAt (created before this feature)
     if (session.lastActivityAt) {
       const lastActivity = new Date(session.lastActivityAt);
@@ -787,6 +828,34 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   } catch (error) {
     log(`Auth middleware error: ${error}`, 'api');
     return res.status(500).json({ error: 'Authentication error' });
+  }
+}
+
+async function getOptionalUserSession(req: Request): Promise<Request['userSession'] | null> {
+  const sessionId = req.cookies?.[SESSION_COOKIE];
+  if (!sessionId) {
+    return null;
+  }
+
+  try {
+    const session = await storage.getSession(sessionId);
+    if (!session || session.revokedAt || new Date(session.expiresAt) < new Date()) {
+      return null;
+    }
+
+    return {
+      id: session.id,
+      userId: session.userId ?? 0,
+      auth0UserId: session.auth0UserId ?? null,
+      virtFusionUserId: session.virtFusionUserId ?? null,
+      extRelationId: session.extRelationId ?? null,
+      email: session.email,
+      name: session.name ?? undefined,
+      isAdmin: session.isAdmin ?? false,
+      emailVerified: session.emailVerified ?? false,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -1086,6 +1155,18 @@ export async function registerRoutes(
     keyGenerator: (req) => getClientIp(req),
   });
 
+  const clientErrorRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    message: { error: 'Too many client error reports. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const sessionId = req.cookies?.[SESSION_COOKIE] || '';
+      return sessionId || getClientIp(req);
+    },
+  });
+
   // Apply CSRF protection to all API routes
   app.use('/api', csrfProtection);
 
@@ -1145,6 +1226,77 @@ export async function registerRoutes(
           virtfusion: null
         }
       });
+    }
+  });
+
+  app.post('/api/client-errors', clientErrorRateLimiter, async (req, res) => {
+    try {
+      const parsed = clientErrorEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid client error payload' });
+      }
+
+      const session = await getOptionalUserSession(req);
+      const payload = parsed.data;
+
+      await db.insert(clientErrorEvents).values({
+        auth0UserId: session?.auth0UserId || null,
+        sessionId: session?.id || null,
+        level: payload.level,
+        source: payload.source,
+        message: payload.message,
+        route: payload.route,
+        pageUrl: payload.pageUrl,
+        requestUrl: payload.requestUrl,
+        method: payload.method,
+        statusCode: payload.statusCode,
+        stack: payload.stack,
+        componentStack: payload.componentStack,
+        tags: payload.tags,
+        extra: payload.extra,
+        userAgent: payload.userAgent || req.get('user-agent') || null,
+        ipAddress: getClientIp(req),
+      });
+
+      if (isSentryEnabled() && (payload.level === 'error' || payload.level === 'fatal')) {
+        const clientError = new Error(`[client] ${payload.message}`);
+        clientError.name = `Client${payload.source.replace(/[^a-z0-9]+/gi, ' ')}`.replace(/\s+/g, '');
+        clientError.stack = payload.stack || clientError.stack;
+        captureException(clientError, {
+          source: payload.source,
+          route: payload.route,
+          pageUrl: payload.pageUrl,
+          requestUrl: payload.requestUrl,
+          method: payload.method,
+          statusCode: payload.statusCode,
+          auth0UserId: session?.auth0UserId,
+          sessionId: session?.id,
+          componentStack: payload.componentStack,
+          tags: payload.tags,
+          extra: payload.extra,
+        });
+      }
+
+      return res.status(202).json({ ok: true });
+    } catch (error: any) {
+      log(`Failed to persist client error event: ${error.message}`, 'api');
+      return res.status(500).json({ error: 'Failed to persist client error event' });
+    }
+  });
+
+  app.get('/api/admin/client-errors', authMiddleware, requireAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+      const rows = await db
+        .select()
+        .from(clientErrorEvents)
+        .orderBy(desc(clientErrorEvents.createdAt))
+        .limit(limit);
+
+      return res.json({ events: rows });
+    } catch (error: any) {
+      log(`Failed to load client error events: ${error.message}`, 'api');
+      return res.status(500).json({ error: 'Failed to load client error events' });
     }
   });
 
@@ -1612,7 +1764,7 @@ export async function registerRoutes(
       }
 
       const { email, password } = parsed.data;
-      const { recaptchaToken } = req.body;
+      const { recaptchaToken, pendingTwoFactorToken, trustDevice } = req.body;
 
       // Check reCAPTCHA if enabled
       // Check if this is a 2FA verification step (user already passed reCAPTCHA on initial login)
@@ -1620,6 +1772,8 @@ export async function registerRoutes(
       const normalizedTotpToken = typeof totpToken === 'string' ? totpToken.trim() : '';
       const normalizedEmailOtpToken = typeof emailOtpToken === 'string' ? emailOtpToken.trim() : '';
       const normalizedBackupCode = typeof backupCode === 'string' ? backupCode.trim() : '';
+      const normalizedPendingTwoFactorToken = typeof pendingTwoFactorToken === 'string' ? pendingTwoFactorToken.trim() : '';
+      const shouldTrustDevice = trustDevice === true;
       const is2FAStep = !!(normalizedTotpToken || normalizedBackupCode || normalizedEmailOtpToken);
 
       // Only check reCAPTCHA on initial login, not on 2FA verification step
@@ -1710,94 +1864,142 @@ export async function registerRoutes(
         : `auth0|${auth0Result.user.user_id}`;
 
       const tfa = await dbStorage.getTwoFactorAuth(auth0UserIdFor2FA);
+      let usedTrustedDevice = false;
       if (tfa?.enabled) {
         const emailVerificationCode = normalizedEmailOtpToken || normalizedTotpToken;
-        const pendingTwoFactorToken = createPendingTwoFactorToken({
-          auth0UserId: auth0UserIdFor2FA,
-          email: email.toLowerCase().trim(),
-          ip: clientIp,
-          exp: Date.now() + PENDING_TWO_FACTOR_TOKEN_TTL_MS,
-        });
 
         if (!normalizedTotpToken && !normalizedBackupCode && !normalizedEmailOtpToken) {
-          log(`2FA required for user: ${email} (method: ${tfa.method})`, 'auth');
-          return res.status(200).json({
-            requires2FA: true,
-            twoFAMethod: tfa.method || 'totp',
+          const trustedDeviceToken = req.cookies?.[TRUSTED_2FA_DEVICE_COOKIE];
+          const trustedDeviceResult = await validateTrustedTwoFactorDevice(dbStorage, {
             auth0UserId: auth0UserIdFor2FA,
-            pendingTwoFactorToken,
-            message: 'Two-factor authentication required',
+            token: trustedDeviceToken,
+            userAgent: req.headers['user-agent'] || null,
+            ipAddress: clientIp,
           });
-        }
 
-        let tfaValid = false;
-
-        if (tfa.method === 'email' && emailVerificationCode) {
-          if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
-            return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
-          }
-
-          if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
-            return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
-          }
-
-          try {
-            if (verifyEmailOtpCode(emailVerificationCode, tfa.emailOtpCode)) {
-              tfaValid = true;
-              await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
-              log(`Email 2FA verified for user: ${email}`, 'security');
+          if (trustedDeviceResult.trusted) {
+            usedTrustedDevice = true;
+            await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
+            setTrustedTwoFactorDeviceCookie(
+              res,
+              trustedDeviceToken,
+              trustedDeviceResult.expiresAt,
+            );
+            log(`Trusted device accepted for user: ${email}`, 'security');
+          } else {
+            if (trustedDeviceResult.reason !== 'missing_cookie') {
+              clearTrustedTwoFactorDeviceCookie(res);
+              log(`Trusted device rejected for user ${email}: ${trustedDeviceResult.reason}`, 'security');
             }
-          } catch {
-            // Invalid format, reject below.
+
+            const nextPendingTwoFactorToken = createPendingTwoFactorToken({
+              auth0UserId: auth0UserIdFor2FA,
+              email: email.toLowerCase().trim(),
+              ip: clientIp,
+              exp: Date.now() + PENDING_TWO_FACTOR_TOKEN_TTL_MS,
+            });
+
+            log(`2FA required for user: ${email} (method: ${tfa.method})`, 'auth');
+            return res.status(200).json({
+              requires2FA: true,
+              twoFAMethod: tfa.method || 'totp',
+              auth0UserId: auth0UserIdFor2FA,
+              pendingTwoFactorToken: nextPendingTwoFactorToken,
+              message: 'Two-factor authentication required',
+            });
           }
-        } else if (normalizedTotpToken) {
-          let plaintextSecret: string;
-          try {
-            plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
-            log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
-          } catch (decryptError: any) {
-            log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
-            return res.status(500).json({ error: 'Authentication error. Please contact support.' });
+        } else {
+          const tokenData = verifyPendingTwoFactorToken(normalizedPendingTwoFactorToken);
+          if (!tokenData) {
+            return res.status(401).json({ error: 'Invalid or expired login token. Please sign in again.' });
           }
 
-          log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
-          tfaValid = totpVerify(normalizedTotpToken, plaintextSecret);
-          log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
+          if (tokenData.auth0UserId !== auth0UserIdFor2FA || tokenData.email !== email.toLowerCase().trim() || tokenData.ip !== clientIp) {
+            log(`Rejected 2FA verification due to pending token mismatch for ${auth0UserIdFor2FA}`, 'security');
+            return res.status(401).json({ error: 'Invalid login token. Please sign in again.' });
+          }
         }
 
-        if (!tfaValid && normalizedBackupCode) {
-          const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+        if (!usedTrustedDevice) {
+          let tfaValid = false;
 
-          for (let i = 0; i < backupCodes.length; i++) {
-            const storedHash = backupCodes[i];
-            if (storedHash.startsWith('$argon2')) {
-              if (await verifyBackupCode(normalizedBackupCode, storedHash)) {
+          if (tfa.method === 'email' && emailVerificationCode) {
+            if (!tfa.emailOtpCode || !tfa.emailOtpExpiresAt) {
+              return res.status(400).json({ error: 'No verification code pending. Please request a new one.' });
+            }
+
+            if (new Date() > new Date(tfa.emailOtpExpiresAt)) {
+              return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+            }
+
+            try {
+              if (verifyEmailOtpCode(emailVerificationCode, tfa.emailOtpCode)) {
                 tfaValid = true;
-                backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
-                log(`Backup code used for 2FA login: ${email}`, 'security');
-                break;
+                await dbStorage.clearEmailOtpCode(auth0UserIdFor2FA);
+                log(`Email 2FA verified for user: ${email}`, 'security');
               }
-            } else {
-              const crypto = await import('crypto');
-              const hashedInput = crypto.createHash('sha256').update(normalizedBackupCode.toUpperCase()).digest('hex');
-              if (hashedInput === storedHash) {
-                tfaValid = true;
-                backupCodes.splice(i, 1);
-                await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
-                log(`Legacy backup code used for 2FA login: ${email}`, 'security');
-                break;
+            } catch {
+              // Invalid format, reject below.
+            }
+          } else if (normalizedTotpToken) {
+            let plaintextSecret: string;
+            try {
+              plaintextSecret = isEncrypted(tfa.secret) ? decryptSecret(tfa.secret) : tfa.secret;
+              log(`Login 2FA: secret decrypted, length=${plaintextSecret.length}, wasEncrypted=${isEncrypted(tfa.secret)}`, 'security');
+            } catch (decryptError: any) {
+              log(`Login 2FA: decrypt failed: ${decryptError.message}`, 'security');
+              return res.status(500).json({ error: 'Authentication error. Please contact support.' });
+            }
+
+            log(`Login 2FA: verifying TOTP token (redacted)`, 'security');
+            tfaValid = totpVerify(normalizedTotpToken, plaintextSecret);
+            log(`Login 2FA: TOTP verification result=${tfaValid}`, 'security');
+          }
+
+          if (!tfaValid && normalizedBackupCode) {
+            const backupCodes: string[] = tfa.backupCodes ? JSON.parse(tfa.backupCodes) : [];
+
+            for (let i = 0; i < backupCodes.length; i++) {
+              const storedHash = backupCodes[i];
+              if (storedHash.startsWith('$argon2')) {
+                if (await verifyBackupCode(normalizedBackupCode, storedHash)) {
+                  tfaValid = true;
+                  backupCodes.splice(i, 1);
+                  await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
+                  log(`Backup code used for 2FA login: ${email}`, 'security');
+                  break;
+                }
+              } else {
+                const crypto = await import('crypto');
+                const hashedInput = crypto.createHash('sha256').update(normalizedBackupCode.toUpperCase()).digest('hex');
+                if (hashedInput === storedHash) {
+                  tfaValid = true;
+                  backupCodes.splice(i, 1);
+                  await dbStorage.updateTwoFactorBackupCodes(auth0UserIdFor2FA, backupCodes);
+                  log(`Legacy backup code used for 2FA login: ${email}`, 'security');
+                  break;
+                }
               }
             }
           }
-        }
 
-        if (!tfaValid) {
-          await recordFailedLogin(email, clientIp);
-          return res.status(401).json({ error: 'Invalid two-factor authentication code' });
-        }
+          if (!tfaValid) {
+            await recordFailedLogin(email, clientIp);
+            return res.status(401).json({ error: 'Invalid two-factor authentication code' });
+          }
 
-        await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
+          await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
+
+          if (shouldTrustDevice) {
+            const trustedDevice = await createTrustedTwoFactorDevice(dbStorage, {
+              auth0UserId: auth0UserIdFor2FA,
+              userAgent: req.headers['user-agent'] || null,
+              ipAddress: clientIp,
+            });
+            setTrustedTwoFactorDeviceCookie(res, trustedDevice.token, trustedDevice.expiresAt);
+            log(`Trusted device created for user: ${email}`, 'security');
+          }
+        }
       }
 
       // Revoke ALL existing sessions for this user (single-session policy)
@@ -1922,6 +2124,7 @@ export async function registerRoutes(
         isAdmin,
         emailVerified,
         has2FA: !!tfa?.enabled,
+        trustedDevice: usedTrustedDevice,
       });
 
       res.json({
@@ -3958,6 +4161,36 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/user/2fa/trusted-devices', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const devices = await dbStorage.listTrustedTwoFactorDevices(session.auth0UserId);
+      const currentTrustedToken = req.cookies?.[TRUSTED_2FA_DEVICE_COOKIE];
+      const currentTokenHash = currentTrustedToken ? hashTrustedTwoFactorToken(currentTrustedToken) : null;
+      const currentUserAgent = req.headers['user-agent'] || null;
+
+      res.json({
+        devices: devices.map((device) => ({
+          id: device.id,
+          deviceLabel: device.deviceLabel,
+          userAgent: device.userAgent,
+          ipAddress: device.ipAddress,
+          createdAt: device.createdAt,
+          lastUsedAt: device.lastUsedAt,
+          expiresAt: device.expiresAt,
+          current: currentTokenHash === device.tokenHash && trustedTwoFactorUserAgentMatches(device.userAgentHash, currentUserAgent),
+        })),
+      });
+    } catch (error: any) {
+      log(`Error getting trusted 2FA devices: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to get trusted devices' });
+    }
+  });
+
   // Begin 2FA setup - generate secret and QR code
   app.post('/api/user/2fa/setup', authMiddleware, mfaRateLimiter, async (req, res) => {
     try {
@@ -4143,6 +4376,8 @@ export async function registerRoutes(
 
       await dbStorage.disableTwoFactorAuth(session.auth0UserId);
       await dbStorage.clearEmailOtpCode(session.auth0UserId);
+      await dbStorage.revokeAllTrustedTwoFactorDevices(session.auth0UserId);
+      clearTrustedTwoFactorDeviceCookie(res);
 
       await auditUserAction(req, session.auth0UserId, session.email, UserActions.TWO_FA_DISABLE, '2fa', session.auth0UserId, { method: tfa.method });
 
@@ -4152,6 +4387,54 @@ export async function registerRoutes(
     } catch (error: any) {
       log(`Error disabling 2FA: ${error.message}`, 'api');
       res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+  });
+
+  app.delete('/api/user/2fa/trusted-devices/:id', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const deviceId = Number.parseInt(req.params.id, 10);
+      if (!Number.isFinite(deviceId) || deviceId <= 0) {
+        return res.status(400).json({ error: 'Invalid device id' });
+      }
+
+      const revokedDevice = await dbStorage.revokeTrustedTwoFactorDevice(session.auth0UserId, deviceId);
+      if (!revokedDevice) {
+        return res.status(404).json({ error: 'Trusted device not found' });
+      }
+
+      const currentTrustedToken = req.cookies?.[TRUSTED_2FA_DEVICE_COOKIE];
+      if (currentTrustedToken && revokedDevice.tokenHash === hashTrustedTwoFactorToken(currentTrustedToken)) {
+        clearTrustedTwoFactorDeviceCookie(res);
+      }
+
+      log(`Trusted 2FA device revoked for ${session.email}: ${revokedDevice.deviceLabel}`, 'security');
+      res.json({ success: true, message: 'Trusted device removed' });
+    } catch (error: any) {
+      log(`Error revoking trusted 2FA device: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to revoke trusted device' });
+    }
+  });
+
+  app.delete('/api/user/2fa/trusted-devices', authMiddleware, async (req, res) => {
+    try {
+      const session = req.userSession!;
+      if (!session.auth0UserId) {
+        return res.status(400).json({ error: 'User not authenticated' });
+      }
+
+      const revokedCount = await dbStorage.revokeAllTrustedTwoFactorDevices(session.auth0UserId);
+      clearTrustedTwoFactorDeviceCookie(res);
+
+      log(`Revoked all trusted 2FA devices for ${session.email}`, 'security');
+      res.json({ success: true, revokedCount, message: 'All trusted devices removed' });
+    } catch (error: any) {
+      log(`Error revoking all trusted 2FA devices: ${error.message}`, 'api');
+      res.status(500).json({ error: 'Failed to revoke trusted devices' });
     }
   });
 

@@ -26,6 +26,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Camera,
+  Laptop,
+  MapPin,
   Trash2,
   Upload
 } from "lucide-react";
@@ -75,6 +77,12 @@ export default function Account() {
     queryFn: () => api.get2FAStatus(),
   });
 
+  const { data: trustedDevicesData, isLoading: trustedDevicesLoading } = useQuery({
+    queryKey: ['2fa-trusted-devices'],
+    queryFn: () => api.getTrusted2FADevices(),
+    enabled: !!twoFAStatus?.enabled,
+  });
+
   // 2FA Mutations
   const setup2FAMutation = useMutation({
     mutationFn: () => api.setup2FA(),
@@ -99,6 +107,7 @@ export default function Account() {
       setTwoFAStep('backup');
       setTwoFAToken("");
       queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      queryClient.invalidateQueries({ queryKey: ['2fa-trusted-devices'] });
       toast({
         title: "2FA Enabled",
         description: "Two-factor authentication is now active on your account.",
@@ -120,6 +129,7 @@ export default function Account() {
       setDisableToken("");
       setDisablePassword("");
       queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      queryClient.invalidateQueries({ queryKey: ['2fa-trusted-devices'] });
       toast({
         title: "2FA Disabled",
         description: "Two-factor authentication has been removed from your account.",
@@ -180,6 +190,7 @@ export default function Account() {
       setTwoFAStep('backup');
       setTwoFAToken("");
       queryClient.invalidateQueries({ queryKey: ['2fa-status'] });
+      queryClient.invalidateQueries({ queryKey: ['2fa-trusted-devices'] });
       toast({
         title: "2FA Enabled",
         description: "Email two-factor authentication is now active on your account.",
@@ -206,6 +217,42 @@ export default function Account() {
       toast({
         title: "Send Failed",
         description: error.message || "Failed to send verification code.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const revokeTrustedDeviceMutation = useMutation({
+    mutationFn: (deviceId: number) => api.revokeTrusted2FADevice(deviceId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['2fa-trusted-devices'] });
+      toast({
+        title: "Trusted Device Removed",
+        description: data.message || "That device will need a 2FA code again next time it signs in.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Removal Failed",
+        description: error.message || "Failed to remove trusted device.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const revokeAllTrustedDevicesMutation = useMutation({
+    mutationFn: () => api.revokeAllTrusted2FADevices(),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['2fa-trusted-devices'] });
+      toast({
+        title: "Trusted Devices Cleared",
+        description: data.message || "All trusted devices have been removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Clear Failed",
+        description: error.message || "Failed to remove trusted devices.",
         variant: "destructive",
       });
     }
@@ -1022,6 +1069,94 @@ export default function Account() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h4 className="font-medium text-foreground">Trusted devices</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Devices trusted for 30 days can skip the 2FA prompt after a successful verification.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => revokeAllTrustedDevicesMutation.mutate()}
+                      disabled={!trustedDevicesData?.devices?.length || revokeAllTrustedDevicesMutation.isPending}
+                      className="border-border hover:bg-muted/50"
+                    >
+                      {revokeAllTrustedDevicesMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      Revoke All
+                    </Button>
+                  </div>
+
+                  {trustedDevicesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading trusted devices...
+                    </div>
+                  ) : trustedDevicesData?.devices?.length ? (
+                    <div className="space-y-3">
+                      {trustedDevicesData.devices.map((device) => (
+                        <div
+                          key={device.id}
+                          className="flex items-start justify-between gap-4 rounded-lg border border-border bg-background/40 p-4"
+                        >
+                          <div className="space-y-2 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Laptop className="h-4 w-4 text-primary flex-shrink-0" />
+                              <p className="font-medium text-foreground break-words">{device.deviceLabel}</p>
+                              {device.current && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                  Current device
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              <p className="break-words">{device.userAgent || 'Unknown browser'}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>
+                                  Last used {new Date(device.lastUsedAt).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', dateStyle: 'medium', timeStyle: 'short' })}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span>{device.ipAddress || 'IP unavailable'}</span>
+                                <span>•</span>
+                                <span>
+                                  Expires {new Date(device.expiresAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Brisbane', dateStyle: 'medium' })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => revokeTrustedDeviceMutation.mutate(device.id)}
+                            disabled={revokeTrustedDeviceMutation.isPending}
+                            className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          >
+                            {revokeTrustedDeviceMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-background/30 p-4 text-sm text-muted-foreground">
+                      No trusted devices yet. When a user chooses "Trust this device" during 2FA login, it will appear here.
+                    </div>
+                  )}
                 </div>
 
                 {!showDisableConfirm ? (

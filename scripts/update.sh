@@ -9,6 +9,7 @@ cd /tmp 2>/dev/null || cd /
 
 INSTALL_DIR="/opt/ozvps-panel"
 REPO_URL="https://github.com/rorywood/ozvps.git"
+DEFAULT_SENTRY_DSN="https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352"
 
 # Colors
 RED='\033[0;31m'
@@ -149,6 +150,33 @@ cd "$INSTALL_DIR" || { echo -e "${RED}Failed to enter $INSTALL_DIR${NC}"; exit 1
 # Save environment marker
 echo "$ENV" > .ozvps-env
 echo "$BRANCH" > .ozvps-branch
+
+# Keep Sentry config consistent for both backend and frontend builds.
+if [[ -f ".env" ]]; then
+    SENTRY_DSN_VALUE=$(grep '^SENTRY_DSN=' .env | head -n 1 | cut -d '=' -f2- || true)
+    if [[ -z "$SENTRY_DSN_VALUE" && "$ENV" == "production" ]]; then
+        echo "SENTRY_DSN=$DEFAULT_SENTRY_DSN" >> .env
+        echo "Added default SENTRY_DSN to .env"
+        SENTRY_DSN_VALUE="$DEFAULT_SENTRY_DSN"
+    fi
+
+    if [[ -n "$SENTRY_DSN_VALUE" ]]; then
+        if ! grep -q '^SENTRY_ENVIRONMENT=' .env; then
+            echo "SENTRY_ENVIRONMENT=$ENV" >> .env
+            echo "Added SENTRY_ENVIRONMENT=$ENV to .env"
+        fi
+
+        if ! grep -q '^VITE_SENTRY_DSN=' .env; then
+            echo "VITE_SENTRY_DSN=$SENTRY_DSN_VALUE" >> .env
+            echo "Added VITE_SENTRY_DSN to .env"
+        fi
+
+        if ! grep -q '^VITE_SENTRY_ENVIRONMENT=' .env; then
+            echo "VITE_SENTRY_ENVIRONMENT=$ENV" >> .env
+            echo "Added VITE_SENTRY_ENVIRONMENT=$ENV to .env"
+        fi
+    fi
+fi
 
 # Install dependencies (including dev deps needed for build)
 echo ""

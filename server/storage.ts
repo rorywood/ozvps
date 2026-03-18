@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, loginAttempts, accountLockouts, userAuditLogs, sessions, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage, type LoginAttempt, type AccountLockout, type UserAuditLog } from "@shared/schema";
+import { SessionRevokeReason, plans, wallets, walletTransactions, deployOrders, serverCancellations, serverBilling, securitySettings, adminAuditLogs, invoices, tickets, ticketMessages, twoFactorAuth, trustedTwoFactorDevices, passwordResetTokens, emailVerificationTokens, promoCodes, promoCodeUsage, userFlags as userFlagsTable, loginAttempts, accountLockouts, userAuditLogs, sessions, type Plan, type InsertPlan, type Wallet, type InsertWallet, type WalletTransaction, type InsertWalletTransaction, type DeployOrder, type InsertDeployOrder, type ServerCancellation, type InsertServerCancellation, type ServerBilling, type InsertServerBilling, type SecuritySetting, type AdminAuditLog, type InsertAdminAuditLog, type Invoice, type InsertInvoice, type Ticket, type InsertTicket, type TicketMessage, type InsertTicketMessage, type TicketStatus, type TicketPriority, type TicketCategory, type TwoFactorAuth, type TrustedTwoFactorDevice, type InsertTwoFactorAuth, type PasswordResetToken, type InsertPasswordResetToken, type EmailVerificationToken, type InsertEmailVerificationToken, type PromoCode, type InsertPromoCode, type PromoCodeUsage, type InsertPromoCodeUsage, type LoginAttempt, type AccountLockout, type UserAuditLog } from "@shared/schema";
 import { log } from './log';
 import { STATIC_PLANS } from "@shared/plans";
 import { db } from "./db";
@@ -2398,6 +2398,102 @@ export const dbStorage = {
       .where(eq(twoFactorAuth.auth0UserId, auth0UserId))
       .returning();
     return updated;
+  },
+
+  async createTrustedTwoFactorDevice(data: {
+    auth0UserId: string;
+    tokenHash: string;
+    userAgentHash: string;
+    deviceLabel: string;
+    userAgent?: string | null;
+    ipAddress?: string | null;
+    expiresAt: Date;
+  }): Promise<TrustedTwoFactorDevice> {
+    const [device] = await db
+      .insert(trustedTwoFactorDevices)
+      .values({
+        auth0UserId: data.auth0UserId,
+        tokenHash: data.tokenHash,
+        userAgentHash: data.userAgentHash,
+        deviceLabel: data.deviceLabel,
+        userAgent: data.userAgent ?? null,
+        ipAddress: data.ipAddress ?? null,
+        expiresAt: data.expiresAt,
+      })
+      .returning();
+    return device;
+  },
+
+  async getTrustedTwoFactorDeviceByToken(auth0UserId: string, tokenHash: string): Promise<TrustedTwoFactorDevice | undefined> {
+    const [device] = await db
+      .select()
+      .from(trustedTwoFactorDevices)
+      .where(
+        and(
+          eq(trustedTwoFactorDevices.auth0UserId, auth0UserId),
+          eq(trustedTwoFactorDevices.tokenHash, tokenHash),
+          isNull(trustedTwoFactorDevices.revokedAt),
+          sql`${trustedTwoFactorDevices.expiresAt} > NOW()`
+        )
+      )
+      .limit(1);
+    return device;
+  },
+
+  async touchTrustedTwoFactorDevice(id: number, updates: { lastUsedAt?: Date; expiresAt?: Date; ipAddress?: string | null }): Promise<TrustedTwoFactorDevice | undefined> {
+    const [device] = await db
+      .update(trustedTwoFactorDevices)
+      .set({
+        lastUsedAt: updates.lastUsedAt ?? new Date(),
+        expiresAt: updates.expiresAt,
+        ipAddress: updates.ipAddress ?? null,
+      })
+      .where(eq(trustedTwoFactorDevices.id, id))
+      .returning();
+    return device;
+  },
+
+  async listTrustedTwoFactorDevices(auth0UserId: string): Promise<TrustedTwoFactorDevice[]> {
+    return db
+      .select()
+      .from(trustedTwoFactorDevices)
+      .where(
+        and(
+          eq(trustedTwoFactorDevices.auth0UserId, auth0UserId),
+          isNull(trustedTwoFactorDevices.revokedAt),
+          sql`${trustedTwoFactorDevices.expiresAt} > NOW()`
+        )
+      )
+      .orderBy(desc(trustedTwoFactorDevices.lastUsedAt));
+  },
+
+  async revokeTrustedTwoFactorDevice(auth0UserId: string, id: number): Promise<TrustedTwoFactorDevice | undefined> {
+    const [device] = await db
+      .update(trustedTwoFactorDevices)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(trustedTwoFactorDevices.id, id),
+          eq(trustedTwoFactorDevices.auth0UserId, auth0UserId),
+          isNull(trustedTwoFactorDevices.revokedAt)
+        )
+      )
+      .returning();
+    return device;
+  },
+
+  async revokeAllTrustedTwoFactorDevices(auth0UserId: string): Promise<number> {
+    const revoked = await db
+      .update(trustedTwoFactorDevices)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(trustedTwoFactorDevices.auth0UserId, auth0UserId),
+          isNull(trustedTwoFactorDevices.revokedAt)
+        )
+      )
+      .returning({ id: trustedTwoFactorDevices.id });
+    return revoked.length;
   },
 
   // Password reset token functions

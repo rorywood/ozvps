@@ -1,4 +1,5 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryFunction } from "@tanstack/react-query";
+import { captureClientError } from "./error-tracking";
 
 export interface SessionError {
   error: string;
@@ -105,6 +106,33 @@ export const getQueryFn: <T>(options: {
   };
 
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      void captureClientError({
+        source: "react-query.query",
+        level: "error",
+        message: error instanceof Error ? error.message : "Query failed",
+        error,
+        extra: {
+          queryKey: query.queryKey,
+        },
+      });
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, variables, _context, mutation) => {
+      void captureClientError({
+        source: "react-query.mutation",
+        level: "error",
+        message: error instanceof Error ? error.message : "Mutation failed",
+        error,
+        extra: {
+          mutationKey: mutation.options.mutationKey,
+          variables,
+        },
+      });
+    },
+  }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),

@@ -1,5 +1,6 @@
 import { Server, SupportTicket, TicketMessage } from "./types";
 import { SessionError } from "./queryClient";
+import { captureClientError } from "./error-tracking";
 
 // CSRF token management - read from cookie only (set by server)
 // SECURITY: Never store CSRF tokens in localStorage (vulnerable to XSS)
@@ -35,6 +36,28 @@ export function clearCsrfToken(): void {
   // No-op: CSRF cookie is cleared by server on logout
 }
 
+async function readResponseSummary(response: Response): Promise<string | undefined> {
+  try {
+    const clone = response.clone();
+    const contentType = clone.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await clone.json();
+      if (typeof data?.error === "string") {
+        return data.error;
+      }
+      if (typeof data?.message === "string") {
+        return data.message;
+      }
+      return undefined;
+    }
+
+    const text = await clone.text();
+    return text ? text.slice(0, 500) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Enhanced fetch that includes CSRF token for mutating requests
 export async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
@@ -58,7 +81,38 @@ export async function secureFetch(url: string, options: RequestInit = {}): Promi
     };
   }
 
-  const response = await fetch(url, options);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      credentials: "include",
+      ...options,
+    });
+  } catch (error) {
+    void captureClientError({
+      source: "api.network",
+      level: "error",
+      message: `Network request failed for ${method} ${url}`,
+      error,
+      requestUrl: url,
+      method,
+    });
+    throw error;
+  }
+
+  if (!response.ok && !url.includes("/api/client-errors")) {
+    const summary = await readResponseSummary(response);
+    void captureClientError({
+      source: "api.response",
+      level: response.status >= 500 ? "error" : "warning",
+      message: summary || `${method} ${url} failed with status ${response.status}`,
+      requestUrl: url,
+      method,
+      statusCode: response.status,
+      extra: {
+        statusText: response.statusText,
+      },
+    });
+  }
 
   // Handle 401 errors - trigger session error callback to redirect to login
   // BUT only if we're not already on the login/register/auth pages (avoid redirect loop)
@@ -120,6 +174,17 @@ export interface OsTemplate {
   id: number;
   name: string;
   group?: string;
+}
+
+export interface TrustedTwoFactorDevice {
+  id: number;
+  deviceLabel: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  current: boolean;
 }
 
 class ApiClient {
@@ -514,6 +579,15 @@ class ApiClient {
     return response.json();
   }
 
+  async getTrusted2FADevices(): Promise<{ devices: TrustedTwoFactorDevice[] }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/trusted-devices`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to get trusted devices');
+    }
+    return response.json();
+  }
+
   async setup2FA(): Promise<{
     secret: string;
     qrCode: string;
@@ -632,13 +706,40 @@ class ApiClient {
     return response.json();
   }
 
+  async revokeTrusted2FADevice(id: number): Promise<{ success: boolean; message: string }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/trusted-devices/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to revoke trusted device');
+    }
+    return response.json();
+  }
+
+  async revokeAllTrusted2FADevices(): Promise<{ success: boolean; message: string; revokedCount: number }> {
+    const response = await secureFetch(`${this.baseUrl}/user/2fa/trusted-devices`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to revoke trusted devices');
+    }
+    return response.json();
+  }
+
   async login(
     email: string,
     password: string,
     recaptchaToken?: string,
     totpToken?: string,
-    backupCode?: string
-  ): Promise<{ user?: { id: number; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; pendingTwoFactorToken?: string }> {
+    backupCode?: string,
+    options?: {
+      trustDevice?: boolean;
+      pendingTwoFactorToken?: string;
+      emailOtpToken?: string;
+    }
+  ): Promise<{ user?: { id: string; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; pendingTwoFactorToken?: string }> {
     // Pre-flight check: verify API is reachable and all services are healthy
     try {
       const healthCheck = await fetch('/api/health', {
@@ -669,7 +770,16 @@ class ApiClient {
     const response = await secureFetch(`${this.baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, recaptchaToken, totpToken, backupCode })
+      body: JSON.stringify({
+        email,
+        password,
+        recaptchaToken,
+        totpToken,
+        backupCode,
+        emailOtpToken: options?.emailOtpToken,
+        pendingTwoFactorToken: options?.pendingTwoFactorToken,
+        trustDevice: options?.trustDevice,
+      })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

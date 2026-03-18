@@ -248,6 +248,21 @@ export const twoFactorAuth = pgTable("two_factor_auth", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Trusted 2FA devices - lets users skip 2FA on approved devices for a limited time
+export const trustedTwoFactorDevices = pgTable("trusted_two_factor_devices", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  userAgentHash: text("user_agent_hash").notNull(),
+  deviceLabel: text("device_label").notNull(),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+});
+
 // Rate limiting table for persistent brute-force protection
 export const rateLimits = pgTable("rate_limits", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -656,6 +671,33 @@ export const userAuditLogs = pgTable("user_audit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Client error events - stores browser-side issues users hit in the app
+export const clientErrorEvents = pgTable("client_error_events", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auth0UserId: text("auth0_user_id"),
+  sessionId: varchar("session_id", { length: 64 }),
+  level: text("level").notNull().default("error"),
+  source: text("source").notNull(),
+  message: text("message").notNull(),
+  route: text("route"),
+  pageUrl: text("page_url"),
+  requestUrl: text("request_url"),
+  method: text("method"),
+  statusCode: integer("status_code"),
+  stack: text("stack"),
+  componentStack: text("component_stack"),
+  tags: jsonb("tags"),
+  extra: jsonb("extra"),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertClientErrorEventSchema = createInsertSchema(clientErrorEvents);
+
 export type LoginAttempt = typeof loginAttempts.$inferSelect;
 export type AccountLockout = typeof accountLockouts.$inferSelect;
 export type UserAuditLog = typeof userAuditLogs.$inferSelect;
+export type ClientErrorEvent = typeof clientErrorEvents.$inferSelect;
+export type InsertClientErrorEvent = z.infer<typeof insertClientErrorEventSchema>;
+export type TrustedTwoFactorDevice = typeof trustedTwoFactorDevices.$inferSelect;

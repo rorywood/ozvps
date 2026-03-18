@@ -107,6 +107,10 @@ EMAIL_FROM=OzVPS <noreply@ozvps.com.au>
 # Optional (Recommended for Production)
 REDIS_URL=redis://localhost:6379
 REDIS_PASSWORD=<your-redis-password>
+SENTRY_DSN=https://your_key@sentry.io/your_backend_project_id
+SENTRY_ENVIRONMENT=production
+VITE_SENTRY_DSN=https://your_key@sentry.io/your_frontend_project_id
+VITE_SENTRY_ENVIRONMENT=production
 ```
 
 ### 4. Database Setup

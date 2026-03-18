@@ -190,6 +190,7 @@ SKIP_SELF_UPDATE=false
 FORCE_REINSTALL=false
 
 # Optional service variables (empty by default for set -u compatibility)
+DEFAULT_SENTRY_DSN="https://d4f992b86441210c3eae4f04bf3924b8@o4510719188074496.ingest.us.sentry.io/4510719196004352"
 SENTRY_DSN=""
 RESEND_API_KEY=""
 
@@ -559,6 +560,10 @@ main() {
         input_field "Resend API Key (blank to skip)" RESEND_API_KEY
     fi
 
+    if [[ -z "$SENTRY_DSN" && "$ENVIRONMENT" == "production" ]]; then
+        SENTRY_DSN="$DEFAULT_SENTRY_DSN"
+    fi
+
     if [[ -n "$SENTRY_DSN" ]]; then
         success "Sentry: Configured"
     else
@@ -813,6 +818,9 @@ EOF
             echo "" >> "$INSTALL_DIR/.env"
             echo "# Error Tracking" >> "$INSTALL_DIR/.env"
             echo "SENTRY_DSN=${SENTRY_DSN}" >> "$INSTALL_DIR/.env"
+            echo "SENTRY_ENVIRONMENT=${ENVIRONMENT}" >> "$INSTALL_DIR/.env"
+            echo "VITE_SENTRY_DSN=${SENTRY_DSN}" >> "$INSTALL_DIR/.env"
+            echo "VITE_SENTRY_ENVIRONMENT=${ENVIRONMENT}" >> "$INSTALL_DIR/.env"
         fi
 
         if [[ -n "$RESEND_API_KEY" ]]; then

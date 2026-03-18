@@ -2,16 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 
-// Match server-side timeout: 15 minutes
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
-// Check session validity every minute
-const CHECK_INTERVAL_MS = 60 * 1000;
-// Warn user 2 minutes before timeout
-const WARNING_THRESHOLD_MS = 2 * 60 * 1000;
+// Match server-side timeout: 7 days
+const IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
+// Check session validity every 5 minutes
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+// Warn user 30 minutes before timeout
+const WARNING_THRESHOLD_MS = 30 * 60 * 1000;
 
 /**
  * Hook to handle automatic session timeout and logout on inactivity.
- * Monitors user activity and logs them out after 15 minutes of inactivity (matching server-side timeout).
+ * Monitors user activity and logs them out after prolonged inactivity (matching server-side timeout).
  */
 export function useSessionTimeout() {
   const [, setLocation] = useLocation();

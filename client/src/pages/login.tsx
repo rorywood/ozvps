@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield, Zap, RefreshCw, DatabaseIcon, CheckCircle2, Eye, EyeOff } from "lucide-react";
@@ -57,6 +58,7 @@ export default function LoginPage() {
   const [pendingTwoFactorToken, setPendingTwoFactorToken] = useState<string>("");
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
 
   const [showUserNotFound, setShowUserNotFound] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -210,8 +212,18 @@ export default function LoginPage() {
   }, []);
 
   const loginMutation = useMutation({
-    mutationFn: (params: { recaptchaToken?: string; totpToken?: string; backupCode?: string }) =>
-      api.login(email, password, params.recaptchaToken, params.totpToken, params.backupCode),
+    mutationFn: (params: {
+      recaptchaToken?: string;
+      totpToken?: string;
+      backupCode?: string;
+      emailOtpToken?: string;
+      pendingTwoFactorToken?: string;
+      trustDevice?: boolean;
+    }) => api.login(email, password, params.recaptchaToken, params.totpToken, params.backupCode, {
+      emailOtpToken: params.emailOtpToken,
+      pendingTwoFactorToken: params.pendingTwoFactorToken,
+      trustDevice: params.trustDevice,
+    }),
     onSuccess: (data) => {
       if (data.requires2FA) {
         setRequires2FA(true);
@@ -324,11 +336,17 @@ export default function LoginPage() {
       loginMutation.mutate({
         recaptchaToken: savedRecaptchaToken,
         backupCode: twoFAToken,
+        pendingTwoFactorToken,
+        trustDevice,
       });
     } else {
       loginMutation.mutate({
         recaptchaToken: savedRecaptchaToken,
-        totpToken: twoFAToken,
+        pendingTwoFactorToken,
+        trustDevice,
+        ...(twoFAMethod === 'email'
+          ? { emailOtpToken: twoFAToken }
+          : { totpToken: twoFAToken }),
       });
     }
   };
@@ -342,6 +360,7 @@ export default function LoginPage() {
     setAuth0UserId('');
     setPendingTwoFactorToken('');
     setEmailCodeSent(false);
+    setTrustDevice(false);
   };
 
   const handleSendEmailCode = async () => {
@@ -750,6 +769,23 @@ export default function LoginPage() {
                         autoComplete="one-time-code"
                         data-testid="input-2fa-code"
                       />
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <Checkbox
+                        id="trust-device"
+                        checked={trustDevice}
+                        onCheckedChange={(checked) => setTrustDevice(checked === true)}
+                        className="mt-0.5 border-white/30 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
+                      />
+                      <div className="space-y-1">
+                        <Label htmlFor="trust-device" className="cursor-pointer text-sm font-medium text-white">
+                          Trust this device for 30 days
+                        </Label>
+                        <p className="text-xs text-[#8b949e]">
+                          You will still need your password, but we will not ask for a 2FA code on this browser again until the trust expires or you revoke it.
+                        </p>
+                      </div>
                     </div>
 
                     {/* Verify Button */}

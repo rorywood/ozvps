@@ -35,6 +35,8 @@ import { Loader2 } from "lucide-react";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
 import { useSystemHealth } from "@/hooks/use-system-health";
 import { ProvisionTrackerProvider } from "@/contexts/provision-tracker";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { setErrorTrackingUser } from "@/lib/error-tracking";
 
 
 // Public routes that handle their own DB error UI or don't require auth
@@ -251,6 +253,30 @@ function SessionErrorHandler() {
   return null;
 }
 
+function ErrorTrackingUserSync() {
+  const { data: auth } = useQuery({
+    queryKey: ['auth'],
+    queryFn: () => api.getAuthUser(),
+    retry: false,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!auth) {
+      setErrorTrackingUser(null);
+      return;
+    }
+
+    setErrorTrackingUser({
+      id: auth.user?.id,
+      email: auth.email,
+      username: auth.user?.name,
+    });
+  }, [auth]);
+
+  return null;
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="dark">
@@ -263,9 +289,12 @@ function App() {
             <SonnerToaster />
             <SessionTimeoutHandler />
             <SessionErrorHandler />
-            <SystemHealthCheck>
-              <Router />
-            </SystemHealthCheck>
+            <ErrorTrackingUserSync />
+            <ErrorBoundary>
+              <SystemHealthCheck>
+                <Router />
+              </SystemHealthCheck>
+            </ErrorBoundary>
           </TooltipProvider>
         </PowerActionProvider>
         </ProvisionTrackerProvider>
