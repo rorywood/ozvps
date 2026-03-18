@@ -41,6 +41,11 @@ const SENTRY_RELEASE = import.meta.env.VITE_APP_VERSION || "dev";
 const RECENT_EVENT_WINDOW_MS = 30_000;
 const recentEventCache = new Map<string, number>();
 const CSRF_COOKIE = "ozvps_csrf";
+const CRITICAL_CLIENT_ERROR_SOURCES = new Set([
+  "window.error",
+  "window.unhandledrejection",
+  "react.error-boundary",
+]);
 
 let sentryInitialized = false;
 let browserHandlersRegistered = false;
@@ -83,6 +88,22 @@ export function shouldIgnoreClientErrorReport(report: Pick<ClientErrorReport, "m
   }
 
   return EXPECTED_AUTH_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+function isCriticalClientErrorReport(report: ClientErrorReport): boolean {
+  if (report.tags?.critical === "true") {
+    return true;
+  }
+
+  if (report.level === "fatal") {
+    return true;
+  }
+
+  if (report.statusCode !== undefined && report.statusCode >= 500) {
+    return true;
+  }
+
+  return CRITICAL_CLIENT_ERROR_SOURCES.has(report.source);
 }
 
 function getCurrentRoute(): string | undefined {
@@ -334,6 +355,10 @@ export async function captureClientError(report: ClientErrorReport): Promise<voi
   };
 
   if (shouldIgnoreClientErrorReport(normalizedReport)) {
+    return;
+  }
+
+  if (!isCriticalClientErrorReport(normalizedReport)) {
     return;
   }
 
