@@ -487,6 +487,7 @@ const CSRF_HEADER = 'x-csrf-token';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const PENDING_TWO_FACTOR_TOKEN_TTL_MS = 10 * 60 * 1000;
+const MAX_TRUSTED_2FA_DEVICES = 5;
 
 /**
  * Generate a cryptographically secure CSRF token
@@ -1773,6 +1774,12 @@ export async function registerRoutes(
       const normalizedEmailOtpToken = typeof emailOtpToken === 'string' ? emailOtpToken.trim() : '';
       const normalizedBackupCode = typeof backupCode === 'string' ? backupCode.trim() : '';
       const normalizedPendingTwoFactorToken = typeof pendingTwoFactorToken === 'string' ? pendingTwoFactorToken.trim() : '';
+      const requestedTrustedDeviceReplacementId =
+        typeof req.body.replaceTrustedDeviceId === 'number'
+          ? req.body.replaceTrustedDeviceId
+          : typeof req.body.replaceTrustedDeviceId === 'string' && req.body.replaceTrustedDeviceId.trim()
+            ? Number.parseInt(req.body.replaceTrustedDeviceId.trim(), 10)
+            : undefined;
       const shouldTrustDevice = trustDevice === true;
       const is2FAStep = !!(normalizedTotpToken || normalizedBackupCode || normalizedEmailOtpToken);
 
@@ -1898,6 +1905,7 @@ export async function registerRoutes(
               ip: clientIp,
               exp: Date.now() + PENDING_TWO_FACTOR_TOKEN_TTL_MS,
             });
+            const trustedDevices = await dbStorage.listTrustedTwoFactorDevices(auth0UserIdFor2FA);
 
             log(`2FA required for user: ${email} (method: ${tfa.method})`, 'auth');
             return res.status(200).json({
@@ -1905,6 +1913,16 @@ export async function registerRoutes(
               twoFAMethod: tfa.method || 'totp',
               auth0UserId: auth0UserIdFor2FA,
               pendingTwoFactorToken: nextPendingTwoFactorToken,
+              trustedDevices: trustedDevices.map((device) => ({
+                id: device.id,
+                deviceLabel: device.deviceLabel,
+                userAgent: device.userAgent,
+                ipAddress: device.ipAddress,
+                createdAt: device.createdAt,
+                lastUsedAt: device.lastUsedAt,
+                expiresAt: device.expiresAt,
+                current: false,
+              })),
               message: 'Two-factor authentication required',
             });
           }
@@ -1991,6 +2009,30 @@ export async function registerRoutes(
           await dbStorage.updateTwoFactorLastUsed(auth0UserIdFor2FA);
 
           if (shouldTrustDevice) {
+            const trustedDevices = await dbStorage.listTrustedTwoFactorDevices(auth0UserIdFor2FA);
+            if (trustedDevices.length >= MAX_TRUSTED_2FA_DEVICES) {
+              if (!requestedTrustedDeviceReplacementId || Number.isNaN(requestedTrustedDeviceReplacementId)) {
+                return res.status(400).json({
+                  error: `You already trust ${MAX_TRUSTED_2FA_DEVICES} devices. Remove one to trust this browser.`,
+                  code: 'TRUSTED_DEVICE_LIMIT_REACHED',
+                });
+              }
+
+              const revokedDevice = await dbStorage.revokeTrustedTwoFactorDevice(
+                auth0UserIdFor2FA,
+                requestedTrustedDeviceReplacementId,
+              );
+
+              if (!revokedDevice) {
+                return res.status(400).json({
+                  error: 'Select a valid trusted device to remove before trusting this browser.',
+                  code: 'TRUSTED_DEVICE_REPLACEMENT_REQUIRED',
+                });
+              }
+
+              log(`Trusted device replaced for user ${email}: revoked ${revokedDevice.deviceLabel}`, 'security');
+            }
+
             const trustedDevice = await createTrustedTwoFactorDevice(dbStorage, {
               auth0UserId: auth0UserIdFor2FA,
               userAgent: req.headers['user-agent'] || null,

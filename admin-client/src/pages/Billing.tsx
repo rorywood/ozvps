@@ -4,6 +4,7 @@ import { billingApi, serversApi } from "../lib/api";
 import { toast } from "sonner";
 import { CreditCard, RefreshCw, Play, Pause, DollarSign, Calendar, Gift, X, Trash2, Clock, Loader2, AlertTriangle } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { AdminPageHeader } from "../components/ui/admin-surfaces";
 
 export default function Billing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -187,13 +188,15 @@ export default function Billing() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Billing</h1>
-        <div className="flex items-center gap-2">
+      <AdminPageHeader
+        title="Billing"
+        description="Keep renewals, overdue services, trial conversions, and manual billing actions under control."
+        actions={
+          <>
           <button
             onClick={() => setShowCleanupConfirm(true)}
             disabled={cleanupMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg hover:bg-[hsl(14_100%_60%)/20] transition-colors text-sm"
+            className="flex items-center gap-2 rounded-xl border border-[hsl(14_100%_60%)/30] bg-[hsl(14_100%_60%)/10] px-4 py-2 text-sm text-[hsl(14_100%_70%)] transition-colors hover:bg-[hsl(14_100%_60%)/20]"
           >
             <Trash2 className={`h-4 w-4 ${cleanupMutation.isPending ? "animate-spin" : ""}`} />
             Cleanup Orphaned
@@ -201,18 +204,19 @@ export default function Billing() {
           <button
             onClick={() => runJobMutation.mutate()}
             disabled={runJobMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors text-sm"
+            className="flex items-center gap-2 rounded-xl bg-[hsl(210_100%_50%)] px-4 py-2 text-sm text-white transition-colors hover:bg-[hsl(210_100%_45%)]"
           >
             <RefreshCw className={`h-4 w-4 ${runJobMutation.isPending ? "animate-spin" : ""}`} />
             Run Billing Job
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(160_84%_39%)/15] rounded-lg">
                 <DollarSign className="h-6 w-6 text-[hsl(160_84%_60%)]" />
@@ -223,15 +227,15 @@ export default function Billing() {
               </div>
             </div>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Active</p>
             <p className="text-xl font-bold text-[hsl(160_84%_60%)]">{stats.statusCounts.active || 0}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Suspended</p>
             <p className="text-xl font-bold text-[hsl(0_84%_70%)]">{stats.statusCounts.suspended || 0}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Due Soon</p>
             <p className="text-xl font-bold text-[hsl(14_100%_70%)]">{stats.dueSoonCount}</p>
           </div>
@@ -240,30 +244,30 @@ export default function Billing() {
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(14_100%_60%)/20] rounded-xl p-4">
+          <div className="rounded-2xl border border-[hsl(14_100%_60%)/20] bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Overdue</p>
             <p className="text-xl font-bold text-[hsl(14_100%_70%)]">{stats.attentionCounts.overdue}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(45_100%_51%)/20] rounded-xl p-4">
+          <div className="rounded-2xl border border-[hsl(45_100%_51%)/20] bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Suspending Soon</p>
             <p className="text-xl font-bold text-[hsl(45_100%_60%)]">{stats.attentionCounts.suspendingSoon}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(0_84%_60%)/20] rounded-xl p-4">
+          <div className="rounded-2xl border border-[hsl(0_84%_60%)/20] bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Admin Suspended</p>
             <p className="text-xl font-bold text-[hsl(0_84%_70%)]">{stats.attentionCounts.adminSuspended}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-[hsl(210_100%_50%)/20] rounded-xl p-4">
+          <div className="rounded-2xl border border-[hsl(210_100%_50%)/20] bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Due in 24h</p>
             <p className="text-xl font-bold text-[hsl(210_100%_70%)]">{stats.attentionCounts.dueToday}</p>
           </div>
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <p className="text-xs text-white/40 uppercase tracking-wide mb-1">Active Trials</p>
             <p className="text-xl font-bold text-white">{stats.attentionCounts.trials}</p>
           </div>
         </div>
       )}
 
-      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4 mb-6">
+      <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 mb-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-[hsl(45_100%_60%)]" />
@@ -317,7 +321,7 @@ export default function Billing() {
       </div>
 
       {/* Filter and Quick Actions */}
-      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4 mb-6">
+      <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 mb-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
             <label className="text-sm font-medium text-white/60">Filter by status:</label>
@@ -438,7 +442,7 @@ export default function Billing() {
       </div>
 
       {/* Records Table */}
-      <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl overflow-hidden">
+      <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <RefreshCw className="h-8 w-8 animate-spin text-white/40" />

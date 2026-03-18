@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { AdminPageHeader } from "../components/ui/admin-surfaces";
 
 function UserAvatar({ name, email, size = "md" }: { name?: string; email?: string; size?: "sm" | "md" | "lg" }) {
   const initials = name
@@ -169,27 +170,28 @@ export default function Users() {
 
   return (
     <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Users</h1>
-          {allUsers?.pagination && (
-            <p className="text-sm text-white/40 mt-0.5">{allUsers.pagination.total} total accounts</p>
-          )}
-        </div>
-        <button
-          onClick={() => refetchUsers()}
-          disabled={isFetching}
-          className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 text-white/60 rounded-lg hover:bg-white/8 hover:text-white transition-colors text-sm disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
+      <AdminPageHeader
+        title="Users"
+        description="Search accounts, review trust and billing state, and handle high-risk actions from a cleaner detail workspace."
+        actions={
+          <button
+            onClick={() => refetchUsers()}
+            disabled={isFetching}
+            className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-sm text-white/60 transition-colors hover:bg-white/8 hover:text-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        }
+      />
+
+      {allUsers?.pagination && (
+        <p className="-mt-2 mb-6 text-sm text-white/35">{allUsers.pagination.total} total accounts</p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
         {/* ── User list ── */}
-        <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col overflow-hidden">
+        <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
           {/* Search */}
           <div className="p-3 border-b border-white/8">
             <div className="relative">
@@ -259,7 +261,7 @@ export default function Users() {
         {/* ── User detail ── */}
         <div className="min-w-0">
           {!selectedUser ? (
-            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col items-center justify-center py-20 text-center">
+            <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col items-center justify-center py-20 text-center shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
               <div className="w-14 h-14 rounded-full bg-white/4 flex items-center justify-center mb-3">
                 <UsersIcon className="h-6 w-6 text-white/20" />
               </div>
@@ -268,7 +270,7 @@ export default function Users() {
           ) : (
             <div className="space-y-4">
               {/* ── Profile card ── */}
-              <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+              <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
                 {/* Header */}
                 <div className="flex items-start gap-4 mb-6">
                   <UserAvatar name={selectedUser.name} email={selectedUser.email} size="lg" />
@@ -389,7 +391,7 @@ export default function Users() {
 
               {/* ── Wallet card ── */}
               {userDetails?.user?.wallet && (
-                <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+                <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-medium text-white/30 uppercase tracking-wider">Wallet Balance</p>
                     <button
@@ -409,7 +411,7 @@ export default function Users() {
 
               {/* ── Transactions ── */}
               {selectedUser && (
-                <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+                <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
                   <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-4">Recent Transactions</p>
                   {transactions?.transactions?.length ? (
                     <div className="space-y-1 max-h-72 overflow-y-auto -mx-1 px-1">

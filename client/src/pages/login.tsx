@@ -6,7 +6,7 @@ import { Mail, Lock, AlertCircle, Loader2, Smartphone, ArrowLeft, Server, Shield
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type TrustedTwoFactorDevice } from "@/lib/api";
 import logo from "@/assets/logo.png";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +59,8 @@ export default function LoginPage() {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
   const [trustDevice, setTrustDevice] = useState(false);
+  const [trustedDevices, setTrustedDevices] = useState<TrustedTwoFactorDevice[]>([]);
+  const [replaceTrustedDeviceId, setReplaceTrustedDeviceId] = useState<number | null>(null);
 
   const [showUserNotFound, setShowUserNotFound] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -219,10 +221,12 @@ export default function LoginPage() {
       emailOtpToken?: string;
       pendingTwoFactorToken?: string;
       trustDevice?: boolean;
+      replaceTrustedDeviceId?: number;
     }) => api.login(email, password, params.recaptchaToken, params.totpToken, params.backupCode, {
       emailOtpToken: params.emailOtpToken,
       pendingTwoFactorToken: params.pendingTwoFactorToken,
       trustDevice: params.trustDevice,
+      replaceTrustedDeviceId: params.replaceTrustedDeviceId,
     }),
     onSuccess: (data) => {
       if (data.requires2FA) {
@@ -231,6 +235,10 @@ export default function LoginPage() {
         setAuth0UserId(data.auth0UserId || '');
         setPendingTwoFactorToken(data.pendingTwoFactorToken || '');
         setEmailCodeSent(false);
+        setTrustDevice(false);
+        setTrustedDevices(data.trustedDevices || []);
+        setReplaceTrustedDeviceId(null);
+        setTwoFAToken("");
         setError("");
         setIsSubmitting(false);
         return;
@@ -332,18 +340,26 @@ export default function LoginPage() {
       return;
     }
 
+    if (trustDevice && trustedDevices.length >= 5 && !replaceTrustedDeviceId) {
+      setError("Choose one trusted device to remove before trusting this browser.");
+      setIsSubmitting(false);
+      return;
+    }
+
     if (useBackupCode) {
       loginMutation.mutate({
         recaptchaToken: savedRecaptchaToken,
         backupCode: twoFAToken,
         pendingTwoFactorToken,
         trustDevice,
+        replaceTrustedDeviceId: replaceTrustedDeviceId || undefined,
       });
     } else {
       loginMutation.mutate({
         recaptchaToken: savedRecaptchaToken,
         pendingTwoFactorToken,
         trustDevice,
+        replaceTrustedDeviceId: replaceTrustedDeviceId || undefined,
         ...(twoFAMethod === 'email'
           ? { emailOtpToken: twoFAToken }
           : { totpToken: twoFAToken }),
@@ -361,6 +377,8 @@ export default function LoginPage() {
     setPendingTwoFactorToken('');
     setEmailCodeSent(false);
     setTrustDevice(false);
+    setTrustedDevices([]);
+    setReplaceTrustedDeviceId(null);
   };
 
   const handleSendEmailCode = async () => {
@@ -775,7 +793,13 @@ export default function LoginPage() {
                       <Checkbox
                         id="trust-device"
                         checked={trustDevice}
-                        onCheckedChange={(checked) => setTrustDevice(checked === true)}
+                        onCheckedChange={(checked) => {
+                          const nextValue = checked === true;
+                          setTrustDevice(nextValue);
+                          if (!nextValue) {
+                            setReplaceTrustedDeviceId(null);
+                          }
+                        }}
                         className="mt-0.5 border-white/30 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                       />
                       <div className="space-y-1">
@@ -787,6 +811,50 @@ export default function LoginPage() {
                         </p>
                       </div>
                     </div>
+
+                    {trustDevice && trustedDevices.length >= 5 && (
+                      <div className="space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-200">You already trust 5 devices</p>
+                          <p className="mt-1 text-xs text-amber-100/80">
+                            Pick one device to remove so this browser can take its place.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          {trustedDevices.map((device) => (
+                            <button
+                              key={device.id}
+                              type="button"
+                              onClick={() => setReplaceTrustedDeviceId(device.id)}
+                              className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                                replaceTrustedDeviceId === device.id
+                                  ? 'border-primary/40 bg-primary/10'
+                                  : 'border-white/10 bg-black/10 hover:border-white/20 hover:bg-white/[0.04]'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-white">{device.deviceLabel}</p>
+                                  <p className="mt-1 truncate text-xs text-[#8b949e]">
+                                    {device.ipAddress || 'IP unavailable'} • Last used {new Date(device.lastUsedAt).toLocaleString('en-AU', {
+                                      timeZone: 'Australia/Brisbane',
+                                      dateStyle: 'medium',
+                                      timeStyle: 'short',
+                                    })}
+                                  </p>
+                                </div>
+                                <div className={`h-4 w-4 rounded-full border ${
+                                  replaceTrustedDeviceId === device.id
+                                    ? 'border-primary bg-primary'
+                                    : 'border-white/30'
+                                }`} />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Verify Button */}
                     <Button

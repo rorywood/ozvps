@@ -187,6 +187,16 @@ export interface TrustedTwoFactorDevice {
   current: boolean;
 }
 
+export interface LoginResponse {
+  user?: { id: string; email: string; name: string };
+  requires2FA?: boolean;
+  csrfToken?: string;
+  twoFAMethod?: 'totp' | 'email';
+  auth0UserId?: string;
+  pendingTwoFactorToken?: string;
+  trustedDevices?: TrustedTwoFactorDevice[];
+}
+
 class ApiClient {
   private baseUrl = '/api';
 
@@ -738,8 +748,9 @@ class ApiClient {
       trustDevice?: boolean;
       pendingTwoFactorToken?: string;
       emailOtpToken?: string;
+      replaceTrustedDeviceId?: number;
     }
-  ): Promise<{ user?: { id: string; email: string; name: string }; requires2FA?: boolean; csrfToken?: string; twoFAMethod?: 'totp' | 'email'; auth0UserId?: string; pendingTwoFactorToken?: string }> {
+  ): Promise<LoginResponse> {
     // Pre-flight check: verify API is reachable and all services are healthy
     try {
       const healthCheck = await fetch('/api/health', {
@@ -779,6 +790,7 @@ class ApiClient {
         emailOtpToken: options?.emailOtpToken,
         pendingTwoFactorToken: options?.pendingTwoFactorToken,
         trustDevice: options?.trustDevice,
+        replaceTrustedDeviceId: options?.replaceTrustedDeviceId,
       })
     });
     if (!response.ok) {

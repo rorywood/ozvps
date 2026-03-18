@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Select } from "../components/ui/select";
+import { AdminPageHeader } from "../components/ui/admin-surfaces";
 
 // ── Canned responses ──────────────────────────────────────────────────────────
 const CANNED_RESPONSES = [
@@ -229,24 +230,14 @@ export default function Tickets() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Support Tickets</h1>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {counts?.counts && Object.entries(counts.counts).map(([status, count]) => (
-              count > 0 && (
-                <span key={status} className={`px-2 py-0.5 text-xs rounded-md border ${STATUS_STYLES[status] || STATUS_STYLES.open}`}>
-                  {statusLabel(status)}: {count as number}
-                </span>
-              )
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <AdminPageHeader
+        title="Support Tickets"
+        description="Work active conversations faster, keep notes internal when needed, and keep queue status visible at a glance."
+        actions={
+          <>
           <button
             onClick={() => setShowNewTicket(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors text-sm font-medium"
+            className="flex items-center gap-2 rounded-xl bg-[hsl(210_100%_50%)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[hsl(210_100%_45%)]"
           >
             <Plus className="h-3.5 w-3.5" />
             New Ticket
@@ -254,17 +245,28 @@ export default function Tickets() {
           <button
             onClick={() => refetch()}
             disabled={isLoading}
-            className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 text-white/60 rounded-lg hover:bg-white/8 hover:text-white transition-colors text-sm"
+            className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-sm text-white/60 transition-colors hover:bg-white/8 hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </button>
-        </div>
+          </>
+        }
+      />
+
+      <div className="mb-6 flex items-center gap-2 flex-wrap">
+        {counts?.counts && Object.entries(counts.counts).map(([status, count]) => (
+          count > 0 && (
+            <span key={status} className={`px-2 py-0.5 text-xs rounded-md border ${STATUS_STYLES[status] || STATUS_STYLES.open}`}>
+              {statusLabel(status)}: {count as number}
+            </span>
+          )
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
         {/* ── Ticket list ── */}
-        <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col overflow-hidden">
+        <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
           {/* Filters */}
           <div className="p-3 border-b border-white/8 space-y-2">
             <div className="relative">
@@ -356,14 +358,14 @@ export default function Tickets() {
         {/* ── Ticket detail ── */}
         <div className="min-w-0">
           {!selectedTicket ? (
-            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col items-center justify-center py-20">
+            <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col items-center justify-center py-20 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
               <div className="w-14 h-14 rounded-full bg-white/4 flex items-center justify-center mb-3">
                 <MessageSquare className="h-6 w-6 text-white/20" />
               </div>
               <p className="text-white/40 text-sm">Select a ticket to view</p>
             </div>
           ) : (
-            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl flex flex-col" style={{ maxHeight: "calc(100vh - 160px)" }}>
+            <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col shadow-[0_18px_48px_rgba(0,0,0,0.2)]" style={{ maxHeight: "calc(100vh - 160px)" }}>
               {/* Ticket header */}
               <div className="px-5 py-4 border-b border-white/8 shrink-0">
                 <div className="flex items-start justify-between gap-3">
@@ -638,7 +640,7 @@ export default function Tickets() {
       {/* New Ticket Dialog */}
       {showNewTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[hsl(216_28%_7%)] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(9,14,24,1)_100%)] shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
               <h2 className="text-base font-semibold text-white">New Ticket on Behalf of User</h2>

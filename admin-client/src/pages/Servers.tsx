@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { virtfusionApi } from "../lib/api";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { PromptDialog } from "../components/ui/prompt-dialog";
+import { AdminPageHeader } from "../components/ui/admin-surfaces";
 
 export default function Servers() {
   const [search, setSearch] = useState("");
@@ -175,21 +176,24 @@ export default function Servers() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Servers</h1>
-        <Link
-          to="/servers/provision"
-          className="flex items-center gap-2 px-4 py-2 bg-[hsl(210_100%_50%)] text-white rounded-lg hover:bg-[hsl(210_100%_45%)] transition-colors"
-        >
-          <Plus className="h-5 w-5" />
-          Provision Server
-        </Link>
-      </div>
+      <AdminPageHeader
+        title="Servers"
+        description="Search the fleet, inspect server health, and run operational actions without losing context."
+        actions={
+          <Link
+            to="/servers/provision"
+            className="flex items-center gap-2 rounded-xl bg-[hsl(210_100%_50%)] px-4 py-2 text-white transition-colors hover:bg-[hsl(210_100%_45%)]"
+          >
+            <Plus className="h-5 w-5" />
+            Provision Server
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Server List */}
         <div className="lg:col-span-1">
-          <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-4">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
               <input
@@ -248,7 +252,7 @@ export default function Servers() {
         <div className="lg:col-span-2">
           {selectedServer ? (
             <div className="space-y-6">
-              <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-6">
+              <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[hsl(210_100%_50%)/10] rounded-lg">
@@ -607,7 +611,7 @@ export default function Servers() {
               </div>
             </div>
           ) : (
-            <div className="bg-[hsl(216_28%_7%)] border border-white/8 rounded-xl p-12 text-center">
+            <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-12 text-center shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
               <div className="inline-flex p-4 bg-white/5 rounded-full mb-4">
                 <Server className="h-8 w-8 text-white/30" />
               </div>
