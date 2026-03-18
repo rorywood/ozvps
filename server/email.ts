@@ -649,6 +649,85 @@ export async function sendAdminTicketNotificationEmail(
 }
 
 /**
+ * Send admin notification when a user replies to an existing support ticket
+ */
+export async function sendAdminTicketReplyNotificationEmail(
+  ticketId: number,
+  ticketNumber: number,
+  title: string,
+  category: string,
+  priority: string,
+  replyMessage: string,
+  userEmail: string,
+  userName: string | null
+): Promise<EmailResult> {
+  if (!resend) {
+    log('Email service not configured - cannot send admin ticket reply notification', 'email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const adminEmails = process.env.ADMIN_NOTIFICATION_EMAIL || 'rorywood10@gmail.com';
+  const adminEmailList = [...new Set(
+    adminEmails.split(',').map(e => e.trim()).filter(e => e)
+  )];
+  if (adminEmailList.length === 0) {
+    log('No admin emails configured - skipping ticket reply notification', 'email');
+    return { success: false, error: 'No admin emails configured' };
+  }
+
+  const adminUrl = process.env.ADMIN_URL || 'https://admin.ozvps.com.au';
+  const logoUrl = getLogoUrl();
+  const preview = replyMessage.length > 500 ? `${replyMessage.slice(0, 500)}...` : replyMessage;
+
+  const priorityColors: Record<string, string> = {
+    low: '#6b7280', normal: blue, high: amber, urgent: red,
+  };
+  const pColor = priorityColors[priority] || blue;
+
+  const body = `
+    <p style="margin:0 0 4px;color:${amber};font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">User Replied</p>
+    <h1 style="margin:0 0 20px;color:${textDark};font-size:22px;font-weight:700;">${title}</h1>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${border};border-radius:8px;margin-bottom:24px;border-collapse:collapse;">
+      ${row('Ticket', `#${ticketNumber}`)}
+      ${row('From', `${userName ? `${userName} — ` : ''}${userEmail}`)}
+      ${row('Category', category.charAt(0).toUpperCase() + category.slice(1))}
+      <tr>
+        <td style="padding:12px 16px;border-bottom:0;color:${textMuted};font-size:13px;white-space:nowrap;">Priority</td>
+        <td style="padding:12px 16px;border-bottom:0;text-align:right;">
+          <span style="display:inline-block;padding:2px 10px;border-radius:20px;background-color:${pColor};color:#fff;font-size:12px;font-weight:600;">${priority.toUpperCase()}</span>
+        </td>
+      </tr>
+    </table>
+
+    <div style="background-color:${bgLight};border-radius:6px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0 0 8px;color:${textMuted};font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Latest Reply</p>
+      <p style="margin:0;color:${textDark};font-size:14px;line-height:1.7;white-space:pre-wrap;">${preview}</p>
+    </div>
+
+    ${btn(`${adminUrl}/tickets`, 'Review Ticket In Admin')}`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: adminEmailList,
+      subject: `[${priority.toUpperCase()}] User Reply on Ticket #${ticketNumber}: ${title}`,
+      html: baseEmail(body, logoUrl),
+      text: `User Reply on Ticket #${ticketNumber}\n\nTitle: ${title}\nFrom: ${userName || ''} <${userEmail}>\nCategory: ${category}\nPriority: ${priority}\n\n${preview}\n\nView: ${adminUrl}/tickets\n\n© ${new Date().getFullYear()} OzVPS Pty Ltd.`,
+    });
+    if (error) {
+      log(`Failed to send admin ticket reply notification: ${error.message}`, 'email');
+      return { success: false, error: error.message };
+    }
+    log(`Admin ticket reply notification sent for ticket #${ticketId}, messageId: ${data?.id}`, 'email');
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    log(`Error sending admin ticket reply notification: ${err.message}`, 'email');
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send ticket confirmation to user
  */
 export async function sendTicketConfirmationEmail(

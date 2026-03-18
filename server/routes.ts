@@ -19,7 +19,7 @@ import { validateServerName } from "./content-filter";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { recordFailedLogin, clearFailedLogins, isAccountLocked, getProgressiveDelay, verifyHmacSignature, isIpBlocked, getBlockedEntries, adminUnblock, adminUnblockEmail, adminClearAllRateLimits } from "./security";
 import { encryptSecret, decryptSecret, isEncrypted, hashBackupCode, verifyBackupCode, generateBackupCodes, verifyEmailOtpCode } from "./crypto";
-import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendServerCredentialsEmail, sendServerReinstallEmail, sendAdminTicketNotificationEmail, sendAdminTicketReplyNotificationEmail, sendTwoFactorCodeEmail, sendTicketStatusEmail, sendBugReportEmail, sendGuestTicketConfirmationEmail, sendGuestTicketAdminReplyEmail, sendTicketAdminReplyEmail } from "./email";
 import { WebhookHandlers } from "./webhookHandlers";
 import { auditUserAction, UserActions } from "./user-audit";
 import { redisClient } from "./redis";
@@ -7489,7 +7489,16 @@ export async function registerRoutes(
       }
 
       // Notify admin of the email reply
-      sendAdminTicketNotificationEmail(ticketId, ticket.title, ticket.category as any, ticket.priority as any, messageText, senderEmail, senderName || null).catch(err => {
+      sendAdminTicketReplyNotificationEmail(
+        ticketId,
+        ticket.ticketNumber ?? ticketId,
+        ticket.title,
+        ticket.category as any,
+        ticket.priority as any,
+        messageText,
+        senderEmail,
+        senderName || null,
+      ).catch(err => {
         log(`Inbound email: failed to notify admin for ticket #${ticketId}: ${err.message}`, 'webhook');
       });
 
@@ -7855,6 +7864,19 @@ export async function registerRoutes(
         closedAt: null,
       });
 
+      sendAdminTicketReplyNotificationEmail(
+        ticketId,
+        ticket.ticketNumber ?? ticketId,
+        ticket.title,
+        ticket.category,
+        ticket.priority,
+        parseResult.data.message,
+        req.userSession!.email,
+        req.userSession!.name || null,
+      ).catch(err => {
+        log(`Failed to send admin reply notification for ticket #${ticketId}: ${err.message}`, 'email');
+      });
+
       log(`Reply added to ticket #${ticketId} by ${req.userSession!.email}`, 'support');
       res.status(201).json({ message });
     } catch (error: any) {
@@ -8063,6 +8085,19 @@ export async function registerRoutes(
       // Reopen resolved ticket on user reply, otherwise set to waiting_admin
       const newStatus = ticket.status === 'resolved' ? 'open' : 'waiting_admin';
       await dbStorage.updateTicket(ticket.id, { status: newStatus });
+
+      sendAdminTicketReplyNotificationEmail(
+        ticket.id,
+        ticket.ticketNumber ?? ticket.id,
+        ticket.title,
+        ticket.category,
+        ticket.priority,
+        rawMessage.trim(),
+        ticket.guestEmail!,
+        null,
+      ).catch(err => {
+        log(`Failed to send admin guest reply notification for ticket #${ticket.id}: ${err.message}`, 'email');
+      });
 
       log(`Guest reply added to ticket #${ticket.id} by ${ticket.guestEmail}`, 'support');
       res.status(201).json({ message: newMessage });
