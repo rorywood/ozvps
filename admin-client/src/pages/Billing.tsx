@@ -186,6 +186,14 @@ export default function Billing() {
     setShowDueDateModal(false);
   };
 
+  const visibleRecords = records?.records ?? [];
+  const selectedStatusTone =
+    selectedRecord?.billing.status === "suspended"
+      ? "text-[hsl(0_84%_70%)]"
+      : selectedRecord?.billing.status === "unpaid"
+        ? "text-[hsl(14_100%_70%)]"
+        : "text-white";
+
   return (
     <div>
       <AdminPageHeader
@@ -320,219 +328,325 @@ export default function Billing() {
         )}
       </div>
 
-      {/* Filter and Quick Actions */}
-      <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-4 mb-6 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-white/60">Filter by status:</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:ring-2 focus:ring-[hsl(210_100%_50%)/40] outline-none text-white text-sm"
-            >
-              <option value="">All</option>
-              <option value="active">Active</option>
-              <option value="paid">Paid</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="suspended">Suspended</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Quick Actions when a record is selected */}
-        {selectedRecord && (
-          <div className="mt-4 pt-4 border-t border-white/8">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-white/40">Selected:</span>
-                <span className="font-medium text-white text-sm">
-                  {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
-                </span>
-                <span className={`px-2 py-0.5 text-xs rounded ${getStatusColor(selectedRecord.billing.status)}`}>
-                  {selectedRecord.billing.status}
-                </span>
-                {selectedRecord.billing.isTrial ? (
-                  <span className="px-2 py-0.5 text-xs bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] rounded flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Trial
-                  </span>
-                ) : selectedRecord.billing.freeServer && (
-                  <span className="px-2 py-0.5 text-xs bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] rounded">Free</span>
-                )}
-                <button
-                  onClick={() => setSelectedRecord(null)}
-                  className="p-1 text-white/40 hover:text-white transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
+          <div className="border-b border-white/8 px-5 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[hsl(210_100%_65%)]">
+                  Billing Queue
+                </p>
+                <h2 className="mt-2 text-lg font-semibold text-white">Recurring records</h2>
+                <p className="mt-1 text-sm text-white/40">
+                  Review live billing state, select a record, and apply operational actions without leaving the queue.
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleOpenDueDateModal}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(210_100%_50%)/10] text-[hsl(210_100%_70%)] border border-[hsl(210_100%_50%)/30] rounded-lg text-sm hover:bg-[hsl(210_100%_50%)/20] transition-colors"
-                >
-                  <Calendar className="h-4 w-4" />
-                  Change Due Date
-                </button>
-                {!selectedRecord.billing.isTrial && (
-                  <button
-                    onClick={handleToggleFree}
-                    disabled={updateRecordMutation.isPending}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                      selectedRecord.billing.freeServer
-                        ? "bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] hover:bg-[hsl(14_100%_60%)/20]"
-                        : "bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] hover:bg-[hsl(160_84%_39%)/20]"
-                    }`}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/30">Visible</p>
+                  <p className="mt-1 text-sm font-medium text-white">{visibleRecords.length} record{visibleRecords.length !== 1 ? "s" : ""}</p>
+                </div>
+                <div className="min-w-[180px]">
+                  <label className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-white/30">
+                    Status filter
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:ring-2 focus:ring-[hsl(210_100%_50%)/35]"
                   >
-                    <Gift className="h-4 w-4" />
-                    {selectedRecord.billing.freeServer ? "Remove Free" : "Set Free"}
-                  </button>
-                )}
-                {selectedRecord.billing.isTrial && !selectedRecord.billing.trialEndedAt && (
-                  <button
-                    onClick={() => setShowEndTrialConfirm(true)}
-                    disabled={endTrialMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg text-sm hover:bg-[hsl(14_100%_60%)/20] transition-colors"
-                  >
-                    <Clock className="h-4 w-4" />
-                    End Trial
-                  </button>
-                )}
-                {/* Force Charge — bypasses idempotency, clears stale ledger entries */}
-                {!selectedRecord.billing.freeServer && !selectedRecord.billing.isTrial && (
-                  <button
-                    onClick={() => forceChargeMutation.mutate(selectedRecord.billing.virtfusionServerId)}
-                    disabled={forceChargeMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(209_100%_50%)/10] text-[hsl(209_100%_70%)] border border-[hsl(209_100%_50%)/30] rounded-lg text-sm hover:bg-[hsl(209_100%_50%)/20] transition-colors"
-                  >
-                    {forceChargeMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" />Charging...</>
-                    ) : (
-                      <><DollarSign className="h-4 w-4" />Force Charge</>
-                    )}
-                  </button>
-                )}
-                {selectedRecord.billing.status === "suspended" ? (
-                  <button
-                    onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
-                    disabled={unsuspendMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] border border-[hsl(160_84%_39%)/30] rounded-lg text-sm hover:bg-[hsl(160_84%_39%)/20] transition-colors"
-                  >
-                    {unsuspendMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" />Unsuspending...</>
-                    ) : (
-                      <><Play className="h-4 w-4" />Unsuspend</>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowSuspendConfirm(true)}
-                    disabled={suspendMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] border border-[hsl(14_100%_60%)/30] rounded-lg text-sm hover:bg-[hsl(14_100%_60%)/20] transition-colors"
-                  >
-                    <Pause className="h-4 w-4" />
-                    Suspend Server
-                  </button>
-                )}
+                    <option value="">All records</option>
+                    <option value="active">Active</option>
+                    <option value="paid">Paid</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Records Table */}
-      <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <RefreshCw className="h-8 w-8 animate-spin text-white/40" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-white/5">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Server</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Price</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-white/40 uppercase">Next Bill</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {records?.records?.map((record: any) => (
-                  <tr
-                    key={record.billing.id}
-                    onClick={() => setSelectedRecord(record)}
-                    className={`cursor-pointer transition-colors ${
-                      selectedRecord?.billing.id === record.billing.id
-                        ? "bg-[hsl(210_100%_50%)/10]"
-                        : "hover:bg-white/3"
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-white">
-                          {record.serverName || `Server #${record.billing.virtfusionServerId}`}
-                        </p>
-                        {record.serverUuid && (
-                          <p className="text-xs text-white/40 font-mono truncate max-w-[180px]" title={record.serverUuid}>
-                            {record.serverUuid}
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-white/40" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-white/5">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-white/40">Server</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-white/40">Customer</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-white/40">Plan</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-white/40">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-white/40">Renewal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {visibleRecords.map((record: any) => (
+                    <tr
+                      key={record.billing.id}
+                      onClick={() => setSelectedRecord(record)}
+                      className={`cursor-pointer transition-colors ${
+                        selectedRecord?.billing.id === record.billing.id
+                          ? "bg-[hsl(210_100%_50%)/10]"
+                          : "hover:bg-white/3"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-white">
+                            {record.serverName || `Server #${record.billing.virtfusionServerId}`}
                           </p>
-                        )}
-                        {!record.serverUuid && (
-                          <p className="text-xs text-white/40">
-                            ID: {record.billing.virtfusionServerId}
+                          <p
+                            className="mt-1 max-w-[240px] truncate font-mono text-xs text-white/35"
+                            title={record.serverUuid || record.billing.virtfusionServerId}
+                          >
+                            {record.serverUuid || `VF-${record.billing.virtfusionServerId}`}
                           </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-white">
-                          {record.user?.name || record.user?.email?.split('@')[0] || "Unknown"}
-                        </p>
-                        <p className="text-sm text-white/50">{record.user?.email || "N/A"}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-white">
-                          {formatCurrency(record.billing.monthlyPriceCents)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-white">
+                            {record.user?.name || record.user?.email?.split("@")[0] || "Unknown"}
+                          </p>
+                          <p className="mt-1 text-sm text-white/45">{record.user?.email || "N/A"}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          <p className="font-medium text-white">{formatCurrency(record.billing.monthlyPriceCents)}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {record.plan?.name ? (
+                              <span className="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/45">
+                                {record.plan.name}
+                              </span>
+                            ) : null}
+                            {record.billing.isTrial ? (
+                              <span className="flex items-center gap-1 rounded-full bg-[hsl(14_100%_60%)/20] px-2 py-0.5 text-xs text-[hsl(14_100%_70%)]">
+                                <Clock className="h-3 w-3" />
+                                Trial
+                              </span>
+                            ) : null}
+                            {record.billing.freeServer ? (
+                              <span className="rounded-full bg-[hsl(160_84%_39%)/20] px-2 py-0.5 text-xs text-[hsl(160_84%_60%)]">
+                                Free
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-lg ${getStatusColor(record.billing.status)}`}>
+                          {record.billing.status}
                         </span>
-                        {record.billing.isTrial ? (
-                          <span className="px-2 py-0.5 text-xs bg-[hsl(14_100%_60%)/20] text-[hsl(14_100%_70%)] rounded-full flex items-center gap-1">
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-white/55">
+                          <p>{record.billing.nextBillAt ? formatDateTime(record.billing.nextBillAt) : "Not scheduled"}</p>
+                          <p className="mt-1 text-xs text-white/30">
+                            Suspend: {record.billing.suspendAt ? formatDateTime(record.billing.suspendAt) : "Not set"}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {visibleRecords.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center text-white/40">
+                        No billing records found for this filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[hsl(210_100%_65%)]">
+                  Operator Rail
+                </p>
+                <h3 className="mt-2 text-base font-semibold text-white">Controls and selection</h3>
+              </div>
+              {selectedRecord ? (
+                <button
+                  onClick={() => setSelectedRecord(null)}
+                  className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/5 px-2.5 py-1.5 text-xs text-white/50 transition-colors hover:bg-white/8 hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear
+                </button>
+              ) : null}
+            </div>
+
+            {!selectedRecord ? (
+              <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+                <CreditCard className="mx-auto h-8 w-8 text-white/20" />
+                <p className="mt-3 text-sm font-medium text-white/70">Select a billing record</p>
+                <p className="mt-2 text-sm leading-6 text-white/35">
+                  Pick a row from the queue to inspect renewal timing, free-server status, trial state, and manual actions.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-5">
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/30">Selected server</p>
+                      <h3 className={`mt-2 text-base font-semibold ${selectedStatusTone}`}>
+                        {selectedRecord.serverName || `Server #${selectedRecord.billing.virtfusionServerId}`}
+                      </h3>
+                    </div>
+                    <span className={`px-2.5 py-1 text-xs rounded-lg ${getStatusColor(selectedRecord.billing.status)}`}>
+                      {selectedRecord.billing.status}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/8 bg-black/10 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Customer</p>
+                      <p className="mt-2 text-sm font-medium text-white">
+                        {selectedRecord.user?.name || "Unknown user"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/40">{selectedRecord.user?.email || "No email on file"}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-black/10 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Commercial state</p>
+                      <p className="mt-2 text-sm font-medium text-white">
+                        {formatCurrency(selectedRecord.billing.monthlyPriceCents)}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedRecord.plan?.name ? (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/45">
+                            {selectedRecord.plan.name}
+                          </span>
+                        ) : null}
+                        {selectedRecord.billing.isTrial ? (
+                          <span className="flex items-center gap-1 rounded-full bg-[hsl(14_100%_60%)/20] px-2 py-0.5 text-xs text-[hsl(14_100%_70%)]">
                             <Clock className="h-3 w-3" />
                             Trial
                           </span>
-                        ) : record.billing.freeServer && (
-                          <span className="px-2 py-0.5 text-xs bg-[hsl(160_84%_39%)/20] text-[hsl(160_84%_60%)] rounded-full">Free</span>
-                        )}
+                        ) : null}
+                        {selectedRecord.billing.freeServer ? (
+                          <span className="rounded-full bg-[hsl(160_84%_39%)/20] px-2 py-0.5 text-xs text-[hsl(160_84%_60%)]">
+                            Free
+                          </span>
+                        ) : null}
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-lg ${getStatusColor(record.billing.status)}`}>
-                        {record.billing.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-white/50">
-                      {record.billing.nextBillAt
-                        ? new Date(record.billing.nextBillAt).toLocaleDateString()
-                        : "N/A"}
-                    </td>
-                  </tr>
-                ))}
-                {(!records?.records || records.records.length === 0) && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-white/40">
-                      No billing records found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-black/10 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Next bill</p>
+                      <p className="mt-2 text-sm font-medium text-white">{formatDateTime(selectedRecord.billing.nextBillAt)}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-black/10 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Suspend at</p>
+                      <p className="mt-2 text-sm font-medium text-white">{formatDateTime(selectedRecord.billing.suspendAt)}</p>
+                    </div>
+                  </div>
+                  {selectedRecord.attentionReason ? (
+                    <div className="mt-4 rounded-xl border border-[hsl(45_100%_51%)/18] bg-[hsl(45_100%_51%)/10] p-3 text-sm text-[hsl(45_100%_60%)]">
+                      Attention: {selectedRecord.attentionReason}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/30">Actions</p>
+                  <div className="mt-4 grid gap-2">
+                    <button
+                      onClick={handleOpenDueDateModal}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(210_100%_50%)/30] bg-[hsl(210_100%_50%)/10] px-4 py-2.5 text-sm text-[hsl(210_100%_70%)] transition-colors hover:bg-[hsl(210_100%_50%)/20]"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      Change due date
+                    </button>
+
+                    {!selectedRecord.billing.isTrial ? (
+                      <button
+                        onClick={handleToggleFree}
+                        disabled={updateRecordMutation.isPending}
+                        className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm transition-colors ${
+                          selectedRecord.billing.freeServer
+                            ? "border-[hsl(14_100%_60%)/30] bg-[hsl(14_100%_60%)/10] text-[hsl(14_100%_70%)] hover:bg-[hsl(14_100%_60%)/20]"
+                            : "border-[hsl(160_84%_39%)/30] bg-[hsl(160_84%_39%)/10] text-[hsl(160_84%_60%)] hover:bg-[hsl(160_84%_39%)/20]"
+                        }`}
+                      >
+                        <Gift className="h-4 w-4" />
+                        {selectedRecord.billing.freeServer ? "Remove free status" : "Mark as free server"}
+                      </button>
+                    ) : null}
+
+                    {selectedRecord.billing.isTrial && !selectedRecord.billing.trialEndedAt ? (
+                      <button
+                        onClick={() => setShowEndTrialConfirm(true)}
+                        disabled={endTrialMutation.isPending}
+                        className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(14_100%_60%)/30] bg-[hsl(14_100%_60%)/10] px-4 py-2.5 text-sm text-[hsl(14_100%_70%)] transition-colors hover:bg-[hsl(14_100%_60%)/20]"
+                      >
+                        <Clock className="h-4 w-4" />
+                        End trial
+                      </button>
+                    ) : null}
+
+                    {!selectedRecord.billing.freeServer && !selectedRecord.billing.isTrial ? (
+                      <button
+                        onClick={() => forceChargeMutation.mutate(selectedRecord.billing.virtfusionServerId)}
+                        disabled={forceChargeMutation.isPending}
+                        className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(209_100%_50%)/30] bg-[hsl(209_100%_50%)/10] px-4 py-2.5 text-sm text-[hsl(209_100%_70%)] transition-colors hover:bg-[hsl(209_100%_50%)/20]"
+                      >
+                        {forceChargeMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Charging...
+                          </>
+                        ) : (
+                          <>
+                            <DollarSign className="h-4 w-4" />
+                            Force charge
+                          </>
+                        )}
+                      </button>
+                    ) : null}
+
+                    {selectedRecord.billing.status === "suspended" ? (
+                      <button
+                        onClick={() => unsuspendMutation.mutate(selectedRecord.billing.id)}
+                        disabled={unsuspendMutation.isPending}
+                        className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(160_84%_39%)/30] bg-[hsl(160_84%_39%)/10] px-4 py-2.5 text-sm text-[hsl(160_84%_60%)] transition-colors hover:bg-[hsl(160_84%_39%)/20]"
+                      >
+                        {unsuspendMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Unsuspending...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-4 w-4" />
+                            Unsuspend server
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowSuspendConfirm(true)}
+                        disabled={suspendMutation.isPending}
+                        className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(14_100%_60%)/30] bg-[hsl(14_100%_60%)/10] px-4 py-2.5 text-sm text-[hsl(14_100%_70%)] transition-colors hover:bg-[hsl(14_100%_60%)/20]"
+                      >
+                        <Pause className="h-4 w-4" />
+                        Suspend server
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Cleanup Confirm Dialog */}

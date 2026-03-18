@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Select } from "../components/ui/select";
-import { AdminPageHeader } from "../components/ui/admin-surfaces";
+import { AdminPageHeader, AdminStatCard, AdminStatGrid } from "../components/ui/admin-surfaces";
 
 // ── Canned responses ──────────────────────────────────────────────────────────
 const CANNED_RESPONSES = [
@@ -226,6 +226,21 @@ export default function Tickets() {
     );
   }) ?? [];
 
+  const attentionCount = filteredTickets.filter((item: any) =>
+    item.ticket.status === "new" || item.ticket.status === "waiting_admin"
+  ).length;
+  const guestCount = filteredTickets.filter((item: any) =>
+    Boolean(item.ticket.guestEmail) && !item.ticket.auth0UserId
+  ).length;
+  const staleCount = filteredTickets.filter((item: any) => {
+    const referenceDate = item.ticket.lastMessageAt || item.ticket.createdAt;
+    if (!referenceDate) return false;
+    return (
+      (item.ticket.status === "new" || item.ticket.status === "waiting_admin") &&
+      Date.now() - new Date(referenceDate).getTime() >= 12 * 60 * 60 * 1000
+    );
+  }).length;
+
   const ticket = selectedTicket?.ticket;
 
   return (
@@ -254,6 +269,35 @@ export default function Tickets() {
         }
       />
 
+      <AdminStatGrid className="mb-6 xl:grid-cols-4">
+        <AdminStatCard
+          label="Visible queue"
+          value={filteredTickets.length}
+          icon={<MessageSquare className="h-4 w-4" />}
+          detail="Tickets in the current filter and search view."
+        />
+        <AdminStatCard
+          label="Needs reply"
+          value={attentionCount}
+          icon={<AlertTriangle className="h-4 w-4" />}
+          tone={attentionCount > 0 ? "warning" : "default"}
+          detail="New tickets and anything waiting on admin action."
+        />
+        <AdminStatCard
+          label="Guest conversations"
+          value={guestCount}
+          icon={<User className="h-4 w-4" />}
+          detail="Public contact threads without a linked account."
+        />
+        <AdminStatCard
+          label="Stale over 12h"
+          value={staleCount}
+          icon={<Clock className="h-4 w-4" />}
+          tone={staleCount > 0 ? "danger" : "default"}
+          detail="Older items still sitting in a reply-needed state."
+        />
+      </AdminStatGrid>
+
       <div className="mb-6 flex items-center gap-2 flex-wrap">
         {counts?.counts && Object.entries(counts.counts).map(([status, count]) => (
           count > 0 && (
@@ -267,7 +311,24 @@ export default function Tickets() {
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
         {/* ── Ticket list ── */}
         <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(9,14,24,0.98)_100%)] flex flex-col overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.2)]">
-          {/* Filters */}
+          <div className="border-b border-white/8 px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[hsl(210_100%_65%)]">
+                  Queue
+                </p>
+                <h2 className="mt-2 text-base font-semibold text-white">Active conversations</h2>
+                <p className="mt-1 text-sm leading-6 text-white/40">
+                  Filter by status, search quickly, and jump into the next ticket that needs movement.
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-right">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Loaded</p>
+                <p className="mt-1 text-sm font-medium text-white">{filteredTickets.length}</p>
+              </div>
+            </div>
+          </div>
+
           <div className="p-3 border-b border-white/8 space-y-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
@@ -315,21 +376,33 @@ export default function Tickets() {
                     <button
                       key={item.ticket.id}
                       onClick={() => setSelectedTicket(item)}
-                      className={`w-full text-left px-3 py-3 rounded-lg transition-all border ${
+                      className={`w-full text-left rounded-xl border px-3 py-3 transition-all ${
                         isSelected
-                          ? "bg-[hsl(210_100%_50%)/12] border-[hsl(210_100%_50%)/25]"
+                          ? "border-[hsl(210_100%_50%)/28] bg-[linear-gradient(180deg,rgba(0,133,255,0.12)_0%,rgba(0,133,255,0.05)_100%)] shadow-[0_12px_28px_rgba(0,133,255,0.08)]"
                           : "border-transparent hover:bg-white/4"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <p className={`text-sm font-medium truncate leading-tight ${isSelected ? "text-white" : "text-white/80"}`}>
-                          {item.ticket.title}
-                        </p>
-                        {needsAttention && (
-                          <span className="shrink-0 w-2 h-2 rounded-full bg-[hsl(45_100%_51%)] mt-0.5" />
-                        )}
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/30">
+                              #{item.ticket.ticketNumber}
+                            </span>
+                            {needsAttention ? (
+                              <span className="rounded-full bg-[hsl(45_100%_51%)/15] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[hsl(45_100%_60%)]">
+                                Needs reply
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className={`mt-1 truncate text-sm font-medium leading-tight ${isSelected ? "text-white" : "text-white/80"}`}>
+                            {item.ticket.title}
+                          </p>
+                        </div>
+                        {needsAttention ? (
+                          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[hsl(45_100%_51%)]" />
+                        ) : null}
                       </div>
-                      <p className="text-xs text-white/40 truncate mb-2">
+                      <p className="mb-2 truncate text-xs text-white/40">
                         {item.user?.email || item.ticket.guestEmail || "Guest"}
                       </p>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -339,6 +412,14 @@ export default function Tickets() {
                         <span className={`px-1.5 py-0.5 text-[10px] rounded border ${PRIORITY_STYLES[item.ticket.priority] || PRIORITY_STYLES.normal}`}>
                           {item.ticket.priority}
                         </span>
+                        <span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-white/35">
+                          {CATEGORY_LABELS[item.ticket.category] || item.ticket.category}
+                        </span>
+                        {item.ticket.guestEmail && !item.ticket.auth0UserId ? (
+                          <span className="rounded border border-[hsl(14_100%_60%)/20] bg-[hsl(14_100%_60%)/10] px-1.5 py-0.5 text-[10px] text-[hsl(14_100%_70%)]">
+                            Guest
+                          </span>
+                        ) : null}
                         <span className="text-[10px] text-white/25 ml-auto">
                           {timeAgo(item.ticket.lastMessageAt)}
                         </span>
@@ -389,80 +470,123 @@ export default function Tickets() {
                     </div>
                   </div>
 
-                  {/* Action icons */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className={`px-2 py-1 text-xs rounded-lg border ${STATUS_STYLES[ticket.status] || STATUS_STYLES.open}`}>
+                      {statusLabel(ticket.status)}
+                    </span>
+                    <span className={`px-2 py-1 text-xs rounded-lg border ${PRIORITY_STYLES[ticket.priority] || PRIORITY_STYLES.normal}`}>
+                      {ticket.priority}
+                    </span>
+                    <span className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/45">
+                      {CATEGORY_LABELS[ticket.category] || ticket.category}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
                     {(ticket.status === "closed" || ticket.status === "resolved") && (
                       <button
                         onClick={() => reopenMutation.mutate(ticket.id)}
                         disabled={reopenMutation.isPending}
-                        className="p-1.5 text-white/30 hover:text-[hsl(160_84%_60%)] hover:bg-[hsl(160_84%_39%)/10] rounded-lg transition-colors"
-                        title="Reopen"
+                        className="flex items-center gap-1.5 rounded-lg border border-[hsl(160_84%_39%)/20] bg-[hsl(160_84%_39%)/10] px-3 py-2 text-xs font-medium text-[hsl(160_84%_60%)] transition-colors hover:bg-[hsl(160_84%_39%)/16]"
+                        title="Reopen ticket"
                       >
                         {reopenMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                        Reopen
                       </button>
                     )}
                     {ticket.status !== "closed" && (
                       <button
                         onClick={() => closeMutation.mutate(ticket.id)}
                         disabled={closeMutation.isPending}
-                        className="p-1.5 text-white/30 hover:text-[hsl(14_100%_70%)] hover:bg-[hsl(14_100%_60%)/10] rounded-lg transition-colors"
-                        title="Close"
+                        className="flex items-center gap-1.5 rounded-lg border border-[hsl(14_100%_60%)/20] bg-[hsl(14_100%_60%)/10] px-3 py-2 text-xs font-medium text-[hsl(14_100%_70%)] transition-colors hover:bg-[hsl(14_100%_60%)/16]"
+                        title="Close ticket"
                       >
                         {closeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                        Close
                       </button>
                     )}
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="p-1.5 text-white/30 hover:text-[hsl(0_84%_70%)] hover:bg-[hsl(0_84%_60%)/10] rounded-lg transition-colors"
-                      title="Delete"
+                      className="flex items-center gap-1.5 rounded-lg border border-[hsl(0_84%_60%)/20] bg-[hsl(0_84%_60%)/10] px-3 py-2 text-xs font-medium text-[hsl(0_84%_70%)] transition-colors hover:bg-[hsl(0_84%_60%)/16]"
+                      title="Delete ticket"
                     >
                       <Trash2 className="h-4 w-4" />
+                      Delete
                     </button>
                   </div>
                 </div>
 
-                {/* Metadata controls */}
-                <div className="grid grid-cols-3 gap-2 mt-3">
-                  <div>
-                    <p className="text-[10px] text-white/30 mb-1">Status</p>
-                    <Select
-                      value={ticket.status}
-                      onChange={(val) => handleUpdate("status", val)}
-                      options={[
-                        { value: "new", label: "New" },
-                        { value: "open", label: "Open" },
-                        { value: "waiting_user", label: "Waiting User" },
-                        { value: "waiting_admin", label: "Waiting Admin" },
-                        { value: "resolved", label: "Resolved" },
-                        { value: "closed", label: "Closed" },
-                      ]}
-                    />
+                <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Requester</p>
+                      <p className="mt-2 text-sm font-medium text-white">
+                        {selectedTicket.user?.name || selectedTicket.user?.email || ticket.guestEmail || "Guest"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/40">
+                        {selectedTicket.user?.email || ticket.guestEmail || "No email"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Last activity</p>
+                      <p className="mt-2 text-sm font-medium text-white">{timeAgo(ticket.lastMessageAt || ticket.createdAt)}</p>
+                      <p className="mt-1 text-xs text-white/40">
+                        {new Date(ticket.lastMessageAt || ticket.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Response mode</p>
+                      <p className="mt-2 text-sm font-medium text-white">
+                        {ticket.status === "closed" ? "Closed" : isInternalNote ? "Internal note" : "Customer reply"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/40">
+                        {ticket.status === "closed" ? "Reopen the ticket to continue." : "Use notes for staff-only context."}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-white/30 mb-1">Priority</p>
-                    <Select
-                      value={ticket.priority}
-                      onChange={(val) => handleUpdate("priority", val)}
-                      options={[
-                        { value: "low", label: "Low" },
-                        { value: "normal", label: "Normal" },
-                        { value: "high", label: "High" },
-                        { value: "urgent", label: "Urgent" },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-white/30 mb-1">Category</p>
-                    <Select
-                      value={ticket.category}
-                      onChange={(val) => handleUpdate("category", val)}
-                      options={[
-                        { value: "sales", label: "Sales" },
-                        { value: "support", label: "Support" },
-                        { value: "accounts", label: "Accounts" },
-                        { value: "abuse", label: "Abuse" },
-                      ]}
-                    />
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[10px] text-white/30 mb-1">Status</p>
+                      <Select
+                        value={ticket.status}
+                        onChange={(val) => handleUpdate("status", val)}
+                        options={[
+                          { value: "new", label: "New" },
+                          { value: "open", label: "Open" },
+                          { value: "waiting_user", label: "Waiting User" },
+                          { value: "waiting_admin", label: "Waiting Admin" },
+                          { value: "resolved", label: "Resolved" },
+                          { value: "closed", label: "Closed" },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-white/30 mb-1">Priority</p>
+                      <Select
+                        value={ticket.priority}
+                        onChange={(val) => handleUpdate("priority", val)}
+                        options={[
+                          { value: "low", label: "Low" },
+                          { value: "normal", label: "Normal" },
+                          { value: "high", label: "High" },
+                          { value: "urgent", label: "Urgent" },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-white/30 mb-1">Category</p>
+                      <Select
+                        value={ticket.category}
+                        onChange={(val) => handleUpdate("category", val)}
+                        options={[
+                          { value: "sales", label: "Sales" },
+                          { value: "support", label: "Support" },
+                          { value: "accounts", label: "Accounts" },
+                          { value: "abuse", label: "Abuse" },
+                        ]}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -518,8 +642,45 @@ export default function Tickets() {
 
               {/* Reply box */}
               {ticket.status !== "closed" && (
-                <div className="px-4 py-4 border-t border-white/8 shrink-0 space-y-2">
-                  {/* Note toggle */}
+                <div className="px-4 py-4 border-t border-white/8 shrink-0 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {isInternalNote ? "Internal note" : "Customer reply"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/35">
+                        {isInternalNote ? "Only visible to staff in the admin workspace." : "The customer will receive this in the ticket thread and by email when applicable."}
+                      </p>
+                    </div>
+
+                    <div className="relative" ref={cannedRef}>
+                      <button
+                        onClick={() => setShowCanned(!showCanned)}
+                        className="flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-3 py-1.5 text-xs text-white/40 transition-colors hover:text-white/70"
+                      >
+                        <Tag className="h-3 w-3" />
+                        Canned
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {showCanned && (
+                        <div className="absolute bottom-full right-0 z-10 mb-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[hsl(215_21%_11%)] shadow-2xl">
+                          {CANNED_RESPONSES.map((r) => (
+                            <button
+                              key={r.label}
+                              onClick={() => {
+                                setReplyText((prev) => prev + r.text);
+                                setShowCanned(false);
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-white/70 hover:bg-white/6 hover:text-white transition-colors"
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setIsInternalNote(false)}
@@ -543,34 +704,6 @@ export default function Tickets() {
                       <StickyNote className="h-3 w-3" />
                       Internal Note
                     </button>
-
-                    {/* Canned responses */}
-                    <div className="relative ml-auto" ref={cannedRef}>
-                      <button
-                        onClick={() => setShowCanned(!showCanned)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/4 border border-white/8 text-white/40 hover:text-white/70 rounded-lg text-xs transition-colors"
-                      >
-                        <Tag className="h-3 w-3" />
-                        Canned
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
-                      {showCanned && (
-                        <div className="absolute bottom-full right-0 mb-2 w-56 bg-[hsl(215_21%_11%)] border border-white/10 rounded-xl shadow-2xl z-10 overflow-hidden">
-                          {CANNED_RESPONSES.map((r) => (
-                            <button
-                              key={r.label}
-                              onClick={() => {
-                                setReplyText((prev) => prev + r.text);
-                                setShowCanned(false);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-white/70 hover:bg-white/6 hover:text-white transition-colors"
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* Textarea + send */}
