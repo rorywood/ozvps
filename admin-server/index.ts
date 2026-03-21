@@ -8,7 +8,6 @@ import { connectRedis, disconnectRedis } from "../server/redis";
 import { runAutoMigrations } from "../server/db";
 import { log } from "../server/logger";
 import { createIpRateLimit } from "../server/rate-limit";
-import { ipWhitelistMiddleware } from "./middleware/ip-whitelist";
 import { adminAuthMiddleware } from "./middleware/admin-auth";
 import { csrfMiddleware } from "./middleware/csrf";
 import { registerAuthRoutes } from "./routes/auth";
@@ -120,16 +119,6 @@ app.use('/api/', apiLimiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(cookieParser());
-
-// Apply the admin IP whitelist to the entire admin surface except the basic
-// load-balancer health check. When the whitelist is empty, the middleware
-// automatically allows bootstrap access for initial setup.
-app.use((req, res, next) => {
-  if (req.path === '/healthz') {
-    return next();
-  }
-  return ipWhitelistMiddleware(req, res, next);
-});
 
 // Request logging
 app.use((req, res, next) => {

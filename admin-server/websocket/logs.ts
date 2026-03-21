@@ -3,7 +3,7 @@ import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { IncomingMessage } from "http";
 import { parse as parseCookie } from "cookie";
 import { isUserAdmin, revokeAdminSession, validateAdminSession } from "../middleware/admin-auth";
-import { getClientIp, isAdminIpAllowed } from "../middleware/ip-whitelist";
+import { getClientIp } from "../middleware/ip-whitelist";
 
 interface AuthenticatedWebSocket extends WebSocket {
   isAlive: boolean;
@@ -68,12 +68,6 @@ export function setupLogWebSocket(wss: WebSocketServer) {
     }
 
     const clientIp = getClientIp(req as any);
-    if (!(await isAdminIpAllowed(clientIp))) {
-      socket.send(JSON.stringify({ type: "error", message: "IP not authorized" }));
-      socket.close(4003, "IP not authorized");
-      return;
-    }
-
     const session = await validateAdminSession(sessionId, clientIp);
 
     if (!session) {
